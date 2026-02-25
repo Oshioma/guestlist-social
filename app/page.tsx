@@ -1,247 +1,213 @@
 export default function Home() {
   return (
     <main className="relative isolate min-h-screen bg-black text-white overflow-hidden">
-      {/* ===== BACKGROUND (ISLAND VISIBLE) ===== */}
+      {/* ===== HERO BACKGROUND (GUARANTEED VISIBLE) ===== */}
       <div aria-hidden className="absolute inset-0 z-0">
-        {/* Base island (stronger) */}
+        {/* Island */}
         <img
           src="/hero-island.jpg"
           alt=""
           className="h-full w-full object-cover"
         />
 
-        {/* Lighter overlay so island shows */}
+        {/* Light overlay only (keeps island visible) */}
         <div className="absolute inset-0 bg-black/20" />
 
-        {/* Put gradients BEHIND the island "feel" (very light) */}
-        <div className="absolute -top-44 left-1/2 h-[680px] w-[1200px] -translate-x-1/2 blur-3xl opacity-35">
-          <img src="/gradient-1.png" alt="" className="h-full w-full object-cover" />
-        </div>
-        <div className="absolute -bottom-56 right-[-240px] h-[760px] w-[980px] blur-3xl opacity-30">
-          <img src="/gradient-2.png" alt="" className="h-full w-full object-cover" />
-        </div>
-
-        {/* Keep texture visible but not overpowering */}
-        <div className="absolute inset-0 opacity-[0.10] mix-blend-overlay">
-          <img src="/pattern.png" alt="" className="h-full w-full object-cover" />
-        </div>
-        <div className="absolute inset-0 opacity-[0.16] mix-blend-overlay">
-          <img src="/texture-water.jpg" alt="" className="h-full w-full object-cover" />
+        {/* Subtle texture (adds premium depth) */}
+        <div className="absolute inset-0 opacity-[0.14]">
+          <img
+            src="/texture-water.jpg"
+            alt=""
+            className="h-full w-full object-cover"
+          />
         </div>
 
-        {/* Gentle bottom fade only */}
-        <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-transparent to-black" />
+        {/* Gentle bottom fade for section transition */}
+        <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-b from-transparent to-black" />
       </div>
 
-      {/* ===== CONTENT WRAPPER ===== */}
+      {/* ===== CONTENT ===== */}
       <div className="relative z-10">
-        {/* HEADER */}
-        <header>
-          <div className="mx-auto max-w-6xl px-6 py-6 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-white/10 ring-1 ring-white/20 grid place-items-center">
-                <span className="text-sm font-semibold tracking-tight">GS</span>
-              </div>
-              <div className="leading-tight">
-                <div className="font-semibold tracking-tight">Guestlist Social</div>
-                <div className="text-xs text-white/80">
-                  Corporate growth systems — with island execution
-                </div>
-              </div>
-            </div>
+        {/* Header */}
+        <header className="px-6 py-6 max-w-6xl mx-auto flex items-center justify-between">
+          <div className="text-lg font-semibold tracking-tight">Guestlist Social</div>
 
-            <nav className="hidden md:flex items-center gap-7 text-sm text-white/85">
-              <a className="hover:text-white" href="#services">Services</a>
-              <a className="hover:text-white" href="#work">Work</a>
-              <a className="hover:text-white" href="#contact">Contact</a>
-            </nav>
+          <nav className="hidden md:flex gap-8 text-sm text-white/85">
+            <a href="#services" className="hover:text-white">Services</a>
+            <a href="#work" className="hover:text-white">Work</a>
+            <a href="#contact" className="hover:text-white">Contact</a>
+          </nav>
 
-            <a
-              href="#contact"
-              className="inline-flex items-center justify-center rounded-full bg-white text-black px-5 py-2.5 text-sm font-medium hover:opacity-90"
-            >
-              Work With Us
-            </a>
-          </div>
+          <a
+            href="#contact"
+            className="bg-white text-black px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition"
+          >
+            Work With Us
+          </a>
         </header>
 
-        {/* HERO */}
-        <section>
-          <div className="mx-auto max-w-6xl px-6 pt-12 pb-10 md:pt-20 md:pb-16 grid md:grid-cols-12 gap-10 items-center">
-            <div className="md:col-span-7">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/12 ring-1 ring-white/15 px-3 py-1 text-xs text-white/90">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/90" />
-                Premium content + performance
+        {/* Hero */}
+        <section className="max-w-6xl mx-auto px-6 pt-20 pb-20 md:pt-28 md:pb-28 grid md:grid-cols-12 gap-10 items-center">
+          <div className="md:col-span-7">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-xs text-white/90">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/90" />
+              Corporate delivery. Island execution.
+            </div>
+
+            <h1 className="mt-6 text-5xl md:text-7xl font-semibold leading-[1.03] tracking-tight">
+              We build brands that don’t scroll.
+              <span className="text-white/75"> They stop attention.</span>
+            </h1>
+
+            <p className="mt-6 text-lg md:text-xl text-white/90 max-w-2xl">
+              Guestlist Social is a premium content and growth partner for brands
+              that want presence, clarity, and performance — without noise.
+            </p>
+
+            <div className="mt-9 flex flex-col sm:flex-row gap-3">
+              <a
+                href="#contact"
+                className="inline-flex items-center justify-center rounded-full bg-white text-black px-6 py-3 font-medium hover:opacity-90"
+              >
+                Start a Conversation
+              </a>
+              <a
+                href="#services"
+                className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3 text-white hover:border-white/60"
+              >
+                View Services
+              </a>
+            </div>
+          </div>
+
+          {/* Right hero card */}
+          <div className="md:col-span-5">
+            <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15">
+              <div className="absolute inset-0">
+                <img
+                  src="/hero-grain.jpg"
+                  alt=""
+                  className="h-full w-full object-cover opacity-80"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/10" />
               </div>
 
-              <h1 className="mt-6 text-5xl md:text-7xl font-semibold leading-[1.03] tracking-tight">
-                We build brands that don’t scroll.
-                <span className="text-white/75"> They stop attention.</span>
-              </h1>
+              <div className="relative p-6 md:p-8">
+                <div className="text-sm text-white/85">Weekly Content Engine</div>
+                <h3 className="mt-3 text-2xl font-semibold">Structured. Consistent. Premium.</h3>
 
-              <p className="mt-6 text-lg md:text-xl text-white/90 max-w-2xl">
-                We plan, shoot, edit, and publish high-performing content for brands
-                that want growth without the chaos.
-              </p>
-
-              <div className="mt-9 flex flex-col sm:flex-row gap-3">
-                <a
-                  href="#contact"
-                  className="inline-flex items-center justify-center rounded-full bg-white text-black px-6 py-3 font-medium hover:opacity-90"
-                >
-                  Start a Conversation
-                </a>
-                <a
-                  href="#work"
-                  className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3 text-white hover:border-white/60"
-                >
-                  See Work
-                </a>
-              </div>
-
-              <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  ["12–48h", "Turnaround"],
-                  ["3–8", "Reels / week"],
-                  ["2×", "Hook testing cadence"],
-                  ["Monthly", "Reporting"],
-                ].map(([k, v]) => (
-                  <div key={v} className="rounded-2xl bg-white/12 ring-1 ring-white/15 px-4 py-4">
-                    <div className="text-sm font-semibold">{k}</div>
-                    <div className="mt-1 text-xs text-white/80">{v}</div>
-                  </div>
-                ))}
+                <ul className="mt-6 space-y-3 text-white/85 text-sm">
+                  <li>• Hook scripting & content planning</li>
+                  <li>• Premium editing & pacing</li>
+                  <li>• Caption + publishing workflow</li>
+                  <li>• Monthly growth review</li>
+                </ul>
               </div>
             </div>
 
-            {/* RIGHT SIDE CARDS */}
-            <div className="md:col-span-5">
-              <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15">
-                <div className="absolute inset-0">
-                  <img
-                    src="/hero-grain.jpg"
-                    alt=""
-                    className="h-full w-full object-cover opacity-85"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
-                </div>
-
-                <div className="relative p-6 md:p-8">
-                  <div className="text-sm text-white/90">What you get</div>
-                  <div className="mt-3 text-2xl font-semibold tracking-tight">
-                    A weekly content system
-                  </div>
-                  <ul className="mt-5 space-y-3 text-sm text-white/90">
-                    {[
-                      "Hook scripting + shot list",
-                      "Premium editing + pacing",
-                      "Captions + publishing plan",
-                      "Monthly performance review",
-                    ].map((x) => (
-                      <li key={x} className="flex gap-3">
-                        <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/85" />
-                        <span>{x}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            <div className="mt-4 rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15">
+              <div className="relative h-44">
+                <img
+                  src="/proof-meeting.jpg"
+                  alt="Proof"
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
               </div>
-
-              <div className="mt-4 rounded-3xl overflow-hidden ring-1 ring-white/15 bg-white/10">
-                <div className="relative h-44">
-                  <img
-                    src="/proof-meeting.jpg"
-                    alt="Team reviewing performance"
-                    className="h-full w-full object-cover opacity-95"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
-                </div>
-                <div className="p-5">
-                  <div className="text-xs text-white/80">Executive standard</div>
-                  <div className="mt-1 text-sm text-white/95">
-                    Strategy, production, and delivery with a boardroom-level finish.
-                  </div>
+              <div className="p-5">
+                <div className="text-xs text-white/80">Executive standard</div>
+                <div className="mt-1 text-sm text-white/95">
+                  Strategy and delivery with a boardroom-level finish.
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* SERVICES */}
-        <section id="services">
-          <div className="mx-auto max-w-6xl px-6 py-16 border-t border-white/15 bg-black/20">
-            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Services</h2>
-            <p className="mt-2 text-white/85 max-w-2xl">
-              A small menu, done properly. No fluff — just the pieces that move growth.
-            </p>
+        {/* Services */}
+        <section id="services" className="border-t border-white/10 bg-black py-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
 
-            <div className="mt-10 grid md:grid-cols-3 gap-4">
+            <div className="mt-12 grid md:grid-cols-3 gap-6">
               {[
-                ["Strategy", "Positioning, content pillars, and posting plan that fits your brand."],
-                ["Content Production", "Short-form video, photography, editing, hooks, captions."],
-                ["Growth + Ads", "Testing, reporting, and paid boosts for winners."],
-              ].map(([title, desc]) => (
-                <div key={title} className="rounded-3xl bg-white/10 ring-1 ring-white/15 p-7">
-                  <div className="text-sm text-white/80">Service</div>
-                  <div className="mt-2 text-lg font-semibold">{title}</div>
-                  <p className="mt-3 text-sm text-white/85 leading-relaxed">{desc}</p>
+                {
+                  title: "Strategy",
+                  desc: "Positioning, content pillars, and direction that aligns attention with revenue.",
+                },
+                {
+                  title: "Content Production",
+                  desc: "Short-form video, creative editing, and visual storytelling that feels intentional and premium.",
+                },
+                {
+                  title: "Growth",
+                  desc: "Testing, iteration, and performance refinement to turn attention into measurable outcomes.",
+                },
+              ].map((service) => (
+                <div
+                  key={service.title}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
+                  <h3 className="text-lg font-semibold">{service.title}</h3>
+                  <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                    {service.desc}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* WORK */}
-        <section id="work">
-          <div className="mx-auto max-w-6xl px-6 py-16 border-t border-white/15 bg-black/30">
-            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Selected work</h2>
-            <p className="mt-2 text-white/85 max-w-2xl">
-              Add your case studies here. For now these are placeholders.
+        {/* Work */}
+        <section id="work" className="border-t border-white/10 bg-black py-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
+            <p className="mt-4 text-white/70 max-w-2xl">
+              We help brands sharpen their presence and build systems that compound.
+              Case studies available upon request.
             </p>
 
-            <div className="mt-8 grid md:grid-cols-3 gap-4">
-              {["Brand Launch", "Content System", "Paid Social"].map((x) => (
-                <div key={x} className="rounded-3xl border border-white/15 p-6 bg-white/10">
-                  <div className="text-white/85 text-sm">Case Study</div>
-                  <div className="mt-2 font-medium">{x}</div>
-                  <div className="mt-4 h-32 rounded-xl bg-black/30 border border-white/10" />
+            <div className="mt-12 grid md:grid-cols-3 gap-6">
+              {["Brand Launch", "Content System", "Growth Execution"].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
+                  <div className="text-sm text-white/60">Case Study</div>
+                  <div className="mt-3 text-lg font-semibold">{item}</div>
+                  <div className="mt-6 h-28 rounded-2xl bg-black/30 border border-white/10" />
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* CONTACT */}
-        <section id="contact">
-          <div className="mx-auto max-w-6xl px-6 py-16 border-t border-white/15 bg-black/35">
-            <div className="rounded-3xl bg-white/10 ring-1 ring-white/15 p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Contact</h2>
-                <p className="mt-2 text-white/85">
-                  Add your email/Calendly link here.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                <a
-                  className="inline-flex items-center justify-center rounded-full bg-white text-black px-6 py-3 font-medium hover:opacity-90"
-                  href="mailto:hello@guestlistsocial.com"
-                >
-                  Email us
-                </a>
-                <a
-                  className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3 text-white hover:border-white/60"
-                  href="#"
-                >
-                  Book via Calendly
-                </a>
-              </div>
+        {/* Contact */}
+        <section id="contact" className="border-t border-white/10 bg-black py-20 px-6">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
+            <div>
+              <h2 className="text-3xl font-semibold tracking-tight">
+                Ready to build something that stops attention?
+              </h2>
+              <p className="mt-4 text-white/70">
+                Tell us about your brand and your goals. We’ll reply with clarity.
+              </p>
             </div>
 
-            <footer className="mt-10 text-sm text-white/70">
-              © {new Date().getFullYear()} Guestlist Social. All rights reserved.
-            </footer>
+            <a
+              href="mailto:hello@guestlistsocial.com"
+              className="bg-white text-black px-6 py-3 rounded-full font-medium hover:opacity-90 transition"
+            >
+              hello@guestlistsocial.com
+            </a>
           </div>
         </section>
+
+        <footer className="border-t border-white/10 bg-black py-10 px-6 text-sm text-white/50">
+          <div className="max-w-6xl mx-auto">
+            © {new Date().getFullYear()} Guestlist Social. All rights reserved.
+          </div>
+        </footer>
       </div>
     </main>
   );
