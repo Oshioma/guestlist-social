@@ -3,7 +3,7 @@
 export default function Home() {
   return (
     <main className="relative isolate min-h-screen bg-black text-white overflow-hidden">
-      {/* ===== Animations (no deps) ===== */}
+      {/* ===== Minimal animations (safe) ===== */}
       <style jsx global>{`
         @keyframes gl-fade-up {
           from {
@@ -17,17 +17,6 @@ export default function Home() {
             filter: blur(0);
           }
         }
-        @keyframes gl-float {
-          0% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-          100% {
-            transform: translateY(0px);
-          }
-        }
         .gl-animate-in {
           animation: gl-fade-up 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
         }
@@ -37,39 +26,32 @@ export default function Home() {
         .gl-animate-in-delay-2 {
           animation-delay: 240ms;
         }
-        .gl-animate-in-delay-3 {
-          animation-delay: 360ms;
-        }
-        .gl-animate-in-delay-4 {
-          animation-delay: 480ms;
-        }
-        .gl-float {
-          animation: gl-float 6s ease-in-out infinite;
-        }
       `}</style>
 
-      {/* ===== FIXED BACKGROUND (DEBUG: NO FADES, LIGHTER OVERLAY, IMAGE OUTLINE) ===== */}
+      {/* ===== FIXED BACKGROUND (ENTIRE IMAGE VISIBLE) ===== */}
       <div aria-hidden className="fixed inset-0 z-0 bg-black">
-        {/* Full image visible (no cropping) */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <img
-            src="/hero-island.jpg"
-            alt=""
-            className="h-screen w-screen object-contain object-center pointer-events-none select-none ring-4 ring-emerald-300/80"
-          />
-        </div>
+        {/* This is the critical bit: contain + full viewport */}
+        <img
+          src="/hero-island.jpg"
+          alt=""
+          className="h-screen w-screen object-contain object-center pointer-events-none select-none"
+        />
 
-        {/* Lighter overlay so edges are visible */}
-        <div className="absolute inset-0 bg-black/35" />
+        {/* Readability overlay */}
+        <div className="absolute inset-0 bg-black/55" />
 
-        {/* Subtle texture (lower opacity so it doesn't mask edges) */}
-        <div className="absolute inset-0 opacity-[0.08]">
+        {/* Subtle texture (premium depth) */}
+        <div className="absolute inset-0 opacity-[0.12]">
           <img
             src="/texture-water.jpg"
             alt=""
             className="h-full w-full object-cover pointer-events-none select-none"
           />
         </div>
+
+        {/* Gentle fades (kept light so edges aren’t “hidden”) */}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/55 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/70 to-transparent" />
       </div>
 
       {/* ===== CONTENT ===== */}
@@ -251,7 +233,8 @@ export default function Home() {
                 Ready to build something that stops attention?
               </h2>
               <p className="mt-4 text-white/70">
-                Typical reply within <span className="text-white/85 font-medium">24–48 hours</span>. Urgent?{" "}
+                Typical reply within{" "}
+                <span className="text-white/85 font-medium">24–48 hours</span>. Urgent?{" "}
                 <span className="text-white/85 font-medium">Call us.</span>
               </p>
             </div>
