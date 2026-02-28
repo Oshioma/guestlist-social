@@ -48,22 +48,18 @@ export default function Home() {
         }
       `}</style>
 
-      {/* ===== FIXED BACKGROUND (FULL HERO VISIBLE + PERSISTS ON SCROLL) ===== */}
-      <div
-        aria-hidden
-        className="fixed inset-0 z-0 bg-black flex items-center justify-center"
-      >
-        {/* Full image visible (no cropping) */}
+      {/* ===== FIXED BACKGROUND (FULL IMAGE ALWAYS VISIBLE) ===== */}
+      <div aria-hidden className="fixed inset-0 z-0 bg-black">
         <img
           src="/hero-island.jpg"
           alt=""
-          className="max-h-full max-w-full object-contain"
+          className="h-screen w-screen object-contain object-center select-none pointer-events-none"
         />
 
-        {/* Global overlay for readability */}
+        {/* overlay */}
         <div className="absolute inset-0 bg-black/55" />
 
-        {/* Texture layer */}
+        {/* texture */}
         <div className="absolute inset-0 opacity-[0.12]">
           <img
             src="/texture-water.jpg"
@@ -72,10 +68,8 @@ export default function Home() {
           />
         </div>
 
-        {/* Top fade */}
+        {/* fades */}
         <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 to-transparent" />
-
-        {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/90 to-transparent" />
       </div>
 
@@ -211,8 +205,8 @@ export default function Home() {
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
             <p className="mt-4 text-white/70 max-w-2xl">
-              We help brands sharpen their presence and build systems that compound. Case studies
-              available upon request.
+              We help brands sharpen their presence and build systems that compound.
+              Case studies available upon request.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
