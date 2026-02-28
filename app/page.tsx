@@ -48,29 +48,28 @@ export default function Home() {
         }
       `}</style>
 
-      {/* ===== FIXED BACKGROUND (FULL IMAGE ALWAYS VISIBLE) ===== */}
+      {/* ===== FIXED BACKGROUND (DEBUG: NO FADES, LIGHTER OVERLAY, IMAGE OUTLINE) ===== */}
       <div aria-hidden className="fixed inset-0 z-0 bg-black">
-        <img
-          src="/hero-island.jpg"
-          alt=""
-          className="h-screen w-screen object-contain object-center select-none pointer-events-none"
-        />
-
-        {/* overlay */}
-        <div className="absolute inset-0 bg-black/55" />
-
-        {/* texture */}
-        <div className="absolute inset-0 opacity-[0.12]">
+        {/* Full image visible (no cropping) */}
+        <div className="absolute inset-0 flex items-center justify-center">
           <img
-            src="/texture-water.jpg"
+            src="/hero-island.jpg"
             alt=""
-            className="h-full w-full object-cover"
+            className="h-screen w-screen object-contain object-center pointer-events-none select-none ring-4 ring-emerald-300/80"
           />
         </div>
 
-        {/* fades */}
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/90 to-transparent" />
+        {/* Lighter overlay so edges are visible */}
+        <div className="absolute inset-0 bg-black/35" />
+
+        {/* Subtle texture (lower opacity so it doesn't mask edges) */}
+        <div className="absolute inset-0 opacity-[0.08]">
+          <img
+            src="/texture-water.jpg"
+            alt=""
+            className="h-full w-full object-cover pointer-events-none select-none"
+          />
+        </div>
       </div>
 
       {/* ===== CONTENT ===== */}
@@ -80,9 +79,15 @@ export default function Home() {
           <div className="text-lg font-semibold tracking-tight">Guestlist Social</div>
 
           <nav className="hidden md:flex gap-8 text-sm text-white/85">
-            <a href="#services" className="hover:text-white">Services</a>
-            <a href="#work" className="hover:text-white">Work</a>
-            <a href="#contact" className="hover:text-white">Contact</a>
+            <a href="#services" className="hover:text-white">
+              Services
+            </a>
+            <a href="#work" className="hover:text-white">
+              Work
+            </a>
+            <a href="#contact" className="hover:text-white">
+              Contact
+            </a>
           </nav>
 
           <a
@@ -172,7 +177,10 @@ export default function Home() {
         </section>
 
         {/* Services */}
-        <section id="services" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+        <section
+          id="services"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
 
@@ -191,9 +199,14 @@ export default function Home() {
                   desc: "Testing, iteration, and performance refinement to turn attention into measurable outcomes.",
                 },
               ].map((service) => (
-                <div key={service.title} className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <div
+                  key={service.title}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
                   <h3 className="text-lg font-semibold">{service.title}</h3>
-                  <p className="mt-4 text-white/70 text-sm leading-relaxed">{service.desc}</p>
+                  <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                    {service.desc}
+                  </p>
                 </div>
               ))}
             </div>
@@ -201,17 +214,23 @@ export default function Home() {
         </section>
 
         {/* Work */}
-        <section id="work" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+        <section
+          id="work"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
             <p className="mt-4 text-white/70 max-w-2xl">
-              We help brands sharpen their presence and build systems that compound.
-              Case studies available upon request.
+              We help brands sharpen their presence and build systems that compound. Case studies
+              available upon request.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
               {["Brand Launch", "Content System", "Growth Execution"].map((item) => (
-                <div key={item} className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <div
+                  key={item}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
                   <div className="text-sm text-white/60">Case Study</div>
                   <div className="mt-3 text-lg font-semibold">{item}</div>
                   <div className="mt-6 h-28 rounded-2xl bg-black/30 border border-white/10" />
@@ -222,7 +241,10 @@ export default function Home() {
         </section>
 
         {/* Contact */}
-        <section id="contact" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+        <section
+          id="contact"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight">
