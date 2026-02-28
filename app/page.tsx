@@ -48,28 +48,44 @@ export default function Home() {
         }
       `}</style>
 
-      {/* ===== HERO BACKGROUND (GUARANTEED VISIBLE) ===== */}
-      <div aria-hidden className="absolute inset-0 z-0">
-        {/* Island */}
-        <img src="/hero-island.jpg" alt="" className="h-full w-full object-cover" />
+      {/* ===== FIXED BACKGROUND (FULL IMAGE VISIBLE) ===== */}
+      <div
+        aria-hidden
+        className="fixed inset-0 z-0 bg-black flex items-center justify-center"
+      >
+        {/* Full image visible (no cropping) */}
+        <img
+          src="/hero-island.jpg"
+          alt=""
+          className="max-h-full max-w-full object-contain"
+        />
 
-        {/* Light overlay only (keeps island visible) */}
-        <div className="absolute inset-0 bg-black/20" />
+        {/* Readability overlay */}
+        <div className="absolute inset-0 bg-black/45" />
 
         {/* Subtle texture (adds premium depth) */}
-        <div className="absolute inset-0 opacity-[0.14]">
-          <img src="/texture-water.jpg" alt="" className="h-full w-full object-cover" />
+        <div className="absolute inset-0 opacity-[0.12]">
+          <img
+            src="/texture-water.jpg"
+            alt=""
+            className="h-full w-full object-cover"
+          />
         </div>
 
-        {/* Gentle bottom fade for section transition */}
-        <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-b from-transparent to-black" />
+        {/* Top fade (header legibility) */}
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/70 to-transparent" />
+
+        {/* Bottom fade (nice exit + section transition) */}
+        <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/80 to-transparent" />
       </div>
 
       {/* ===== CONTENT ===== */}
       <div className="relative z-10">
         {/* Header */}
         <header className="px-6 py-6 max-w-6xl mx-auto flex items-center justify-between">
-          <div className="text-lg font-semibold tracking-tight">Guestlist Social</div>
+          <div className="text-lg font-semibold tracking-tight">
+            Guestlist Social
+          </div>
 
           <nav className="hidden md:flex gap-8 text-sm text-white/85">
             <a href="#services" className="hover:text-white">
@@ -105,8 +121,8 @@ export default function Home() {
             </h1>
 
             <p className="mt-6 text-lg md:text-xl text-white/90 max-w-2xl gl-animate-in gl-animate-in-delay-1">
-              Guestlist Social is a premium content and growth partner for brands that want
-              presence, clarity, and performance — without noise.
+              Guestlist Social is a premium content and growth partner for brands
+              that want presence, clarity, and performance — without noise.
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-3 gl-animate-in gl-animate-in-delay-2">
@@ -127,15 +143,21 @@ export default function Home() {
 
           {/* Right hero card */}
           <div className="md:col-span-5">
-            <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15">
+            <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[2px]">
               <div className="absolute inset-0">
-                <img src="/hero-grain.jpg" alt="" className="h-full w-full object-cover opacity-80" />
+                <img
+                  src="/hero-grain.jpg"
+                  alt=""
+                  className="h-full w-full object-cover opacity-80"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/10" />
               </div>
 
               <div className="relative p-6 md:p-8">
                 <div className="text-sm text-white/85">Weekly Content Engine</div>
-                <h3 className="mt-3 text-2xl font-semibold">Structured. Consistent. Premium.</h3>
+                <h3 className="mt-3 text-2xl font-semibold">
+                  Structured. Consistent. Premium.
+                </h3>
 
                 <ul className="mt-6 space-y-3 text-white/85 text-sm">
                   <li>• Hook scripting & content planning</li>
@@ -146,9 +168,13 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15">
+            <div className="mt-4 rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[2px]">
               <div className="relative h-44">
-                <img src="/proof-meeting.jpg" alt="Proof" className="h-full w-full object-cover" />
+                <img
+                  src="/proof-meeting.jpg"
+                  alt="Proof"
+                  className="h-full w-full object-cover"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
               </div>
               <div className="p-5">
@@ -162,7 +188,10 @@ export default function Home() {
         </section>
 
         {/* Services */}
-        <section id="services" className="border-t border-white/10 bg-black py-20 px-6">
+        <section
+          id="services"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[2px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
 
@@ -181,9 +210,14 @@ export default function Home() {
                   desc: "Testing, iteration, and performance refinement to turn attention into measurable outcomes.",
                 },
               ].map((service) => (
-                <div key={service.title} className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <div
+                  key={service.title}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
                   <h3 className="text-lg font-semibold">{service.title}</h3>
-                  <p className="mt-4 text-white/70 text-sm leading-relaxed">{service.desc}</p>
+                  <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                    {service.desc}
+                  </p>
                 </div>
               ))}
             </div>
@@ -191,17 +225,23 @@ export default function Home() {
         </section>
 
         {/* Work */}
-        <section id="work" className="border-t border-white/10 bg-black py-20 px-6">
+        <section
+          id="work"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[2px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
             <p className="mt-4 text-white/70 max-w-2xl">
-              We help brands sharpen their presence and build systems that compound. Case studies
-              available upon request.
+              We help brands sharpen their presence and build systems that compound.
+              Case studies available upon request.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
               {["Brand Launch", "Content System", "Growth Execution"].map((item) => (
-                <div key={item} className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <div
+                  key={item}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
+                >
                   <div className="text-sm text-white/60">Case Study</div>
                   <div className="mt-3 text-lg font-semibold">{item}</div>
                   <div className="mt-6 h-28 rounded-2xl bg-black/30 border border-white/10" />
@@ -211,11 +251,14 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ===== Contact (UPGRADED / HIGH-END / SPLIT) ===== */}
-        <section id="contact" className="border-t border-white/10 bg-black py-20 px-6">
+        {/* Contact */}
+        <section
+          id="contact"
+          className="border-t border-white/10 bg-black/80 backdrop-blur-[2px] py-20 px-6"
+        >
           <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-stretch">
-              {/* LEFT: Copy + direct contact */}
+              {/* LEFT */}
               <div className="lg:col-span-6 xl:col-span-7">
                 <div className="gl-animate-in">
                   <h2 className="text-3xl font-semibold tracking-tight">
@@ -225,17 +268,23 @@ export default function Home() {
                     Tell us about your brand and your goals. We’ll reply with clarity — and a
                     simple path forward. No booking links.
                   </p>
+                  <p className="mt-3 text-sm text-white/60 gl-animate-in gl-animate-in-delay-2">
+                    Typical reply within{" "}
+                    <span className="text-white/80 font-medium">24–48 hours</span>. Urgent?
+                    <span className="text-white/80 font-medium"> Call us.</span>
+                  </p>
                 </div>
 
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {/* Email card */}
                   <a
                     href="mailto:nelly@guestlistsocial.com?subject=Guestlist%20Social%20Enquiry"
-                    className="gl-animate-in gl-animate-in-delay-2 group rounded-3xl bg-white/5 border border-white/10 p-7 hover:bg-white/7 transition"
+                    className="gl-animate-in gl-animate-in-delay-3 group rounded-3xl bg-white/5 border border-white/10 p-7 hover:bg-white/7 transition"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-white/60">Email</div>
+                        <div className="text-xs uppercase tracking-wide text-white/60">
+                          Email
+                        </div>
                         <div className="mt-2 text-lg font-semibold text-white group-hover:underline underline-offset-4">
                           nelly@guestlistsocial.com
                         </div>
@@ -249,14 +298,15 @@ export default function Home() {
                     </div>
                   </a>
 
-                  {/* Phone card */}
                   <a
                     href="tel:07537142056"
-                    className="gl-animate-in gl-animate-in-delay-3 group rounded-3xl bg-white/5 border border-white/10 p-7 hover:bg-white/7 transition"
+                    className="gl-animate-in gl-animate-in-delay-4 group rounded-3xl bg-white/5 border border-white/10 p-7 hover:bg-white/7 transition"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-white/60">Phone</div>
+                        <div className="text-xs uppercase tracking-wide text-white/60">
+                          Phone
+                        </div>
                         <div className="mt-2 text-lg font-semibold text-white group-hover:underline underline-offset-4">
                           07537 142 056
                         </div>
@@ -271,9 +321,10 @@ export default function Home() {
                   </a>
                 </div>
 
-                {/* What to include */}
                 <div className="mt-8 rounded-3xl bg-white/5 border border-white/10 p-7">
-                  <div className="text-sm font-semibold text-white">To get a sharp reply, include:</div>
+                  <div className="text-sm font-semibold text-white">
+                    To get a sharp reply, include:
+                  </div>
                   <ul className="mt-4 space-y-2 text-sm text-white/70">
                     <li>• Website + Instagram/TikTok links</li>
                     <li>• What you sell + ideal customer</li>
@@ -283,10 +334,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT: Premium enquiry panel */}
+              {/* RIGHT */}
               <div className="lg:col-span-6 xl:col-span-5">
                 <div className="relative h-full rounded-3xl overflow-hidden bg-white/5 border border-white/10">
-                  {/* floating orbs */}
                   <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-white/10 blur-2xl gl-float" />
                   <div className="pointer-events-none absolute -bottom-20 -left-16 h-64 w-64 rounded-full bg-white/10 blur-2xl gl-float" />
 
@@ -298,14 +348,19 @@ export default function Home() {
                       Tell us what you’re building.
                     </h3>
                     <p className="mt-3 text-sm text-white/70">
-                      This is a clean starter form. If you want it to actually send submissions,
+                      This form is a clean starter. If you want it to actually send submissions,
                       I’ll wire it to Basin/Formspree/Supabase next.
                     </p>
 
-                    <form className="mt-7 space-y-4" onSubmit={(e) => e.preventDefault()}>
+                    <form
+                      className="mt-7 space-y-4"
+                      onSubmit={(e) => e.preventDefault()}
+                    >
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm text-white/70 mb-2">Name</label>
+                          <label className="block text-sm text-white/70 mb-2">
+                            Name
+                          </label>
                           <input
                             type="text"
                             placeholder="Your name"
@@ -313,7 +368,9 @@ export default function Home() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-white/70 mb-2">Email</label>
+                          <label className="block text-sm text-white/70 mb-2">
+                            Email
+                          </label>
                           <input
                             type="email"
                             placeholder="you@company.com"
@@ -323,7 +380,9 @@ export default function Home() {
                       </div>
 
                       <div>
-                        <label className="block text-sm text-white/70 mb-2">Message</label>
+                        <label className="block text-sm text-white/70 mb-2">
+                          Message
+                        </label>
                         <textarea
                           rows={5}
                           placeholder="Goals, timeline, and what you need help with…"
@@ -362,35 +421,13 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            {/* Bottom CTA strip */}
-            <div className="mt-10 rounded-3xl bg-gradient-to-r from-white/10 via-white/5 to-white/10 border border-white/10 p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-              <div>
-                <div className="text-sm font-semibold">Fastest way to start</div>
-                <div className="mt-1 text-sm text-white/70">
-                  Email your socials + goals and we’ll reply with next steps.
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <a
-                  href="mailto:nelly@guestlistsocial.com?subject=Guestlist%20Social%20Enquiry"
-                  className="inline-flex items-center justify-center rounded-full bg-white text-black px-6 py-3 font-medium hover:opacity-90 transition"
-                >
-                  nelly@guestlistsocial.com
-                </a>
-                <a
-                  href="tel:07537142056"
-                  className="inline-flex items-center justify-center rounded-full border border-white/25 px-6 py-3 text-white hover:border-white/60 transition"
-                >
-                  07537 142 056
-                </a>
-              </div>
-            </div>
           </div>
         </section>
 
-        <footer className="border-t border-white/10 bg-black py-10 px-6 text-sm text-white/50">
-          <div className="max-w-6xl mx-auto">© {new Date().getFullYear()} Guestlist Social. All rights reserved.</div>
+        <footer className="border-t border-white/10 bg-black/80 backdrop-blur-[2px] py-10 px-6 text-sm text-white/50">
+          <div className="max-w-6xl mx-auto">
+            © {new Date().getFullYear()} Guestlist Social. All rights reserved.
+          </div>
         </footer>
       </div>
     </main>
