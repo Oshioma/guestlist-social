@@ -54,7 +54,7 @@ export default function Home() {
         <img
           src="/hero-island.jpg"
           alt=""
-          className="h-screen w-screen object-contain object-center pointer-events-none select-none"
+          className="h-full w-full object-contain object-center pointer-events-none select-none"
         />
 
         {/* Overlay (keeps text readable, does NOT affect cropping) */}
