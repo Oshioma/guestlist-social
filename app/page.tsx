@@ -185,32 +185,37 @@ export default function Home() {
         >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
+            <p className="mt-4 text-white/70 max-w-2xl text-lg leading-relaxed">
+              We combine strategy, creative and community to build brands people actually engage with.
+            </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
-              {[
-                {
-                  title: "Strategy",
-                  desc: "Positioning, content pillars, and direction that aligns attention with revenue.",
-                },
-                {
-                  title: "Content Production",
-                  desc: "Short-form video, creative editing, and visual storytelling that feels intentional and premium.",
-                },
-                {
-                  title: "Growth",
-                  desc: "Testing, iteration, and performance refinement to turn attention into measurable outcomes.",
-                },
-              ].map((service) => (
-                <div
-                  key={service.title}
-                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
-                >
-                  <h3 className="text-lg font-semibold">{service.title}</h3>
-                  <p className="mt-4 text-white/70 text-sm leading-relaxed">
-                    {service.desc}
-                  </p>
-                </div>
-              ))}
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Strategy</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  We define how your brand shows up with a clear plan of action. Following a thorough
+                  consultation, we plan positioning, content direction and platform strategy to create
+                  clarity, consistency and growth.
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Content</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  Content that earns attention, not just fills a feed. We concept, plan and produce
+                  high-performing content designed to stop scroll and spark engagement including video
+                  and design.
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Being Social</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  Growth doesn't happen without conversation. We manage your presence, engage your
+                  audience, turn attention into loyalty and expand your reach sparking conversations
+                  outside your current community.
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -223,21 +228,137 @@ export default function Home() {
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
             <p className="mt-4 text-white/70 max-w-2xl">
-              We help brands sharpen their presence and build systems that compound. Case studies
-              available upon request.
+              We help brands sharpen their presence and build systems that compound.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
-              {["Brand Launch", "Content System", "Growth Execution"].map((item) => (
-                <div
-                  key={item}
-                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
-                >
-                  <div className="text-sm text-white/60">Case Study</div>
-                  <div className="mt-3 text-lg font-semibold">{item}</div>
-                  <div className="mt-6 h-28 rounded-2xl bg-black/30 border border-white/10" />
+              {/* Case Study 1 */}
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+                <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 01</div>
+                <h3 className="mt-3 text-lg font-semibold leading-snug">
+                  Luxury Hospitality Brand — Short-Form Content System
+                </h3>
+
+                <p className="mt-4 text-sm text-white/60 leading-relaxed">
+                  High-end boutique hospitality brand struggling with inconsistent posting and low
+                  engagement despite premium positioning.
+                </p>
+
+                <div className="mt-6">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
+                  <ul className="space-y-2 text-sm text-white/75">
+                    <li>• Built a weekly short-form content engine (3–5 reels/week)</li>
+                    <li>• Scripted hooks aligned with booking intent</li>
+                    <li>• Repositioned visuals from aesthetic to aspirational experience</li>
+                    <li>• Structured caption strategy tied to direct booking links</li>
+                  </ul>
                 </div>
-              ))}
+
+                <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 90 Days</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">+42%</span>
+                    <span className="text-sm text-white/65">profile engagement</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">3.1×</span>
+                    <span className="text-sm text-white/65">reel reach</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">+28%</span>
+                    <span className="text-sm text-white/65">direct booking inquiries</span>
+                  </div>
+                </div>
+
+                <p className="mt-5 text-xs text-white/50 italic">
+                  Consistency + structured hooks outperformed ad spend alone.
+                </p>
+              </div>
+
+              {/* Case Study 2 */}
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+                <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 02</div>
+                <h3 className="mt-3 text-lg font-semibold leading-snug">
+                  Service Business — Lead Flow Rebuild
+                </h3>
+
+                <p className="mt-4 text-sm text-white/60 leading-relaxed">
+                  Founder-led service brand relying entirely on referrals. No consistent inbound
+                  pipeline.
+                </p>
+
+                <div className="mt-6">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
+                  <ul className="space-y-2 text-sm text-white/75">
+                    <li>• Defined brand positioning & messaging clarity</li>
+                    <li>• Created educational authority-style short-form content</li>
+                    <li>• Implemented monthly performance review + hook testing</li>
+                    <li>• Layered paid amplification on top 20% performing posts</li>
+                  </ul>
+                </div>
+
+                <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 120 Days</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">64</span>
+                    <span className="text-sm text-white/65">qualified inbound leads</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">−37%</span>
+                    <span className="text-sm text-white/65">cost per lead</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">5</span>
+                    <span className="text-sm text-white/65">new retainer clients closed</span>
+                  </div>
+                </div>
+
+                <p className="mt-5 text-xs text-white/50 italic">
+                  Clear positioning converts faster than high volume posting.
+                </p>
+              </div>
+
+              {/* Case Study 3 */}
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+                <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 03</div>
+                <h3 className="mt-3 text-lg font-semibold leading-snug">
+                  Personal Brand → Authority Positioning
+                </h3>
+
+                <p className="mt-4 text-sm text-white/60 leading-relaxed">
+                  Founder had strong knowledge but weak digital authority and inconsistent posting.
+                </p>
+
+                <div className="mt-6">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
+                  <ul className="space-y-2 text-sm text-white/75">
+                    <li>• Built a structured weekly publishing calendar</li>
+                    <li>• Designed repeatable video format system</li>
+                    <li>• Refined visual identity for premium perception</li>
+                    <li>• Integrated growth testing cycles</li>
+                  </ul>
+                </div>
+
+                <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
+                  <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 6 Months</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">2.4×</span>
+                    <span className="text-sm text-white/65">follower growth</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">+187%</span>
+                    <span className="text-sm text-white/65">avg engagement rate</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-white">3</span>
+                    <span className="text-sm text-white/65">high-ticket partnership deals</span>
+                  </div>
+                </div>
+
+                <p className="mt-5 text-xs text-white/50 italic">
+                  Structured repetition builds authority faster than viral chasing.
+                </p>
+              </div>
             </div>
           </div>
         </section>
