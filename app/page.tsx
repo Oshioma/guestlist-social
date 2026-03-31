@@ -160,7 +160,7 @@ export default function Home() {
             </p>
 
             <p className="mt-3 text-xl md:text-2xl text-emerald-300/80 font-medium gl-animate-in gl-animate-in-delay-2">
-              We like clients whom do good things.
+              We like clients who do good things.
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-3 gl-animate-in gl-animate-in-delay-2">
@@ -469,7 +469,7 @@ export default function Home() {
                 Ready to build something that stops attention?
               </h2>
               <p className="mt-4 text-white/70 leading-relaxed">
-                We work with brands and founders whom do good things. If that sounds like
+                We work with brands and founders who do good things. If that sounds like
                 you, we'd love to hear about what you're building.
               </p>
               <p className="mt-6 text-sm text-white/50">
