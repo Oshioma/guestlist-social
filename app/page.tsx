@@ -142,8 +142,8 @@ export default function Home() {
         </header>
 
         {/* ── Hero ────────────────────────────────────────────────── */}
-        <section className="max-w-6xl mx-auto px-6 pt-20 pb-20 md:pt-28 md:pb-28 grid md:grid-cols-12 gap-10 items-center">
-          <div className="md:col-span-7 gl-animate-in">
+        <section className="max-w-4xl mx-auto px-6 pt-20 pb-24 md:pt-32 md:pb-32">
+          <div className="gl-animate-in">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-xs text-white/90">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/90" />
               Corporate delivery. Island execution.
@@ -159,7 +159,6 @@ export default function Home() {
               attention with content that connects.
             </p>
 
-            {/* Who we work with */}
             <p className="mt-3 text-sm text-emerald-300/80 gl-animate-in gl-animate-in-delay-2">
               We like clients whom we think do good things.
             </p>
@@ -177,37 +176,6 @@ export default function Home() {
               >
                 View Services
               </a>
-            </div>
-          </div>
-
-          {/* Right hero card */}
-          <div className="md:col-span-5">
-            <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[4px]">
-              <div className="absolute inset-0">
-                <img src="/hero-grain.jpg" alt="" className="h-full w-full object-cover opacity-80" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/10" />
-              </div>
-              <div className="relative p-6 md:p-8">
-                <div className="text-sm text-white/85">Weekly Content Engine</div>
-                <h3 className="mt-3 text-2xl font-semibold">Structured. Consistent. Premium.</h3>
-                <ul className="mt-6 space-y-3 text-white/85 text-sm">
-                  <li>• Hook scripting & content planning</li>
-                  <li>• Premium editing & pacing</li>
-                  <li>• Caption + publishing workflow</li>
-                  <li>• Monthly growth review</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[4px]">
-              <div className="relative h-44">
-                <img src="/proof-meeting.jpg" alt="Proof" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
-              </div>
-              <div className="p-5">
-                <div className="text-xs text-white/80">Executive standard</div>
-                <div className="mt-1 text-sm text-white/95">Strategy and delivery with a boardroom-level finish.</div>
-              </div>
             </div>
           </div>
         </section>
@@ -426,25 +394,42 @@ export default function Home() {
           <div className="max-w-6xl mx-auto">
             <h2 className="sr text-3xl font-semibold tracking-tight">What Clients Say</h2>
 
-            <div className="mt-12 grid md:grid-cols-3 gap-6">
+            <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
                 {
-                  quote:
-                    "They brought genuine strategic thinking, not just execution. The results spoke for themselves within weeks.",
-                  author: "Founder, hospitality brand",
+                  quote: "Really enjoyed working with this team! They were super friendly, easy to communicate with, and made the whole process smooth from start to finish. Always great collaborating with people who are both professional and genuinely nice to work with.",
+                  author: "Mama Buci",
                   delay: "0ms",
                 },
                 {
-                  quote:
-                    "We went from zero inbound to a consistent pipeline. The clarity they brought to our messaging changed everything.",
-                  author: "Director, service business",
-                  delay: "80ms",
+                  quote: "We've had a good experience working with them. They understood our brand and handle things professionally.",
+                  author: "Cirio",
+                  delay: "60ms",
                 },
                 {
-                  quote:
-                    "My online presence finally matches the quality of the work I do. The authority positioning approach was exactly what I needed.",
-                  author: "Founder, personal brand",
-                  delay: "160ms",
+                  quote: "The service you provided is second to none! The organisation and consistency in the messages you post are brilliant, and the competitions and other activities were great.",
+                  author: "BagelFactory UK",
+                  delay: "120ms",
+                },
+                {
+                  quote: "Guestlist have run our social media accounts for over 2 years and made my life really easy and just got on with the tasks in hand. They done a great job of increasing our brand exposure and I've recommended them to a number of clients that are now using their services.",
+                  author: "Wrappz Skins",
+                  delay: "0ms",
+                },
+                {
+                  quote: "I've been really pleased with the posts. I think they've really helped us triple our takings over the last 4 weeks!",
+                  author: "Flaming Licks",
+                  delay: "60ms",
+                },
+                {
+                  quote: "Loved your work on Twitter and Facebook. Already getting positive feedback.",
+                  author: "ElVaqueroLondon",
+                  delay: "120ms",
+                },
+                {
+                  quote: "I was sceptical about how effective this would actually be — happy to say they proved me wrong! Very friendly and thoughtful team who took the time to understand my business and what I wanted...",
+                  author: "AerosoulLimited",
+                  delay: "0ms",
                 },
               ].map(({ quote, author, delay }) => (
                 <div
@@ -453,7 +438,7 @@ export default function Home() {
                   style={{ transitionDelay: delay }}
                 >
                   <p className="text-white/80 text-sm leading-relaxed">"{quote}"</p>
-                  <p className="text-xs text-white/45 mt-auto">— {author}</p>
+                  <p className="text-xs text-white/45 mt-auto font-medium">— {author}</p>
                 </div>
               ))}
             </div>
