@@ -270,7 +270,30 @@ export default function Home() {
               We help brands sharpen their presence and build systems that compound.
             </p>
 
-            <div className="mt-12 grid md:grid-cols-3 gap-6">
+            {/* Video examples */}
+            <div className="mt-12 grid grid-cols-3 gap-4 md:gap-6">
+              {[
+                "FgIEQINuoyc",
+                "vfj0Q-b31_M",
+                "-Z3W6igzIsI",
+              ].map((id, i) => (
+                <div
+                  key={id}
+                  className="sr rounded-2xl overflow-hidden aspect-[9/16] bg-black"
+                  style={{ transitionDelay: `${i * 80}ms` }}
+                >
+                  <iframe
+                    src={`https://www.youtube.com/embed/${id}`}
+                    title={`Content example ${i + 1}`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-full"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-16 grid md:grid-cols-3 gap-6">
               {/* Case Study 1 */}
               <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 01</div>
@@ -392,9 +415,7 @@ export default function Home() {
         {/* ── Testimonials ────────────────────────────────────────── */}
         <section className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
           <div className="max-w-6xl mx-auto">
-            <h2 className="sr text-3xl font-semibold tracking-tight">What Clients Say</h2>
-
-            <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
                 {
                   quote: "Really enjoyed working with this team! They were super friendly, easy to communicate with, and made the whole process smooth from start to finish. Always great collaborating with people who are both professional and genuinely nice to work with.",
@@ -422,14 +443,9 @@ export default function Home() {
                   delay: "60ms",
                 },
                 {
-                  quote: "Loved your work on Twitter and Facebook. Already getting positive feedback.",
-                  author: "ElVaqueroLondon",
-                  delay: "120ms",
-                },
-                {
                   quote: "I was sceptical about how effective this would actually be — happy to say they proved me wrong! Very friendly and thoughtful team who took the time to understand my business and what I wanted...",
                   author: "AerosoulLimited",
-                  delay: "0ms",
+                  delay: "120ms",
                 },
               ].map(({ quote, author, delay }) => (
                 <div
