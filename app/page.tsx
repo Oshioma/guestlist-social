@@ -185,32 +185,37 @@ export default function Home() {
         >
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
+            <p className="mt-4 text-white/70 max-w-2xl text-lg leading-relaxed">
+              We combine strategy, creative and community to build brands people actually engage with.
+            </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
-              {[
-                {
-                  title: "Strategy",
-                  desc: "Positioning, content pillars, and direction that aligns attention with revenue.",
-                },
-                {
-                  title: "Content Production",
-                  desc: "Short-form video, creative editing, and visual storytelling that feels intentional and premium.",
-                },
-                {
-                  title: "Growth",
-                  desc: "Testing, iteration, and performance refinement to turn attention into measurable outcomes.",
-                },
-              ].map((service) => (
-                <div
-                  key={service.title}
-                  className="rounded-3xl bg-white/5 border border-white/10 p-8"
-                >
-                  <h3 className="text-lg font-semibold">{service.title}</h3>
-                  <p className="mt-4 text-white/70 text-sm leading-relaxed">
-                    {service.desc}
-                  </p>
-                </div>
-              ))}
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Strategy</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  We define how your brand shows up with a clear plan of action. Following a thorough
+                  consultation, we plan positioning, content direction and platform strategy to create
+                  clarity, consistency and growth.
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Content</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  Content that earns attention, not just fills a feed. We concept, plan and produce
+                  high-performing content designed to stop scroll and spark engagement including video
+                  and design.
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+                <h3 className="text-lg font-semibold">Being Social</h3>
+                <p className="mt-4 text-white/70 text-sm leading-relaxed">
+                  Growth doesn't happen without conversation. We manage your presence, engage your
+                  audience, turn attention into loyalty and expand your reach sparking conversations
+                  outside your current community.
+                </p>
+              </div>
             </div>
           </div>
         </section>
