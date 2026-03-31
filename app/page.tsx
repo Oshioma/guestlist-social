@@ -1,106 +1,147 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
+/* ── Scroll-reveal hook ─────────────────────────────────────── */
+function useScrollReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll(".sr");
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            (e.target as HTMLElement).classList.add("sr-visible");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+}
+
 export default function Home() {
+  useScrollReveal();
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [formState, setFormState] = useState({ name: "", brand: "", message: "" });
+  const [submitted, setSubmitted] = useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const { name, brand, message } = formState;
+    const subject = encodeURIComponent(`New enquiry from ${name} — ${brand}`);
+    const body = encodeURIComponent(
+      `Name: ${name}\nBrand: ${brand}\n\nMessage:\n${message}`
+    );
+    window.location.href = `mailto:nelly@guestlistsocial.com?subject=${subject}&body=${body}`;
+    setSubmitted(true);
+  }
+
   return (
-    <main className="relative isolate min-h-screen bg-black text-white overflow-hidden">
-      {/* ===== Animations (no deps) ===== */}
+    <main className="relative isolate min-h-screen bg-black text-white overflow-x-hidden">
+      {/* ── Styles ──────────────────────────────────────────────── */}
       <style jsx global>{`
         @keyframes gl-fade-up {
-          from {
-            opacity: 0;
-            transform: translateY(14px);
-            filter: blur(6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-            filter: blur(0);
-          }
+          from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+          to   { opacity: 1; transform: translateY(0);    filter: blur(0);   }
         }
         @keyframes gl-float {
-          0% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-          100% {
-            transform: translateY(0px);
-          }
+          0%, 100% { transform: translateY(0px);  }
+          50%       { transform: translateY(-10px); }
         }
-        .gl-animate-in {
-          animation: gl-fade-up 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        .gl-animate-in               { animation: gl-fade-up 700ms cubic-bezier(0.2,0.8,0.2,1) both; }
+        .gl-animate-in-delay-1       { animation-delay: 120ms; }
+        .gl-animate-in-delay-2       { animation-delay: 240ms; }
+        .gl-animate-in-delay-3       { animation-delay: 360ms; }
+        .gl-animate-in-delay-4       { animation-delay: 480ms; }
+        .gl-float                    { animation: gl-float 6s ease-in-out infinite; }
+
+        /* Scroll-reveal */
+        .sr {
+          opacity: 0;
+          transform: translateY(20px);
+          transition: opacity 0.65s ease, transform 0.65s ease;
         }
-        .gl-animate-in-delay-1 {
-          animation-delay: 120ms;
-        }
-        .gl-animate-in-delay-2 {
-          animation-delay: 240ms;
-        }
-        .gl-animate-in-delay-3 {
-          animation-delay: 360ms;
-        }
-        .gl-animate-in-delay-4 {
-          animation-delay: 480ms;
-        }
-        .gl-float {
-          animation: gl-float 6s ease-in-out infinite;
+        .sr-visible {
+          opacity: 1;
+          transform: translateY(0);
         }
       `}</style>
 
-      {/* ===== FIXED BACKGROUND (FULL IMAGE, NEVER CROPS) ===== */}
+      {/* ── Fixed background ────────────────────────────────────── */}
       <div aria-hidden className="fixed inset-0 z-0 bg-black">
-        {/* IMPORTANT: force full viewport sizing + contain */}
         <img
           src="/hero-island.jpg"
           alt=""
           className="h-full w-full object-contain object-center pointer-events-none select-none"
         />
-
-        {/* Overlay (keeps text readable, does NOT affect cropping) */}
         <div className="absolute inset-0 bg-black/55" />
-
-        {/* Texture (optional) */}
         <div className="absolute inset-0 opacity-[0.12]">
-          <img
-            src="/texture-water.jpg"
-            alt=""
-            className="h-full w-full object-cover pointer-events-none select-none"
-          />
+          <img src="/texture-water.jpg" alt="" className="h-full w-full object-cover pointer-events-none select-none" />
         </div>
-
-        {/* Keep fades light so they don't “hide” edges */}
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/55 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/70 to-transparent" />
       </div>
 
-      {/* ===== CONTENT ===== */}
+      {/* ── Content ─────────────────────────────────────────────── */}
       <div className="relative z-10">
-        {/* Header */}
-        <header className="px-6 py-6 max-w-6xl mx-auto flex items-center justify-between">
-          <div className="text-lg font-semibold tracking-tight">Guestlist Social</div>
 
-          <nav className="hidden md:flex gap-8 text-sm text-white/85">
-            <a href="#services" className="hover:text-white">
-              Services
-            </a>
-            <a href="#work" className="hover:text-white">
-              Work
-            </a>
-            <a href="#contact" className="hover:text-white">
-              Contact
-            </a>
-          </nav>
+        {/* ── Sticky header ───────────────────────────────────────── */}
+        <header className="sticky top-0 z-50 border-b border-white/10 bg-black/70 backdrop-blur-md">
+          <div className="px-6 py-4 max-w-6xl mx-auto flex items-center justify-between">
+            <div className="text-lg font-semibold tracking-tight">Guestlist Social</div>
 
-          <a
-            href="#contact"
-            className="bg-white text-black px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition"
-          >
-            Work With Us
-          </a>
+            {/* Desktop nav */}
+            <nav className="hidden md:flex gap-8 text-sm text-white/85">
+              <a href="#services" className="hover:text-white transition-colors">Services</a>
+              <a href="#process"  className="hover:text-white transition-colors">Process</a>
+              <a href="#work"     className="hover:text-white transition-colors">Work</a>
+              <a href="#contact"  className="hover:text-white transition-colors">Contact</a>
+            </nav>
+
+            <div className="flex items-center gap-3">
+              <a
+                href="#contact"
+                className="hidden md:inline-flex bg-white text-black px-5 py-2.5 rounded-full text-sm font-medium hover:opacity-90 transition"
+              >
+                Work With Us
+              </a>
+
+              {/* Hamburger */}
+              <button
+                onClick={() => setMobileOpen(!mobileOpen)}
+                aria-label="Toggle menu"
+                className="md:hidden flex flex-col gap-1.5 p-2"
+              >
+                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "rotate-45 translate-y-2" : ""}`} />
+                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "opacity-0" : ""}`} />
+                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "-rotate-45 -translate-y-2" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile menu */}
+          {mobileOpen && (
+            <nav className="md:hidden border-t border-white/10 bg-black/90 px-6 py-4 flex flex-col gap-4 text-sm">
+              <a href="#services" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Services</a>
+              <a href="#process"  onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Process</a>
+              <a href="#work"     onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Work</a>
+              <a href="#contact"  onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Contact</a>
+              <a
+                href="#contact"
+                onClick={() => setMobileOpen(false)}
+                className="mt-2 inline-flex justify-center bg-white text-black px-5 py-2.5 rounded-full text-sm font-medium"
+              >
+                Work With Us
+              </a>
+            </nav>
+          )}
         </header>
 
-        {/* Hero */}
+        {/* ── Hero ────────────────────────────────────────────────── */}
         <section className="max-w-6xl mx-auto px-6 pt-20 pb-20 md:pt-28 md:pb-28 grid md:grid-cols-12 gap-10 items-center">
           <div className="md:col-span-7 gl-animate-in">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-xs text-white/90">
@@ -109,13 +150,18 @@ export default function Home() {
             </div>
 
             <h1 className="mt-6 text-5xl md:text-7xl font-semibold leading-[1.03] tracking-tight">
-              We build brands that don’t scroll.
+              We build brands that don't scroll.
               <span className="text-white/75"> They stop attention.</span>
             </h1>
 
             <p className="mt-6 text-lg md:text-xl text-white/90 max-w-2xl gl-animate-in gl-animate-in-delay-1">
               We create meaningful engagement between brands and audiences, building real
               attention with content that connects.
+            </p>
+
+            {/* Who we work with */}
+            <p className="mt-3 text-sm text-emerald-300/80 gl-animate-in gl-animate-in-delay-2">
+              We like clients whom we think do good things.
             </p>
 
             <div className="mt-9 flex flex-col sm:flex-row gap-3 gl-animate-in gl-animate-in-delay-2">
@@ -138,18 +184,12 @@ export default function Home() {
           <div className="md:col-span-5">
             <div className="relative rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[4px]">
               <div className="absolute inset-0">
-                <img
-                  src="/hero-grain.jpg"
-                  alt=""
-                  className="h-full w-full object-cover opacity-80"
-                />
+                <img src="/hero-grain.jpg" alt="" className="h-full w-full object-cover opacity-80" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/10" />
               </div>
-
               <div className="relative p-6 md:p-8">
                 <div className="text-sm text-white/85">Weekly Content Engine</div>
                 <h3 className="mt-3 text-2xl font-semibold">Structured. Consistent. Premium.</h3>
-
                 <ul className="mt-6 space-y-3 text-white/85 text-sm">
                   <li>• Hook scripting & content planning</li>
                   <li>• Premium editing & pacing</li>
@@ -161,36 +201,27 @@ export default function Home() {
 
             <div className="mt-4 rounded-3xl overflow-hidden bg-white/10 ring-1 ring-white/15 backdrop-blur-[4px]">
               <div className="relative h-44">
-                <img
-                  src="/proof-meeting.jpg"
-                  alt="Proof"
-                  className="h-full w-full object-cover"
-                />
+                <img src="/proof-meeting.jpg" alt="Proof" className="h-full w-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
               </div>
               <div className="p-5">
                 <div className="text-xs text-white/80">Executive standard</div>
-                <div className="mt-1 text-sm text-white/95">
-                  Strategy and delivery with a boardroom-level finish.
-                </div>
+                <div className="mt-1 text-sm text-white/95">Strategy and delivery with a boardroom-level finish.</div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Services */}
-        <section
-          id="services"
-          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
-        >
+        {/* ── Services ────────────────────────────────────────────── */}
+        <section id="services" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl font-semibold tracking-tight">What We Do</h2>
-            <p className="mt-4 text-white/70 max-w-2xl text-lg leading-relaxed">
+            <h2 className="sr text-3xl font-semibold tracking-tight">What We Do</h2>
+            <p className="sr mt-4 text-white/70 max-w-2xl text-lg leading-relaxed">
               We combine strategy, creative and community to build brands people actually engage with.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8">
                 <h3 className="text-lg font-semibold">Strategy</h3>
                 <p className="mt-4 text-white/70 text-sm leading-relaxed">
                   We define how your brand shows up with a clear plan of action. Following a thorough
@@ -199,7 +230,7 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8" style={{transitionDelay:"80ms"}}>
                 <h3 className="text-lg font-semibold">Content</h3>
                 <p className="mt-4 text-white/70 text-sm leading-relaxed">
                   Content that earns attention, not just fills a feed. We concept, plan and produce
@@ -208,7 +239,7 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8" style={{transitionDelay:"160ms"}}>
                 <h3 className="text-lg font-semibold">Being Social</h3>
                 <p className="mt-4 text-white/70 text-sm leading-relaxed">
                   Growth doesn't happen without conversation. We manage your presence, engage your
@@ -220,30 +251,68 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Work */}
-        <section
-          id="work"
-          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
-        >
+        {/* ── Process ─────────────────────────────────────────────── */}
+        <section id="process" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl font-semibold tracking-tight">Selected Work</h2>
-            <p className="mt-4 text-white/70 max-w-2xl">
+            <h2 className="sr text-3xl font-semibold tracking-tight">How It Works</h2>
+            <p className="sr mt-4 text-white/70 max-w-2xl">
+              Three steps from conversation to compounding results.
+            </p>
+
+            <div className="mt-12 grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  step: "01",
+                  title: "Discovery",
+                  desc: "We start with a deep-dive consultation — your brand, your audience, your goals. No templates. We build the strategy around you.",
+                  delay: "0ms",
+                },
+                {
+                  step: "02",
+                  title: "Strategy & Build",
+                  desc: "We define your positioning, content pillars and publishing cadence, then build the creative system designed to perform week after week.",
+                  delay: "80ms",
+                },
+                {
+                  step: "03",
+                  title: "Execute & Grow",
+                  desc: "We produce, publish and manage. Monthly reviews test and refine what's working, compounding results over time.",
+                  delay: "160ms",
+                },
+              ].map(({ step, title, desc, delay }) => (
+                <div
+                  key={step}
+                  className="sr rounded-3xl bg-white/5 border border-white/10 p-8 relative"
+                  style={{ transitionDelay: delay }}
+                >
+                  <div className="text-5xl font-bold text-white/10 leading-none">{step}</div>
+                  <h3 className="mt-4 text-lg font-semibold">{title}</h3>
+                  <p className="mt-3 text-white/70 text-sm leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Work / Case Studies ─────────────────────────────────── */}
+        <section id="work" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="sr text-3xl font-semibold tracking-tight">Selected Work</h2>
+            <p className="sr mt-4 text-white/70 max-w-2xl">
               We help brands sharpen their presence and build systems that compound.
             </p>
 
             <div className="mt-12 grid md:grid-cols-3 gap-6">
               {/* Case Study 1 */}
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 01</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
                   Luxury Hospitality Brand — Short-Form Content System
                 </h3>
-
                 <p className="mt-4 text-sm text-white/60 leading-relaxed">
                   High-end boutique hospitality brand struggling with inconsistent posting and low
                   engagement despite premium positioning.
                 </p>
-
                 <div className="mt-6">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
                   <ul className="space-y-2 text-sm text-white/75">
@@ -253,7 +322,6 @@ export default function Home() {
                     <li>• Structured caption strategy tied to direct booking links</li>
                   </ul>
                 </div>
-
                 <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 90 Days</div>
                   <div className="flex items-baseline gap-2">
@@ -269,24 +337,20 @@ export default function Home() {
                     <span className="text-sm text-white/65">direct booking inquiries</span>
                   </div>
                 </div>
-
                 <p className="mt-5 text-xs text-white/50 italic">
                   Consistency + structured hooks outperformed ad spend alone.
                 </p>
               </div>
 
               {/* Case Study 2 */}
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col" style={{transitionDelay:"80ms"}}>
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 02</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
                   Service Business — Lead Flow Rebuild
                 </h3>
-
                 <p className="mt-4 text-sm text-white/60 leading-relaxed">
-                  Founder-led service brand relying entirely on referrals. No consistent inbound
-                  pipeline.
+                  Founder-led service brand relying entirely on referrals. No consistent inbound pipeline.
                 </p>
-
                 <div className="mt-6">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
                   <ul className="space-y-2 text-sm text-white/75">
@@ -296,7 +360,6 @@ export default function Home() {
                     <li>• Layered paid amplification on top 20% performing posts</li>
                   </ul>
                 </div>
-
                 <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 120 Days</div>
                   <div className="flex items-baseline gap-2">
@@ -312,23 +375,20 @@ export default function Home() {
                     <span className="text-sm text-white/65">new retainer clients closed</span>
                   </div>
                 </div>
-
                 <p className="mt-5 text-xs text-white/50 italic">
                   Clear positioning converts faster than high volume posting.
                 </p>
               </div>
 
               {/* Case Study 3 */}
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
+              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col" style={{transitionDelay:"160ms"}}>
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 03</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
                   Personal Brand → Authority Positioning
                 </h3>
-
                 <p className="mt-4 text-sm text-white/60 leading-relaxed">
                   Founder had strong knowledge but weak digital authority and inconsistent posting.
                 </p>
-
                 <div className="mt-6">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-3">What We Did</div>
                   <ul className="space-y-2 text-sm text-white/75">
@@ -338,7 +398,6 @@ export default function Home() {
                     <li>• Integrated growth testing cycles</li>
                   </ul>
                 </div>
-
                 <div className="mt-6 rounded-2xl bg-black/30 border border-white/10 p-5 space-y-3">
                   <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Result — 6 Months</div>
                   <div className="flex items-baseline gap-2">
@@ -354,7 +413,6 @@ export default function Home() {
                     <span className="text-sm text-white/65">high-ticket partnership deals</span>
                   </div>
                 </div>
-
                 <p className="mt-5 text-xs text-white/50 italic">
                   Structured repetition builds authority faster than viral chasing.
                 </p>
@@ -363,45 +421,156 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Contact */}
-        <section
-          id="contact"
-          className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6"
-        >
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
-            <div>
-              <h2 className="text-3xl font-semibold tracking-tight">
-                Ready to build something that stops attention?
-              </h2>
-              <p className="mt-4 text-white/70">
-                Typical reply within{" "}
-                <span className="text-white/85 font-medium">24–48 hours</span>. Urgent?{" "}
-                <span className="text-white/85 font-medium">Call us.</span>
-              </p>
-            </div>
+        {/* ── Testimonials ────────────────────────────────────────── */}
+        <section className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="sr text-3xl font-semibold tracking-tight">What Clients Say</h2>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <a
-                href="mailto:nelly@guestlistsocial.com"
-                className="bg-white text-black px-6 py-3 rounded-full font-medium hover:opacity-90 transition"
-              >
-                nelly@guestlistsocial.com
-              </a>
-              <a
-                href="tel:07537142056"
-                className="rounded-full border border-white/25 px-6 py-3 text-white hover:border-white/60 transition"
-              >
-                07537 142 056
-              </a>
+            <div className="mt-12 grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  quote:
+                    "They brought genuine strategic thinking, not just execution. The results spoke for themselves within weeks.",
+                  author: "Founder, hospitality brand",
+                  delay: "0ms",
+                },
+                {
+                  quote:
+                    "We went from zero inbound to a consistent pipeline. The clarity they brought to our messaging changed everything.",
+                  author: "Director, service business",
+                  delay: "80ms",
+                },
+                {
+                  quote:
+                    "My online presence finally matches the quality of the work I do. The authority positioning approach was exactly what I needed.",
+                  author: "Founder, personal brand",
+                  delay: "160ms",
+                },
+              ].map(({ quote, author, delay }) => (
+                <div
+                  key={author}
+                  className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col gap-6"
+                  style={{ transitionDelay: delay }}
+                >
+                  <p className="text-white/80 text-sm leading-relaxed">"{quote}"</p>
+                  <p className="text-xs text-white/45 mt-auto">— {author}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
+        {/* ── Contact ─────────────────────────────────────────────── */}
+        <section id="contact" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+          <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-14 items-start">
+            <div className="sr">
+              <h2 className="text-3xl font-semibold tracking-tight">
+                Ready to build something that stops attention?
+              </h2>
+              <p className="mt-4 text-white/70 leading-relaxed">
+                We work with brands and founders whom we think do good things. If that sounds like
+                you, we'd love to hear about what you're building.
+              </p>
+              <p className="mt-6 text-sm text-white/50">
+                Typical reply within <span className="text-white/75 font-medium">24–48 hours</span>.
+                Urgent? <span className="text-white/75 font-medium">Call us.</span>
+              </p>
+              <div className="mt-8 flex flex-col gap-3">
+                <a
+                  href="mailto:nelly@guestlistsocial.com"
+                  className="text-sm text-white/70 hover:text-white transition-colors"
+                >
+                  nelly@guestlistsocial.com
+                </a>
+                <a
+                  href="tel:07537142056"
+                  className="text-sm text-white/70 hover:text-white transition-colors"
+                >
+                  07537 142 056
+                </a>
+              </div>
+            </div>
+
+            {/* Contact form */}
+            <div className="sr" style={{transitionDelay:"100ms"}}>
+              {submitted ? (
+                <div className="rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
+                  <div className="text-2xl font-semibold">Thank you</div>
+                  <p className="mt-3 text-white/65 text-sm">
+                    Your message is on its way. We'll be in touch shortly.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSubmit}
+                  className="rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col gap-5"
+                >
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-white/50 uppercase tracking-widest">Your Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={formState.name}
+                      onChange={(e) => setFormState({ ...formState, name: e.target.value })}
+                      className="rounded-xl bg-white/8 border border-white/10 px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                      placeholder="Jane Smith"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-white/50 uppercase tracking-widest">Your Brand / Business</label>
+                    <input
+                      type="text"
+                      required
+                      value={formState.brand}
+                      onChange={(e) => setFormState({ ...formState, brand: e.target.value })}
+                      className="rounded-xl bg-white/8 border border-white/10 px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+                      placeholder="Acme Co."
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-white/50 uppercase tracking-widest">What do you need?</label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={formState.message}
+                      onChange={(e) => setFormState({ ...formState, message: e.target.value })}
+                      className="rounded-xl bg-white/8 border border-white/10 px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 resize-none"
+                      placeholder="Tell us a bit about your brand and what you're looking to achieve…"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="mt-2 rounded-full bg-white text-black px-6 py-3 text-sm font-medium hover:opacity-90 transition"
+                  >
+                    Send Message
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Footer ──────────────────────────────────────────────── */}
         <footer className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-10 px-6 text-sm text-white/50">
-          <div className="max-w-6xl mx-auto">
-            © {new Date().getFullYear()} Guestlist Social. All rights reserved.
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="font-semibold text-white/70 tracking-tight">Guestlist Social</div>
+
+            <nav className="flex gap-6 text-xs">
+              <a href="#services" className="hover:text-white/80 transition-colors">Services</a>
+              <a href="#process"  className="hover:text-white/80 transition-colors">Process</a>
+              <a href="#work"     className="hover:text-white/80 transition-colors">Work</a>
+              <a href="#contact"  className="hover:text-white/80 transition-colors">Contact</a>
+            </nav>
+
+            <div className="text-xs text-center md:text-right">
+              © {new Date().getFullYear()} Guestlist Social. All rights reserved.
+            </div>
           </div>
         </footer>
+
       </div>
     </main>
   );
