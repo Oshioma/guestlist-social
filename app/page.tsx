@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /* ── Scroll-reveal hook ─────────────────────────────────────── */
 function useScrollReveal() {
@@ -49,15 +49,15 @@ export default function Home() {
           to   { opacity: 1; transform: translateY(0);    filter: blur(0);   }
         }
         @keyframes gl-float {
-          0%, 100% { transform: translateY(0px);  }
-          50%       { transform: translateY(-10px); }
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
         }
-        .gl-animate-in               { animation: gl-fade-up 700ms cubic-bezier(0.2,0.8,0.2,1) both; }
-        .gl-animate-in-delay-1       { animation-delay: 120ms; }
-        .gl-animate-in-delay-2       { animation-delay: 240ms; }
-        .gl-animate-in-delay-3       { animation-delay: 360ms; }
-        .gl-animate-in-delay-4       { animation-delay: 480ms; }
-        .gl-float                    { animation: gl-float 6s ease-in-out infinite; }
+        .gl-animate-in { animation: gl-fade-up 700ms cubic-bezier(0.2,0.8,0.2,1) both; }
+        .gl-animate-in-delay-1 { animation-delay: 120ms; }
+        .gl-animate-in-delay-2 { animation-delay: 240ms; }
+        .gl-animate-in-delay-3 { animation-delay: 360ms; }
+        .gl-animate-in-delay-4 { animation-delay: 480ms; }
+        .gl-float { animation: gl-float 6s ease-in-out infinite; }
 
         /* Scroll-reveal */
         .sr {
@@ -80,7 +80,11 @@ export default function Home() {
         />
         <div className="absolute inset-0 bg-black/55" />
         <div className="absolute inset-0 opacity-[0.12]">
-          <img src="/texture-water.jpg" alt="" className="h-full w-full object-cover pointer-events-none select-none" />
+          <img
+            src="/texture-water.jpg"
+            alt=""
+            className="h-full w-full object-cover pointer-events-none select-none"
+          />
         </div>
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/55 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/70 to-transparent" />
@@ -88,7 +92,6 @@ export default function Home() {
 
       {/* ── Content ─────────────────────────────────────────────── */}
       <div className="relative z-10">
-
         {/* ── Sticky header ───────────────────────────────────────── */}
         <header className="sticky top-0 z-50 border-b border-white/10 bg-black/70 backdrop-blur-md">
           <div className="px-6 py-4 max-w-6xl mx-auto flex items-center justify-between">
@@ -97,9 +100,10 @@ export default function Home() {
             {/* Desktop nav */}
             <nav className="hidden md:flex gap-8 text-sm text-white/85">
               <a href="#services" className="hover:text-white transition-colors">Services</a>
-              <a href="#process"  className="hover:text-white transition-colors">Process</a>
-              <a href="#work"     className="hover:text-white transition-colors">Work</a>
-              <a href="#contact"  className="hover:text-white transition-colors">Contact</a>
+              <a href="#process" className="hover:text-white transition-colors">Process</a>
+              <a href="#work" className="hover:text-white transition-colors">Work</a>
+              <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+              <a href="#contact" className="hover:text-white transition-colors">Contact</a>
             </nav>
 
             <div className="flex items-center gap-3">
@@ -116,9 +120,21 @@ export default function Home() {
                 aria-label="Toggle menu"
                 className="md:hidden flex flex-col gap-1.5 p-2"
               >
-                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "rotate-45 translate-y-2" : ""}`} />
-                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "opacity-0" : ""}`} />
-                <span className={`block h-0.5 w-6 bg-white transition-all duration-300 ${mobileOpen ? "-rotate-45 -translate-y-2" : ""}`} />
+                <span
+                  className={`block h-0.5 w-6 bg-white transition-all duration-300 ${
+                    mobileOpen ? "rotate-45 translate-y-2" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 w-6 bg-white transition-all duration-300 ${
+                    mobileOpen ? "opacity-0" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 w-6 bg-white transition-all duration-300 ${
+                    mobileOpen ? "-rotate-45 -translate-y-2" : ""
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -126,10 +142,21 @@ export default function Home() {
           {/* Mobile menu */}
           {mobileOpen && (
             <nav className="md:hidden border-t border-white/10 bg-black/90 px-6 py-4 flex flex-col gap-4 text-sm">
-              <a href="#services" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Services</a>
-              <a href="#process"  onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Process</a>
-              <a href="#work"     onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Work</a>
-              <a href="#contact"  onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">Contact</a>
+              <a href="#services" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">
+                Services
+              </a>
+              <a href="#process" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">
+                Process
+              </a>
+              <a href="#work" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">
+                Work
+              </a>
+              <a href="#faq" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">
+                FAQ
+              </a>
+              <a href="#contact" onClick={() => setMobileOpen(false)} className="text-white/80 hover:text-white">
+                Contact
+              </a>
               <a
                 href="#contact"
                 onClick={() => setMobileOpen(false)}
@@ -198,7 +225,10 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8" style={{transitionDelay:"80ms"}}>
+              <div
+                className="sr rounded-3xl bg-white/5 border border-white/10 p-8"
+                style={{ transitionDelay: "80ms" }}
+              >
                 <h3 className="text-lg font-semibold">Content</h3>
                 <p className="mt-4 text-white/70 text-sm leading-relaxed">
                   Content that earns attention, not just fills a feed. We concept, plan and produce
@@ -207,7 +237,10 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8" style={{transitionDelay:"160ms"}}>
+              <div
+                className="sr rounded-3xl bg-white/5 border border-white/10 p-8"
+                style={{ transitionDelay: "160ms" }}
+              >
                 <h3 className="text-lg font-semibold">Being Social</h3>
                 <p className="mt-4 text-white/70 text-sm leading-relaxed">
                   Growth doesn't happen without conversation. We manage your presence, engage your
@@ -334,7 +367,10 @@ export default function Home() {
               </div>
 
               {/* Case Study 2 */}
-              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col" style={{transitionDelay:"80ms"}}>
+              <div
+                className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col"
+                style={{ transitionDelay: "80ms" }}
+              >
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 02</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
                   Service Business — Lead Flow Rebuild
@@ -372,7 +408,10 @@ export default function Home() {
               </div>
 
               {/* Case Study 3 */}
-              <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col" style={{transitionDelay:"160ms"}}>
+              <div
+                className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col"
+                style={{ transitionDelay: "160ms" }}
+              >
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 03</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
                   Personal Brand → Authority Positioning
@@ -461,6 +500,62 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── FAQ ─────────────────────────────────────────────────── */}
+        <section id="faq" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="sr text-3xl font-semibold tracking-tight">Frequently Asked Questions</h2>
+            <p className="sr mt-4 text-white/70 max-w-2xl text-lg leading-relaxed">
+              Everything you might want to know before working with us.
+            </p>
+
+            <div className="mt-12 grid md:grid-cols-2 gap-6">
+              {[
+                {
+                  q: "Do we need to create content ourselves?",
+                  a: "No. After your consultation, we take full ownership of your content — strategy, ideas, copy and execution. If you already have photos or video, we can use them. If not, we can create original content for you.",
+                },
+                {
+                  q: "Who comes up with the ideas?",
+                  a: "We do. Following the consultation, we build a full month of ideas and content tailored to your brand, audience and goals.",
+                },
+                {
+                  q: "Do we approve content before it goes live?",
+                  a: "Yes — always. You get to review and approve all content each month before anything is posted. Nothing goes live without your sign-off.",
+                },
+                {
+                  q: "What happens after we get started?",
+                  a: "Your consultation and audit shape the strategy. From there, we create your content direction, prepare your first month of content, and begin publishing and refining based on performance.",
+                },
+                {
+                  q: "What results should we expect?",
+                  a: "We track follower growth, engagement and reach. Rather than guessing unrealistic numbers upfront, we prefer to launch, learn what your audience responds to, and then set better targets based on real performance.",
+                },
+                {
+                  q: "How much time do we need to commit?",
+                  a: "Minimal. Most clients spend around an hour each month reviewing upcoming content and giving approval or feedback. Beyond that, we handle the work.",
+                },
+                {
+                  q: "What do you need from us?",
+                  a: "Optional but useful: photos, videos, updates, product shots, launches, events, awards or brand news. The more context we have, the stronger and more aligned the content becomes.",
+                },
+                {
+                  q: "How involved can we be?",
+                  a: "As much or as little as you want. Some clients are very hands-off. Others like to collaborate closely. We adapt to the way you prefer to work.",
+                },
+              ].map(({ q, a }, i) => (
+                <div
+                  key={q}
+                  className="sr rounded-3xl bg-white/5 border border-white/10 p-8"
+                  style={{ transitionDelay: `${i * 60}ms` }}
+                >
+                  <h3 className="text-lg font-semibold">{q}</h3>
+                  <p className="mt-3 text-white/70 text-sm leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ── Contact ─────────────────────────────────────────────── */}
         <section id="contact" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
           <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-14 items-start">
@@ -493,7 +588,7 @@ export default function Home() {
             </div>
 
             {/* Contact form */}
-            <div className="sr" style={{transitionDelay:"100ms"}}>
+            <div className="sr" style={{ transitionDelay: "100ms" }}>
               {submitted ? (
                 <div className="rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
                   <div className="text-2xl font-semibold">Thank you</div>
@@ -561,9 +656,10 @@ export default function Home() {
 
             <nav className="flex gap-6 text-xs">
               <a href="#services" className="hover:text-white/80 transition-colors">Services</a>
-              <a href="#process"  className="hover:text-white/80 transition-colors">Process</a>
-              <a href="#work"     className="hover:text-white/80 transition-colors">Work</a>
-              <a href="#contact"  className="hover:text-white/80 transition-colors">Contact</a>
+              <a href="#process" className="hover:text-white/80 transition-colors">Process</a>
+              <a href="#work" className="hover:text-white/80 transition-colors">Work</a>
+              <a href="#faq" className="hover:text-white/80 transition-colors">FAQ</a>
+              <a href="#contact" className="hover:text-white/80 transition-colors">Contact</a>
             </nav>
 
             <div className="text-xs text-center md:text-right">
@@ -571,7 +667,6 @@ export default function Home() {
             </div>
           </div>
         </footer>
-
       </div>
     </main>
   );
