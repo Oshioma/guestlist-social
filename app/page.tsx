@@ -305,11 +305,7 @@ export default function Home() {
 
             {/* Video examples */}
             <div className="mt-12 grid grid-cols-3 gap-4 md:gap-6">
-              {[
-                "FgIEQINuoyc",
-                "vfj0Q-b31_M",
-                "-Z3W6igzIsI",
-              ].map((id, i) => (
+              {["FgIEQINuoyc", "vfj0Q-b31_M", "-Z3W6igzIsI"].map((id, i) => (
                 <div
                   key={id}
                   className="sr rounded-2xl overflow-hidden aspect-[9/16] bg-black"
@@ -327,7 +323,6 @@ export default function Home() {
             </div>
 
             <div className="mt-16 grid md:grid-cols-3 gap-6">
-              {/* Case Study 1 */}
               <div className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col">
                 <div className="text-xs text-white/50 uppercase tracking-widest">Case Study 01</div>
                 <h3 className="mt-3 text-lg font-semibold leading-snug">
@@ -366,7 +361,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Case Study 2 */}
               <div
                 className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col"
                 style={{ transitionDelay: "80ms" }}
@@ -407,7 +401,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Case Study 3 */}
               <div
                 className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col"
                 style={{ transitionDelay: "160ms" }}
@@ -452,39 +445,78 @@ export default function Home() {
         </section>
 
         {/* ── Testimonials ────────────────────────────────────────── */}
-        <section className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
+        <section className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-24 px-6">
           <div className="max-w-6xl mx-auto">
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="sr max-w-2xl">
+              <h2 className="text-3xl font-semibold tracking-tight">What Clients Say</h2>
+              <p className="mt-4 text-white/70 text-lg leading-relaxed">
+                Real feedback from brands we’ve worked with.
+              </p>
+            </div>
+
+            {/* Featured testimonial */}
+            <div className="sr mt-14">
+              <div className="relative overflow-hidden rounded-[2rem] border border-white/12 bg-white/[0.07] p-8 md:p-12 lg:p-14 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -top-6 left-6 text-[7rem] md:text-[9rem] leading-none font-semibold text-white/[0.06]"
+                >
+                  “
+                </div>
+
+                <div className="relative max-w-3xl">
+                  <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                    Featured Client
+                  </div>
+
+                  <p className="mt-8 text-xl md:text-3xl lg:text-[2rem] leading-relaxed text-white/92 font-medium">
+                    We've had a good experience working with them. They understood our brand and handle things professionally.
+                  </p>
+
+                  <div className="mt-10">
+                    <p className="text-lg md:text-xl text-white/95 font-semibold tracking-tight">
+                      Cirio
+                    </p>
+                    <p className="mt-1 text-sm text-white/50">
+                      Client
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Supporting testimonials */}
+            <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
                 {
-                  quote: "Really enjoyed working with this team! They were super friendly, easy to communicate with, and made the whole process smooth from start to finish. Always great collaborating with people who are both professional and genuinely nice to work with.",
+                  quote:
+                    "Really enjoyed working with this team! They were super friendly, easy to communicate with, and made the whole process smooth from start to finish. Always great collaborating with people who are both professional and genuinely nice to work with.",
                   author: "Mama Buci",
                   delay: "0ms",
                 },
                 {
-                  quote: "We've had a good experience working with them. They understood our brand and handle things professionally.",
-                  author: "Cirio",
+                  quote:
+                    "The service you provided is second to none! The organisation and consistency in the messages you post are brilliant, and the competitions and other activities were great.",
+                  author: "BagelFactory UK",
                   delay: "60ms",
                 },
                 {
-                  quote: "The service you provided is second to none! The organisation and consistency in the messages you post are brilliant, and the competitions and other activities were great.",
-                  author: "BagelFactory UK",
+                  quote:
+                    "Guestlist have run our social media accounts for over 2 years and made my life really easy and just got on with the tasks in hand. They done a great job of increasing our brand exposure and I've recommended them to a number of clients that are now using their services.",
+                  author: "Wrappz Skins",
                   delay: "120ms",
                 },
                 {
-                  quote: "Guestlist have run our social media accounts for over 2 years and made my life really easy and just got on with the tasks in hand. They done a great job of increasing our brand exposure and I've recommended them to a number of clients that are now using their services.",
-                  author: "Wrappz Skins",
+                  quote:
+                    "I've been really pleased with the posts. I think they've really helped us triple our takings over the last 4 weeks!",
+                  author: "Flaming Licks",
                   delay: "0ms",
                 },
                 {
-                  quote: "I've been really pleased with the posts. I think they've really helped us triple our takings over the last 4 weeks!",
-                  author: "Flaming Licks",
-                  delay: "60ms",
-                },
-                {
-                  quote: "I was sceptical about how effective this would actually be — happy to say they proved me wrong! Very friendly and thoughtful team who took the time to understand my business and what I wanted...",
+                  quote:
+                    "I was sceptical about how effective this would actually be — happy to say they proved me wrong! Very friendly and thoughtful team who took the time to understand my business and what I wanted...",
                   author: "AerosoulLimited",
-                  delay: "120ms",
+                  delay: "60ms",
                 },
               ].map(({ quote, author, delay }) => (
                 <div
@@ -492,8 +524,16 @@ export default function Home() {
                   className="sr rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col gap-6"
                   style={{ transitionDelay: delay }}
                 >
-                  <p className="text-white/80 text-sm leading-relaxed">"{quote}"</p>
-                  <p className="text-xs text-white/45 mt-auto font-medium">— {author}</p>
+                  <p className="text-white/82 text-sm leading-relaxed">“{quote}”</p>
+
+                  <div className="mt-auto">
+                    <p className="text-sm md:text-base text-white/90 font-semibold tracking-tight">
+                      {author}
+                    </p>
+                    <p className="text-xs text-white/50 mt-1">
+                      Client
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
