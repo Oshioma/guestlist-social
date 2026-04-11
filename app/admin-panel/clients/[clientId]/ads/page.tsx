@@ -1,16 +1,25 @@
+"use client";
+
 import { clients, ads } from "../../../lib/data";
 import SectionCard from "../../../components/SectionCard";
 import AdRow from "../../../components/AdRow";
+import AdFilterBar, {
+  useAdFilter,
+  getAdCounts,
+} from "../../../components/AdFilterBar";
 import EmptyState from "../../../components/EmptyState";
+import { use } from "react";
 
-export default async function ClientAdsPage({
+export default function ClientAdsPage({
   params,
 }: {
   params: Promise<{ clientId: string }>;
 }) {
-  const { clientId } = await params;
+  const { clientId } = use(params);
   const client = clients.find((c) => c.id === clientId);
   const clientAds = ads.filter((a) => a.clientId === clientId);
+  const { filter, setFilter, filtered } = useAdFilter(clientAds);
+  const counts = getAdCounts(clientAds);
 
   if (!client) {
     return <EmptyState title="Client not found" />;
@@ -25,6 +34,11 @@ export default async function ClientAdsPage({
       <SectionCard title={`${clientAds.length} campaigns`}>
         {clientAds.length > 0 ? (
           <>
+            <AdFilterBar
+              current={filter}
+              onChange={setFilter}
+              counts={counts}
+            />
             <div
               style={{
                 display: "flex",
@@ -44,10 +58,23 @@ export default async function ClientAdsPage({
               <div style={{ width: 90, textAlign: "right" }}>Impr.</div>
               <div style={{ width: 60, textAlign: "right" }}>Clicks</div>
               <div style={{ width: 60, textAlign: "right" }}>CTR</div>
+              <div style={{ width: 160 }} />
             </div>
-            {clientAds.map((ad) => (
+            {filtered.map((ad) => (
               <AdRow key={ad.id} ad={ad} />
             ))}
+            {filtered.length === 0 && (
+              <div
+                style={{
+                  padding: "24px 0",
+                  textAlign: "center",
+                  color: "#a1a1aa",
+                  fontSize: 14,
+                }}
+              >
+                No ads match this filter.
+              </div>
+            )}
           </>
         ) : (
           <EmptyState
