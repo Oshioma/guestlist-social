@@ -64,7 +64,7 @@ export async function getContentDashboardData(): Promise<{
     throw new Error(`content_progress: ${progressRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
-    .filter((row) => row.status !== "paused")
+    .filter((row) => row.status !== "needs_attention")
     .map((row) => ({
     id: row.id,
     name: row.name ?? "Untitled client",
@@ -108,7 +108,7 @@ export async function getVideoIdeasData(): Promise<{
   if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
-    .filter((row) => row.status !== "paused")
+    .filter((row) => row.status !== "needs_attention")
     .map((row) => ({
       id: row.id,
       name: row.name ?? "Untitled client",
@@ -167,7 +167,7 @@ export async function getCarouselIdeasData(): Promise<{
   if (ideasRes.error) throw new Error(`carousel_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
-    .filter((row) => row.status !== "paused")
+    .filter((row) => row.status !== "needs_attention")
     .map((row) => ({
       id: row.id,
       name: row.name ?? "Untitled client",
@@ -228,7 +228,7 @@ export async function getStoryIdeasData(): Promise<{
   if (ideasRes.error) throw new Error(`story_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
-    .filter((row) => row.status !== "paused")
+    .filter((row) => row.status !== "needs_attention")
     .map((row) => ({
       id: row.id,
       name: row.name ?? "Untitled client",
