@@ -93,3 +93,11 @@ export type ContentProgress = {
   month: string;
   status: ContentStatus;
 };
+
+export type VideoIdea = {
+  id: string;
+  clientId: string;
+  month: string;
+  idea: string;
+  createdAt: string;
+};

@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 const titles: Record<string, string> = {
   "/app/dashboard": "Dashboard",
   "/app/clients": "Clients",
+  "/app/content": "Content",
+  "/app/video-ideas": "Video Ideas",
   "/app/launch": "Launch",
   "/app/reports": "Reports",
   "/app/memory": "Memory",

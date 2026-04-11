@@ -5,7 +5,7 @@ import {
   mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion, ContentProgress } from "./types";
+import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea } from "./types";
 
 export async function getDashboardData(): Promise<{
   clients: Client[];
@@ -76,4 +76,41 @@ export async function getContentDashboardData(): Promise<{
   }));
 
   return { clients, progress };
+}
+
+export async function getVideoIdeasData(): Promise<{
+  clients: { id: string; name: string }[];
+  ideas: VideoIdea[];
+}> {
+  const supabase = await createClient();
+
+  const [clientsRes, ideasRes] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+    supabase
+      .from("video_ideas")
+      .select("*")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
+  if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
+
+  const clients = (clientsRes.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name ?? "Untitled client",
+  }));
+
+  const ideas: VideoIdea[] = (ideasRes.data ?? []).map((row) => ({
+    id: row.id,
+    clientId: row.client_id,
+    month: row.month,
+    idea: row.idea ?? "",
+    createdAt: row.created_at ?? "",
+  }));
+
+  return { clients, ideas };
 }

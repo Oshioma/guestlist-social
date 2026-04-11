@@ -1,7 +1,8 @@
-import { getContentDashboardData } from "../lib/queries";
+import { getContentDashboardData, getVideoIdeasData } from "../lib/queries";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import ContentGrid from "./ContentGrid";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,17 @@ export default async function ContentDashboardPage() {
   const months = getNextTwoMonths();
 
   try {
-    const { clients, progress } = await getContentDashboardData();
+    const [{ clients, progress }, ideasData] = await Promise.all([
+      getContentDashboardData(),
+      getVideoIdeasData().catch(() => ({ clients: [], ideas: [] })),
+    ]);
+
+    const ideasByClient = new Map<string, number>();
+    for (const idea of ideasData.ideas) {
+      if (months.some((m) => m.key === idea.month)) {
+        ideasByClient.set(idea.clientId, (ideasByClient.get(idea.clientId) ?? 0) + 1);
+      }
+    }
 
     const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
     const relevantProgress = progress.filter((p) =>
@@ -115,6 +126,110 @@ export default async function ContentDashboardPage() {
             months={months}
           />
         </SectionCard>
+
+        <SectionCard
+          title="Video Ideas"
+          action={
+            <Link
+              href="/app/video-ideas"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#18181b",
+                background: "#f4f4f5",
+                padding: "6px 12px",
+                borderRadius: 999,
+                textDecoration: "none",
+              }}
+            >
+              Manage Ideas
+            </Link>
+          }
+        >
+          {clients.length === 0 ? (
+            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
+              No clients yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
+                  fontSize: 14,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Client</th>
+                    {months.map((m) => (
+                      <th key={m.key} style={{ ...thStyle, textAlign: "center" }}>
+                        {m.label}
+                      </th>
+                    ))}
+                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((client, idx) => {
+                    const clientIdeas = ideasData.ideas.filter(
+                      (i) => i.clientId === client.id
+                    );
+                    const total = clientIdeas.filter((i) =>
+                      months.some((m) => m.key === i.month)
+                    ).length;
+                    return (
+                      <tr
+                        key={client.id}
+                        style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}
+                      >
+                        <td style={tdStyle}>{client.name}</td>
+                        {months.map((m) => {
+                          const count = clientIdeas.filter(
+                            (i) => i.month === m.key
+                          ).length;
+                          return (
+                            <td key={m.key} style={{ ...tdStyle, textAlign: "center" }}>
+                              {count > 0 ? (
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    minWidth: 26,
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    background: "#dcfce7",
+                                    color: "#166534",
+                                  }}
+                                >
+                                  {count}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#d4d4d8" }}>0</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td
+                          style={{
+                            ...tdStyle,
+                            textAlign: "center",
+                            fontWeight: 600,
+                            color: total > 0 ? "#18181b" : "#d4d4d8",
+                          }}
+                        >
+                          {total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
       </div>
     );
   } catch (error) {
@@ -127,6 +242,22 @@ export default async function ContentDashboardPage() {
     );
   }
 }
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "10px 14px",
+  fontWeight: 600,
+  fontSize: 13,
+  color: "#71717a",
+  borderBottom: "2px solid #e4e4e7",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderBottom: "1px solid #f4f4f5",
+  whiteSpace: "nowrap",
+};
 
 function StatBox({
   label,
