@@ -1,46 +1,54 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "../../../../../lib/supabase/server";
-import { mapDbAdToUiAd, mapDbClientToUiClient } from "../../../lib/mappers";
 import ClientForm from "../../../components/ClientForm";
-import EmptyState from "../../../components/EmptyState";
+import { updateClientAction } from "../../../lib/client-actions";
+import { mapClientStatus } from "../../../lib/mappers";
 
-export const dynamic = "force-dynamic";
-
-export default async function EditClientPage({
-  params,
-}: {
+type Props = {
   params: Promise<{ clientId: string }>;
-}) {
+};
+
+export default async function EditClientPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes] = await Promise.all([
-    supabase.from("clients").select("*").eq("id", clientId).single(),
-    supabase.from("ads").select("*").eq("client_id", clientId),
-  ]);
+  const { data: client, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", clientId)
+    .single();
 
-  if (clientRes.error || !clientRes.data) {
-    return <EmptyState title="Client not found" />;
+  if (error || !client) {
+    notFound();
   }
 
-  const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
-  const client = mapDbClientToUiClient(clientRes.data, ads.length);
+  async function action(
+    _state: { error: string | null },
+    formData: FormData
+  ): Promise<{ error: string | null }> {
+    "use server";
+
+    try {
+      await updateClientAction(clientId, formData);
+      return { error: null };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Could not update client.",
+      };
+    }
+  }
 
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <Link
-          href={`/app/clients/${clientId}`}
-          style={{ fontSize: 13, color: "#71717a", textDecoration: "none" }}
-        >
-          &larr; Back to {client.name}
-        </Link>
-        <h2 style={{ fontSize: 18, fontWeight: 600, margin: "8px 0 0" }}>
-          Edit Client
-        </h2>
-      </div>
-
-      <ClientForm client={client} />
-    </div>
+    <ClientForm
+      title={`Edit ${client.name}`}
+      submitLabel="Save changes"
+      action={action}
+      initialValues={{
+        name: client.name ?? "",
+        platform: client.platform ?? "Meta",
+        monthlyBudget: Number(client.monthly_budget ?? 0),
+        status: mapClientStatus(client.status ?? "testing"),
+      }}
+    />
   );
 }

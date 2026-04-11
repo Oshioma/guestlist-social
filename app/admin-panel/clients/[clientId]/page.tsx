@@ -70,6 +70,22 @@ export default async function ClientDetailPage({
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
           <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>{client.name}</h2>
           <StatusPill status={client.status} />
+          <Link
+            href={`/app/clients/${clientId}/edit`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: "#18181b",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Edit client
+          </Link>
         </div>
         <p style={{ fontSize: 14, color: "#71717a", margin: 0 }}>
           {client.platform} · {formatCurrency(client.monthlyBudget)}/mo

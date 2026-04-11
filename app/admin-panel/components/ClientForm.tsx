@@ -1,155 +1,129 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import type { Client } from "../lib/types";
-import { createClientAction, updateClientAction } from "../lib/client-actions";
+import { useActionState } from "react";
+
+type ClientFormValues = {
+  name: string;
+  platform: string;
+  monthlyBudget: number;
+  status: "active" | "paused" | "onboarding";
+};
+
+type Props = {
+  title: string;
+  submitLabel: string;
+  action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+  initialValues?: ClientFormValues;
+};
 
 export default function ClientForm({
-  client,
-}: {
-  client?: Client;
-}) {
-  const isEdit = !!client;
-
-  const [name, setName] = useState(client?.name ?? "");
-  const [platform, setPlatform] = useState(client?.platform ?? "Meta");
-  const [monthlyBudget, setMonthlyBudget] = useState(
-    client?.monthlyBudget ? String(client.monthlyBudget) : ""
-  );
-  const [status, setStatus] = useState(() => {
-    if (!client) return "onboarding";
-    if (client.status === "active") return "growing";
-    if (client.status === "paused") return "needs_attention";
-    return "onboarding";
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    const budget = parseFloat(monthlyBudget);
-    if (isNaN(budget) || budget < 0) {
-      setError("Enter a valid monthly budget.");
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        if (isEdit && client) {
-          await updateClientAction(client.id, {
-            name,
-            platform,
-            monthlyBudget: budget,
-            status,
-          });
-        } else {
-          await createClientAction({
-            name,
-            platform,
-            monthlyBudget: budget,
-            status,
-          });
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Something went wrong. Please try again.");
-      }
-    });
-  }
+  title,
+  submitLabel,
+  action,
+  initialValues,
+}: Props) {
+  const [state, formAction, pending] = useActionState(action, { error: null });
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}
+    <div
+      style={{
+        maxWidth: 720,
+        background: "#fff",
+        border: "1px solid #e4e4e7",
+        borderRadius: 16,
+        padding: 24,
+      }}
     >
-      {error && (
-        <div
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: 28 }}>{title}</h1>
+        <p style={{ margin: "8px 0 0", fontSize: 14, color: "#71717a" }}>
+          Add or update a client profile for the dashboard.
+        </p>
+      </div>
+
+      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {state.error && (
+          <div
+            style={{
+              fontSize: 13,
+              color: "#b91c1c",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            {state.error}
+          </div>
+        )}
+
+        <div>
+          <label style={labelStyle}>Client name</label>
+          <input
+            name="name"
+            defaultValue={initialValues?.name ?? ""}
+            style={inputStyle}
+            placeholder="Organzibar"
+            required
+          />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Platform</label>
+            <input
+              name="platform"
+              defaultValue={initialValues?.platform ?? "Meta"}
+              style={inputStyle}
+              placeholder="Meta"
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Monthly budget</label>
+            <input
+              name="monthlyBudget"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={initialValues?.monthlyBudget ?? 3}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Status</label>
+          <select
+            name="status"
+            defaultValue={initialValues?.status ?? "onboarding"}
+            style={inputStyle}
+          >
+            <option value="onboarding">Onboarding</option>
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          disabled={pending}
           style={{
-            fontSize: 13,
-            color: "#b91c1c",
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
+            border: "none",
             borderRadius: 10,
-            padding: "10px 12px",
+            padding: "12px 14px",
+            background: "#18181b",
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: pending ? "wait" : "pointer",
+            opacity: pending ? 0.7 : 1,
           }}
         >
-          {error}
-        </div>
-      )}
-
-      <div>
-        <label style={labelStyle}>Client name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Acme Corp"
-          required
-          style={inputStyle}
-        />
-      </div>
-
-      <div>
-        <label style={labelStyle}>Platform</label>
-        <select
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="Meta">Meta</option>
-          <option value="Google">Google</option>
-          <option value="TikTok">TikTok</option>
-          <option value="LinkedIn">LinkedIn</option>
-          <option value="X">X</option>
-        </select>
-      </div>
-
-      <div>
-        <label style={labelStyle}>Monthly budget (£)</label>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={monthlyBudget}
-          onChange={(e) => setMonthlyBudget(e.target.value)}
-          placeholder="1500"
-          required
-          style={inputStyle}
-        />
-      </div>
-
-      <div>
-        <label style={labelStyle}>Status</label>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="onboarding">Onboarding</option>
-          <option value="growing">Active / Growing</option>
-          <option value="needs_attention">Needs Attention</option>
-        </select>
-      </div>
-
-      <button
-        type="submit"
-        disabled={isPending || !name.trim()}
-        style={{
-          border: "none",
-          borderRadius: 10,
-          padding: "12px 16px",
-          background: "#18181b",
-          color: "#fff",
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: isPending || !name.trim() ? "not-allowed" : "pointer",
-          opacity: isPending || !name.trim() ? 0.6 : 1,
-        }}
-      >
-        {isPending ? "Saving..." : isEdit ? "Update client" : "Create client"}
-      </button>
-    </form>
+          {pending ? "Saving..." : submitLabel}
+        </button>
+      </form>
+    </div>
   );
 }
 

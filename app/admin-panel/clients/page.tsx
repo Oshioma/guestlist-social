@@ -42,17 +42,18 @@ export default async function ClientsPage() {
         <Link
           href="/app/clients/new"
           style={{
-            padding: "10px 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            border: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "10px 14px",
             borderRadius: 10,
             background: "#18181b",
             color: "#fff",
             textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 600,
           }}
         >
-          New client
+          Add client
         </Link>
       </div>
 
