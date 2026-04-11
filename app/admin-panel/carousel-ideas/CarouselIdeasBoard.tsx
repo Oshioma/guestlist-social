@@ -8,9 +8,11 @@ import {
   addCarouselIdeaAction,
   updateCarouselIdeaAction,
   updateCarouselCaptionsAction,
+  updateCarouselDesignLinkAction,
   deleteCarouselIdeaAction,
 } from "../lib/carousel-idea-actions";
 import type { CarouselIdea, CarouselTheme } from "../lib/types";
+import ImageUpload from "../components/ImageUpload";
 
 type Client = { id: string; name: string };
 
@@ -67,14 +69,6 @@ export default function CarouselIdeasBoard({
     (i) => !i.themeId || !clientThemes.some((t) => t.id === i.themeId)
   );
 
-  // Summary for "at a glance"
-  const summaryMap = new Map<string, { themes: number; ideas: number }>();
-  for (const client of clients) {
-    const ct = themes.filter((t) => t.clientId === client.id).length;
-    const ci = ideas.filter((i) => i.clientId === client.id).length;
-    summaryMap.set(client.id, { themes: ct, ideas: ci });
-  }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* At a glance */}
@@ -85,13 +79,17 @@ export default function CarouselIdeasBoard({
             <thead>
               <tr>
                 <th style={thStyle}>Client</th>
+                {MONTHS.map((m) => (
+                  <th key={m.value} style={{ ...thStyle, textAlign: "center" }}>{m.label.split(" ")[0]}</th>
+                ))}
                 <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Ideas</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {clients.map((client, idx) => {
-                const summary = summaryMap.get(client.id);
+                const cThemes = themes.filter((t) => t.clientId === client.id).length;
+                const cIdeas = ideas.filter((i) => i.clientId === client.id);
                 return (
                   <tr
                     key={client.id}
@@ -113,11 +111,19 @@ export default function CarouselIdeasBoard({
                     >
                       {client.name}
                     </td>
+                    {MONTHS.map((m) => {
+                      const count = cIdeas.filter((i) => i.month === m.value).length;
+                      return (
+                        <td key={m.value} style={{ ...tdStyle, textAlign: "center" }}>
+                          <CountBadge count={count} />
+                        </td>
+                      );
+                    })}
                     <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <CountBadge count={summary?.themes ?? 0} />
+                      <CountBadge count={cThemes} />
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <CountBadge count={summary?.ideas ?? 0} />
+                    <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: cIdeas.length > 0 ? "#18181b" : "#d4d4d8" }}>
+                      {cIdeas.length}
                     </td>
                   </tr>
                 );
@@ -491,6 +497,8 @@ function AddThemeForm({
 function IdeaRow({ idea }: { idea: CarouselIdea }) {
   const [isEditing, setIsEditing] = useState(false);
   const [showCaptions, setShowCaptions] = useState(false);
+  const [editingLink, setEditingLink] = useState(false);
+  const [linkValue, setLinkValue] = useState(idea.designLink);
   const [editText, setEditText] = useState(idea.idea);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
@@ -499,6 +507,13 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   const colors = categoryColor(idea.category);
   const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
   const captionCount = idea.captions.filter((c) => c.trim()).length;
+
+  function handleSaveLink() {
+    startTransition(async () => {
+      await updateCarouselDesignLinkAction(idea.id, linkValue);
+      setEditingLink(false);
+    });
+  }
 
   function handleSave() {
     if (!editText.trim()) return;
@@ -593,13 +608,65 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
         >
           {captionCount > 0 ? `${captionCount}/8 slides` : "Captions"}
         </button>
+        {editingLink ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input
+              value={linkValue}
+              onChange={(e) => setLinkValue(e.target.value)}
+              placeholder="Paste Google Drive link..."
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveLink();
+                if (e.key === "Escape") { setLinkValue(idea.designLink); setEditingLink(false); }
+              }}
+              style={{ ...inputStyle, padding: "4px 8px", fontSize: 12, width: 220 }}
+            />
+            <button onClick={handleSaveLink} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button onClick={() => { setLinkValue(idea.designLink); setEditingLink(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+              Cancel
+            </button>
+          </div>
+        ) : idea.designLink ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <a
+              href={idea.designLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 11, fontWeight: 600, color: "#1e40af", textDecoration: "underline", whiteSpace: "nowrap" }}
+            >
+              Design
+            </a>
+            <button onClick={() => setEditingLink(true)} style={{ ...btnStyle("#f3f4f6", "#374151"), padding: "2px 6px", fontSize: 10 }}>
+              edit
+            </button>
+          </div>
+        ) : (
+          <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <button onClick={() => setEditingLink(true)} style={btnStyle("#f3f4f6", "#71717a")}>
+              + Link
+            </button>
+            <ImageUpload
+              folder={`carousel/${idea.id}`}
+              compact
+              label="Upload"
+              onUploaded={(url) => {
+                setLinkValue(url);
+                startTransition(async () => {
+                  await updateCarouselDesignLinkAction(idea.id, url);
+                });
+              }}
+            />
+          </span>
+        )}
         <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
         <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
           {isPending ? "..." : "Delete"}
         </button>
       </div>
       {showCaptions && (
-        <CaptionsEditor ideaId={idea.id} captions={idea.captions} />
+        <CaptionsEditor ideaId={idea.id} captions={idea.captions} captionImages={idea.captionImages} />
       )}
     </div>
   );
@@ -607,9 +674,11 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
 
 // ── Captions editor ──
 
-function CaptionsEditor({ ideaId, captions }: { ideaId: string; captions: string[] }) {
+function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; captions: string[]; captionImages: string[] }) {
   const initial = Array.from({ length: 8 }, (_, i) => captions[i] ?? "");
+  const initialImages = Array.from({ length: 8 }, (_, i) => captionImages[i] ?? "");
   const [slides, setSlides] = useState(initial);
+  const [imageLinks, setImageLinks] = useState(initialImages);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
 
@@ -620,9 +689,16 @@ function CaptionsEditor({ ideaId, captions }: { ideaId: string; captions: string
     setSaved(false);
   }
 
+  function updateImageLink(index: number, value: string) {
+    const next = [...imageLinks];
+    next[index] = value;
+    setImageLinks(next);
+    setSaved(false);
+  }
+
   function handleSave() {
     startTransition(async () => {
-      await updateCarouselCaptionsAction(ideaId, slides);
+      await updateCarouselCaptionsAction(ideaId, slides, imageLinks);
       setSaved(true);
     });
   }
@@ -630,11 +706,11 @@ function CaptionsEditor({ ideaId, captions }: { ideaId: string; captions: string
   return (
     <div style={{ padding: "8px 10px 12px", borderTop: "1px solid #f4f4f5" }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: "#71717a", marginBottom: 8 }}>
-        Slide Captions (up to 8)
+        Slide Captions & Images (up to 8)
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         {slides.map((caption, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div key={i} style={{ display: "flex", gap: 6 }}>
             <span style={{
               fontSize: 11,
               fontWeight: 700,
@@ -642,24 +718,49 @@ function CaptionsEditor({ ideaId, captions }: { ideaId: string; captions: string
               width: 16,
               textAlign: "center",
               flexShrink: 0,
+              paddingTop: 8,
             }}>
               {i + 1}
             </span>
-            <textarea
-              value={caption}
-              onChange={(e) => updateSlide(i, e.target.value)}
-              placeholder={`Slide ${i + 1} caption...`}
-              rows={2}
-              style={{
-                ...inputStyle,
-                flex: 1,
-                padding: "6px 8px",
-                fontSize: 13,
-                resize: "vertical",
-                fontFamily: "inherit",
-                lineHeight: 1.4,
-              }}
-            />
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+              <textarea
+                value={caption}
+                onChange={(e) => updateSlide(i, e.target.value)}
+                placeholder={`Slide ${i + 1} caption...`}
+                rows={2}
+                style={{
+                  ...inputStyle,
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: 13,
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                  lineHeight: 1.4,
+                }}
+              />
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <input
+                  value={imageLinks[i]}
+                  onChange={(e) => updateImageLink(i, e.target.value)}
+                  placeholder="Image link or upload..."
+                  style={{
+                    ...inputStyle,
+                    flex: 1,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    color: imageLinks[i] ? "#1e40af" : "#a1a1aa",
+                  }}
+                />
+                {imageLinks[i] && (
+                  <a href={imageLinks[i]} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#1e40af", flexShrink: 0 }}>View</a>
+                )}
+                <ImageUpload
+                  folder={`carousel/${ideaId}`}
+                  compact
+                  onUploaded={(url) => updateImageLink(i, url)}
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>

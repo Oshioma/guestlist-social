@@ -161,18 +161,21 @@ export async function updateCarouselIdeaAction(
 
 export async function updateCarouselCaptionsAction(
   id: string,
-  captions: string[]
+  captions: string[],
+  captionImages: string[] = []
 ) {
   if (!id) throw new Error("ID is required.");
 
   const supabase = await createClient();
 
-  const trimmed = captions.map((c) => c.trim()).slice(0, 8);
+  const trimmedCaptions = captions.map((c) => c.trim()).slice(0, 8);
+  const trimmedImages = captionImages.map((c) => c.trim()).slice(0, 8);
 
   const { error } = await supabase
     .from("carousel_ideas")
     .update({
-      captions: trimmed,
+      captions: trimmedCaptions,
+      caption_images: trimmedImages,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -182,6 +185,20 @@ export async function updateCarouselCaptionsAction(
     throw new Error("Could not update captions.");
   }
 
+  revalidatePath("/app/carousel-ideas");
+}
+
+export async function updateCarouselDesignLinkAction(id: string, designLink: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("carousel_ideas")
+    .update({ design_link: designLink.trim(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.error("updateCarouselDesignLinkAction error:", error);
+    throw new Error("Could not update design link.");
+  }
   revalidatePath("/app/carousel-ideas");
 }
 

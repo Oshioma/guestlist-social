@@ -159,6 +159,20 @@ export async function updateVideoIdeaAction(
   revalidatePath("/app/content");
 }
 
+export async function updateVideoDesignLinkAction(id: string, designLink: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("video_ideas")
+    .update({ design_link: designLink.trim(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.error("updateVideoDesignLinkAction error:", error);
+    throw new Error("Could not update design link.");
+  }
+  revalidatePath("/app/video-ideas");
+}
+
 export async function deleteVideoIdeaAction(id: string) {
   if (!id) throw new Error("ID is required.");
 

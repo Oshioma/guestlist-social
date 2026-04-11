@@ -101,6 +101,7 @@ export type VideoIdea = {
   idea: string;
   category: string;
   month: string;
+  designLink: string;
   createdBy: string;
   createdAt: string;
 };
@@ -123,6 +124,8 @@ export type CarouselIdea = {
   category: string;
   month: string;
   captions: string[];
+  captionImages: string[];
+  designLink: string;
   createdBy: string;
   createdAt: string;
 };
@@ -144,6 +147,7 @@ export type StoryIdea = {
   idea: string;
   category: string;
   month: string;
+  designLink: string;
   createdBy: string;
   createdAt: string;
 };

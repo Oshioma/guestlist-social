@@ -127,6 +127,7 @@ export async function getVideoIdeasData(): Promise<{
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
+    designLink: row.design_link ?? "",
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
@@ -184,6 +185,8 @@ export async function getCarouselIdeasData(): Promise<{
     category: row.category ?? "general",
     month: row.month ?? "",
     captions: Array.isArray(row.captions) ? row.captions : [],
+    captionImages: Array.isArray(row.caption_images) ? row.caption_images : [],
+    designLink: row.design_link ?? "",
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
@@ -240,6 +243,7 @@ export async function getStoryIdeasData(): Promise<{
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
+    designLink: row.design_link ?? "",
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));

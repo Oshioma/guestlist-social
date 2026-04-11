@@ -7,9 +7,11 @@ import {
   deleteStoryThemeAction,
   addStoryIdeaAction,
   updateStoryIdeaAction,
+  updateStoryDesignLinkAction,
   deleteStoryIdeaAction,
 } from "../lib/story-idea-actions";
 import type { StoryIdea, StoryTheme } from "../lib/types";
+import ImageUpload from "../components/ImageUpload";
 
 type Client = { id: string; name: string };
 
@@ -66,14 +68,6 @@ export default function StoryIdeasBoard({
     (i) => !i.themeId || !clientThemes.some((t) => t.id === i.themeId)
   );
 
-  // Summary for "at a glance"
-  const summaryMap = new Map<string, { themes: number; ideas: number }>();
-  for (const client of clients) {
-    const ct = themes.filter((t) => t.clientId === client.id).length;
-    const ci = ideas.filter((i) => i.clientId === client.id).length;
-    summaryMap.set(client.id, { themes: ct, ideas: ci });
-  }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* At a glance */}
@@ -84,13 +78,17 @@ export default function StoryIdeasBoard({
             <thead>
               <tr>
                 <th style={thStyle}>Client</th>
+                {MONTHS.map((m) => (
+                  <th key={m.value} style={{ ...thStyle, textAlign: "center" }}>{m.label.split(" ")[0]}</th>
+                ))}
                 <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Ideas</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {clients.map((client, idx) => {
-                const summary = summaryMap.get(client.id);
+                const cThemes = themes.filter((t) => t.clientId === client.id).length;
+                const cIdeas = ideas.filter((i) => i.clientId === client.id);
                 return (
                   <tr
                     key={client.id}
@@ -112,11 +110,19 @@ export default function StoryIdeasBoard({
                     >
                       {client.name}
                     </td>
+                    {MONTHS.map((m) => {
+                      const count = cIdeas.filter((i) => i.month === m.value).length;
+                      return (
+                        <td key={m.value} style={{ ...tdStyle, textAlign: "center" }}>
+                          <CountBadge count={count} />
+                        </td>
+                      );
+                    })}
                     <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <CountBadge count={summary?.themes ?? 0} />
+                      <CountBadge count={cThemes} />
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <CountBadge count={summary?.ideas ?? 0} />
+                    <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: cIdeas.length > 0 ? "#18181b" : "#d4d4d8" }}>
+                      {cIdeas.length}
                     </td>
                   </tr>
                 );
@@ -489,6 +495,8 @@ function AddThemeForm({
 
 function IdeaRow({ idea }: { idea: StoryIdea }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [editingLink, setEditingLink] = useState(false);
+  const [linkValue, setLinkValue] = useState(idea.designLink);
   const [editText, setEditText] = useState(idea.idea);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
@@ -496,6 +504,13 @@ function IdeaRow({ idea }: { idea: StoryIdea }) {
 
   const colors = categoryColor(idea.category);
   const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
+
+  function handleSaveLink() {
+    startTransition(async () => {
+      await updateStoryDesignLinkAction(idea.id, linkValue);
+      setEditingLink(false);
+    });
+  }
 
   function handleSave() {
     if (!editText.trim()) return;
@@ -579,6 +594,58 @@ function IdeaRow({ idea }: { idea: StoryIdea }) {
       {idea.createdBy && (
         <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
           {idea.createdBy.split("@")[0]}
+        </span>
+      )}
+      {editingLink ? (
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <input
+            value={linkValue}
+            onChange={(e) => setLinkValue(e.target.value)}
+            placeholder="Paste Google Drive link..."
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSaveLink();
+              if (e.key === "Escape") { setLinkValue(idea.designLink); setEditingLink(false); }
+            }}
+            style={{ ...inputStyle, padding: "4px 8px", fontSize: 12, width: 220 }}
+          />
+          <button onClick={handleSaveLink} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+            {isPending ? "..." : "Save"}
+          </button>
+          <button onClick={() => { setLinkValue(idea.designLink); setEditingLink(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+            Cancel
+          </button>
+        </div>
+      ) : idea.designLink ? (
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <a
+            href={idea.designLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 11, fontWeight: 600, color: "#1e40af", textDecoration: "underline", whiteSpace: "nowrap" }}
+          >
+            Design
+          </a>
+          <button onClick={() => setEditingLink(true)} style={{ ...btnStyle("#f3f4f6", "#374151"), padding: "2px 6px", fontSize: 10 }}>
+            edit
+          </button>
+        </div>
+      ) : (
+        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <button onClick={() => setEditingLink(true)} style={btnStyle("#f3f4f6", "#71717a")}>
+            + Link
+          </button>
+          <ImageUpload
+            folder={`story/${idea.id}`}
+            compact
+            label="Upload"
+            onUploaded={(url) => {
+              setLinkValue(url);
+              startTransition(async () => {
+                await updateStoryDesignLinkAction(idea.id, url);
+              });
+            }}
+          />
         </span>
       )}
       <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>

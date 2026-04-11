@@ -158,6 +158,20 @@ export async function updateStoryIdeaAction(
   revalidatePath("/app/content");
 }
 
+export async function updateStoryDesignLinkAction(id: string, designLink: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("story_ideas")
+    .update({ design_link: designLink.trim(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) {
+    console.error("updateStoryDesignLinkAction error:", error);
+    throw new Error("Could not update design link.");
+  }
+  revalidatePath("/app/story-ideas");
+}
+
 export async function deleteStoryIdeaAction(id: string) {
   if (!id) throw new Error("ID is required.");
 
