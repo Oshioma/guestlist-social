@@ -99,7 +99,20 @@ export default async function DashboardPage() {
           )}
         </SectionCard>
 
-        <SuggestionCard suggestions={suggestions.slice(0, 6)} />
+        <SectionCard title="Suggestions">
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {suggestions.length > 0 ? (
+              suggestions.slice(0, 6).map((suggestion) => (
+                <SuggestionCard key={suggestion.id} suggestion={suggestion} />
+              ))
+            ) : (
+              <EmptyState
+                title="No suggestions yet"
+                description="Suggestions will appear here as data builds up."
+              />
+            )}
+          </div>
+        </SectionCard>
       </div>
 
       <SectionCard title="Needs Attention">
