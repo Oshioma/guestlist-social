@@ -10,6 +10,7 @@ const navItems = [
   { label: "Reports", href: "/app/reports" },
   { label: "Memory", href: "/app/memory" },
   { label: "Settings", href: "/app/settings" },
+  { label: "Guide", href: "/app/guide" },
 ];
 
 export default function Sidebar() {
