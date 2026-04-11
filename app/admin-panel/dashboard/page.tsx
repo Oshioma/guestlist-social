@@ -1,4 +1,5 @@
 import { getDashboardData } from "../lib/queries";
+import { createClient } from "@/lib/supabase/server";
 import SectionCard from "../components/SectionCard";
 import StatCard from "../components/StatCard";
 import ClientCard from "../components/ClientCard";
@@ -13,6 +14,19 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   try {
     const { clients, ads, actions, suggestions } = await getDashboardData();
+
+    // Learnings — separate query so it doesn't break the page if table is missing
+    let learningRows: any[] = [];
+    try {
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("learnings")
+        .select("*, clients(name)")
+        .order("created_at", { ascending: false });
+      learningRows = data ?? [];
+    } catch {
+      // table may not exist yet
+    }
 
     const openActions = actions.filter((a) => !a.done);
     const completedActions = actions.filter((a) => a.done);
@@ -222,6 +236,97 @@ export default async function DashboardPage() {
             <EmptyState
               title="No completed actions yet"
               description="Completed work will appear here."
+            />
+          )}
+        </SectionCard>
+
+        {/* Learnings */}
+        <SectionCard title={`Learnings (${learningRows.length})`}>
+          {learningRows.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {learningRows.slice(0, 10).map((learning: any) => {
+                const clientName =
+                  (learning.clients as { name: string } | null)?.name ??
+                  "Unknown client";
+                return (
+                  <div
+                    key={learning.id}
+                    style={{
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 14,
+                      padding: 14,
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#18181b",
+                        }}
+                      >
+                        {learning.problem || "Untitled learning"}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#71717a",
+                          background: "#f4f4f5",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {clientName}
+                      </span>
+                    </div>
+                    {learning.change_made ? (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "#52525b",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
+                        {learning.change_made}
+                      </div>
+                    ) : null}
+                    {learning.result ? (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "#52525b",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
+                        {learning.result}
+                      </div>
+                    ) : null}
+                    {learning.outcome ? (
+                      <div style={{ fontSize: 13, color: "#71717a" }}>
+                        <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
+                        {learning.outcome}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title="No learnings yet"
+              description="Completed actions can be turned into learnings from the campaign page."
             />
           )}
         </SectionCard>

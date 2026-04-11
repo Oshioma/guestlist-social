@@ -85,6 +85,19 @@ export default async function ClientDetailPage({
   );
   const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
 
+  // Learnings — separate query so it doesn't break the page if table is missing
+  let learningRows: any[] = [];
+  try {
+    const { data } = await supabase
+      .from("learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false });
+    learningRows = data ?? [];
+  } catch {
+    // table may not exist
+  }
+
   const winnerAds = ads.filter((a) => a.status === "active" && a.ctr >= 2.5);
   const losingAds = ads.filter((a) => a.status === "ended");
   const testingAds = ads.filter((a) => a.status === "draft");
@@ -363,6 +376,59 @@ export default async function ClientDetailPage({
           </div>
         </SectionCard>
       </div>
+
+      {/* Learnings */}
+      <SectionCard title={`Learnings (${learningRows.length})`}>
+        {learningRows.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {learningRows.map((learning: any) => (
+              <div
+                key={learning.id}
+                style={{
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 14,
+                  padding: 14,
+                  background: "#fff",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#18181b",
+                    marginBottom: 6,
+                  }}
+                >
+                  {learning.problem || "Untitled learning"}
+                </div>
+                {learning.change_made ? (
+                  <div style={{ fontSize: 13, color: "#52525b", marginBottom: 4 }}>
+                    <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
+                    {learning.change_made}
+                  </div>
+                ) : null}
+                {learning.result ? (
+                  <div style={{ fontSize: 13, color: "#52525b", marginBottom: 4 }}>
+                    <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
+                    {learning.result}
+                  </div>
+                ) : null}
+                {learning.outcome ? (
+                  <div style={{ fontSize: 13, color: "#71717a" }}>
+                    <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
+                    {learning.outcome}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No learnings yet"
+            description="Completed actions can be turned into learnings from the campaign page."
+          />
+        )}
+      </SectionCard>
 
       {/* Campaigns */}
       <SectionCard title={`Campaigns (${rawCampaigns.length})`}>
