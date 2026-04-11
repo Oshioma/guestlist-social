@@ -1,3 +1,6 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   getCampaigns,
@@ -11,60 +14,35 @@ import {
   targetingToAudience,
 } from "@/lib/meta";
 
-/**
- * GET /api/meta-sync?clientId=1
- *
- * Full sync: pulls 12 months of campaigns, ads, insights, and daily
- * snapshots from Meta and upserts everything into Supabase.
- *
- * Query params:
- *   clientId — required, the Supabase client ID to associate data with
- */
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const clientId = searchParams.get("clientId");
+export async function syncMetaData(clientId: string) {
+  const supabase = await createClient();
 
-  if (!clientId) {
-    return Response.json(
-      { error: "clientId query param is required" },
-      { status: 400 }
-    );
+  // Verify client exists
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id, name")
+    .eq("id", clientId)
+    .single();
+
+  if (clientError || !client) {
+    return { ok: false, error: `Client ${clientId} not found` };
   }
 
+  const log: string[] = [];
+
   try {
-    const supabase = await createClient();
+    log.push(`Syncing Meta data for "${client.name}"`);
 
-    // Verify client exists
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id, name")
-      .eq("id", clientId)
-      .single();
-
-    if (clientError || !client) {
-      return Response.json(
-        { error: `Client ${clientId} not found` },
-        { status: 404 }
-      );
-    }
-
-    const log: string[] = [];
-    log.push(`Syncing Meta data for "${client.name}" (id: ${clientId})`);
-
-    // ---------------------------------------------------------------
     // 1. Campaigns
-    // ---------------------------------------------------------------
     const metaCampaigns = await getCampaigns();
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
 
-    const campaignMap = new Map<string, string>(); // meta id → supabase id
+    const campaignMap = new Map<string, string>();
     let campaignsCreated = 0;
     let campaignsUpdated = 0;
 
     for (const mc of metaCampaigns) {
-      const budget =
-        Number(mc.daily_budget ?? mc.lifetime_budget ?? 0) / 100; // Meta uses cents
-
+      const budget = Number(mc.daily_budget ?? mc.lifetime_budget ?? 0) / 100;
       const campaignData = {
         name: mc.name,
         status: mapMetaStatus(mc.status),
@@ -72,7 +50,6 @@ export async function GET(request: Request) {
         budget,
       };
 
-      // Check if already imported
       const { data: existing } = await supabase
         .from("campaigns")
         .select("id")
@@ -90,11 +67,7 @@ export async function GET(request: Request) {
       } else {
         const { data: newCampaign } = await supabase
           .from("campaigns")
-          .insert({
-            client_id: clientId,
-            meta_id: mc.id,
-            ...campaignData,
-          })
+          .insert({ client_id: clientId, meta_id: mc.id, ...campaignData })
           .select("id")
           .single();
 
@@ -105,34 +78,22 @@ export async function GET(request: Request) {
       }
     }
 
-    log.push(
-      `Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`
-    );
+    log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // ---------------------------------------------------------------
-    // 2. Ad Sets (for audience/targeting data)
-    // ---------------------------------------------------------------
+    // 2. Ad Sets → audience data
     const metaAdSets = await getAdSets();
-    log.push(`Fetched ${metaAdSets.length} ad sets from Meta`);
-
-    // Build ad set lookup: meta ad set id → audience string
     const adSetAudienceMap = new Map<string, string>();
     for (const adSet of metaAdSets) {
       adSetAudienceMap.set(adSet.id, targetingToAudience(adSet));
     }
+    log.push(`Fetched ${metaAdSets.length} ad sets`);
 
-    // ---------------------------------------------------------------
-    // 3. Ads + Insights (last 12 months, aggregated per ad)
-    // ---------------------------------------------------------------
+    // 3. Ads + Insights (last 12 months)
     const [metaAds, insights] = await Promise.all([
       getAds(),
       getAdInsights({ datePreset: "last_year" }),
     ]);
-    log.push(
-      `Fetched ${metaAds.length} ads and ${insights.length} insight rows from Meta`
-    );
 
-    // Build insight lookup by ad ID
     const insightByAdId = new Map(insights.map((i) => [i.ad_id, i]));
 
     let adsCreated = 0;
@@ -156,17 +117,13 @@ export async function GET(request: Request) {
             followers_gained: 0,
           };
 
-      // Audience from ad set targeting
       const audience = adSetAudienceMap.get(metaAd.adset_id) ?? null;
-
-      // Creative hook from ad creative body/title
       const creativeHook = metaAd.creative
         ? [metaAd.creative.title, metaAd.creative.body]
             .filter(Boolean)
             .join(" — ") || null
         : null;
 
-      // Check if already imported
       const { data: existingAd } = await supabase
         .from("ads")
         .select("id")
@@ -207,28 +164,17 @@ export async function GET(request: Request) {
 
     log.push(`Ads: ${adsCreated} created, ${adsUpdated} updated`);
 
-    // ---------------------------------------------------------------
-    // 4. Daily snapshots (last 30 days for trend tracking)
-    // ---------------------------------------------------------------
+    // 4. Daily snapshots (last 30 days)
     let snapshotsCreated = 0;
     try {
-      const dailyInsights = await getDailyAdInsights({
-        datePreset: "last_30d",
-      });
-      log.push(
-        `Fetched ${dailyInsights.length} daily insight rows for snapshots`
-      );
+      const dailyInsights = await getDailyAdInsights({ datePreset: "last_30d" });
 
-      // We need to map meta ad IDs to supabase ad IDs
       const { data: allAds } = await supabase
         .from("ads")
         .select("id, meta_id, campaign_id")
         .eq("client_id", clientId);
 
-      const metaToSupabaseAd = new Map<
-        string,
-        { id: string; campaignId: string }
-      >();
+      const metaToSupabaseAd = new Map<string, { id: string; campaignId: string }>();
       for (const ad of allAds ?? []) {
         if (ad.meta_id) {
           metaToSupabaseAd.set(ad.meta_id, {
@@ -243,9 +189,8 @@ export async function GET(request: Request) {
         const adInfo = metaToSupabaseAd.get(day.ad_id);
         if (!adInfo) continue;
 
-        const capturedAt = day.date_start; // YYYY-MM-DD
+        const capturedAt = day.date_start;
 
-        // Upsert: one snapshot per ad per day
         const { data: existingSnap } = await supabase
           .from("ad_snapshots")
           .select("id")
@@ -277,36 +222,22 @@ export async function GET(request: Request) {
       }
 
       log.push(`Snapshots: ${snapshotsCreated} created`);
-    } catch (e) {
-      log.push(
-        `Snapshots skipped: ${e instanceof Error ? e.message : "ad_snapshots table may not exist"}`
-      );
+    } catch {
+      log.push("Snapshots skipped (ad_snapshots table may not exist)");
     }
 
-    // ---------------------------------------------------------------
-    // Done
-    // ---------------------------------------------------------------
-    return Response.json({
-      ok: true,
-      client: client.name,
-      campaigns: {
-        total: metaCampaigns.length,
-        created: campaignsCreated,
-        updated: campaignsUpdated,
-      },
-      ads: {
-        total: metaAds.length,
-        created: adsCreated,
-        updated: adsUpdated,
-      },
-      snapshots: snapshotsCreated,
-      log,
-    });
+    // Revalidate everything
+    revalidatePath("/app/dashboard");
+    revalidatePath(`/app/clients/${clientId}`);
+    revalidatePath("/app/reports");
+
+    return { ok: true, log };
   } catch (err) {
     console.error("Meta sync error:", err);
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Sync failed" },
-      { status: 500 }
-    );
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Sync failed",
+      log,
+    };
   }
 }
