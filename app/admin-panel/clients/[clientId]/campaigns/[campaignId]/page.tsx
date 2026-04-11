@@ -580,6 +580,70 @@ export default async function CampaignDetailPage({ params }: Props) {
       </div>
 
       <SectionCard title={`Generated actions (${generatedActions.length})`}>
+        <details
+          style={{
+            marginBottom: 16,
+            border: "1px solid #e4e4e7",
+            borderRadius: 12,
+            background: "#f4f4f5",
+          }}
+        >
+          <summary
+            style={{
+              padding: "10px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#52525b",
+              cursor: "pointer",
+            }}
+          >
+            How actions are generated
+          </summary>
+          <div
+            style={{
+              padding: "0 14px 14px",
+              fontSize: 13,
+              color: "#52525b",
+              lineHeight: 1.6,
+            }}
+          >
+            <p style={{ margin: "0 0 8px" }}>
+              Every time you create or edit an ad, the system evaluates it
+              against a set of rules:
+            </p>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}
+            >
+              <li>
+                <strong>Weak CTR</strong> — if spend &ge; 5 and CTR is between
+                0% and 1%, a &ldquo;Review weak ad&rdquo; action is created
+              </li>
+              <li>
+                <strong>Winner</strong> — if CTR &ge; 2.5% and spend &ge; 3, a
+                &ldquo;Consider scaling&rdquo; action is created
+              </li>
+              <li>
+                <strong>Underperforming</strong> — if spend &ge; 8 but clicks
+                &le; 2, a &ldquo;Pause&rdquo; action is created
+              </li>
+              <li>
+                <strong>No delivery</strong> — if spend and impressions are both
+                0, a &ldquo;Check delivery/setup&rdquo; action is created
+              </li>
+            </ul>
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71717a" }}>
+              Actions that no longer match their rule are automatically
+              completed. If conditions return, the action reopens.
+            </p>
+          </div>
+        </details>
+
         {generatedActions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
