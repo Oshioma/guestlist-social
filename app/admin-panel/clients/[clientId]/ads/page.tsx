@@ -14,6 +14,7 @@ import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerat
 import AdActionRow from "@/app/admin-panel/components/AdActionRow";
 import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
 import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
+import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlaybookButton";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
@@ -60,6 +61,11 @@ export default async function ClientAdsPage({
       .select("*, experiment_variants(*, ads(id, name))")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("client_playbooks")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("avg_reliability", { ascending: false }),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -71,6 +77,7 @@ export default async function ClientAdsPage({
   const rawActions = actionsRes.data ?? [];
   const learnings = learningsRes.data ?? [];
   const rawExperiments = experimentsRes.data ?? [];
+  const playbook = playbookRes.data ?? [];
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -189,6 +196,79 @@ export default async function ClientAdsPage({
           </div>
         ))}
       </div>
+
+      <SectionCard title={`${client.name} Playbook`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GeneratePlaybookButton clientId={clientId} />
+        </div>
+        {playbook.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {playbook.map((p: any) => {
+              const catLabels: Record<string, string> = {
+                winning_hooks: "Winning Hooks",
+                winning_formats: "Winning Formats",
+                failing_patterns: "Failing Patterns",
+                audience_insights: "Audience Insights",
+                budget_rules: "Budget Rules",
+              };
+              const catColors: Record<string, { bg: string; text: string }> = {
+                winning_hooks: { bg: "#dcfce7", text: "#166534" },
+                winning_formats: { bg: "#dbeafe", text: "#1e40af" },
+                failing_patterns: { bg: "#fee2e2", text: "#991b1b" },
+                audience_insights: { bg: "#fef3c7", text: "#92400e" },
+                budget_rules: { bg: "#f4f4f5", text: "#52525b" },
+              };
+              const cc = catColors[p.category] ?? catColors.budget_rules;
+
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 10,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: cc.bg,
+                        color: cc.text,
+                      }}
+                    >
+                      {catLabels[p.category] ?? p.category}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#71717a" }}>
+                      {p.supporting_count} supporting learnings
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: Number(p.avg_reliability) >= 50 ? "#166534" : "#92400e",
+                      }}
+                    >
+                      {Number(p.avg_reliability).toFixed(0)}% reliable
+                    </span>
+                  </div>
+                  <p style={{ margin: "6px 0 0", fontSize: 13, color: "#18181b", lineHeight: 1.5 }}>
+                    {p.insight}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No playbook yet. Complete some actions and generate learnings first, then hit Generate Playbook.
+          </p>
+        )}
+      </SectionCard>
 
       <SectionCard title={`All ads (${ads.length})`}>
         {ads.length > 0 ? (
