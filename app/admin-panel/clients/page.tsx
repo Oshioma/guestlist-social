@@ -1,402 +1,224 @@
 import Link from "next/link";
-import {
-  mapDbAdToUiAd,
-  mapDbClientToUiClient,
-  mapDbCreativeToUiCreative,
-  mapDbReportToUiReport,
-  mapDbSuggestionToUiSuggestion,
-} from "../../lib/mappers";
-import { createClient } from "../../../../lib/supabase/server";
-import StatusPill from "../../components/StatusPill";
-import SectionCard from "../../components/SectionCard";
-import AdRow from "../../components/AdRow";
-import CreativeCard from "../../components/CreativeCard";
-import EmptyState from "../../components/EmptyState";
-import StatCard from "../../components/StatCard";
-import SuggestionCard from "../../components/SuggestionCard";
-import { formatCurrency } from "../../lib/utils";
-import DeleteClientButton from "../../components/DeleteClientButton";
-import GenerateReportsButton from "../../components/GenerateReportsButton";
-import { generateClientReport } from "../../lib/report-actions";
-import AssignCampaignButton from "../../components/AssignCampaignButton";
+import { createClient } from "@/lib/supabase/server";
+import EmptyState from "../components/EmptyState";
+import StatusPill from "../components/StatusPill";
+import SectionCard from "../components/SectionCard";
+import { formatCurrency } from "../lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClientDetailPage({
-  params,
-}: {
-  params: Promise<{ clientId: string }>;
-}) {
-  const { clientId } = await params;
+type ClientRow = {
+  id: number | string;
+  name: string;
+  platform?: string | null;
+  monthly_budget?: number | string | null;
+  status?: string | null;
+  website_url?: string | null;
+  industry?: string | null;
+  notes?: string | null;
+  archived?: boolean | null;
+  created_at?: string | null;
+};
+
+type CampaignRow = {
+  id: number | string;
+  client_id?: number | string | null;
+};
+
+type AdRow = {
+  id: number | string;
+  client_id?: number | string | null;
+  spend?: number | string | null;
+};
+
+export default async function ClientsPage() {
   const supabase = await createClient();
 
-  const [
-    clientRes,
-    adsRes,
-    creativesRes,
-    reportsRes,
-    suggestionsRes,
-    campaignsRes,
-    unassignedCampaignsRes,
-    clientsForAssignmentRes,
-  ] = await Promise.all([
-    supabase.from("clients").select("*").eq("id", clientId).single(),
-    supabase
-      .from("ads")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("creatives")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("reports")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("suggestions")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("campaigns")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("campaigns")
-      .select("*")
-      .is("client_id", null)
-      .order("created_at", { ascending: false }),
+  const [clientsRes, campaignsRes, adsRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("*")
       .eq("archived", false)
-      .order("name", { ascending: true }),
+      .order("created_at", { ascending: false }),
+    supabase.from("campaigns").select("id, client_id"),
+    supabase.from("ads").select("id, client_id, spend"),
   ]);
 
-  if (clientRes.error || !clientRes.data) {
+  if (clientsRes.error) {
     return (
       <EmptyState
-        title="Client not found"
-        description="This client does not exist or has been removed."
+        title="Unable to load clients"
+        description={clientsRes.error.message}
       />
     );
   }
 
-  const rawAds = adsRes.data ?? [];
-  const rawCampaigns = campaignsRes.data ?? [];
-  const unassignedCampaigns = unassignedCampaignsRes.data ?? [];
-  const assignableClients = clientsForAssignmentRes.data ?? [];
+  const clients = (clientsRes.data ?? []) as ClientRow[];
+  const campaigns = (campaignsRes.data ?? []) as CampaignRow[];
+  const ads = (adsRes.data ?? []) as AdRow[];
 
-  const ads = rawAds.map(mapDbAdToUiAd);
-  const client = mapDbClientToUiClient(clientRes.data, ads.length);
-  const creatives = (creativesRes.data ?? []).map(mapDbCreativeToUiCreative);
-  const reports = (reportsRes.data ?? []).map((r) =>
-    mapDbReportToUiReport(r, client.name)
-  );
-  const suggestions = (suggestionsRes.data ?? []).map(
-    mapDbSuggestionToUiSuggestion
-  );
-
-  let learningRows: any[] = [];
-  try {
-    const { data } = await supabase
-      .from("learnings")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false });
-    learningRows = data ?? [];
-  } catch {
-    // table may not exist
+  if (clients.length === 0) {
+    return (
+      <EmptyState
+        title="No clients yet"
+        description="Create your first client to start tracking campaigns, ads, and learnings."
+      />
+    );
   }
 
-  const winnerAds = ads.filter((a) => a.status === "active" && a.ctr >= 2.5);
-  const losingAds = ads.filter((a) => a.status === "ended");
-  const testingAds = ads.filter((a) => a.status === "draft");
-
-  const totalCampaignBudget = rawCampaigns.reduce(
-    (sum, campaign) => sum + Number(campaign.budget ?? 0),
+  const totalBudget = clients.reduce(
+    (sum, client) => sum + Number(client.monthly_budget ?? 0),
     0
   );
 
-  const liveCampaigns = rawCampaigns.filter((campaign) =>
-    ["live", "testing"].includes(String(campaign.status ?? ""))
-  );
+  const totalSpend = ads.reduce((sum, ad) => sum + Number(ad.spend ?? 0), 0);
+
+  const unassignedCampaigns = campaigns.filter(
+    (campaign) => campaign.client_id === null || campaign.client_id === undefined
+  ).length;
 
   const stats = [
-    { label: "Campaigns", value: String(rawCampaigns.length) },
     {
-      label: "Total Ads",
-      value: String(ads.length),
+      label: "Clients",
+      value: String(clients.length),
     },
     {
-      label: "Winners",
-      value: String(winnerAds.length),
-      trend: winnerAds.length > 0 ? ("up" as const) : undefined,
+      label: "Campaigns",
+      value: String(campaigns.length),
     },
     {
-      label: "Budget",
-      value: formatCurrency(totalCampaignBudget),
+      label: "Monthly Budget",
+      value: formatCurrency(totalBudget),
     },
-  ];
-
-  const subNav = [
-    { label: "Overview", href: `/app/clients/${clientId}`, active: true },
-    { label: "Ads", href: `/app/clients/${clientId}/ads` },
-    { label: "Creatives", href: `/app/clients/${clientId}/creatives` },
-    { label: "Reports", href: `/app/clients/${clientId}/reports` },
+    {
+      label: "Ad Spend Logged",
+      value: formatCurrency(totalSpend),
+      subtext:
+        unassignedCampaigns > 0
+          ? `${unassignedCampaigns} unassigned campaign${
+              unassignedCampaigns === 1 ? "" : "s"
+            }`
+          : "All campaigns assigned",
+    },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
-            {client.name}
-          </h2>
-          <StatusPill status={client.status} />
-
-          <Link
-            href={`/app/clients/${clientId}/edit`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "#18181b",
-              color: "#fff",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            Edit client
-          </Link>
-
-          <Link
-            href={`/app/clients/${clientId}/campaigns/new`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "#18181b",
-              color: "#fff",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            New campaign
-          </Link>
-
-          <DeleteClientButton clientId={clientId} />
-        </div>
-
-        <p style={{ fontSize: 14, color: "#71717a", margin: 0 }}>
-          {client.platform} · {formatCurrency(client.monthlyBudget)}/mo
-        </p>
-        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
-          You can edit: name, platform, budget, status, website, and notes.
-        </p>
-      </div>
-
       <div
         style={{
           display: "flex",
-          gap: 8,
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
           flexWrap: "wrap",
-          borderBottom: "1px solid #e4e4e7",
-          paddingBottom: 12,
         }}
       >
-        {subNav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
+        <div>
+          <h1
             style={{
-              padding: "9px 14px",
-              fontSize: 14,
-              fontWeight: 500,
-              textDecoration: "none",
-              color: item.active ? "#18181b" : "#52525b",
-              background: item.active ? "#f4f4f5" : "transparent",
-              border: item.active
-                ? "1px solid #e4e4e7"
-                : "1px solid transparent",
-              borderRadius: 999,
+              margin: 0,
+              fontSize: 30,
+              lineHeight: 1.05,
+              fontWeight: 700,
+              color: "#18181b",
+              letterSpacing: "-0.03em",
             }}
           >
-            {item.label}
-          </Link>
-        ))}
+            Clients
+          </h1>
+          <p
+            style={{
+              margin: "8px 0 0",
+              fontSize: 14,
+              color: "#71717a",
+              maxWidth: 760,
+            }}
+          >
+            Manage clients, review performance at a glance, and open each client
+            workspace to assign campaigns, review ads, and track learnings.
+          </p>
+        </div>
+
+        <Link
+          href="/app/clients/new"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#18181b",
+            color: "#fff",
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          New client
+        </Link>
       </div>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: 16,
         }}
       >
-        {stats.map((s) => (
-          <StatCard key={s.label} stat={s} />
+        {stats.map((stat) => (
+          <div
+            key={stat.label}
+            style={{
+              border: "1px solid #e4e4e7",
+              borderRadius: 16,
+              padding: 16,
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#71717a" }}>{stat.label}</div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 24,
+                fontWeight: 700,
+                color: "#18181b",
+              }}
+            >
+              {stat.value}
+            </div>
+            {"subtext" in stat && stat.subtext ? (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: "#71717a",
+                }}
+              >
+                {stat.subtext}
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.4fr 1fr",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Top priorities">
-          {ads.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {winnerAds.length > 0 && (
-                <div
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 16,
-                    padding: 14,
-                    background: "#fafafa",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: "0 0 6px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                    }}
-                  >
-                    What to scale
-                  </p>
-                  <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                    {winnerAds.length} winning ad
-                    {winnerAds.length === 1 ? "" : "s"} ready for more budget.
-                  </p>
-                </div>
-              )}
+      <SectionCard title={`All clients (${clients.length})`}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {clients.map((client) => {
+            const clientCampaigns = campaigns.filter(
+              (campaign) => String(campaign.client_id) === String(client.id)
+            );
 
-              {losingAds.length > 0 && (
-                <div
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 16,
-                    padding: 14,
-                    background: "#fafafa",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: "0 0 6px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                    }}
-                  >
-                    What to fix
-                  </p>
-                  <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                    {losingAds.length} underperforming ad
-                    {losingAds.length === 1 ? "" : "s"} likely need pausing or
-                    new creative.
-                  </p>
-                </div>
-              )}
+            const clientAds = ads.filter(
+              (ad) => String(ad.client_id) === String(client.id)
+            );
 
-              {testingAds.length > 0 && (
-                <div
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 16,
-                    padding: 14,
-                    background: "#fafafa",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: "0 0 6px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                    }}
-                  >
-                    What is still learning
-                  </p>
-                  <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                    {testingAds.length} ad{testingAds.length === 1 ? "" : "s"}{" "}
-                    still in testing.
-                  </p>
-                </div>
-              )}
+            const clientSpend = clientAds.reduce(
+              (sum, ad) => sum + Number(ad.spend ?? 0),
+              0
+            );
 
-              {liveCampaigns.length > 0 && (
-                <div
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 16,
-                    padding: 14,
-                    background: "#fafafa",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: "0 0 6px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Campaign momentum
-                  </p>
-                  <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                    {liveCampaigns.length} live or testing campaign
-                    {liveCampaigns.length === 1 ? "" : "s"} currently driving
-                    activity.
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <EmptyState
-              title="No ads yet"
-              description="Launch a campaign to start learning what works for this client."
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard title="Suggestions">
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {suggestions.length > 0 ? (
-              suggestions.map((s) => (
-                <SuggestionCard key={s.id} suggestion={s} />
-              ))
-            ) : (
-              <EmptyState title="No suggestions yet" />
-            )}
-          </div>
-        </SectionCard>
-      </div>
-
-      <SectionCard
-        title={`Unassigned Meta campaigns (${unassignedCampaigns.length})`}
-      >
-        {unassignedCampaigns.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {unassignedCampaigns.map((campaign) => (
+            return (
               <div
-                key={campaign.id}
+                key={client.id}
                 style={{
                   border: "1px solid #e4e4e7",
                   borderRadius: 16,
@@ -413,74 +235,96 @@ export default async function ClientDetailPage({
                     flexWrap: "wrap",
                   }}
                 >
-                  <div>
-                    <p
+                  <div style={{ minWidth: 0 }}>
+                    <div
                       style={{
-                        margin: 0,
-                        fontSize: 16,
-                        fontWeight: 600,
-                        color: "#18181b",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        flexWrap: "wrap",
                       }}
                     >
-                      {campaign.name}
-                    </p>
+                      <h2
+                        style={{
+                          margin: 0,
+                          fontSize: 18,
+                          lineHeight: 1.1,
+                          fontWeight: 700,
+                          color: "#18181b",
+                        }}
+                      >
+                        {client.name}
+                      </h2>
+                      <StatusPill status={client.status ?? "active"} />
+                    </div>
+
                     <p
                       style={{
-                        margin: "6px 0 0",
+                        margin: "8px 0 0",
                         fontSize: 13,
                         color: "#71717a",
                       }}
                     >
-                      {campaign.objective ?? "No objective"} ·{" "}
-                      {campaign.meta_ad_account_name ?? "Unknown Meta account"}
+                      {client.platform ?? "No platform"} ·{" "}
+                      {client.industry ?? "No industry"}
                     </p>
-                    <p
-                      style={{
-                        margin: "6px 0 0",
-                        fontSize: 12,
-                        color: "#a1a1aa",
-                      }}
-                    >
-                      Meta ID: {campaign.meta_id ?? "—"}
-                    </p>
+
+                    {client.website_url ? (
+                      <p
+                        style={{
+                          margin: "6px 0 0",
+                          fontSize: 12,
+                          color: "#a1a1aa",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {client.website_url}
+                      </p>
+                    ) : null}
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Link
+                      href={`/app/clients/${client.id}`}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        background: "#f4f4f5",
-                        color: "#52525b",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        textTransform: "capitalize",
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        background: "#18181b",
+                        color: "#fff",
+                        textDecoration: "none",
+                        fontSize: 13,
+                        fontWeight: 600,
                       }}
                     >
-                      {campaign.meta_status ?? campaign.status ?? "unknown"}
-                    </span>
+                      Open client
+                    </Link>
 
-                    <AssignCampaignButton
-                      campaignId={campaign.id}
-                      clientId={clientId}
-                      label={`Assign to ${client.name}`}
-                    />
+                    <Link
+                      href={`/app/clients/${client.id}/edit`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        color: "#18181b",
+                        textDecoration: "none",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Edit
+                    </Link>
                   </div>
                 </div>
 
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
                     gap: 12,
                     marginTop: 14,
                   }}
@@ -494,16 +338,17 @@ export default async function ClientDetailPage({
                     }}
                   >
                     <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Budget
+                      Monthly budget
                     </div>
                     <div
                       style={{
                         marginTop: 4,
                         fontSize: 15,
                         fontWeight: 600,
+                        color: "#18181b",
                       }}
                     >
-                      {formatCurrency(Number(campaign.budget ?? 0))}
+                      {formatCurrency(Number(client.monthly_budget ?? 0))}
                     </div>
                   </div>
 
@@ -516,16 +361,38 @@ export default async function ClientDetailPage({
                     }}
                   >
                     <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Meta account
+                      Campaigns
                     </div>
                     <div
                       style={{
                         marginTop: 4,
                         fontSize: 15,
                         fontWeight: 600,
+                        color: "#18181b",
                       }}
                     >
-                      {campaign.meta_ad_account_name ?? "—"}
+                      {clientCampaigns.length}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid #f4f4f5",
+                      borderRadius: 12,
+                      padding: 12,
+                      background: "#fafafa",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "#71717a" }}>Ads</div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: "#18181b",
+                      }}
+                    >
+                      {clientAds.length}
                     </div>
                   </div>
 
@@ -538,552 +405,58 @@ export default async function ClientDetailPage({
                     }}
                   >
                     <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Created
+                      Spend logged
                     </div>
                     <div
                       style={{
                         marginTop: 4,
                         fontSize: 15,
                         fontWeight: 600,
+                        color: "#18181b",
                       }}
                     >
-                      {campaign.created_at
-                        ? new Date(campaign.created_at).toLocaleDateString()
-                        : "—"}
+                      {formatCurrency(clientSpend)}
                     </div>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 14,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  {assignableClients
-                    .filter((c) => String(c.id) !== String(clientId))
-                    .map((targetClient) => (
-                      <AssignCampaignButton
-                        key={targetClient.id}
-                        campaignId={campaign.id}
-                        clientId={targetClient.id}
-                        label={`Assign to ${targetClient.name}`}
-                        variant="secondary"
-                      />
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No unassigned Meta campaigns"
-            description="Everything imported from Meta is either already assigned or nothing new has synced in."
-          />
-        )}
-      </SectionCard>
-
-      <SectionCard title={`Learnings (${learningRows.length})`}>
-        {learningRows.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {learningRows.map((learning: any) => (
-              <div
-                key={learning.id}
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 14,
-                  padding: 14,
-                  background: "#fff",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#18181b",
-                    marginBottom: 6,
-                  }}
-                >
-                  {learning.problem || "Untitled learning"}
-                </div>
-                {learning.change_made ? (
-                  <div style={{ fontSize: 13, color: "#52525b", marginBottom: 4 }}>
-                    <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
-                    {learning.change_made}
-                  </div>
-                ) : null}
-                {learning.result ? (
-                  <div style={{ fontSize: 13, color: "#52525b", marginBottom: 4 }}>
-                    <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
-                    {learning.result}
-                  </div>
-                ) : null}
-                {learning.outcome ? (
-                  <div style={{ fontSize: 13, color: "#71717a" }}>
-                    <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
-                    {learning.outcome}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No learnings yet"
-            description="Completed actions can be turned into learnings from the campaign page."
-          />
-        )}
-      </SectionCard>
-
-      <SectionCard title={`Campaigns (${rawCampaigns.length})`}>
-        {rawCampaigns.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {rawCampaigns.map((campaign) => {
-              const campaignAdsRaw = rawAds.filter(
-                (ad) => ad.campaign_id === campaign.id
-              );
-
-              const campaignSpend = campaignAdsRaw.reduce(
-                (sum, ad) => sum + Number(ad.spend ?? 0),
-                0
-              );
-
-              const campaignClicks = campaignAdsRaw.reduce(
-                (sum, ad) => sum + Number(ad.clicks ?? 0),
-                0
-              );
-
-              const campaignImpressions = campaignAdsRaw.reduce(
-                (sum, ad) => sum + Number(ad.impressions ?? 0),
-                0
-              );
-
-              const campaignCtr =
-                campaignImpressions > 0
-                  ? ((campaignClicks / campaignImpressions) * 100).toFixed(1)
-                  : null;
-
-              const campaignWinners = campaignAdsRaw.filter(
-                (ad) => String(ad.status) === "winner"
-              ).length;
-
-              return (
-                <div
-                  key={campaign.id}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 16,
-                    padding: 16,
-                    background: "#fff",
-                  }}
-                >
+                {client.notes ? (
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 16,
-                      alignItems: "flex-start",
-                      flexWrap: "wrap",
+                      marginTop: 14,
+                      border: "1px solid #f4f4f5",
+                      borderRadius: 12,
+                      padding: 12,
+                      background: "#fafafa",
                     }}
                   >
-                    <div>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 16,
-                          fontWeight: 600,
-                          color: "#18181b",
-                        }}
-                      >
-                        {campaign.name}
-                      </p>
-                      <p
-                        style={{
-                          margin: "6px 0 0",
-                          fontSize: 13,
-                          color: "#71717a",
-                        }}
-                      >
-                        {campaign.objective ?? "No objective"} ·{" "}
-                        {campaign.audience ?? "No audience set"}
-                      </p>
-                    </div>
-
                     <div
                       style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        background: "#f4f4f5",
-                        color: "#52525b",
                         fontSize: 12,
-                        fontWeight: 500,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {campaign.status ?? "testing"}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                      gap: 12,
-                      marginTop: 14,
-                    }}
-                  >
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Budget
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {formatCurrency(Number(campaign.budget ?? 0))}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Spend
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {formatCurrency(campaignSpend)}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Ads
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {campaignAdsRaw.length}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        CTR / winners
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {campaignCtr ? `${campaignCtr}%` : "—"} / {campaignWinners}
-                      </div>
-                    </div>
-                  </div>
-
-                  {campaignAdsRaw.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "#71717a",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        Ads
-                      </p>
-                      {campaignAdsRaw.map((ad) => (
-                        <div
-                          key={ad.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "8px 12px",
-                            border: "1px solid #f4f4f5",
-                            borderRadius: 10,
-                            background: "#fafafa",
-                            fontSize: 13,
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontWeight: 500, color: "#18181b" }}>
-                              {ad.name}
-                            </span>
-                            <span
-                              style={{
-                                padding: "2px 8px",
-                                borderRadius: 999,
-                                background: "#f4f4f5",
-                                color: "#52525b",
-                                fontSize: 11,
-                                fontWeight: 500,
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              {ad.status ?? "testing"}
-                            </span>
-                          </div>
-                          <Link
-                            href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/${ad.id}/edit`}
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border: "1px solid #e4e4e7",
-                              background: "#fff",
-                              color: "#18181b",
-                              textDecoration: "none",
-                              fontSize: 12,
-                              fontWeight: 500,
-                            }}
-                          >
-                            Edit
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      marginTop: 14,
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 13,
+                        fontWeight: 600,
                         color: "#71717a",
+                        marginBottom: 6,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
                       }}
                     >
-                      {campaignAdsRaw.length > 0
-                        ? `This campaign currently contains ${campaignAdsRaw.length} ad${
-                            campaignAdsRaw.length === 1 ? "" : "s"
-                          }.`
-                        : "No ads added to this campaign yet."}
-                    </p>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          background: "#18181b",
-                          color: "#fff",
-                          textDecoration: "none",
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Open campaign
-                      </Link>
-
-                      <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/edit`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid #e4e4e7",
-                          background: "#fff",
-                          color: "#18181b",
-                          textDecoration: "none",
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Edit campaign
-                      </Link>
-
-                      <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/new`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid #e4e4e7",
-                          background: "#fff",
-                          color: "#18181b",
-                          textDecoration: "none",
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Add ad
-                      </Link>
+                      Notes
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {client.notes}
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyState
-            title="No campaigns yet"
-            description="Create the first campaign to structure ad testing properly."
-          />
-        )}
-      </SectionCard>
-
-      <SectionCard title={`Ads (${ads.length})`}>
-        {ads.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {ads.slice(0, 4).map((ad) => (
-              <AdRow key={ad.id} ad={ad} />
-            ))}
-            {ads.length > 4 && (
-              <Link
-                href={`/app/clients/${clientId}/ads`}
-                style={{
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: "#18181b",
-                  textDecoration: "none",
-                  marginTop: 12,
-                }}
-              >
-                View all {ads.length} ads
-              </Link>
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            title="No ads yet"
-            description="Launch a campaign to get started."
-          />
-        )}
-      </SectionCard>
-
-      <SectionCard title={`Creatives (${creatives.length})`}>
-        {creatives.length > 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
-            }}
-          >
-            {creatives.slice(0, 6).map((cr) => (
-              <CreativeCard key={cr.id} creative={cr} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No creatives"
-            description="Upload assets to get started."
-          />
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title={`Reports (${reports.length})`}
-        action={
-          <GenerateReportsButton
-            action={async () => {
-              "use server";
-              await generateClientReport(clientId);
-            }}
-            label="Generate report"
-          />
-        }
-      >
-        {reports.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {reports.slice(0, 3).map((report) => (
-              <div
-                key={report.id}
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 16,
-                  padding: 14,
-                  background: "#fff",
-                }}
-              >
-                <p
-                  style={{
-                    margin: "0 0 6px",
-                    fontSize: 15,
-                    fontWeight: 600,
-                  }}
-                >
-                  {report.title}
-                </p>
-                <p style={{ margin: 0, fontSize: 14, color: "#71717a" }}>
-                  {report.period}
-                </p>
+                ) : null}
               </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No reports yet"
-            description='Click "Generate report" to create a report from real data.'
-          />
-        )}
+            );
+          })}
+        </div>
       </SectionCard>
     </div>
   );

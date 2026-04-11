@@ -1,74 +1,47 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-
-type Props = {
-  campaignId: string | number;
-  clientId: string | number;
-  label: string;
-  variant?: "primary" | "secondary";
-};
+import { useTransition } from "react";
+import { assignCampaignToClient } from "../lib/campaign-actions";
 
 export default function AssignCampaignButton({
   campaignId,
   clientId,
   label,
   variant = "primary",
-}: Props) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
+}: {
+  campaignId: string | number;
+  clientId: string | number;
+  label: string;
+  variant?: "primary" | "secondary";
+}) {
+  const [isPending, startTransition] = useTransition();
 
-  async function handleClick() {
-    try {
-      setLoading(true);
-
-      const res = await fetch("/api/assign-campaign", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          campaignId: String(campaignId),
-          clientId: String(clientId),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data?.ok) {
-        alert(data?.error || "Failed to assign campaign.");
-        return;
-      }
-
-      router.refresh();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to assign campaign.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const isPrimary = variant === "primary";
 
   return (
     <button
       type="button"
-      onClick={handleClick}
-      disabled={loading}
+      disabled={isPending}
+      onClick={() => {
+        startTransition(async () => {
+          await assignCampaignToClient(String(campaignId), String(clientId));
+        });
+      }}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        padding: variant === "primary" ? "8px 12px" : "7px 11px",
-        borderRadius: variant === "primary" ? 10 : 9,
-        background: variant === "primary" ? "#18181b" : "#fff",
-        color: variant === "primary" ? "#fff" : "#18181b",
-        border: variant === "primary" ? "none" : "1px solid #e4e4e7",
-        cursor: loading ? "default" : "pointer",
-        fontSize: variant === "primary" ? 13 : 12,
+        padding: "6px 12px",
+        borderRadius: 8,
+        background: isPrimary ? "#18181b" : "#fff",
+        color: isPrimary ? "#fff" : "#18181b",
+        border: isPrimary ? "none" : "1px solid #e4e4e7",
+        fontSize: 12,
         fontWeight: 600,
-        opacity: loading ? 0.7 : 1,
+        cursor: isPending ? "wait" : "pointer",
+        opacity: isPending ? 0.6 : 1,
       }}
     >
-      {loading ? "Assigning..." : label}
+      {isPending ? "Assigning..." : label}
     </button>
   );
 }

@@ -36,6 +36,24 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   redirect(`/app/clients/${clientId}`);
 }
 
+export async function assignCampaignToClient(campaignId: string, clientId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ client_id: clientId })
+    .eq("id", campaignId);
+
+  if (error) {
+    console.error("assignCampaignToClient error:", error);
+    throw new Error("Could not assign campaign.");
+  }
+
+  revalidatePath(`/app/clients/${clientId}`);
+  revalidatePath("/app/dashboard");
+  revalidatePath("/app/settings");
+}
+
 export async function updateCampaignAction(
   clientId: string,
   campaignId: string,
