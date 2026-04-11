@@ -19,18 +19,9 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside
-      style={{
-        width: 240,
-        background: "#18181b",
-        color: "#fff",
-        padding: "24px 0",
-        display: "flex",
-        flexDirection: "column",
-        flexShrink: 0,
-      }}
-    >
+    <aside className="app-sidebar">
       <div
+        className="app-sidebar-brand"
         style={{
           padding: "0 20px 20px",
           fontSize: 14,
@@ -53,15 +44,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          padding: "0 8px",
-          flex: 1,
-        }}
-      >
+      <nav className="app-sidebar-nav">
         {navItems.map((item) => {
           const active =
             pathname === item.href ||
@@ -81,6 +64,7 @@ export default function Sidebar() {
                 color: active ? "#fff" : "#a1a1aa",
                 background: active ? "rgba(255,255,255,0.1)" : "transparent",
                 textDecoration: "none",
+                whiteSpace: "nowrap",
               }}
             >
               {item.label}
@@ -89,7 +73,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div style={{ padding: "16px 20px" }}>
+      <div className="app-sidebar-footer" style={{ padding: "16px 20px" }}>
         <Link
           href="/"
           style={{ fontSize: 12, color: "#71717a", textDecoration: "none" }}
