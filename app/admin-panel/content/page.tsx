@@ -6,11 +6,11 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-function getNextTwoMonths(): { key: string; label: string }[] {
+function getNextFiveMonths(): { key: string; label: string }[] {
   const now = new Date();
   const months: { key: string; label: string }[] = [];
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 5; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = d.toLocaleDateString("en-GB", {
@@ -24,7 +24,7 @@ function getNextTwoMonths(): { key: string; label: string }[] {
 }
 
 export default async function ContentDashboardPage() {
-  const months = getNextTwoMonths();
+  const months = getNextFiveMonths();
 
   try {
     const [{ clients, progress }, ideasData] = await Promise.all([
@@ -139,121 +139,101 @@ export default async function ContentDashboardPage() {
             </Link>
           }
         >
-          {(() => {
-            // Build a list of all unique month labels from themes
-            const allMonthLabels = Array.from(
-              new Set(ideasData.themes.map((t) => t.monthLabel).filter(Boolean))
-            );
+          {clients.length === 0 ? (
+            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
+              No clients yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
+                  fontSize: 14,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Client</th>
+                    {months.map((m) => (
+                      <th
+                        key={m.key}
+                        style={{ ...thStyle, textAlign: "center" }}
+                      >
+                        {m.label.split(" ")[0]}
+                      </th>
+                    ))}
+                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((client, idx) => {
+                    const clientThemes = ideasData.themes.filter(
+                      (t) => t.clientId === client.id
+                    );
+                    const clientIdeaIds = new Set(
+                      ideasData.ideas
+                        .filter((i) => i.clientId === client.id)
+                        .map((i) => i.id)
+                    );
+                    const total = clientIdeaIds.size;
 
-            // Build a map: clientId -> monthLabel -> idea count
-            const clientMonthCounts = new Map<string, Map<string, number>>();
-            for (const client of clients) {
-              const monthMap = new Map<string, number>();
-              const clientThemes = ideasData.themes.filter(
-                (t) => t.clientId === client.id
-              );
-              for (const theme of clientThemes) {
-                const count = ideasData.ideas.filter(
-                  (i) => i.themeId === theme.id
-                ).length;
-                const label = theme.monthLabel || "Other";
-                monthMap.set(label, (monthMap.get(label) ?? 0) + count);
-              }
-              // Count unlinked ideas
-              const unlinked = ideasData.ideas.filter(
-                (i) => i.clientId === client.id && !i.themeId
-              ).length;
-              if (unlinked > 0) {
-                monthMap.set("Other", (monthMap.get("Other") ?? 0) + unlinked);
-              }
-              clientMonthCounts.set(client.id, monthMap);
-            }
-
-            const columnLabels = allMonthLabels.length > 0 ? allMonthLabels : [];
-            if (
-              clients.some((c) => {
-                const m = clientMonthCounts.get(c.id);
-                return m?.has("Other");
-              })
-            ) {
-              if (!columnLabels.includes("Other")) columnLabels.push("Other");
-            }
-
-            return clients.length === 0 ? (
-              <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
-                No clients yet.
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "separate",
-                    borderSpacing: 0,
-                    fontSize: 14,
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Client</th>
-                      {columnLabels.map((label) => (
-                        <th
-                          key={label}
-                          style={{ ...thStyle, textAlign: "center" }}
-                        >
-                          {label}
-                        </th>
-                      ))}
-                      <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clients.map((client, idx) => {
-                      const monthMap = clientMonthCounts.get(client.id);
-                      const total = ideasData.ideas.filter(
-                        (i) => i.clientId === client.id
-                      ).length;
-                      return (
-                        <tr
-                          key={client.id}
+                    return (
+                      <tr
+                        key={client.id}
+                        style={{
+                          background: idx % 2 === 0 ? "#fff" : "#fafafa",
+                        }}
+                      >
+                        <td style={tdStyle}>{client.name}</td>
+                        {months.map((m, mIdx) => {
+                          // Map calendar month index to theme month ranges
+                          // mIdx 0-1 → themes with "1-2", mIdx 2-3 → "3-4", mIdx 4 → "5-6"
+                          const pairIndex = Math.floor(mIdx / 2);
+                          const pairLabel = `${pairIndex * 2 + 1}-${pairIndex * 2 + 2}`;
+                          const matchingThemes = clientThemes.filter((t) =>
+                            t.monthLabel.includes(pairLabel)
+                          );
+                          const count = matchingThemes.reduce(
+                            (sum, t) =>
+                              sum +
+                              ideasData.ideas.filter((i) => i.themeId === t.id)
+                                .length,
+                            0
+                          );
+                          // Split evenly across the 2 months in a pair, show full on first
+                          const display = mIdx % 2 === 0 ? count : 0;
+                          return (
+                            <td
+                              key={m.key}
+                              style={{ ...tdStyle, textAlign: "center" }}
+                            >
+                              {display > 0 ? (
+                                <span style={badgeGreen}>{display}</span>
+                              ) : (
+                                <span style={{ color: "#d4d4d8" }}>0</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td
                           style={{
-                            background: idx % 2 === 0 ? "#fff" : "#fafafa",
+                            ...tdStyle,
+                            textAlign: "center",
+                            fontWeight: 600,
+                            color: total > 0 ? "#18181b" : "#d4d4d8",
                           }}
                         >
-                          <td style={tdStyle}>{client.name}</td>
-                          {columnLabels.map((label) => {
-                            const count = monthMap?.get(label) ?? 0;
-                            return (
-                              <td
-                                key={label}
-                                style={{ ...tdStyle, textAlign: "center" }}
-                              >
-                                {count > 0 ? (
-                                  <span style={badgeGreen}>{count}</span>
-                                ) : (
-                                  <span style={{ color: "#d4d4d8" }}>0</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td
-                            style={{
-                              ...tdStyle,
-                              textAlign: "center",
-                              fontWeight: 600,
-                              color: total > 0 ? "#18181b" : "#d4d4d8",
-                            }}
-                          >
-                            {total}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })()}
+                          {total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </SectionCard>
       </div>
     );
