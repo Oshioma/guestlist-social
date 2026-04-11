@@ -61,19 +61,24 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   // Step 3: Fetch actions, learnings, and trends (after rules have run)
   let adTrends: AdTrend[] = [];
-  const [{ data: actionRows }, { data: learningRows }] = await Promise.all([
-    supabase
-      .from("actions")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
+  const { data: actionRows } = await supabase
+    .from("actions")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  let learningRows: any[] | null = null;
+  try {
+    const { data } = await supabase
       .from("learnings")
       .select("*")
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: false }),
-  ]);
+      .order("created_at", { ascending: false });
+    learningRows = data;
+  } catch {
+    // learnings table may not exist yet
+  }
 
   try {
     adTrends = await getAdTrends(clientId, campaignId);
@@ -132,10 +137,16 @@ export default async function CampaignDetailPage({ params }: Props) {
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
-  const learningSuggestions = await generateSuggestionsFromLearnings(
-    clientId,
-    campaignId
-  );
+  let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
+  try {
+    learningSuggestions = await generateSuggestionsFromLearnings(
+      clientId,
+      campaignId
+    );
+  } catch (e) {
+    console.error("generateSuggestionsFromLearnings error:", e);
+    // learnings table may not exist yet — safe to continue with empty suggestions
+  }
 
   async function handleGenerateActions() {
     "use server";
