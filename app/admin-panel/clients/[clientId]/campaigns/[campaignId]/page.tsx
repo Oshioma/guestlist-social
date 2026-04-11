@@ -5,15 +5,14 @@ import {
   mapDbAdToUiAd,
   mapDbActionToUiAction,
 } from "@/app/admin-panel/lib/mappers";
-import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
-import { getAdTrends, type AdTrend } from "@/app/admin-panel/lib/snapshot-actions";
+import { createActionFromSuggestion } from "@/app/admin-panel/lib/suggestion-actions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import ActionList from "@/app/admin-panel/components/ActionList";
-import GenerateActionsButton from "@/app/admin-panel/components/GenerateActionsButton";
+import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
@@ -26,11 +25,12 @@ export default async function CampaignDetailPage({ params }: Props) {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
 
-  // Step 1: Fetch client, campaign, and ads
   const [
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
-    { data: adsRows },
+    { data: adsRows, error: adsError },
+    { data: actionRows, error: actionsError },
+    { data: learningRows, error: learningsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -45,67 +45,30 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
-  ]);
-
-  if (clientError || !client || campaignError || !campaign) {
-    console.error("Campaign page error:", { clientError, campaignError, clientId, campaignId });
-    return (
-      <div style={{ padding: 24, maxWidth: 600 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-          Could not load campaign
-        </h2>
-        {clientError && (
-          <p style={{ fontSize: 14, color: "#dc2626", margin: "0 0 8px" }}>
-            Client error: {clientError.message}
-          </p>
-        )}
-        {campaignError && (
-          <p style={{ fontSize: 14, color: "#dc2626", margin: "0 0 8px" }}>
-            Campaign error: {campaignError.message}
-          </p>
-        )}
-        <p style={{ fontSize: 13, color: "#71717a", margin: "12px 0 0" }}>
-          Looked for client_id={clientId}, campaign_id={campaignId}
-        </p>
-      </div>
-    );
-  }
-
-  // Step 2: Auto-run rule engine so actions are always fresh
-  try {
-    await generateCampaignActions(clientId, campaignId);
-  } catch (e) {
-    console.error("Auto-generate actions on page load:", e);
-  }
-
-  // Step 3: Fetch actions, learnings, and trends (after rules have run)
-  let adTrends: AdTrend[] = [];
-  const { data: actionRows } = await supabase
-    .from("actions")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: false });
-
-  let learningRows: any[] | null = null;
-  try {
-    const { data } = await supabase
+    supabase
+      .from("actions")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
       .from("learnings")
       .select("*")
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: false });
-    learningRows = data;
-  } catch {
-    // learnings table may not exist yet
-  }
+      .order("created_at", { ascending: false }),
+  ]);
 
-  try {
-    adTrends = await getAdTrends(clientId, campaignId);
-  } catch {
-    // ad_snapshots table may not exist yet
+  if (
+    clientError ||
+    !client ||
+    campaignError ||
+    !campaign ||
+    adsError ||
+    actionsError ||
+    learningsError
+  ) {
+    notFound();
   }
-
-  const trendMap = new Map(adTrends.map((t) => [t.adId, t]));
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
@@ -147,30 +110,20 @@ export default async function CampaignDetailPage({ params }: Props) {
   const generatedActions = (actionRows ?? [])
     .filter((row) => {
       const title = String(row.title ?? "");
-      if (!title.includes("[AUTO:")) return false;
+      if (!title.includes("[AUTO:") && !title.includes("[SUGGESTION:")) return false;
 
-      return [...campaignAdIds].some((adId) => title.includes(`:${adId}]`));
+      return [...campaignAdIds].some((adId) => title.includes(`:${adId}]`)) ||
+        title.includes(`[SUGGESTION:${campaignId}:`);
     })
     .map((row) => mapDbActionToUiAction(row, client.name));
 
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
-  let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
-  try {
-    learningSuggestions = await generateSuggestionsFromLearnings(
-      clientId,
-      campaignId
-    );
-  } catch (e) {
-    console.error("generateSuggestionsFromLearnings error:", e);
-    // learnings table may not exist yet — safe to continue with empty suggestions
-  }
-
-  async function handleGenerateActions() {
-    "use server";
-    await generateCampaignActions(clientId, campaignId);
-  }
+  const learningSuggestions = await generateSuggestionsFromLearnings(
+    clientId,
+    campaignId
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -232,15 +185,6 @@ export default async function CampaignDetailPage({ params }: Props) {
                 {campaign.objective ?? "No objective"} ·{" "}
                 {campaign.audience ?? "No audience set"}
               </p>
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: 12,
-                  color: "#a1a1aa",
-                }}
-              >
-                You can edit: objective, audience, budget, and status.
-              </p>
             </div>
 
             <div
@@ -301,7 +245,6 @@ export default async function CampaignDetailPage({ params }: Props) {
                 Add ad
               </Link>
 
-              <GenerateActionsButton action={handleGenerateActions} />
             </div>
           </div>
         </div>
@@ -414,60 +357,21 @@ export default async function CampaignDetailPage({ params }: Props) {
 
         <SectionCard title="Signals">
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#71717a" }}>Winners</div>
-              <div style={{ marginTop: 4, fontSize: 18, fontWeight: 700 }}>
-                {winners.length}
-              </div>
+            <div style={signalBoxStyle}>
+              <div style={signalLabelStyle}>Winners</div>
+              <div style={signalValueStyle}>{winners.length}</div>
             </div>
-
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#71717a" }}>Testing</div>
-              <div style={{ marginTop: 4, fontSize: 18, fontWeight: 700 }}>
-                {drafts.length}
-              </div>
+            <div style={signalBoxStyle}>
+              <div style={signalLabelStyle}>Testing</div>
+              <div style={signalValueStyle}>{drafts.length}</div>
             </div>
-
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#71717a" }}>Paused</div>
-              <div style={{ marginTop: 4, fontSize: 18, fontWeight: 700 }}>
-                {paused.length}
-              </div>
+            <div style={signalBoxStyle}>
+              <div style={signalLabelStyle}>Paused</div>
+              <div style={signalValueStyle}>{paused.length}</div>
             </div>
-
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: 12,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#71717a" }}>Ended</div>
-              <div style={{ marginTop: 4, fontSize: 18, fontWeight: 700 }}>
-                {ended.length}
-              </div>
+            <div style={signalBoxStyle}>
+              <div style={signalLabelStyle}>Ended</div>
+              <div style={signalValueStyle}>{ended.length}</div>
             </div>
           </div>
         </SectionCard>
@@ -484,59 +388,27 @@ export default async function CampaignDetailPage({ params }: Props) {
           {(learningRows ?? []).length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {(learningRows ?? []).map((learning) => (
-                <div
-                  key={learning.id}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 14,
-                    padding: 14,
-                    background: "#fff",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "#18181b",
-                      marginBottom: 6,
-                    }}
-                  >
+                <div key={learning.id} style={cardStyle}>
+                  <div style={cardTitleStyle}>
                     {learning.problem || "Untitled learning"}
                   </div>
 
                   {learning.change_made ? (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#52525b",
-                        marginBottom: 6,
-                      }}
-                    >
+                    <div style={cardTextStyle}>
                       <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
                       {learning.change_made}
                     </div>
                   ) : null}
 
                   {learning.result ? (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#52525b",
-                        marginBottom: 6,
-                      }}
-                    >
+                    <div style={cardTextStyle}>
                       <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
                       {learning.result}
                     </div>
                   ) : null}
 
                   {learning.outcome ? (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#71717a",
-                      }}
-                    >
+                    <div style={cardMutedStyle}>
                       <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
                       {learning.outcome}
                     </div>
@@ -557,70 +429,86 @@ export default async function CampaignDetailPage({ params }: Props) {
         >
           {learningSuggestions.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {learningSuggestions.map((suggestion, index) => (
-                <div
-                  key={`${suggestion.title}-${index}`}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 14,
-                    padding: 14,
-                    background: "#fafafa",
-                  }}
-                >
+              {learningSuggestions.map((suggestion, index) => {
+                async function handleCreateAction() {
+                  "use server";
+                  await createActionFromSuggestion({
+                    clientId,
+                    campaignId,
+                    title: suggestion.title,
+                    description: suggestion.description,
+                    priority: suggestion.priority,
+                  });
+                }
+
+                return (
                   <div
+                    key={`${suggestion.title}-${index}`}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      marginBottom: 6,
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 14,
+                      padding: 14,
+                      background: "#fafafa",
                     }}
                   >
                     <div
                       style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: "#18181b",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        marginBottom: 6,
                       }}
                     >
-                      {suggestion.title}
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#18181b",
+                        }}
+                      >
+                        {suggestion.title}
+                      </div>
+
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "4px 8px",
+                          borderRadius: 999,
+                          background:
+                            suggestion.priority === "high"
+                              ? "#fee2e2"
+                              : suggestion.priority === "medium"
+                                ? "#fef3c7"
+                                : "#e0f2fe",
+                          color:
+                            suggestion.priority === "high"
+                              ? "#991b1b"
+                              : suggestion.priority === "medium"
+                                ? "#92400e"
+                                : "#075985",
+                          textTransform: "capitalize",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {suggestion.priority}
+                      </span>
                     </div>
 
-                    <span
+                    <div
                       style={{
-                        fontSize: 11,
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        background:
-                          suggestion.priority === "high"
-                            ? "#fee2e2"
-                            : suggestion.priority === "medium"
-                              ? "#fef3c7"
-                              : "#e0f2fe",
-                        color:
-                          suggestion.priority === "high"
-                            ? "#991b1b"
-                            : suggestion.priority === "medium"
-                              ? "#92400e"
-                              : "#075985",
-                        textTransform: "capitalize",
-                        fontWeight: 600,
+                        fontSize: 13,
+                        color: "#71717a",
+                        marginBottom: 12,
                       }}
                     >
-                      {suggestion.priority}
-                    </span>
-                  </div>
+                      {suggestion.description}
+                    </div>
 
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#71717a",
-                    }}
-                  >
-                    {suggestion.description}
+                    <CreateActionFromSuggestionButton action={handleCreateAction} />
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyState
@@ -632,88 +520,10 @@ export default async function CampaignDetailPage({ params }: Props) {
       </div>
 
       <SectionCard title={`Generated actions (${generatedActions.length})`}>
-        <details
-          style={{
-            marginBottom: 16,
-            border: "1px solid #e4e4e7",
-            borderRadius: 12,
-            background: "#f4f4f5",
-          }}
-        >
-          <summary
-            style={{
-              padding: "10px 14px",
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#52525b",
-              cursor: "pointer",
-            }}
-          >
-            How actions are generated
-          </summary>
-          <div
-            style={{
-              padding: "0 14px 14px",
-              fontSize: 13,
-              color: "#52525b",
-              lineHeight: 1.6,
-            }}
-          >
-            <p style={{ margin: "0 0 8px" }}>
-              Every time you create or edit an ad, the system evaluates it
-              against a set of rules:
-            </p>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: 18,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-              }}
-            >
-              <li>
-                <strong>Weak CTR</strong> — if spend &ge; 5 and CTR is between
-                0% and 1%, a &ldquo;Review weak ad&rdquo; action is created
-              </li>
-              <li>
-                <strong>Winner</strong> — if CTR &ge; 2.5% and spend &ge; 3, a
-                &ldquo;Consider scaling&rdquo; action is created
-              </li>
-              <li>
-                <strong>Underperforming</strong> — if spend &ge; 8 but clicks
-                &le; 2, a &ldquo;Pause&rdquo; action is created
-              </li>
-              <li>
-                <strong>No delivery</strong> — if spend and impressions are both
-                0, a &ldquo;Check delivery/setup&rdquo; action is created
-              </li>
-              <li>
-                <strong>CTR declining</strong> — if CTR dropped 30%+ over
-                recent days and spend &ge; 5, a &ldquo;CTR declining&rdquo;
-                action is created
-              </li>
-            </ul>
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71717a" }}>
-              Actions that no longer match their rule are automatically
-              completed. If conditions return, the action reopens.
-            </p>
-          </div>
-        </details>
-
         {generatedActions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
-              <h3
-                style={{
-                  margin: "0 0 10px",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#18181b",
-                }}
-              >
-                Open
-              </h3>
+              <h3 style={subheadStyle}>Open</h3>
               {openGeneratedActions.length > 0 ? (
                 <ActionList actions={openGeneratedActions} />
               ) : (
@@ -725,16 +535,7 @@ export default async function CampaignDetailPage({ params }: Props) {
             </div>
 
             <div>
-              <h3
-                style={{
-                  margin: "0 0 10px",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#18181b",
-                }}
-              >
-                Completed
-              </h3>
+              <h3 style={subheadStyle}>Completed</h3>
               {completedGeneratedActions.length > 0 ? (
                 <ActionList actions={completedGeneratedActions} />
               ) : (
@@ -774,78 +575,39 @@ export default async function CampaignDetailPage({ params }: Props) {
           </Link>
         }
       >
-        <p style={{ margin: "0 0 12px", fontSize: 12, color: "#a1a1aa" }}>
-          Use the Edit button on each ad to update: name, status, spend,
-          impressions, clicks, engagement, conversions, audience, creative hook,
-          and notes.
-        </p>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {ads.map((ad) => {
-              const trend = trendMap.get(String(ad.id));
-              return (
-                <div key={ad.id}>
-                  <AdRow ad={ad} />
-                  <div
+            {ads.map((ad) => (
+              <div key={ad.id}>
+                <AdRow ad={ad} />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    marginTop: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Link
+                    href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
+                      display: "inline-flex",
                       alignItems: "center",
-                      marginTop: 8,
-                      marginBottom: 12,
+                      padding: "7px 11px",
+                      borderRadius: 9,
+                      border: "1px solid #e4e4e7",
+                      background: "#fff",
+                      color: "#18181b",
+                      textDecoration: "none",
+                      fontSize: 12,
+                      fontWeight: 600,
                     }}
                   >
-                    {trend ? (
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color:
-                            trend.direction === "up"
-                              ? "#16a34a"
-                              : trend.direction === "down"
-                                ? "#dc2626"
-                                : "#71717a",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {trend.direction === "up"
-                          ? "\u25B2"
-                          : trend.direction === "down"
-                            ? "\u25BC"
-                            : "\u2014"}{" "}
-                        CTR {trend.ctrChange > 0 ? "+" : ""}
-                        {trend.ctrChange}% over {trend.daysCompared}d
-                        <span style={{ color: "#a1a1aa", fontWeight: 400 }}>
-                          {" "}
-                          ({trend.ctrBefore}% &rarr; {trend.ctrNow}%)
-                        </span>
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "#a1a1aa" }}>
-                        No trend data yet
-                      </span>
-                    )}
-                    <Link
-                      href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "7px 11px",
-                        borderRadius: 9,
-                        border: "1px solid #e4e4e7",
-                        background: "#fff",
-                        color: "#18181b",
-                        textDecoration: "none",
-                        fontSize: 12,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Edit ad
-                    </Link>
-                  </div>
+                    Edit ad
+                  </Link>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         ) : (
           <EmptyState
@@ -857,3 +619,53 @@ export default async function CampaignDetailPage({ params }: Props) {
     </div>
   );
 }
+
+const signalBoxStyle: React.CSSProperties = {
+  border: "1px solid #e4e4e7",
+  borderRadius: 12,
+  padding: 12,
+  background: "#fff",
+};
+
+const signalLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#71717a",
+};
+
+const signalValueStyle: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 18,
+  fontWeight: 700,
+};
+
+const cardStyle: React.CSSProperties = {
+  border: "1px solid #e4e4e7",
+  borderRadius: 14,
+  padding: 14,
+  background: "#fff",
+};
+
+const cardTitleStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#18181b",
+  marginBottom: 6,
+};
+
+const cardTextStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#52525b",
+  marginBottom: 6,
+};
+
+const cardMutedStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#71717a",
+};
+
+const subheadStyle: React.CSSProperties = {
+  margin: "0 0 10px",
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#18181b",
+};
