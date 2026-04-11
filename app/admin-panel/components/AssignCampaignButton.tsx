@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useTransition, useState } from "react";
 import { assignCampaignToClient } from "../lib/campaign-actions";
 
 export default function AssignCampaignButton({
@@ -15,8 +15,29 @@ export default function AssignCampaignButton({
   variant?: "primary" | "secondary";
 }) {
   const [isPending, startTransition] = useTransition();
+  const [done, setDone] = useState(false);
 
   const isPrimary = variant === "primary";
+
+  if (done) {
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "6px 12px",
+          borderRadius: 8,
+          background: "#f0fdf4",
+          color: "#166534",
+          border: "1px solid #bbf7d0",
+          fontSize: 12,
+          fontWeight: 600,
+        }}
+      >
+        Assigned
+      </span>
+    );
+  }
 
   return (
     <button
@@ -25,6 +46,7 @@ export default function AssignCampaignButton({
       onClick={() => {
         startTransition(async () => {
           await assignCampaignToClient(String(campaignId), String(clientId));
+          setDone(true);
         });
       }}
       style={{
