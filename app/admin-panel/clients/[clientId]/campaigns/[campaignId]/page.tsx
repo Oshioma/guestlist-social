@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
+import {
+  mapDbAdToUiAd,
+  mapDbActionToUiAction,
+} from "@/app/admin-panel/lib/mappers";
 import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
-import { createLearningFromAction } from "@/app/admin-panel/lib/learning-actions";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
@@ -28,7 +30,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: campaign, error: campaignError },
     { data: adsRows, error: adsError },
     { data: actionRows, error: actionsError },
-    { data: learningRows },
+    { data: learningRows, error: learningsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -51,15 +53,22 @@ export default async function CampaignDetailPage({ params }: Props) {
     supabase
       .from("learnings")
       .select("*")
+      .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
   ]);
 
-  if (clientError || !client || campaignError || !campaign || adsError || actionsError) {
+  if (
+    clientError ||
+    !client ||
+    campaignError ||
+    !campaign ||
+    adsError ||
+    actionsError ||
+    learningsError
+  ) {
     notFound();
   }
-
-  const learnings = learningRows ?? [];
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
@@ -93,41 +102,31 @@ export default async function CampaignDetailPage({ params }: Props) {
       : campaignStatus === "completed"
       ? { background: "#e4e4e7", color: "#3f3f46" }
       : campaignStatus === "draft"
-      ? { background: "#f4f4f5", color: "#52525b" }
-      : { background: "#fef3c7", color: "#92400e" };
+        ? { background: "#f4f4f5", color: "#52525b" }
+        : { background: "#fef3c7", color: "#92400e" };
 
-  // Filter actions that belong to this campaign's ads via [AUTO:rule:adId] signatures
   const campaignAdIds = new Set(ads.map((ad) => ad.id));
 
   const generatedActions = (actionRows ?? [])
     .filter((row) => {
       const title = String(row.title ?? "");
       if (!title.includes("[AUTO:")) return false;
+
       return [...campaignAdIds].some((adId) => title.includes(`:${adId}]`));
     })
     .map((row) => mapDbActionToUiAction(row, client.name));
 
-  // Split into three status groups
-  const openActions = generatedActions.filter((a) => a.status === "open");
-  const inProgressActions = generatedActions.filter((a) => a.status === "in_progress");
-  const completedActions = generatedActions.filter((a) => a.status === "completed");
+  const openGeneratedActions = generatedActions.filter((action) => !action.done);
+  const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
-  const learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
+  const learningSuggestions = await generateSuggestionsFromLearnings(
+    clientId,
+    campaignId
+  );
 
   async function handleGenerateActions() {
     "use server";
     await generateCampaignActions(clientId, campaignId);
-  }
-
-  async function handleCreateLearning(actionId: string, formData: FormData) {
-    "use server";
-    // Extract adId from the action title signature [AUTO:rule:adId]
-    const action = (actionRows ?? []).find((r) => r.id === actionId);
-    const title = String(action?.title ?? "");
-    const match = title.match(/\[AUTO:\w[\w-]*:([^\]]+)\]/);
-    const adId = match ? match[1] : null;
-
-    await createLearningFromAction(clientId, campaignId, adId, actionId, formData);
   }
 
   return (
@@ -422,192 +421,213 @@ export default async function CampaignDetailPage({ params }: Props) {
         </SectionCard>
       </div>
 
-      {/* Generated Actions — three status groups */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 20,
+        }}
+      >
+        <SectionCard title={`Learnings (${(learningRows ?? []).length})`}>
+          {(learningRows ?? []).length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {(learningRows ?? []).map((learning) => (
+                <div
+                  key={learning.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 14,
+                    padding: 14,
+                    background: "#fff",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#18181b",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {learning.problem || "Untitled learning"}
+                  </div>
+
+                  {learning.change_made ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
+                      {learning.change_made}
+                    </div>
+                  ) : null}
+
+                  {learning.result ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
+                      {learning.result}
+                    </div>
+                  ) : null}
+
+                  {learning.outcome ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#71717a",
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
+                      {learning.outcome}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No learnings yet"
+              description="Completed actions can be turned into campaign learnings."
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={`Suggestions from past learnings (${learningSuggestions.length})`}
+        >
+          {learningSuggestions.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {learningSuggestions.map((suggestion, index) => (
+                <div
+                  key={`${suggestion.title}-${index}`}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 14,
+                    padding: 14,
+                    background: "#fafafa",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#18181b",
+                      }}
+                    >
+                      {suggestion.title}
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        background:
+                          suggestion.priority === "high"
+                            ? "#fee2e2"
+                            : suggestion.priority === "medium"
+                              ? "#fef3c7"
+                              : "#e0f2fe",
+                        color:
+                          suggestion.priority === "high"
+                            ? "#991b1b"
+                            : suggestion.priority === "medium"
+                              ? "#92400e"
+                              : "#075985",
+                        textTransform: "capitalize",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {suggestion.priority}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#71717a",
+                    }}
+                  >
+                    {suggestion.description}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No learning-based suggestions yet"
+              description="As more learnings are saved, the system will start recommending proven fixes."
+            />
+          )}
+        </SectionCard>
+      </div>
+
       <SectionCard title={`Generated actions (${generatedActions.length})`}>
         {generatedActions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Open */}
-            {openActions.length > 0 && (
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 10px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#b91c1c",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "#ef4444",
-                    }}
-                  />
-                  Open ({openActions.length})
-                </h3>
-                <ActionList actions={openActions} onCreateLearning={handleCreateLearning} />
-              </div>
-            )}
-
-            {/* In progress */}
-            {inProgressActions.length > 0 && (
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 10px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#92400e",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "#eab308",
-                    }}
-                  />
-                  In progress ({inProgressActions.length})
-                </h3>
-                <ActionList actions={inProgressActions} onCreateLearning={handleCreateLearning} />
-              </div>
-            )}
-
-            {/* Completed */}
-            {completedActions.length > 0 && (
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 10px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#166534",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "#22c55e",
-                    }}
-                  />
-                  Completed ({completedActions.length})
-                </h3>
-                <ActionList actions={completedActions} onCreateLearning={handleCreateLearning} />
-              </div>
-            )}
-
-            {/* Empty fallback */}
-            {openActions.length === 0 &&
-              inProgressActions.length === 0 &&
-              completedActions.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <h3
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#18181b",
+                }}
+              >
+                Open
+              </h3>
+              {openGeneratedActions.length > 0 ? (
+                <ActionList actions={openGeneratedActions} />
+              ) : (
                 <EmptyState
-                  title="No generated actions"
-                  description="Actions will appear here when rules detect issues with ads."
+                  title="No open generated actions"
+                  description="Either nothing has triggered yet, or they have all been completed."
                 />
               )}
+            </div>
+
+            <div>
+              <h3
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#18181b",
+                }}
+              >
+                Completed
+              </h3>
+              {completedGeneratedActions.length > 0 ? (
+                <ActionList actions={completedGeneratedActions} />
+              ) : (
+                <EmptyState
+                  title="No completed generated actions"
+                  description="Completed auto-actions will appear here."
+                />
+              )}
+            </div>
           </div>
         ) : (
           <EmptyState
             title="No generated actions yet"
             description="Click Generate actions to evaluate the ads in this campaign."
-          />
-        )}
-      </SectionCard>
-
-      {/* Learnings */}
-      <SectionCard title={`Learnings (${learnings.length})`}>
-        {learnings.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {learnings.map((l: { id: string; problem: string; change_made: string; result: string; outcome: string }) => (
-              <div
-                key={l.id}
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 10,
-                  padding: 12,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
-                  {l.problem}
-                </div>
-                <div style={{ fontSize: 13, color: "#52525b", marginTop: 4 }}>
-                  {l.change_made}
-                </div>
-                {l.result && (
-                  <div style={{ fontSize: 13, color: "#166534", marginTop: 4 }}>
-                    {l.result}
-                  </div>
-                )}
-                {l.outcome && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "#71717a",
-                      marginTop: 6,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    {l.outcome}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No learnings yet"
-            description="Completed actions can be turned into learnings."
-          />
-        )}
-      </SectionCard>
-
-      {/* Suggestions from past learnings */}
-      <SectionCard title="Suggestions from past learnings">
-        {learningSuggestions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {learningSuggestions.map((s, i) => (
-              <div
-                key={`${s.title}-${i}`}
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 12,
-                  padding: 14,
-                  background: "#fafafa",
-                }}
-              >
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
-                  {s.title}
-                </div>
-                <div style={{ fontSize: 13, color: "#71717a" }}>
-                  {s.description}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No learning-based suggestions yet"
-            description="As more learnings are saved, the system will start recommending proven fixes."
           />
         )}
       </SectionCard>
