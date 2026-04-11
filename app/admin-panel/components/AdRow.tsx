@@ -2,121 +2,144 @@
 
 import Link from "next/link";
 import type { Ad } from "../lib/types";
-import StatusPill from "./StatusPill";
 import { formatCurrency } from "../lib/utils";
+import { getActionSuggestion } from "../lib/action-engine";
+
+const perfColors: Record<string, { bg: string; text: string }> = {
+  winner: { bg: "#dcfce7", text: "#166534" },
+  losing: { bg: "#fee2e2", text: "#991b1b" },
+  testing: { bg: "#fef3c7", text: "#92400e" },
+  paused: { bg: "#f4f4f5", text: "#71717a" },
+};
+
+const priorityColors: Record<string, { bg: string; text: string }> = {
+  high: { bg: "#fee2e2", text: "#991b1b" },
+  medium: { bg: "#fef3c7", text: "#92400e" },
+  low: { bg: "#f4f4f5", text: "#71717a" },
+};
 
 export default function AdRow({ ad }: { ad: Ad }) {
+  const colors = perfColors[ad.performanceStatus] ?? perfColors.testing;
+  const suggestion = getActionSuggestion({
+    performance_status: ad.performanceStatus,
+    performance_reason: ad.performanceReason,
+  });
+
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "center",
-        padding: "10px 0",
+        flexDirection: "column",
+        gap: 6,
+        padding: "12px 0",
         borderBottom: "1px solid #f4f4f5",
-        gap: 12,
-        fontSize: 14,
       }}
     >
-      <div style={{ flex: 2, fontWeight: 500 }}>{ad.name}</div>
-      <div style={{ flex: 1, color: "#71717a" }}>{ad.platform}</div>
-      <div style={{ width: 90 }}>
-        <StatusPill status={ad.status} />
-      </div>
-      <div style={{ width: 80, textAlign: "right", color: "#52525b" }}>
-        {formatCurrency(ad.spend)}
-      </div>
-      <div style={{ width: 90, textAlign: "right", color: "#52525b" }}>
-        {ad.impressions.toLocaleString()}
-      </div>
-      <div style={{ width: 60, textAlign: "right", color: "#52525b" }}>
-        {ad.clicks.toLocaleString()}
-      </div>
-      <div style={{ width: 60, textAlign: "right", fontWeight: 500 }}>
-        {ad.ctr > 0 ? `${ad.ctr}%` : "—"}
-      </div>
-
-      {/* Quick actions */}
-      <div style={{ width: 200, display: "flex", gap: 6, justifyContent: "flex-end" }}>
-        {ad.campaignId && (
-          <Link
-            href={`/app/clients/${ad.clientId}/campaigns/${ad.campaignId}/ads/${ad.id}/edit`}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 14,
+        }}
+      >
+        <div style={{ flex: 2, fontWeight: 500 }}>{ad.name}</div>
+        <div style={{ width: 100 }}>
+          <span
             style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "1px solid #e4e4e7",
-              background: "#fff",
+              display: "inline-block",
+              padding: "2px 10px",
+              borderRadius: 999,
               fontSize: 12,
-              color: "#18181b",
-              textDecoration: "none",
-              fontWeight: 500,
+              fontWeight: 600,
+              background: colors.bg,
+              color: colors.text,
+              textTransform: "capitalize",
             }}
           >
-            Edit
-          </Link>
-        )}
-        {ad.status === "active" && (
-          <button
-            onClick={() => console.log("pause ad", ad.id)}
-            style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "1px solid #e4e4e7",
-              background: "#fff",
-              fontSize: 12,
-              color: "#854d0e",
-              cursor: "pointer",
-            }}
-          >
-            Pause
-          </button>
-        )}
-        {ad.status === "paused" && (
-          <button
-            onClick={() => console.log("resume ad", ad.id)}
-            style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "1px solid #e4e4e7",
-              background: "#fff",
-              fontSize: 12,
-              color: "#166534",
-              cursor: "pointer",
-            }}
-          >
-            Resume
-          </button>
-        )}
-        <button
-          onClick={() => console.log("duplicate ad", ad.id)}
+            {ad.performanceStatus}
+          </span>
+        </div>
+        <div
           style={{
-            padding: "4px 10px",
-            borderRadius: 6,
-            border: "1px solid #e4e4e7",
-            background: "#fff",
-            fontSize: 12,
-            color: "#52525b",
-            cursor: "pointer",
+            width: 50,
+            textAlign: "center",
+            fontSize: 13,
+            fontWeight: 700,
+            color: ad.performanceScore >= 3 ? "#166534" : ad.performanceScore <= -2 ? "#991b1b" : "#71717a",
           }}
         >
-          Duplicate
-        </button>
-        {ad.status === "active" && ad.ctr >= 2.5 && (
-          <button
-            onClick={() => console.log("scale ad", ad.id)}
+          {ad.performanceScore > 0 ? `+${ad.performanceScore}` : ad.performanceScore}
+        </div>
+        <div style={{ width: 80, textAlign: "right", color: "#52525b", fontSize: 13 }}>
+          {formatCurrency(ad.spend)}
+        </div>
+        <div style={{ width: 90, textAlign: "right", color: "#52525b", fontSize: 13 }}>
+          {ad.impressions.toLocaleString()}
+        </div>
+        <div style={{ width: 60, textAlign: "right", color: "#52525b", fontSize: 13 }}>
+          {ad.clicks.toLocaleString()}
+        </div>
+        <div style={{ width: 60, textAlign: "right", fontWeight: 500, fontSize: 13 }}>
+          {ad.ctr > 0 ? `${ad.ctr}%` : "—"}
+        </div>
+        <div style={{ width: 50, textAlign: "right", color: "#52525b", fontSize: 13 }}>
+          {ad.conversions > 0 ? ad.conversions : "—"}
+        </div>
+
+        <div style={{ width: 120, display: "flex", gap: 6, justifyContent: "flex-end" }}>
+          {ad.campaignId && (
+            <Link
+              href={`/app/clients/${ad.clientId}/campaigns/${ad.campaignId}/ads/${ad.id}/edit`}
+              style={{
+                padding: "4px 10px",
+                borderRadius: 6,
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+                fontSize: 12,
+                color: "#18181b",
+                textDecoration: "none",
+                fontWeight: 500,
+              }}
+            >
+              Edit
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: "#71717a", paddingLeft: 2 }}>
+        {ad.performanceReason}
+      </div>
+
+      {suggestion && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginTop: 2,
+            paddingLeft: 2,
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: "#991b1b" }}>Problem: {suggestion.problem}</span>
+          <span style={{ color: "#18181b" }}>Action: {suggestion.action}</span>
+          <span
             style={{
-              padding: "4px 10px",
-              borderRadius: 6,
-              border: "none",
-              background: "#18181b",
-              fontSize: 12,
-              color: "#fff",
-              cursor: "pointer",
+              padding: "1px 8px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 600,
+              background: priorityColors[suggestion.priority].bg,
+              color: priorityColors[suggestion.priority].text,
+              textTransform: "uppercase",
             }}
           >
-            Scale
-          </button>
-        )}
-      </div>
+            {suggestion.priority}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
