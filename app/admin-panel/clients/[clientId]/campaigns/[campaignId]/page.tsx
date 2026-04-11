@@ -64,8 +64,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     campaignError ||
     !campaign ||
     adsError ||
-    actionsError ||
-    learningsError
+    actionsError
   ) {
     notFound();
   }
@@ -119,10 +118,12 @@ export default async function CampaignDetailPage({ params }: Props) {
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
-  const learningSuggestions = await generateSuggestionsFromLearnings(
-    clientId,
-    campaignId
-  );
+  let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
+  try {
+    learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
+  } catch {
+    // learnings table may not exist yet
+  }
 
   async function handleGenerateActions() {
     "use server";
