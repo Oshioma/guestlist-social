@@ -447,94 +447,162 @@ export default async function ClientAdsPage({
         )}
       </SectionCard>
 
-      {learnings.length > 0 && (
-        <SectionCard title={`Learnings (${learnings.length})`}>
-          <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 12px" }}>
-            Auto-generated from completed actions. These compound over time.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {learnings.map((l: any) => {
-              const oColors: Record<string, { bg: string; text: string }> = {
-                positive: { bg: "#dcfce7", text: "#166534" },
-                neutral: { bg: "#fef3c7", text: "#92400e" },
-                negative: { bg: "#fee2e2", text: "#991b1b" },
-              };
-              const oc = oColors[l.outcome] ?? oColors.neutral;
+      {learnings.length > 0 && (() => {
+        const sorted = [...learnings].sort(
+          (a: any, b: any) => Number(b.reliability_score ?? 0) - Number(a.reliability_score ?? 0)
+        );
+        return (
+          <SectionCard title={`Learnings (${learnings.length})`}>
+            <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 12px" }}>
+              Ranked by reliability. Repeated, consistent learnings rise to the top.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sorted.map((l: any) => {
+                const oColors: Record<string, { bg: string; text: string }> = {
+                  positive: { bg: "#dcfce7", text: "#166534" },
+                  neutral: { bg: "#fef3c7", text: "#92400e" },
+                  negative: { bg: "#fee2e2", text: "#991b1b" },
+                };
+                const oc = oColors[l.outcome] ?? oColors.neutral;
+                const reliability = Number(l.reliability_score ?? 0);
+                const timesSeen = Number(l.times_seen ?? 1);
+                const avgCtrLift = Number(l.avg_ctr_lift ?? 0);
+                const avgCpcChange = Number(l.avg_cpc_change ?? 0);
 
-              return (
-                <div
-                  key={l.id}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 10,
-                    padding: 12,
-                    background: "#fff",
-                  }}
-                >
+                return (
                   <div
+                    key={l.id}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      flexWrap: "wrap",
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 10,
+                      padding: 12,
+                      background: "#fff",
                     }}
                   >
-                    <span
+                    <div
                       style={{
-                        padding: "1px 8px",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: oc.bg,
-                        color: oc.text,
-                        textTransform: "uppercase",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
                       }}
                     >
-                      {l.outcome}
-                    </span>
-                    {l.tags?.map((tag: string) => (
                       <span
-                        key={tag}
                         style={{
-                          padding: "1px 6px",
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 500,
-                          background: "#f4f4f5",
-                          color: "#52525b",
+                          padding: "1px 8px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: oc.bg,
+                          color: oc.text,
+                          textTransform: "uppercase",
                         }}
                       >
-                        {tag}
+                        {l.outcome}
                       </span>
-                    ))}
-                  </div>
-                  <p
-                    style={{
-                      margin: "6px 0 0",
-                      fontSize: 13,
-                      color: "#18181b",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {l.learning}
-                  </p>
-                  {l.created_at && (
+
+                      {/* Reliability bar */}
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: reliability >= 60 ? "#166534" : reliability >= 30 ? "#92400e" : "#991b1b",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 40,
+                            height: 6,
+                            background: "#f4f4f5",
+                            borderRadius: 3,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "block",
+                              width: `${Math.min(reliability, 100)}%`,
+                              height: "100%",
+                              background: reliability >= 60 ? "#166534" : reliability >= 30 ? "#d97706" : "#dc2626",
+                              borderRadius: 3,
+                            }}
+                          />
+                        </span>
+                        {reliability.toFixed(0)}%
+                      </span>
+
+                      {timesSeen > 1 && (
+                        <span style={{ fontSize: 11, color: "#52525b", fontWeight: 500 }}>
+                          seen {timesSeen}x
+                        </span>
+                      )}
+
+                      {l.tags?.map((tag: string) => (
+                        <span
+                          key={tag}
+                          style={{
+                            padding: "1px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 500,
+                            background: "#f4f4f5",
+                            color: "#52525b",
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
                     <p
                       style={{
-                        margin: "4px 0 0",
-                        fontSize: 11,
-                        color: "#a1a1aa",
+                        margin: "6px 0 0",
+                        fontSize: 13,
+                        color: "#18181b",
+                        lineHeight: 1.5,
                       }}
                     >
-                      {new Date(l.created_at).toLocaleDateString()}
+                      {l.learning}
                     </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      )}
+
+                    {/* Avg lifts */}
+                    {(avgCtrLift !== 0 || avgCpcChange !== 0) && (
+                      <div style={{ marginTop: 4, display: "flex", gap: 12, fontSize: 11 }}>
+                        {avgCtrLift !== 0 && (
+                          <span style={{ color: avgCtrLift > 0 ? "#166534" : "#991b1b" }}>
+                            Avg CTR lift: {avgCtrLift > 0 ? "+" : ""}{avgCtrLift.toFixed(1)}%
+                          </span>
+                        )}
+                        {avgCpcChange !== 0 && (
+                          <span style={{ color: avgCpcChange < 0 ? "#166534" : "#991b1b" }}>
+                            Avg CPC change: {avgCpcChange > 0 ? "+" : ""}{avgCpcChange.toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {l.created_at && (
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          fontSize: 11,
+                          color: "#a1a1aa",
+                        }}
+                      >
+                        {new Date(l.created_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        );
+      })()}
     </div>
   );
 }

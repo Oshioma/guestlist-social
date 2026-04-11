@@ -248,7 +248,7 @@ export async function POST(req: Request) {
       console.error("Failed to insert action_outcome:", outcomeError.message);
     }
 
-    // Auto-generate a learning from this outcome
+    // Auto-generate or merge a learning from this outcome
     const { learning, tags } = generateLearning(
       action.problem ?? "",
       action.action ?? "",
@@ -256,23 +256,75 @@ export async function POST(req: Request) {
       reasons
     );
 
-    const { error: learningError } = await supabase
-      .from("action_learnings")
-      .insert({
-        client_id: ad.client_id,
-        ad_id: action.ad_id,
-        action_id: actionId,
-        problem: action.problem,
-        action_taken: action.action,
-        outcome,
-        metric_before: action.metric_snapshot_before,
-        metric_after: afterSnapshot,
-        learning,
-        tags,
-      });
+    // Compute lifts for this action
+    const beforeSnap = action.metric_snapshot_before as Record<string, unknown> | null;
+    const ctrBefore = Number(beforeSnap?.ctr ?? 0);
+    const ctrAfter = Number((afterSnapshot as Record<string, unknown>).ctr ?? 0);
+    const cpcBefore = Number(beforeSnap?.cpc ?? 0);
+    const cpcAfter = Number((afterSnapshot as Record<string, unknown>).cpc ?? 0);
+    const ctrLift = ctrBefore > 0 ? ((ctrAfter - ctrBefore) / ctrBefore) * 100 : 0;
+    const cpcChange = cpcBefore > 0 ? ((cpcAfter - cpcBefore) / cpcBefore) * 100 : 0;
 
-    if (learningError) {
-      console.error("Failed to insert learning:", learningError.message);
+    // Check if a similar learning already exists for this client + problem + outcome
+    const { data: existingLearnings } = await supabase
+      .from("action_learnings")
+      .select("id, times_seen, avg_ctr_lift, avg_cpc_change, reliability_score")
+      .eq("client_id", ad.client_id)
+      .eq("problem", action.problem)
+      .eq("outcome", outcome)
+      .limit(1);
+
+    if (existingLearnings && existingLearnings.length > 0) {
+      // Merge: increment times_seen, running average of lifts
+      const existing = existingLearnings[0];
+      const n = Number(existing.times_seen ?? 1);
+      const newN = n + 1;
+      const newAvgCtrLift = ((Number(existing.avg_ctr_lift ?? 0) * n) + ctrLift) / newN;
+      const newAvgCpcChange = ((Number(existing.avg_cpc_change ?? 0) * n) + cpcChange) / newN;
+
+      // Reliability: times_seen * consistency * lift magnitude
+      // Higher times_seen = more reliable, consistent outcome = more reliable
+      const liftMagnitude = Math.abs(newAvgCtrLift) + Math.abs(newAvgCpcChange);
+      const reliability = Math.min(100, newN * 15 + Math.min(liftMagnitude, 50));
+
+      await supabase
+        .from("action_learnings")
+        .update({
+          times_seen: newN,
+          avg_ctr_lift: Number(newAvgCtrLift.toFixed(2)),
+          avg_cpc_change: Number(newAvgCpcChange.toFixed(2)),
+          reliability_score: Number(reliability.toFixed(1)),
+          learning,
+          metric_after: afterSnapshot,
+        })
+        .eq("id", existing.id);
+    } else {
+      // Create new learning
+      const liftMagnitude = Math.abs(ctrLift) + Math.abs(cpcChange);
+      const reliability = Math.min(100, 15 + Math.min(liftMagnitude, 50));
+
+      const { error: learningError } = await supabase
+        .from("action_learnings")
+        .insert({
+          client_id: ad.client_id,
+          ad_id: action.ad_id,
+          action_id: actionId,
+          problem: action.problem,
+          action_taken: action.action,
+          outcome,
+          metric_before: action.metric_snapshot_before,
+          metric_after: afterSnapshot,
+          learning,
+          tags,
+          times_seen: 1,
+          avg_ctr_lift: Number(ctrLift.toFixed(2)),
+          avg_cpc_change: Number(cpcChange.toFixed(2)),
+          reliability_score: Number(reliability.toFixed(1)),
+        });
+
+      if (learningError) {
+        console.error("Failed to insert learning:", learningError.message);
+      }
     }
 
     return NextResponse.json({
