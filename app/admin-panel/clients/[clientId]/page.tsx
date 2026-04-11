@@ -178,6 +178,9 @@ export default async function ClientDetailPage({
         <p style={{ fontSize: 14, color: "#71717a", margin: 0 }}>
           {client.platform} · {formatCurrency(client.monthlyBudget)}/mo
         </p>
+        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
+          You can edit: name, platform, budget, status, website, and notes.
+        </p>
       </div>
 
       {/* Sub-nav */}

@@ -189,6 +189,15 @@ export default async function CampaignDetailPage({ params }: Props) {
                 {campaign.objective ?? "No objective"} ·{" "}
                 {campaign.audience ?? "No audience set"}
               </p>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: 12,
+                  color: "#a1a1aa",
+                }}
+              >
+                You can edit: objective, audience, budget, and status.
+              </p>
             </div>
 
             <div
@@ -717,6 +726,11 @@ export default async function CampaignDetailPage({ params }: Props) {
           </Link>
         }
       >
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "#a1a1aa" }}>
+          Use the Edit button on each ad to update: name, status, spend,
+          impressions, clicks, engagement, conversions, audience, creative hook,
+          and notes.
+        </p>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {ads.map((ad) => (
