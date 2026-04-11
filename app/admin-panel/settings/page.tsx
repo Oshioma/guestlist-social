@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
-import { syncMetaData, importFromMeta } from "../lib/meta-sync-action";
+import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +79,33 @@ export default async function SettingsPage() {
               pendingLabel="Importing from Meta..."
             />
           </div>
+
+          {clientList.length > 1 && (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                Sync All Clients
+              </div>
+              <p style={{ fontSize: 13, color: "#71717a", margin: "0 0 12px" }}>
+                Runs a full Meta sync for all {clientList.length} clients in one
+                go.
+              </p>
+              <MetaSyncButton
+                action={async () => {
+                  "use server";
+                  return await syncAllClients();
+                }}
+                label="Sync All Clients"
+                pendingLabel="Syncing all clients..."
+              />
+            </div>
+          )}
 
           {clientList.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

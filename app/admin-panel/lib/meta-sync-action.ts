@@ -76,6 +76,44 @@ export async function importFromMeta() {
   }
 }
 
+/**
+ * Sync all clients: runs syncMetaData for every non-archived client.
+ */
+export async function syncAllClients() {
+  const supabase = await createClient();
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name")
+    .eq("archived", false)
+    .order("name", { ascending: true });
+
+  if (!clients || clients.length === 0) {
+    return { ok: false, error: "No clients found to sync." };
+  }
+
+  const log: string[] = [];
+  let allOk = true;
+
+  for (const client of clients) {
+    const result = await syncMetaData(String(client.id));
+    if (result.log) {
+      log.push(...result.log);
+    }
+    if (!result.ok) {
+      allOk = false;
+      log.push(`Failed for "${client.name}": ${result.error}`);
+    }
+    log.push("---");
+  }
+
+  revalidatePath("/app/settings");
+  revalidatePath("/app/clients");
+  revalidatePath("/app/dashboard");
+
+  return { ok: allOk, log };
+}
+
 export async function syncMetaData(clientId: string) {
   const supabase = await createClient();
 
