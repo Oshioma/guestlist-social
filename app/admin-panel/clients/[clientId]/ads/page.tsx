@@ -15,6 +15,8 @@ import AdActionRow from "@/app/admin-panel/components/AdActionRow";
 import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
 import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
 import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlaybookButton";
+import DecisionRow from "@/app/admin-panel/components/DecisionRow";
+import GenerateDecisionsButton from "@/app/admin-panel/components/GenerateDecisionsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes, decisionsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
@@ -66,6 +68,11 @@ export default async function ClientAdsPage({
       .select("*")
       .eq("client_id", clientId)
       .order("avg_reliability", { ascending: false }),
+    supabase
+      .from("ad_decisions")
+      .select("*, ads(name)")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -78,6 +85,9 @@ export default async function ClientAdsPage({
   const learnings = learningsRes.data ?? [];
   const rawExperiments = experimentsRes.data ?? [];
   const playbook = playbookRes.data ?? [];
+  const rawDecisions = decisionsRes.data ?? [];
+  const pendingDecisions = rawDecisions.filter((d: any) => d.status === "pending");
+  const pastDecisions = rawDecisions.filter((d: any) => d.status !== "pending");
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -267,6 +277,63 @@ export default async function ClientAdsPage({
           <p style={{ fontSize: 13, color: "#a1a1aa" }}>
             No playbook yet. Complete some actions and generate learnings first, then hit Generate Playbook.
           </p>
+        )}
+      </SectionCard>
+
+      <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GenerateDecisionsButton clientId={clientId} />
+        </div>
+        {pendingDecisions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingDecisions.map((d: any) => (
+              <DecisionRow
+                key={d.id}
+                decision={{
+                  id: d.id,
+                  ad_id: d.ad_id,
+                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                  type: d.type,
+                  reason: d.reason,
+                  action: d.action,
+                  confidence: d.confidence,
+                  meta_action: d.meta_action,
+                  status: d.status,
+                  execution_result: d.execution_result,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No pending decisions. Hit Generate Decisions to scan all ads.
+          </p>
+        )}
+        {pastDecisions.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+              {pastDecisions.length} past decisions
+            </summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {pastDecisions.map((d: any) => (
+                <DecisionRow
+                  key={d.id}
+                  decision={{
+                    id: d.id,
+                    ad_id: d.ad_id,
+                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                    type: d.type,
+                    reason: d.reason,
+                    action: d.action,
+                    confidence: d.confidence,
+                    meta_action: d.meta_action,
+                    status: d.status,
+                    execution_result: d.execution_result,
+                  }}
+                />
+              ))}
+            </div>
+          </details>
         )}
       </SectionCard>
 
