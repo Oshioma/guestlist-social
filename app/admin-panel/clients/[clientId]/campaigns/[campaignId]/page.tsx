@@ -58,16 +58,13 @@ export default async function CampaignDetailPage({ params }: Props) {
       .order("created_at", { ascending: false }),
   ]);
 
-  if (
-    clientError ||
-    !client ||
-    campaignError ||
-    !campaign ||
-    adsError ||
-    actionsError
-  ) {
+  if (clientError || !client || campaignError || !campaign) {
+    console.error("Campaign page 404:", { clientError, campaignError, clientId, campaignId });
     notFound();
   }
+
+  if (adsError) console.error("Campaign ads query error (non-fatal):", adsError);
+  if (actionsError) console.error("Campaign actions query error (non-fatal):", actionsError);
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
