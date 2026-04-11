@@ -591,7 +591,7 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
       <span style={{ flex: 1, fontSize: 14, color: "#18181b", display: "inline-flex", alignItems: "center", gap: 5 }}>
         {idea.idea}
         {idea.designLink && (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="#22c55e" style={{ flexShrink: 0 }} title="Has image">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="#22c55e" style={{ flexShrink: 0 }} aria-label="Has image">
             <path d="M14.5 2.5h-13A1.5 1.5 0 000 4v8a1.5 1.5 0 001.5 1.5h13A1.5 1.5 0 0016 12V4a1.5 1.5 0 00-1.5-1.5zm-13 1h13a.5.5 0 01.5.5v6.06l-3.22-3.22a.75.75 0 00-1.06 0L7 10.56 5.28 8.84a.75.75 0 00-1.06 0L1 12.06V4a.5.5 0 01.5-.5zM5 7a1 1 0 100-2 1 1 0 000 2z"/>
           </svg>
         )}
