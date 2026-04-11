@@ -53,7 +53,7 @@ export async function getContentDashboardData(): Promise<{
   const [clientsRes, progressRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, status")
       .eq("archived", false)
       .order("name", { ascending: true }),
     supabase.from("content_progress").select("*"),
@@ -63,7 +63,9 @@ export async function getContentDashboardData(): Promise<{
   if (progressRes.error)
     throw new Error(`content_progress: ${progressRes.error.message}`);
 
-  const clients = (clientsRes.data ?? []).map((row) => ({
+  const clients = (clientsRes.data ?? [])
+    .filter((row) => row.status !== "needs_attention")
+    .map((row) => ({
     id: row.id,
     name: row.name ?? "Untitled client",
   }));
@@ -88,7 +90,7 @@ export async function getVideoIdeasData(): Promise<{
   const [clientsRes, themesRes, ideasRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, status")
       .eq("archived", false)
       .order("name", { ascending: true }),
     supabase
@@ -105,10 +107,12 @@ export async function getVideoIdeasData(): Promise<{
   if (themesRes.error) throw new Error(`content_themes: ${themesRes.error.message}`);
   if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
 
-  const clients = (clientsRes.data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name ?? "Untitled client",
-  }));
+  const clients = (clientsRes.data ?? [])
+    .filter((row) => row.status !== "needs_attention")
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? "Untitled client",
+    }));
 
   const themes: ContentTheme[] = (themesRes.data ?? []).map((row) => ({
     id: row.id,
@@ -145,7 +149,7 @@ export async function getCarouselIdeasData(): Promise<{
   const [clientsRes, themesRes, ideasRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, status")
       .eq("archived", false)
       .order("name", { ascending: true }),
     supabase
@@ -162,10 +166,12 @@ export async function getCarouselIdeasData(): Promise<{
   if (themesRes.error) throw new Error(`carousel_themes: ${themesRes.error.message}`);
   if (ideasRes.error) throw new Error(`carousel_ideas: ${ideasRes.error.message}`);
 
-  const clients = (clientsRes.data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name ?? "Untitled client",
-  }));
+  const clients = (clientsRes.data ?? [])
+    .filter((row) => row.status !== "needs_attention")
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? "Untitled client",
+    }));
 
   const themes: CarouselTheme[] = (themesRes.data ?? []).map((row) => ({
     id: row.id,
@@ -204,7 +210,7 @@ export async function getStoryIdeasData(): Promise<{
   const [clientsRes, themesRes, ideasRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, status")
       .eq("archived", false)
       .order("name", { ascending: true }),
     supabase
@@ -221,10 +227,12 @@ export async function getStoryIdeasData(): Promise<{
   if (themesRes.error) throw new Error(`story_themes: ${themesRes.error.message}`);
   if (ideasRes.error) throw new Error(`story_ideas: ${ideasRes.error.message}`);
 
-  const clients = (clientsRes.data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name ?? "Untitled client",
-  }));
+  const clients = (clientsRes.data ?? [])
+    .filter((row) => row.status !== "needs_attention")
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? "Untitled client",
+    }));
 
   const themes: StoryTheme[] = (themesRes.data ?? []).map((row) => ({
     id: row.id,

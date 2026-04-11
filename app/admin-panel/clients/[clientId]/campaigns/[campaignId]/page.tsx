@@ -6,7 +6,7 @@ import {
   mapDbActionToUiAction,
 } from "@/app/admin-panel/lib/mappers";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
-import { createActionFromSuggestion } from "@/app/admin-panel/lib/suggestion-actions";
+
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
@@ -430,17 +430,6 @@ export default async function CampaignDetailPage({ params }: Props) {
           {learningSuggestions.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {learningSuggestions.map((suggestion, index) => {
-                async function handleCreateAction() {
-                  "use server";
-                  await createActionFromSuggestion({
-                    clientId,
-                    campaignId,
-                    title: suggestion.title,
-                    description: suggestion.description,
-                    priority: suggestion.priority,
-                  });
-                }
-
                 return (
                   <div
                     key={`${suggestion.title}-${index}`}
@@ -505,7 +494,13 @@ export default async function CampaignDetailPage({ params }: Props) {
                       {suggestion.description}
                     </div>
 
-                    <CreateActionFromSuggestionButton action={handleCreateAction} />
+                    <CreateActionFromSuggestionButton
+                      clientId={clientId}
+                      campaignId={campaignId}
+                      title={suggestion.title}
+                      description={suggestion.description}
+                      priority={suggestion.priority}
+                    />
                   </div>
                 );
               })}

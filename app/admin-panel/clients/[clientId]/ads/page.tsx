@@ -10,6 +10,13 @@ import {
 } from "@/app/admin-panel/lib/performance-truth";
 import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-truth";
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
+import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
+import AdActionRow from "@/app/admin-panel/components/AdActionRow";
+import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
+import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
+import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlaybookButton";
+import DecisionRow from "@/app/admin-panel/components/DecisionRow";
+import GenerateDecisionsButton from "@/app/admin-panel/components/GenerateDecisionsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +41,36 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes, decisionsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
       .select("*, campaigns(id, name)")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("ad_actions")
+      .select("*, ads!inner(name, client_id)")
+      .eq("ads.client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("action_learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("experiments")
+      .select("*, experiment_variants(*, ads(id, name))")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("client_playbooks")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("avg_reliability", { ascending: false }),
+    supabase
+      .from("ad_decisions")
+      .select("*, ads(name)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
   ]);
@@ -49,6 +81,13 @@ export default async function ClientAdsPage({
 
   const client = clientRes.data;
   const rawAds = adsRes.data ?? [];
+  const rawActions = actionsRes.data ?? [];
+  const learnings = learningsRes.data ?? [];
+  const rawExperiments = experimentsRes.data ?? [];
+  const playbook = playbookRes.data ?? [];
+  const rawDecisions = decisionsRes.data ?? [];
+  const pendingDecisions = rawDecisions.filter((d: any) => d.status === "pending");
+  const pastDecisions = rawDecisions.filter((d: any) => d.status !== "pending");
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -124,6 +163,9 @@ export default async function ClientAdsPage({
         <p style={{ fontSize: 14, color: "#71717a", margin: "6px 0 0" }}>
           Performance scored automatically. Each ad is rated by CTR, CPC, conversions, and spend.
         </p>
+        <div style={{ marginTop: 12 }}>
+          <ScoreAndGenerateButton clientId={clientId} />
+        </div>
       </div>
 
       <div
@@ -164,6 +206,136 @@ export default async function ClientAdsPage({
           </div>
         ))}
       </div>
+
+      <SectionCard title={`${client.name} Playbook`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GeneratePlaybookButton clientId={clientId} />
+        </div>
+        {playbook.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {playbook.map((p: any) => {
+              const catLabels: Record<string, string> = {
+                winning_hooks: "Winning Hooks",
+                winning_formats: "Winning Formats",
+                failing_patterns: "Failing Patterns",
+                audience_insights: "Audience Insights",
+                budget_rules: "Budget Rules",
+              };
+              const catColors: Record<string, { bg: string; text: string }> = {
+                winning_hooks: { bg: "#dcfce7", text: "#166534" },
+                winning_formats: { bg: "#dbeafe", text: "#1e40af" },
+                failing_patterns: { bg: "#fee2e2", text: "#991b1b" },
+                audience_insights: { bg: "#fef3c7", text: "#92400e" },
+                budget_rules: { bg: "#f4f4f5", text: "#52525b" },
+              };
+              const cc = catColors[p.category] ?? catColors.budget_rules;
+
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 10,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: cc.bg,
+                        color: cc.text,
+                      }}
+                    >
+                      {catLabels[p.category] ?? p.category}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#71717a" }}>
+                      {p.supporting_count} supporting learnings
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: Number(p.avg_reliability) >= 50 ? "#166534" : "#92400e",
+                      }}
+                    >
+                      {Number(p.avg_reliability).toFixed(0)}% reliable
+                    </span>
+                  </div>
+                  <p style={{ margin: "6px 0 0", fontSize: 13, color: "#18181b", lineHeight: 1.5 }}>
+                    {p.insight}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No playbook yet. Complete some actions and generate learnings first, then hit Generate Playbook.
+          </p>
+        )}
+      </SectionCard>
+
+      <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GenerateDecisionsButton clientId={clientId} />
+        </div>
+        {pendingDecisions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingDecisions.map((d: any) => (
+              <DecisionRow
+                key={d.id}
+                decision={{
+                  id: d.id,
+                  ad_id: d.ad_id,
+                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                  type: d.type,
+                  reason: d.reason,
+                  action: d.action,
+                  confidence: d.confidence,
+                  meta_action: d.meta_action,
+                  status: d.status,
+                  execution_result: d.execution_result,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No pending decisions. Hit Generate Decisions to scan all ads.
+          </p>
+        )}
+        {pastDecisions.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+              {pastDecisions.length} past decisions
+            </summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {pastDecisions.map((d: any) => (
+                <DecisionRow
+                  key={d.id}
+                  decision={{
+                    id: d.id,
+                    ad_id: d.ad_id,
+                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                    type: d.type,
+                    reason: d.reason,
+                    action: d.action,
+                    confidence: d.confidence,
+                    meta_action: d.meta_action,
+                    status: d.status,
+                    execution_result: d.execution_result,
+                  }}
+                />
+              ))}
+            </div>
+          </details>
+        )}
+      </SectionCard>
 
       <SectionCard title={`All ads (${ads.length})`}>
         {ads.length > 0 ? (
@@ -354,6 +526,230 @@ export default async function ClientAdsPage({
           />
         )}
       </SectionCard>
+
+      {rawActions.length > 0 && (
+        <SectionCard title={`Actions (${rawActions.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rawActions.map((a: any) => (
+              <AdActionRow
+                key={a.id}
+                action={{
+                  id: a.id,
+                  ad_id: a.ad_id,
+                  ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                  problem: a.problem ?? "",
+                  action: a.action ?? "",
+                  priority: a.priority ?? "medium",
+                  status: a.status ?? "pending",
+                  hypothesis: a.hypothesis,
+                  outcome: a.outcome,
+                  result_summary: a.result_summary,
+                  metric_snapshot_before: a.metric_snapshot_before,
+                  metric_snapshot_after: a.metric_snapshot_after,
+                  completed_at: a.completed_at,
+                }}
+              />
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      <SectionCard title={`Experiments (${rawExperiments.length})`}>
+        <CreateExperimentForm
+          clientId={clientId}
+          ads={rawAds.map((a: any) => ({ id: a.id, name: a.name }))}
+        />
+        {rawExperiments.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+            {rawExperiments.map((exp: any) => (
+              <ExperimentCard
+                key={exp.id}
+                experiment={{
+                  id: exp.id,
+                  title: exp.title,
+                  hypothesis: exp.hypothesis,
+                  variable_tested: exp.variable_tested,
+                  success_metric: exp.success_metric,
+                  secondary_metric: exp.secondary_metric,
+                  status: exp.status,
+                  outcome: exp.outcome,
+                  winner: exp.winner,
+                  confidence: exp.confidence,
+                  started_at: exp.started_at,
+                  completed_at: exp.completed_at,
+                  variants: (exp.experiment_variants ?? []).map((v: any) => ({
+                    id: v.id,
+                    ad_id: v.ad_id,
+                    label: v.label,
+                    role: v.role,
+                    notes: v.notes,
+                    ad_name: v.ads?.name ?? "Unknown ad",
+                    snapshot_before: v.snapshot_before,
+                    snapshot_after: v.snapshot_after,
+                  })),
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {learnings.length > 0 && (() => {
+        const sorted = [...learnings].sort(
+          (a: any, b: any) => Number(b.reliability_score ?? 0) - Number(a.reliability_score ?? 0)
+        );
+        return (
+          <SectionCard title={`Learnings (${learnings.length})`}>
+            <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 12px" }}>
+              Ranked by reliability. Repeated, consistent learnings rise to the top.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sorted.map((l: any) => {
+                const oColors: Record<string, { bg: string; text: string }> = {
+                  positive: { bg: "#dcfce7", text: "#166534" },
+                  neutral: { bg: "#fef3c7", text: "#92400e" },
+                  negative: { bg: "#fee2e2", text: "#991b1b" },
+                };
+                const oc = oColors[l.outcome] ?? oColors.neutral;
+                const reliability = Number(l.reliability_score ?? 0);
+                const timesSeen = Number(l.times_seen ?? 1);
+                const avgCtrLift = Number(l.avg_ctr_lift ?? 0);
+                const avgCpcChange = Number(l.avg_cpc_change ?? 0);
+
+                return (
+                  <div
+                    key={l.id}
+                    style={{
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 10,
+                      padding: 12,
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: "1px 8px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: oc.bg,
+                          color: oc.text,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {l.outcome}
+                      </span>
+
+                      {/* Reliability bar */}
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: reliability >= 60 ? "#166534" : reliability >= 30 ? "#92400e" : "#991b1b",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: 40,
+                            height: 6,
+                            background: "#f4f4f5",
+                            borderRadius: 3,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "block",
+                              width: `${Math.min(reliability, 100)}%`,
+                              height: "100%",
+                              background: reliability >= 60 ? "#166534" : reliability >= 30 ? "#d97706" : "#dc2626",
+                              borderRadius: 3,
+                            }}
+                          />
+                        </span>
+                        {reliability.toFixed(0)}%
+                      </span>
+
+                      {timesSeen > 1 && (
+                        <span style={{ fontSize: 11, color: "#52525b", fontWeight: 500 }}>
+                          seen {timesSeen}x
+                        </span>
+                      )}
+
+                      {l.tags?.map((tag: string) => (
+                        <span
+                          key={tag}
+                          style={{
+                            padding: "1px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 500,
+                            background: "#f4f4f5",
+                            color: "#52525b",
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontSize: 13,
+                        color: "#18181b",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {l.learning}
+                    </p>
+
+                    {/* Avg lifts */}
+                    {(avgCtrLift !== 0 || avgCpcChange !== 0) && (
+                      <div style={{ marginTop: 4, display: "flex", gap: 12, fontSize: 11 }}>
+                        {avgCtrLift !== 0 && (
+                          <span style={{ color: avgCtrLift > 0 ? "#166534" : "#991b1b" }}>
+                            Avg CTR lift: {avgCtrLift > 0 ? "+" : ""}{avgCtrLift.toFixed(1)}%
+                          </span>
+                        )}
+                        {avgCpcChange !== 0 && (
+                          <span style={{ color: avgCpcChange < 0 ? "#166534" : "#991b1b" }}>
+                            Avg CPC change: {avgCpcChange > 0 ? "+" : ""}{avgCpcChange.toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {l.created_at && (
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          fontSize: 11,
+                          color: "#a1a1aa",
+                        }}
+                      >
+                        {new Date(l.created_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+        );
+      })()}
     </div>
   );
 }
