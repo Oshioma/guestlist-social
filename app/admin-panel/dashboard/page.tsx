@@ -1,139 +1,123 @@
-"use client";
-
-import { dashboardStats, clients, actions, ads, suggestions } from "../lib/data";
-import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
-import ActionList from "../components/ActionList";
+import StatCard from "../components/StatCard";
 import ClientCard from "../components/ClientCard";
 import SuggestionCard from "../components/SuggestionCard";
 import AdRow from "../components/AdRow";
-import AdFilterBar, {
-  useAdFilter,
-  getAdCounts,
-} from "../components/AdFilterBar";
+import EmptyState from "../components/EmptyState";
+import ActionList from "../components/ActionList";
+import { supabase } from "../lib/supabase";
 
-export default function DashboardPage() {
-  const { filter, setFilter, filtered } = useAdFilter(ads);
-  const counts = getAdCounts(ads);
-  const problemClients = clients.filter((c) => c.status === "paused");
+export default async function DashboardPage() {
+  const [
+    clientsRes,
+    adsRes,
+    actionsRes,
+    suggestionsRes,
+  ] = await Promise.all([
+    supabase.from("clients").select("*").order("created_at", { ascending: false }),
+    supabase.from("ads").select("*").order("created_at", { ascending: false }),
+    supabase.from("actions").select("*").eq("is_complete", false).order("created_at", { ascending: false }),
+    supabase.from("suggestions").select("*").order("created_at", { ascending: false }),
+  ]);
+
+  const clients = clientsRes.data ?? [];
+  const ads = adsRes.data ?? [];
+  const actions = actionsRes.data ?? [];
+  const suggestions = suggestionsRes.data ?? [];
+
+  const winningAds = ads.filter((ad) => ad.status === "winner");
+  const problemClients = clients.filter((client) => client.status === "needs_attention");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Stats row */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
         }}
       >
-        {dashboardStats.map((stat) => (
-          <StatCard key={stat.label} stat={stat} />
-        ))}
+        <StatCard label="Clients" value={String(clients.length)} />
+        <StatCard label="Active Ads" value={String(ads.length)} />
+        <StatCard label="Winning Ads" value={String(winningAds.length)} />
       </div>
 
-      {/* Actions + Suggestions */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-        }}
-      >
-        <SectionCard title="Today's Actions">
+      <SectionCard title="Today’s Actions">
+        {actions.length > 0 ? (
           <ActionList actions={actions} />
-        </SectionCard>
-
-        <SectionCard title="Suggestions">
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: 10 }}
-          >
-            {suggestions.map((s) => (
-              <SuggestionCard key={s.id} suggestion={s} />
-            ))}
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* Ads with filter */}
-      <SectionCard title="Ads">
-        <AdFilterBar
-          current={filter}
-          onChange={setFilter}
-          counts={counts}
-        />
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "8px 0",
-            borderBottom: "1px solid #e4e4e7",
-            gap: 12,
-            fontSize: 12,
-            color: "#a1a1aa",
-            fontWeight: 500,
-          }}
-        >
-          <div style={{ flex: 2 }}>Name</div>
-          <div style={{ flex: 1 }}>Platform</div>
-          <div style={{ width: 90 }}>Status</div>
-          <div style={{ width: 80, textAlign: "right" }}>Spend</div>
-          <div style={{ width: 90, textAlign: "right" }}>Impr.</div>
-          <div style={{ width: 60, textAlign: "right" }}>Clicks</div>
-          <div style={{ width: 60, textAlign: "right" }}>CTR</div>
-          <div style={{ width: 160 }} />
-        </div>
-        {filtered.map((ad) => (
-          <AdRow key={ad.id} ad={ad} />
-        ))}
-        {filtered.length === 0 && (
-          <div
-            style={{
-              padding: "24px 0",
-              textAlign: "center",
-              color: "#a1a1aa",
-              fontSize: 14,
-            }}
-          >
-            No ads match this filter.
-          </div>
+        ) : (
+          <EmptyState
+            title="No open actions"
+            description="You have cleared the current action list."
+          />
         )}
       </SectionCard>
 
-      {/* Needs attention */}
-      <SectionCard title="Needs Attention">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 16,
-          }}
-        >
-          {problemClients.length > 0 ? (
-            problemClients.map((client) => (
-              <ClientCard key={client.id} client={client} />
-            ))
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 1fr)",
+          gap: 20,
+        }}
+      >
+        <SectionCard title="Top Performing Ads">
+          {winningAds.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {winningAds.slice(0, 5).map((ad) => (
+                <AdRow key={ad.id} ad={ad} />
+              ))}
+            </div>
           ) : (
-            <p style={{ fontSize: 14, color: "#a1a1aa", gridColumn: "1/-1" }}>
-              All clients are performing well.
-            </p>
+            <EmptyState
+              title="No winning ads yet"
+              description="Run more tests to start identifying strong performers."
+            />
           )}
-        </div>
+        </SectionCard>
+
+        <SuggestionCard suggestions={suggestions.slice(0, 6)} />
+      </div>
+
+      <SectionCard title="Needs Attention">
+        {problemClients.length > 0 ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {problemClients.map((client) => (
+              <ClientCard key={client.id} client={client} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No clients need attention"
+            description="Everything is stable right now."
+          />
+        )}
       </SectionCard>
 
-      {/* All clients */}
       <SectionCard title="All Clients">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 16,
-          }}
-        >
-          {clients.map((client) => (
-            <ClientCard key={client.id} client={client} />
-          ))}
-        </div>
+        {clients.length > 0 ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {clients.map((client) => (
+              <ClientCard key={client.id} client={client} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No clients yet"
+            description="Add your first client to start using the system."
+          />
+        )}
       </SectionCard>
     </div>
   );
