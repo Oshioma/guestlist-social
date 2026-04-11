@@ -80,6 +80,8 @@ function StatusDropdown({
 const extraColumns = [
   { key: "video", label: "Video" },
   { key: "images", label: "Images" },
+  { key: "strategy", label: "Strategy" },
+  { key: "style_guide", label: "Style Guide" },
 ];
 
 export default function ContentGrid({

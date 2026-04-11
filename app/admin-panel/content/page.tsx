@@ -28,7 +28,7 @@ export default async function ContentDashboardPage() {
   try {
     const { clients, progress } = await getContentDashboardData();
 
-    const allKeys = [...months.map((m) => m.key), "video", "images"];
+    const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
     const relevantProgress = progress.filter((p) =>
       allKeys.includes(p.month)
     );
