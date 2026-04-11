@@ -53,23 +53,30 @@ export default async function DashboardPage() {
     notes: client.notes ?? "",
   }));
 
-  const ads = (adsRes.data ?? []).map((ad) => ({
-    id: ad.id,
-    clientId: ad.client_id,
-    campaignId: ad.campaign_id,
-    name: ad.name,
-    status: ad.status ?? "testing",
-    spend: Number(ad.spend ?? 0),
-    costPerResult: Number(ad.cost_per_result ?? 0),
-    followersGained: Number(ad.followers_gained ?? 0),
-    clicks: Number(ad.clicks ?? 0),
-    engagement: Number(ad.engagement ?? 0),
-    impressions: Number(ad.impressions ?? 0),
-    conversions: Number(ad.conversions ?? 0),
-    audience: ad.audience ?? "",
-    creativeHook: ad.creative_hook ?? "",
-    notes: ad.notes ?? "",
-  }));
+  const ads = (adsRes.data ?? []).map((ad) => {
+    const impressions = Number(ad.impressions ?? 0);
+    const clicks = Number(ad.clicks ?? 0);
+
+    return {
+      id: ad.id,
+      clientId: ad.client_id,
+      campaignId: ad.campaign_id,
+      name: ad.name,
+      status: ad.status ?? "testing",
+      platform: "Meta",
+      spend: Number(ad.spend ?? 0),
+      costPerResult: Number(ad.cost_per_result ?? 0),
+      followersGained: Number(ad.followers_gained ?? 0),
+      clicks,
+      engagement: Number(ad.engagement ?? 0),
+      impressions,
+      conversions: Number(ad.conversions ?? 0),
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      audience: ad.audience ?? "",
+      creativeHook: ad.creative_hook ?? "",
+      notes: ad.notes ?? "",
+    };
+  });
 
   const actions = (actionsRes.data ?? []).map((action) => {
     const client = clients.find((c) => c.id === action.client_id);
