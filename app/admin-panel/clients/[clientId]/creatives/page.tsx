@@ -1,6 +1,9 @@
-import { clients, creatives } from "../../../lib/data";
+import { mapDbClientToUiClient, mapDbCreativeToUiCreative } from "../../../lib/mappers";
+import { supabase } from "../../../lib/supabase";
 import CreativeCard from "../../../components/CreativeCard";
 import EmptyState from "../../../components/EmptyState";
+
+export const dynamic = "force-dynamic";
 
 export default async function ClientCreativesPage({
   params,
@@ -8,12 +11,18 @@ export default async function ClientCreativesPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  const client = clients.find((c) => c.id === clientId);
-  const clientCreatives = creatives.filter((c) => c.clientId === clientId);
 
-  if (!client) {
+  const [clientRes, creativesRes] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", clientId).single(),
+    supabase.from("creatives").select("*").eq("client_id", clientId).order("created_at", { ascending: false }),
+  ]);
+
+  if (clientRes.error || !clientRes.data) {
     return <EmptyState title="Client not found" />;
   }
+
+  const client = mapDbClientToUiClient(clientRes.data, 0);
+  const creatives = (creativesRes.data ?? []).map(mapDbCreativeToUiCreative);
 
   return (
     <div>
@@ -21,7 +30,7 @@ export default async function ClientCreativesPage({
         {client.name} — Creatives
       </h2>
 
-      {clientCreatives.length > 0 ? (
+      {creatives.length > 0 ? (
         <div
           style={{
             display: "grid",
@@ -29,7 +38,7 @@ export default async function ClientCreativesPage({
             gap: 16,
           }}
         >
-          {clientCreatives.map((cr) => (
+          {creatives.map((cr) => (
             <CreativeCard key={cr.id} creative={cr} />
           ))}
         </div>

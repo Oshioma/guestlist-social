@@ -1,7 +1,10 @@
-import { clients, reports } from "../../../lib/data";
+import { mapDbClientToUiClient, mapDbReportToUiReport } from "../../../lib/mappers";
+import { supabase } from "../../../lib/supabase";
 import SectionCard from "../../../components/SectionCard";
 import EmptyState from "../../../components/EmptyState";
 import { formatDate } from "../../../lib/utils";
+
+export const dynamic = "force-dynamic";
 
 export default async function ClientReportsPage({
   params,
@@ -9,12 +12,18 @@ export default async function ClientReportsPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  const client = clients.find((c) => c.id === clientId);
-  const clientReports = reports.filter((r) => r.clientId === clientId);
 
-  if (!client) {
+  const [clientRes, reportsRes] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", clientId).single(),
+    supabase.from("reports").select("*").eq("client_id", clientId).order("created_at", { ascending: false }),
+  ]);
+
+  if (clientRes.error || !clientRes.data) {
     return <EmptyState title="Client not found" />;
   }
+
+  const client = mapDbClientToUiClient(clientRes.data, 0);
+  const reports = (reportsRes.data ?? []).map((r) => mapDbReportToUiReport(r, client.name));
 
   return (
     <div>
@@ -22,9 +31,9 @@ export default async function ClientReportsPage({
         {client.name} — Reports
       </h2>
 
-      {clientReports.length > 0 ? (
+      {reports.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {clientReports.map((rpt) => (
+          {reports.map((rpt) => (
             <SectionCard key={rpt.id} title={rpt.title}>
               <div style={{ fontSize: 14, color: "#71717a" }}>
                 Period: {rpt.period} · Created {formatDate(rpt.createdAt)}
