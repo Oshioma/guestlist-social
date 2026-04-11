@@ -1,0 +1,302 @@
+import type {
+  Client,
+  Ad,
+  Creative,
+  Report,
+  Suggestion,
+  Stat,
+  Action,
+  MemoryEntry,
+} from "./types";
+
+export const clients: Client[] = [
+  {
+    id: "cirio",
+    name: "Cirio",
+    status: "active",
+    platform: "Instagram, TikTok",
+    monthlyBudget: 3200,
+    adCount: 4,
+    lastActivity: "2026-04-10",
+  },
+  {
+    id: "mama-buci",
+    name: "Mama Buci",
+    status: "active",
+    platform: "Instagram",
+    monthlyBudget: 1800,
+    adCount: 2,
+    lastActivity: "2026-04-09",
+  },
+  {
+    id: "bagel-factory",
+    name: "BagelFactory UK",
+    status: "paused",
+    platform: "Instagram, Facebook",
+    monthlyBudget: 2500,
+    adCount: 0,
+    lastActivity: "2026-03-28",
+  },
+  {
+    id: "flaming-licks",
+    name: "Flaming Licks",
+    status: "onboarding",
+    platform: "TikTok",
+    monthlyBudget: 1500,
+    adCount: 0,
+    lastActivity: "2026-04-11",
+  },
+  {
+    id: "wrappz",
+    name: "Wrappz Skins",
+    status: "active",
+    platform: "Instagram, Facebook",
+    monthlyBudget: 2000,
+    adCount: 3,
+    lastActivity: "2026-04-08",
+  },
+];
+
+export const ads: Ad[] = [
+  {
+    id: "ad-1",
+    clientId: "cirio",
+    name: "Spring Menu Promo",
+    platform: "Instagram",
+    status: "active",
+    spend: 480,
+    impressions: 24300,
+    clicks: 612,
+    ctr: 2.52,
+  },
+  {
+    id: "ad-2",
+    clientId: "cirio",
+    name: "Brand Story Reel",
+    platform: "TikTok",
+    status: "active",
+    spend: 320,
+    impressions: 18700,
+    clicks: 445,
+    ctr: 2.38,
+  },
+  {
+    id: "ad-3",
+    clientId: "mama-buci",
+    name: "Weekend Special",
+    platform: "Instagram",
+    status: "active",
+    spend: 210,
+    impressions: 9800,
+    clicks: 287,
+    ctr: 2.93,
+  },
+  {
+    id: "ad-4",
+    clientId: "wrappz",
+    name: "New Skins Drop",
+    platform: "Instagram",
+    status: "paused",
+    spend: 150,
+    impressions: 6200,
+    clicks: 134,
+    ctr: 2.16,
+  },
+  {
+    id: "ad-5",
+    clientId: "cirio",
+    name: "Easter Campaign",
+    platform: "Instagram",
+    status: "draft",
+    spend: 0,
+    impressions: 0,
+    clicks: 0,
+    ctr: 0,
+  },
+  {
+    id: "ad-6",
+    clientId: "wrappz",
+    name: "Phone Case Launch",
+    platform: "Facebook",
+    status: "active",
+    spend: 380,
+    impressions: 15400,
+    clicks: 398,
+    ctr: 2.58,
+  },
+];
+
+export const creatives: Creative[] = [
+  {
+    id: "cr-1",
+    clientId: "cirio",
+    name: "Spring Menu — Carousel",
+    type: "carousel",
+    status: "approved",
+    createdAt: "2026-04-08",
+  },
+  {
+    id: "cr-2",
+    clientId: "cirio",
+    name: "Brand Story 60s",
+    type: "video",
+    status: "approved",
+    createdAt: "2026-04-06",
+  },
+  {
+    id: "cr-3",
+    clientId: "mama-buci",
+    name: "Weekend Offer Static",
+    type: "image",
+    status: "pending",
+    createdAt: "2026-04-09",
+  },
+  {
+    id: "cr-4",
+    clientId: "wrappz",
+    name: "Product Showcase Reel",
+    type: "video",
+    status: "approved",
+    createdAt: "2026-04-05",
+  },
+  {
+    id: "cr-5",
+    clientId: "flaming-licks",
+    name: "Launch Teaser",
+    type: "video",
+    status: "pending",
+    createdAt: "2026-04-11",
+  },
+];
+
+export const reports: Report[] = [
+  {
+    id: "rpt-1",
+    clientId: "cirio",
+    clientName: "Cirio",
+    title: "Monthly Performance — March 2026",
+    period: "March 2026",
+    createdAt: "2026-04-02",
+  },
+  {
+    id: "rpt-2",
+    clientId: "mama-buci",
+    clientName: "Mama Buci",
+    title: "Monthly Performance — March 2026",
+    period: "March 2026",
+    createdAt: "2026-04-03",
+  },
+  {
+    id: "rpt-3",
+    clientId: "wrappz",
+    clientName: "Wrappz Skins",
+    title: "Q1 Review",
+    period: "Q1 2026",
+    createdAt: "2026-04-05",
+  },
+];
+
+export const suggestions: Suggestion[] = [
+  {
+    id: "sug-1",
+    title: "Boost Cirio's top reel",
+    description:
+      "Brand Story Reel has 2.38% CTR — above average. Consider increasing spend by 20% this week.",
+    priority: "high",
+  },
+  {
+    id: "sug-2",
+    title: "Restart BagelFactory campaigns",
+    description:
+      "Account has been paused for 14 days. Reconnect with client to confirm budget for April.",
+    priority: "medium",
+  },
+  {
+    id: "sug-3",
+    title: "Prepare Flaming Licks launch assets",
+    description:
+      "Onboarding completes this week. Have 3 creatives ready for launch day.",
+    priority: "high",
+  },
+];
+
+export const dashboardStats: Stat[] = [
+  { label: "Active Clients", value: "3", change: "+1", trend: "up" },
+  { label: "Running Ads", value: "5", change: "+2", trend: "up" },
+  { label: "Total Spend (MTD)", value: "£1,540", change: "+12%", trend: "up" },
+  { label: "Avg CTR", value: "2.51%", change: "-0.1%", trend: "down" },
+];
+
+export const actions: Action[] = [
+  {
+    id: "act-1",
+    label: "Review Easter Campaign draft",
+    clientName: "Cirio",
+    due: "2026-04-12",
+    done: false,
+  },
+  {
+    id: "act-2",
+    label: "Send March report",
+    clientName: "Mama Buci",
+    due: "2026-04-11",
+    done: false,
+  },
+  {
+    id: "act-3",
+    label: "Finalise onboarding brief",
+    clientName: "Flaming Licks",
+    due: "2026-04-13",
+    done: false,
+  },
+  {
+    id: "act-4",
+    label: "Pause underperforming ad",
+    clientName: "Wrappz Skins",
+    due: "2026-04-10",
+    done: true,
+  },
+];
+
+export const memoryEntries: MemoryEntry[] = [
+  {
+    id: "mem-1",
+    clientId: "cirio",
+    clientName: "Cirio",
+    note: "Prefers warm-toned visuals. No blue in creatives.",
+    createdAt: "2026-03-15",
+    tag: "creative",
+  },
+  {
+    id: "mem-2",
+    clientId: "mama-buci",
+    clientName: "Mama Buci",
+    note: "Approval turnaround is slow — send content 5 days early.",
+    createdAt: "2026-03-20",
+    tag: "process",
+  },
+  {
+    id: "mem-3",
+    clientId: "cirio",
+    clientName: "Cirio",
+    note: "Easter campaign must go live by April 14th. Hard deadline.",
+    createdAt: "2026-04-01",
+    tag: "deadline",
+  },
+  {
+    id: "mem-4",
+    clientId: "wrappz",
+    clientName: "Wrappz Skins",
+    note: "Budget review end of April. May increase if Q1 results hold.",
+    createdAt: "2026-04-05",
+    tag: "budget",
+  },
+  {
+    id: "mem-5",
+    clientId: "flaming-licks",
+    clientName: "Flaming Licks",
+    note: "Founder wants TikTok-first. No Facebook for now.",
+    createdAt: "2026-04-10",
+    tag: "strategy",
+  },
+];
