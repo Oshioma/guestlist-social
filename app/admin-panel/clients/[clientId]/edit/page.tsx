@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import { updateClientAction } from "../../../lib/client-actions";
@@ -32,6 +33,7 @@ export default async function EditClientPage({ params }: Props) {
       await updateClientAction(clientId, formData);
       return { error: null };
     } catch (error) {
+      if (isRedirectError(error)) throw error;
       return {
         error: error instanceof Error ? error.message : "Could not update client.",
       };

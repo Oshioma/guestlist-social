@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../../lib/supabase/server";
 import CampaignForm from "../../../../components/CampaignForm";
 import { createCampaignAction } from "../../../../lib/campaign-actions";
@@ -32,6 +33,7 @@ export default async function NewCampaignPage({ params }: Props) {
       await createCampaignAction(clientId, formData);
       return { error: null };
     } catch (error) {
+      if (isRedirectError(error)) throw error;
       return {
         error: error instanceof Error ? error.message : "Could not create campaign.",
       };

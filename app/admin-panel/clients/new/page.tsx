@@ -1,3 +1,4 @@
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import ClientForm from "../../components/ClientForm";
 import { createClientAction } from "../../lib/client-actions";
 
@@ -11,6 +12,7 @@ async function action(
     await createClientAction(formData);
     return { error: null };
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     return {
       error: error instanceof Error ? error.message : "Could not create client.",
     };
