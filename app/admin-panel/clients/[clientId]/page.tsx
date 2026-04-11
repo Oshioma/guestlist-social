@@ -15,6 +15,7 @@ import EmptyState from "../../components/EmptyState";
 import StatCard from "../../components/StatCard";
 import SuggestionCard from "../../components/SuggestionCard";
 import { formatCurrency } from "../../lib/utils";
+import DeleteClientButton from "../../components/DeleteClientButton";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,7 @@ export default async function ClientDetailPage({
           >
             New campaign
           </Link>
+          <DeleteClientButton clientId={clientId} />
         </div>
         <p style={{ fontSize: 14, color: "#71717a", margin: 0 }}>
           {client.platform} · {formatCurrency(client.monthlyBudget)}/mo
