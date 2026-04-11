@@ -98,3 +98,39 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   revalidatePath(`/app/clients/${clientId}`);
   redirect("/app/clients");
 }
+
+export async function archiveClientAction(clientId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("clients")
+    .update({ archived: true })
+    .eq("id", clientId);
+
+  if (error) {
+    console.error("archiveClientAction error:", error);
+    throw new Error("Could not archive client.");
+  }
+
+  revalidatePath("/app/clients");
+  revalidatePath("/app/dashboard");
+  redirect("/app/clients");
+}
+
+export async function deleteClientAction(clientId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("id", clientId);
+
+  if (error) {
+    console.error("deleteClientAction error:", error);
+    throw new Error("Could not delete client.");
+  }
+
+  revalidatePath("/app/clients");
+  revalidatePath("/app/dashboard");
+  redirect("/app/clients");
+}
