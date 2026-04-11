@@ -12,6 +12,8 @@ import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-tru
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
 import AdActionRow from "@/app/admin-panel/components/AdActionRow";
+import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
+import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +38,7 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes, actionsRes, learningsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
@@ -53,6 +55,11 @@ export default async function ClientAdsPage({
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("experiments")
+      .select("*, experiment_variants(*, ads(id, name))")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -63,6 +70,7 @@ export default async function ClientAdsPage({
   const rawAds = adsRes.data ?? [];
   const rawActions = actionsRes.data ?? [];
   const learnings = learningsRes.data ?? [];
+  const rawExperiments = experimentsRes.data ?? [];
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -398,6 +406,46 @@ export default async function ClientAdsPage({
           </div>
         </SectionCard>
       )}
+
+      <SectionCard title={`Experiments (${rawExperiments.length})`}>
+        <CreateExperimentForm
+          clientId={clientId}
+          ads={rawAds.map((a: any) => ({ id: a.id, name: a.name }))}
+        />
+        {rawExperiments.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+            {rawExperiments.map((exp: any) => (
+              <ExperimentCard
+                key={exp.id}
+                experiment={{
+                  id: exp.id,
+                  title: exp.title,
+                  hypothesis: exp.hypothesis,
+                  variable_tested: exp.variable_tested,
+                  success_metric: exp.success_metric,
+                  secondary_metric: exp.secondary_metric,
+                  status: exp.status,
+                  outcome: exp.outcome,
+                  winner: exp.winner,
+                  confidence: exp.confidence,
+                  started_at: exp.started_at,
+                  completed_at: exp.completed_at,
+                  variants: (exp.experiment_variants ?? []).map((v: any) => ({
+                    id: v.id,
+                    ad_id: v.ad_id,
+                    label: v.label,
+                    role: v.role,
+                    notes: v.notes,
+                    ad_name: v.ads?.name ?? "Unknown ad",
+                    snapshot_before: v.snapshot_before,
+                    snapshot_after: v.snapshot_after,
+                  })),
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       {learnings.length > 0 && (
         <SectionCard title={`Learnings (${learnings.length})`}>
