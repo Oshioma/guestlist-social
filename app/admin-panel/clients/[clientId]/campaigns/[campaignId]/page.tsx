@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
+import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import ActionList from "@/app/admin-panel/components/ActionList";
+import GenerateActionsButton from "@/app/admin-panel/components/GenerateActionsButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
@@ -97,6 +99,11 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
+
+  async function handleGenerateActions() {
+    "use server";
+    await generateCampaignActions(clientId, campaignId);
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -218,6 +225,7 @@ export default async function CampaignDetailPage({ params }: Props) {
                 Add ad
               </Link>
 
+              <GenerateActionsButton action={handleGenerateActions} />
             </div>
           </div>
         </div>
