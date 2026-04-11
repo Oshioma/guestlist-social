@@ -132,6 +132,7 @@ export async function POST(req: Request) {
     }
 
     let scored = 0;
+    const breakdown = { winner: 0, losing: 0, testing: 0, paused: 0 };
     const errors: string[] = [];
 
     for (const row of ads) {
@@ -173,6 +174,10 @@ export async function POST(req: Request) {
         errors.push(`Ad ${row.id}: ${updateError.message}`);
       } else {
         scored++;
+        if (perfStatus === "winner") breakdown.winner++;
+        else if (perfStatus === "losing") breakdown.losing++;
+        else if (perfStatus === "paused") breakdown.paused++;
+        else breakdown.testing++;
       }
     }
 
@@ -180,6 +185,7 @@ export async function POST(req: Request) {
       ok: true,
       scored,
       total: ads.length,
+      breakdown,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

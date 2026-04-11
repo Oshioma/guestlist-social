@@ -112,6 +112,8 @@ export async function POST(req: Request) {
 
     let generated = 0;
     let skipped = 0;
+    const priorityBreakdown = { high: 0, medium: 0, low: 0 };
+    const topActions: { ad_name: string; problem: string; action: string; priority: string }[] = [];
     const errors: string[] = [];
 
     for (const ad of ads) {
@@ -169,14 +171,29 @@ export async function POST(req: Request) {
         errors.push(`Ad ${ad.id} (${ad.name}): ${insertError.message}`);
       } else {
         generated++;
+        priorityBreakdown[suggestion.priority]++;
+        if (topActions.length < 5) {
+          topActions.push({
+            ad_name: ad.name ?? "Unknown ad",
+            problem: suggestion.problem,
+            action: suggestion.action,
+            priority: suggestion.priority,
+          });
+        }
       }
     }
+
+    // Sort top actions: high first, then medium, then low
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    topActions.sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     return NextResponse.json({
       ok: true,
       generated,
       skipped,
       total: ads.length,
+      priorityBreakdown,
+      topActions,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

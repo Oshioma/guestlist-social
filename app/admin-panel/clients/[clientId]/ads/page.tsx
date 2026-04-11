@@ -89,6 +89,13 @@ export default async function ClientAdsPage({
   const pendingDecisions = rawDecisions.filter((d: any) => d.status === "pending");
   const pastDecisions = rawDecisions.filter((d: any) => d.status !== "pending");
 
+  // Group actions by priority
+  const pendingActions = rawActions.filter((a: any) => a.status === "pending" || a.status === "in_progress");
+  const completedActions = rawActions.filter((a: any) => a.status === "completed");
+  const highPriorityActions = pendingActions.filter((a: any) => a.priority === "high");
+  const mediumPriorityActions = pendingActions.filter((a: any) => a.priority === "medium");
+  const lowPriorityActions = pendingActions.filter((a: any) => a.priority === "low");
+
   // Score every ad
   const ads = rawAds.map((ad) => {
     const impressions = Number(ad.impressions ?? 0);
@@ -127,6 +134,18 @@ export default async function ClientAdsPage({
       }),
     };
   });
+
+  // Build a map of ad_id → pending action for badge display
+  const adActionMap = new Map<number, { problem: string; action: string; priority: string }>();
+  for (const a of pendingActions) {
+    if (!adActionMap.has(a.ad_id)) {
+      adActionMap.set(a.ad_id, {
+        problem: a.problem ?? "",
+        action: a.action ?? "",
+        priority: a.priority ?? "medium",
+      });
+    }
+  }
 
   const totalSpend = ads.reduce((sum, ad) => sum + ad._spend, 0);
   const totalImpressions = ads.reduce((sum, ad) => sum + ad._impressions, 0);
@@ -207,136 +226,214 @@ export default async function ClientAdsPage({
         ))}
       </div>
 
-      <SectionCard title={`${client.name} Playbook`}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <GeneratePlaybookButton clientId={clientId} />
-        </div>
-        {playbook.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {playbook.map((p: any) => {
-              const catLabels: Record<string, string> = {
-                winning_hooks: "Winning Hooks",
-                winning_formats: "Winning Formats",
-                failing_patterns: "Failing Patterns",
-                audience_insights: "Audience Insights",
-                budget_rules: "Budget Rules",
-              };
-              const catColors: Record<string, { bg: string; text: string }> = {
-                winning_hooks: { bg: "#dcfce7", text: "#166534" },
-                winning_formats: { bg: "#dbeafe", text: "#1e40af" },
-                failing_patterns: { bg: "#fee2e2", text: "#991b1b" },
-                audience_insights: { bg: "#fef3c7", text: "#92400e" },
-                budget_rules: { bg: "#f4f4f5", text: "#52525b" },
-              };
-              const cc = catColors[p.category] ?? catColors.budget_rules;
-
-              return (
-                <div
-                  key={p.id}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 10,
-                    padding: 12,
-                    background: "#fff",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span
-                      style={{
-                        padding: "2px 10px",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: cc.bg,
-                        color: cc.text,
-                      }}
-                    >
-                      {catLabels[p.category] ?? p.category}
-                    </span>
-                    <span style={{ fontSize: 11, color: "#71717a" }}>
-                      {p.supporting_count} supporting learnings
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: Number(p.avg_reliability) >= 50 ? "#166534" : "#92400e",
-                      }}
-                    >
-                      {Number(p.avg_reliability).toFixed(0)}% reliable
-                    </span>
-                  </div>
-                  <p style={{ margin: "6px 0 0", fontSize: 13, color: "#18181b", lineHeight: 1.5 }}>
-                    {p.insight}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
-            No playbook yet. Complete some actions and generate learnings first, then hit Generate Playbook.
+      {/* ── ACTION QUEUE ── */}
+      {pendingActions.length > 0 && (
+        <SectionCard title={`Action Queue (${pendingActions.length})`}>
+          <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 14px" }}>
+            Here&apos;s exactly what you need to do. Fix high priority first.
           </p>
-        )}
-      </SectionCard>
 
-      <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <GenerateDecisionsButton clientId={clientId} />
-        </div>
-        {pendingDecisions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pendingDecisions.map((d: any) => (
-              <DecisionRow
-                key={d.id}
-                decision={{
-                  id: d.id,
-                  ad_id: d.ad_id,
-                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                  type: d.type,
-                  reason: d.reason,
-                  action: d.action,
-                  confidence: d.confidence,
-                  meta_action: d.meta_action,
-                  status: d.status,
-                  execution_result: d.execution_result,
+          {highPriorityActions.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 8,
                 }}
-              />
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
-            No pending decisions. Hit Generate Decisions to scan all ads.
-          </p>
-        )}
-        {pastDecisions.length > 0 && (
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
-              {pastDecisions.length} past decisions
-            </summary>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-              {pastDecisions.map((d: any) => (
-                <DecisionRow
-                  key={d.id}
-                  decision={{
-                    id: d.id,
-                    ad_id: d.ad_id,
-                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                    type: d.type,
-                    reason: d.reason,
-                    action: d.action,
-                    confidence: d.confidence,
-                    meta_action: d.meta_action,
-                    status: d.status,
-                    execution_result: d.execution_result,
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#dc2626",
+                    display: "inline-block",
                   }}
                 />
-              ))}
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#991b1b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  High Priority ({highPriorityActions.length})
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {highPriorityActions.map((a: any) => (
+                  <AdActionRow
+                    key={a.id}
+                    action={{
+                      id: a.id,
+                      ad_id: a.ad_id,
+                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                      problem: a.problem ?? "",
+                      action: a.action ?? "",
+                      priority: a.priority ?? "high",
+                      status: a.status ?? "pending",
+                      hypothesis: a.hypothesis,
+                      outcome: a.outcome,
+                      result_summary: a.result_summary,
+                      metric_snapshot_before: a.metric_snapshot_before,
+                      metric_snapshot_after: a.metric_snapshot_after,
+                      completed_at: a.completed_at,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
-          </details>
-        )}
-      </SectionCard>
+          )}
 
+          {mediumPriorityActions.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#d97706",
+                    display: "inline-block",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#92400e",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Medium Priority ({mediumPriorityActions.length})
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {mediumPriorityActions.map((a: any) => (
+                  <AdActionRow
+                    key={a.id}
+                    action={{
+                      id: a.id,
+                      ad_id: a.ad_id,
+                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                      problem: a.problem ?? "",
+                      action: a.action ?? "",
+                      priority: a.priority ?? "medium",
+                      status: a.status ?? "pending",
+                      hypothesis: a.hypothesis,
+                      outcome: a.outcome,
+                      result_summary: a.result_summary,
+                      metric_snapshot_before: a.metric_snapshot_before,
+                      metric_snapshot_after: a.metric_snapshot_after,
+                      completed_at: a.completed_at,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {lowPriorityActions.length > 0 && (
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#a1a1aa",
+                    display: "inline-block",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#71717a",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Low Priority ({lowPriorityActions.length})
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {lowPriorityActions.map((a: any) => (
+                  <AdActionRow
+                    key={a.id}
+                    action={{
+                      id: a.id,
+                      ad_id: a.ad_id,
+                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                      problem: a.problem ?? "",
+                      action: a.action ?? "",
+                      priority: a.priority ?? "low",
+                      status: a.status ?? "pending",
+                      hypothesis: a.hypothesis,
+                      outcome: a.outcome,
+                      result_summary: a.result_summary,
+                      metric_snapshot_before: a.metric_snapshot_before,
+                      metric_snapshot_after: a.metric_snapshot_after,
+                      completed_at: a.completed_at,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedActions.length > 0 && (
+            <details style={{ marginTop: 16 }}>
+              <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+                {completedActions.length} completed actions
+              </summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                {completedActions.map((a: any) => (
+                  <AdActionRow
+                    key={a.id}
+                    action={{
+                      id: a.id,
+                      ad_id: a.ad_id,
+                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                      problem: a.problem ?? "",
+                      action: a.action ?? "",
+                      priority: a.priority ?? "medium",
+                      status: a.status ?? "completed",
+                      hypothesis: a.hypothesis,
+                      outcome: a.outcome,
+                      result_summary: a.result_summary,
+                      metric_snapshot_before: a.metric_snapshot_before,
+                      metric_snapshot_after: a.metric_snapshot_after,
+                      completed_at: a.completed_at,
+                    }}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ── ALL ADS ── */}
       <SectionCard title={`All ads (${ads.length})`}>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -437,45 +534,69 @@ export default async function ClientAdsPage({
                         </p>
                       ) : null}
 
-                      {ad._suggestion && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            marginTop: 6,
-                            padding: "6px 10px",
-                            borderRadius: 8,
-                            background: "#fafafa",
-                            border: "1px solid #f4f4f5",
-                            fontSize: 12,
-                          }}
-                        >
-                          <span style={{ color: "#991b1b", fontWeight: 500 }}>
-                            {ad._suggestion.problem}
-                          </span>
-                          <span style={{ color: "#18181b" }}>
-                            {ad._suggestion.action}
-                          </span>
-                          <span
+                      {/* Action badge — show queued action or suggestion */}
+                      {(() => {
+                        const queued = adActionMap.get(ad.id);
+                        const source = queued ?? ad._suggestion;
+                        if (!source) return null;
+
+                        const actionLabels: Record<string, string> = {
+                          high: "Fix",
+                          medium: "Optimize",
+                          low: "Monitor",
+                        };
+                        const actionBadge = queued
+                          ? actionLabels[source.priority] ?? "Action"
+                          : "";
+
+                        return (
+                          <div
                             style={{
-                              padding: "1px 8px",
-                              borderRadius: 999,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background:
-                                priorityColors[ad._suggestion.priority]?.bg ??
-                                "#f4f4f5",
-                              color:
-                                priorityColors[ad._suggestion.priority]?.text ??
-                                "#71717a",
-                              textTransform: "uppercase",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              marginTop: 6,
+                              padding: "5px 10px",
+                              borderRadius: 8,
+                              background: queued ? (
+                                source.priority === "high" ? "#fef2f2" :
+                                source.priority === "medium" ? "#fffbeb" : "#fafafa"
+                              ) : "#fafafa",
+                              border: `1px solid ${
+                                queued ? (
+                                  source.priority === "high" ? "#fecaca" :
+                                  source.priority === "medium" ? "#fde68a" : "#e4e4e7"
+                                ) : "#f4f4f5"
+                              }`,
+                              fontSize: 12,
                             }}
                           >
-                            {ad._suggestion.priority}
-                          </span>
-                        </div>
-                      )}
+                            {queued && (
+                              <span
+                                style={{
+                                  padding: "1px 8px",
+                                  borderRadius: 999,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  background:
+                                    priorityColors[source.priority]?.text ?? "#71717a",
+                                  color: "#fff",
+                                  textTransform: "uppercase",
+                                }}
+                              >
+                                {actionBadge}
+                              </span>
+                            )}
+                            <span style={{ color: "#991b1b", fontWeight: 500 }}>
+                              {source.problem}
+                            </span>
+                            <span style={{ color: "#71717a" }}>→</span>
+                            <span style={{ color: "#18181b" }}>
+                              {source.action}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -527,33 +648,139 @@ export default async function ClientAdsPage({
         )}
       </SectionCard>
 
-      {rawActions.length > 0 && (
-        <SectionCard title={`Actions (${rawActions.length})`}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {rawActions.map((a: any) => (
-              <AdActionRow
-                key={a.id}
-                action={{
-                  id: a.id,
-                  ad_id: a.ad_id,
-                  ad_name: (a.ads as any)?.name ?? "Unknown ad",
-                  problem: a.problem ?? "",
-                  action: a.action ?? "",
-                  priority: a.priority ?? "medium",
-                  status: a.status ?? "pending",
-                  hypothesis: a.hypothesis,
-                  outcome: a.outcome,
-                  result_summary: a.result_summary,
-                  metric_snapshot_before: a.metric_snapshot_before,
-                  metric_snapshot_after: a.metric_snapshot_after,
-                  completed_at: a.completed_at,
+      {/* ── DECISIONS ── */}
+      <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GenerateDecisionsButton clientId={clientId} />
+        </div>
+        {pendingDecisions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingDecisions.map((d: any) => (
+              <DecisionRow
+                key={d.id}
+                decision={{
+                  id: d.id,
+                  ad_id: d.ad_id,
+                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                  type: d.type,
+                  reason: d.reason,
+                  action: d.action,
+                  confidence: d.confidence,
+                  meta_action: d.meta_action,
+                  status: d.status,
+                  execution_result: d.execution_result,
                 }}
               />
             ))}
           </div>
-        </SectionCard>
-      )}
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No pending decisions. Hit Generate Decisions to scan all ads.
+          </p>
+        )}
+        {pastDecisions.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+              {pastDecisions.length} past decisions
+            </summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              {pastDecisions.map((d: any) => (
+                <DecisionRow
+                  key={d.id}
+                  decision={{
+                    id: d.id,
+                    ad_id: d.ad_id,
+                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
+                    type: d.type,
+                    reason: d.reason,
+                    action: d.action,
+                    confidence: d.confidence,
+                    meta_action: d.meta_action,
+                    status: d.status,
+                    execution_result: d.execution_result,
+                  }}
+                />
+              ))}
+            </div>
+          </details>
+        )}
+      </SectionCard>
 
+      {/* ── PLAYBOOK ── */}
+      <SectionCard title={`${client.name} Playbook`}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <GeneratePlaybookButton clientId={clientId} />
+        </div>
+        {playbook.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {playbook.map((p: any) => {
+              const catLabels: Record<string, string> = {
+                winning_hooks: "Winning Hooks",
+                winning_formats: "Winning Formats",
+                failing_patterns: "Failing Patterns",
+                audience_insights: "Audience Insights",
+                budget_rules: "Budget Rules",
+              };
+              const catColors: Record<string, { bg: string; text: string }> = {
+                winning_hooks: { bg: "#dcfce7", text: "#166534" },
+                winning_formats: { bg: "#dbeafe", text: "#1e40af" },
+                failing_patterns: { bg: "#fee2e2", text: "#991b1b" },
+                audience_insights: { bg: "#fef3c7", text: "#92400e" },
+                budget_rules: { bg: "#f4f4f5", text: "#52525b" },
+              };
+              const cc = catColors[p.category] ?? catColors.budget_rules;
+
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 10,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: cc.bg,
+                        color: cc.text,
+                      }}
+                    >
+                      {catLabels[p.category] ?? p.category}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#71717a" }}>
+                      {p.supporting_count} supporting learnings
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: Number(p.avg_reliability) >= 50 ? "#166534" : "#92400e",
+                      }}
+                    >
+                      {Number(p.avg_reliability).toFixed(0)}% reliable
+                    </span>
+                  </div>
+                  <p style={{ margin: "6px 0 0", fontSize: 13, color: "#18181b", lineHeight: 1.5 }}>
+                    {p.insight}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+            No playbook yet. Complete some actions and generate learnings first, then hit Generate Playbook.
+          </p>
+        )}
+      </SectionCard>
+
+      {/* ── EXPERIMENTS ── */}
       <SectionCard title={`Experiments (${rawExperiments.length})`}>
         <CreateExperimentForm
           clientId={clientId}
