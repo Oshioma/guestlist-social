@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
 import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
+import { createLearningFromAction } from "@/app/admin-panel/lib/learning-actions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
@@ -26,6 +27,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: campaign, error: campaignError },
     { data: adsRows, error: adsError },
     { data: actionRows, error: actionsError },
+    { data: learningRows },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -45,11 +47,18 @@ export default async function CampaignDetailPage({ params }: Props) {
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("learnings")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientError || !client || campaignError || !campaign || adsError || actionsError) {
     notFound();
   }
+
+  const learnings = learningRows ?? [];
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
@@ -105,6 +114,17 @@ export default async function CampaignDetailPage({ params }: Props) {
   async function handleGenerateActions() {
     "use server";
     await generateCampaignActions(clientId, campaignId);
+  }
+
+  async function handleCreateLearning(actionId: string, formData: FormData) {
+    "use server";
+    // Extract adId from the action title signature [AUTO:rule:adId]
+    const action = (actionRows ?? []).find((r) => r.id === actionId);
+    const title = String(action?.title ?? "");
+    const match = title.match(/\[AUTO:\w[\w-]*:([^\]]+)\]/);
+    const adId = match ? match[1] : null;
+
+    await createLearningFromAction(clientId, campaignId, adId, actionId, formData);
   }
 
   return (
@@ -428,7 +448,7 @@ export default async function CampaignDetailPage({ params }: Props) {
                   />
                   Open ({openActions.length})
                 </h3>
-                <ActionList actions={openActions} />
+                <ActionList actions={openActions} onCreateLearning={handleCreateLearning} />
               </div>
             )}
 
@@ -457,7 +477,7 @@ export default async function CampaignDetailPage({ params }: Props) {
                   />
                   In progress ({inProgressActions.length})
                 </h3>
-                <ActionList actions={inProgressActions} />
+                <ActionList actions={inProgressActions} onCreateLearning={handleCreateLearning} />
               </div>
             )}
 
@@ -486,7 +506,7 @@ export default async function CampaignDetailPage({ params }: Props) {
                   />
                   Completed ({completedActions.length})
                 </h3>
-                <ActionList actions={completedActions} />
+                <ActionList actions={completedActions} onCreateLearning={handleCreateLearning} />
               </div>
             )}
 
@@ -504,6 +524,56 @@ export default async function CampaignDetailPage({ params }: Props) {
           <EmptyState
             title="No generated actions yet"
             description="Click Generate actions to evaluate the ads in this campaign."
+          />
+        )}
+      </SectionCard>
+
+      {/* Learnings */}
+      <SectionCard title={`Learnings (${learnings.length})`}>
+        {learnings.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {learnings.map((l: { id: string; problem: string; change_made: string; result: string; outcome: string }) => (
+              <div
+                key={l.id}
+                style={{
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 10,
+                  padding: 12,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
+                  {l.problem}
+                </div>
+                <div style={{ fontSize: 13, color: "#52525b", marginTop: 4 }}>
+                  {l.change_made}
+                </div>
+                {l.result && (
+                  <div style={{ fontSize: 13, color: "#166534", marginTop: 4 }}>
+                    {l.result}
+                  </div>
+                )}
+                {l.outcome && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#71717a",
+                      marginTop: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {l.outcome}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No learnings yet"
+            description="Completed actions can be turned into learnings."
           />
         )}
       </SectionCard>

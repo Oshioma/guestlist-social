@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Action, ActionStatus } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import { createClient } from "../../../lib/supabase/client";
+import LearningForm from "./LearningForm";
 
 const statusOrder: Record<ActionStatus, number> = {
   open: 0,
@@ -14,8 +15,10 @@ const statusOrder: Record<ActionStatus, number> = {
 
 export default function ActionList({
   actions: initial,
+  onCreateLearning,
 }: {
   actions: Action[];
+  onCreateLearning?: (actionId: string, formData: FormData) => Promise<void>;
 }) {
   const router = useRouter();
 
@@ -29,6 +32,7 @@ export default function ActionList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<ActionStatus>("open");
   const [editNote, setEditNote] = useState("");
+  const [learningId, setLearningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function saveAction(id: string, newStatus: ActionStatus, note: string) {
@@ -237,7 +241,41 @@ export default function ActionList({
                   Update
                 </button>
               )}
+
+              {!isEditing && isDone && onCreateLearning && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLearningId(learningId === a.id ? null : a.id)
+                  }
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #d9f99d",
+                    background: "#f7fee7",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "#365314",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {learningId === a.id ? "Cancel" : "Add learning"}
+                </button>
+              )}
             </div>
+
+            {/* Learning form */}
+            {learningId === a.id && onCreateLearning && (
+              <div style={{ marginTop: 10 }}>
+                <LearningForm
+                  action={async (formData) => {
+                    await onCreateLearning(a.id, formData);
+                    setLearningId(null);
+                  }}
+                />
+              </div>
+            )}
 
             {/* Inline editor */}
             {isEditing && (
