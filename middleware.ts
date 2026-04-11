@@ -5,7 +5,7 @@ import { updateSession } from "./lib/supabase/middleware";
 const PROTECTED_PREFIXES = ["/app", "/admin-panel"];
 
 export async function middleware(request: NextRequest) {
-  let response = await updateSession(request);
+  const response = await updateSession(request);
 
   const isProtected = PROTECTED_PREFIXES.some((prefix) =>
     request.nextUrl.pathname.startsWith(prefix)
@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
