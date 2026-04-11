@@ -19,11 +19,7 @@ export default async function DashboardPage() {
   const [clientsRes, adsRes, actionsRes, suggestionsRes] = await Promise.all([
     supabase.from("clients").select("*").order("created_at", { ascending: false }),
     supabase.from("ads").select("*").order("created_at", { ascending: false }),
-    supabase
-      .from("actions")
-      .select("*")
-      .eq("is_complete", false)
-      .order("created_at", { ascending: false }),
+    supabase.from("actions").select("*").order("created_at", { ascending: false }),
     supabase.from("suggestions").select("*").order("created_at", { ascending: false }),
   ]);
 
@@ -50,10 +46,13 @@ export default async function DashboardPage() {
     return mapDbClientToUiClient(row, adCount);
   });
 
-  const actions = (actionsRes.data ?? []).map((row) => {
+  const allActions = (actionsRes.data ?? []).map((row) => {
     const client = clients.find((c) => c.id === row.client_id);
     return mapDbActionToUiAction(row, client?.name ?? "Unknown client");
   });
+
+  const openActions = allActions.filter((a) => !a.done);
+  const completedActions = allActions.filter((a) => a.done);
 
   const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
 
@@ -71,7 +70,6 @@ export default async function DashboardPage() {
         gap: 24,
       }}
     >
-      {/* Hero / header */}
       <div
         style={{
           position: "relative",
@@ -222,7 +220,7 @@ export default async function DashboardPage() {
                   Open actions
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 700 }}>
-                  {actions.length}
+                  {openActions.length}
                 </div>
               </div>
             </div>
@@ -230,7 +228,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Main stats */}
       <div
         style={{
           display: "grid",
@@ -272,10 +269,9 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Actions */}
       <SectionCard title="Today’s Actions">
-        {actions.length > 0 ? (
-          <ActionList actions={actions} />
+        {openActions.length > 0 ? (
+          <ActionList actions={openActions} />
         ) : (
           <EmptyState
             title="No open actions"
@@ -284,7 +280,17 @@ export default async function DashboardPage() {
         )}
       </SectionCard>
 
-      {/* Performance + suggestions */}
+      <SectionCard title="Completed Actions">
+        {completedActions.length > 0 ? (
+          <ActionList actions={completedActions} />
+        ) : (
+          <EmptyState
+            title="No completed actions yet"
+            description="Completed work will appear here."
+          />
+        )}
+      </SectionCard>
+
       <div
         style={{
           display: "grid",
@@ -345,7 +351,6 @@ export default async function DashboardPage() {
         </SectionCard>
       </div>
 
-      {/* Attention / clients split */}
       <div
         style={{
           display: "grid",
