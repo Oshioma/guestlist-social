@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Ad } from "../lib/types";
 import StatusPill from "./StatusPill";
 import { formatCurrency } from "../lib/utils";
@@ -35,7 +36,24 @@ export default function AdRow({ ad }: { ad: Ad }) {
       </div>
 
       {/* Quick actions */}
-      <div style={{ width: 160, display: "flex", gap: 6, justifyContent: "flex-end" }}>
+      <div style={{ width: 200, display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        {ad.campaignId && (
+          <Link
+            href={`/app/clients/${ad.clientId}/campaigns/${ad.campaignId}/ads/${ad.id}/edit`}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 6,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              fontSize: 12,
+              color: "#18181b",
+              textDecoration: "none",
+              fontWeight: 500,
+            }}
+          >
+            Edit
+          </Link>
+        )}
         {ad.status === "active" && (
           <button
             onClick={() => console.log("pause ad", ad.id)}

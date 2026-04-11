@@ -548,6 +548,80 @@ export default async function ClientDetailPage({
                     </div>
                   </div>
 
+                  {/* Ads in this campaign */}
+                  {campaignAdsRaw.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#71717a",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Ads
+                      </p>
+                      {campaignAdsRaw.map((ad) => (
+                        <div
+                          key={ad.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            border: "1px solid #f4f4f5",
+                            borderRadius: 10,
+                            background: "#fafafa",
+                            fontSize: 13,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontWeight: 500, color: "#18181b" }}>
+                              {ad.name}
+                            </span>
+                            <span
+                              style={{
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                background: "#f4f4f5",
+                                color: "#52525b",
+                                fontSize: 11,
+                                fontWeight: 500,
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {ad.status ?? "testing"}
+                            </span>
+                          </div>
+                          <Link
+                            href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/${ad.id}/edit`}
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: 6,
+                              border: "1px solid #e4e4e7",
+                              background: "#fff",
+                              color: "#18181b",
+                              textDecoration: "none",
+                              fontSize: 12,
+                              fontWeight: 500,
+                            }}
+                          >
+                            Edit
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div
                     style={{
                       display: "flex",

@@ -61,6 +61,7 @@ export const ads: Ad[] = [
   {
     id: "ad-1",
     clientId: "cirio",
+    campaignId: null,
     name: "Spring Menu Promo",
     platform: "Instagram",
     status: "active",
@@ -72,6 +73,7 @@ export const ads: Ad[] = [
   {
     id: "ad-2",
     clientId: "cirio",
+    campaignId: null,
     name: "Brand Story Reel",
     platform: "TikTok",
     status: "active",
@@ -83,6 +85,7 @@ export const ads: Ad[] = [
   {
     id: "ad-3",
     clientId: "mama-buci",
+    campaignId: null,
     name: "Weekend Special",
     platform: "Instagram",
     status: "active",
@@ -94,6 +97,7 @@ export const ads: Ad[] = [
   {
     id: "ad-4",
     clientId: "wrappz",
+    campaignId: null,
     name: "New Skins Drop",
     platform: "Instagram",
     status: "paused",
@@ -105,6 +109,7 @@ export const ads: Ad[] = [
   {
     id: "ad-5",
     clientId: "cirio",
+    campaignId: null,
     name: "Easter Campaign",
     platform: "Instagram",
     status: "draft",
@@ -116,6 +121,7 @@ export const ads: Ad[] = [
   {
     id: "ad-6",
     clientId: "wrappz",
+    campaignId: null,
     name: "Phone Case Launch",
     platform: "Facebook",
     status: "active",

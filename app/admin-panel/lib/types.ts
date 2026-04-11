@@ -18,6 +18,7 @@ export type Client = {
 export type Ad = {
   id: string;
   clientId: string;
+  campaignId: string | null;
   name: string;
   platform: string;
   status: AdStatus;
