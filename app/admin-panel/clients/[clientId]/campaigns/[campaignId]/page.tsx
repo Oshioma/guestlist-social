@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
+import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
+import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
+import ActionList from "@/app/admin-panel/components/ActionList";
+import GenerateActionsButton from "@/app/admin-panel/components/GenerateActionsButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
@@ -13,57 +16,6 @@ type Props = {
 };
 
 export const dynamic = "force-dynamic";
-
-async function autoCreateActions(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  clientId: string,
-  adsRows: any[]
-) {
-  for (const ad of adsRows) {
-    const impressions = Number(ad.impressions ?? 0);
-    const clicks = Number(ad.clicks ?? 0);
-    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-    const status = String(ad.status ?? "testing");
-
-    let title: string | null = null;
-    let priority: "low" | "medium" | "high" = "medium";
-    let kind: "pause" | "scale" | "creative" | "review" = "review";
-
-    if (status === "winner" || (ctr >= 2.5 && impressions >= 1000)) {
-      title = `Scale "${ad.name}" — CTR ${ctr.toFixed(1)}%, strong performer`;
-      priority = "high";
-      kind = "scale";
-    } else if (status === "losing" || (ctr < 1.0 && impressions >= 1000)) {
-      title = `Pause or refresh "${ad.name}" — CTR ${ctr.toFixed(1)}%, underperforming`;
-      priority = "high";
-      kind = "pause";
-    } else if (status === "paused") {
-      title = `Review paused ad "${ad.name}" — decide whether to restart or archive`;
-      priority = "low";
-      kind = "review";
-    }
-
-    if (!title) continue;
-
-    const { data: existing } = await supabase
-      .from("actions")
-      .select("id")
-      .eq("client_id", clientId)
-      .ilike("title", `%${ad.name}%`)
-      .eq("is_complete", false)
-      .limit(1);
-
-    if (existing && existing.length > 0) continue;
-
-    await supabase.from("actions").insert({
-      client_id: clientId,
-      title,
-      priority,
-      kind,
-      is_complete: false,
-    });
-  }
-}
 
 export default async function CampaignDetailPage({ params }: Props) {
   const { clientId, campaignId } = await params;
@@ -73,6 +25,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
     { data: adsRows, error: adsError },
+    { data: actionRows, error: actionsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -87,14 +40,16 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("actions")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
   ]);
 
-  if (clientError || !client || campaignError || !campaign || adsError) {
+  if (clientError || !client || campaignError || !campaign || adsError || actionsError) {
     notFound();
   }
-
-  // Auto-create actions for strong/weak ads
-  await autoCreateActions(supabase, clientId, adsRows ?? []);
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
@@ -130,6 +85,25 @@ export default async function CampaignDetailPage({ params }: Props) {
       : campaignStatus === "draft"
       ? { background: "#f4f4f5", color: "#52525b" }
       : { background: "#fef3c7", color: "#92400e" };
+
+  const campaignAdIds = new Set(ads.map((ad) => ad.id));
+
+  const generatedActions = (actionRows ?? [])
+    .filter((row) => {
+      const title = String(row.title ?? "");
+      if (!title.includes("[AUTO:")) return false;
+
+      return [...campaignAdIds].some((adId) => title.includes(`:${adId}]`));
+    })
+    .map((row) => mapDbActionToUiAction(row, client.name));
+
+  const openGeneratedActions = generatedActions.filter((action) => !action.done);
+  const completedGeneratedActions = generatedActions.filter((action) => action.done);
+
+  async function handleGenerateActions() {
+    "use server";
+    await generateCampaignActions(clientId, campaignId);
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -193,7 +167,14 @@ export default async function CampaignDetailPage({ params }: Props) {
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
               <span
                 style={{
                   display: "inline-flex",
@@ -243,6 +224,8 @@ export default async function CampaignDetailPage({ params }: Props) {
               >
                 Add ad
               </Link>
+
+              <GenerateActionsButton action={handleGenerateActions} />
             </div>
           </div>
         </div>
@@ -278,7 +261,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         <StatCard
           stat={{
             label: "CTR",
-            value: avgCtr > 0 ? `${avgCtr}%` : "\u2014",
+            value: avgCtr > 0 ? `${avgCtr}%` : "—",
             change: `${totalClicks} clicks`,
             trend: avgCtr >= 2.5 ? "up" : avgCtr > 0 ? "flat" : "down",
           }}
@@ -413,6 +396,59 @@ export default async function CampaignDetailPage({ params }: Props) {
           </div>
         </SectionCard>
       </div>
+
+      <SectionCard title={`Generated actions (${generatedActions.length})`}>
+        {generatedActions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <h3
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#18181b",
+                }}
+              >
+                Open
+              </h3>
+              {openGeneratedActions.length > 0 ? (
+                <ActionList actions={openGeneratedActions} />
+              ) : (
+                <EmptyState
+                  title="No open generated actions"
+                  description="Either nothing has triggered yet, or they have all been completed."
+                />
+              )}
+            </div>
+
+            <div>
+              <h3
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: "#18181b",
+                }}
+              >
+                Completed
+              </h3>
+              {completedGeneratedActions.length > 0 ? (
+                <ActionList actions={completedGeneratedActions} />
+              ) : (
+                <EmptyState
+                  title="No completed generated actions"
+                  description="Completed auto-actions will appear here."
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            title="No generated actions yet"
+            description="Click Generate actions to evaluate the ads in this campaign."
+          />
+        )}
+      </SectionCard>
 
       <SectionCard
         title={`Ads in this campaign (${ads.length})`}
