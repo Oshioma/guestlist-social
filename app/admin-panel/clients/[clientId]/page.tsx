@@ -86,6 +86,22 @@ export default async function ClientDetailPage({
           >
             Edit client
           </Link>
+          <Link
+            href={`/app/clients/${clientId}/campaigns/new`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "8px 12px",
+              borderRadius: 10,
+              background: "#18181b",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            New campaign
+          </Link>
         </div>
         <p style={{ fontSize: 14, color: "#71717a", margin: 0 }}>
           {client.platform} · {formatCurrency(client.monthlyBudget)}/mo
