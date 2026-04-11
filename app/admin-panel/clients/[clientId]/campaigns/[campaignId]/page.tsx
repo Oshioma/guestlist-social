@@ -25,12 +25,11 @@ export default async function CampaignDetailPage({ params }: Props) {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
 
+  // Step 1: Fetch client, campaign, and ads
   const [
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
-    { data: adsRows, error: adsError },
-    { data: actionRows, error: actionsError },
-    { data: learningRows, error: learningsError },
+    { data: adsRows },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -45,6 +44,22 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
+  ]);
+
+  if (clientError || !client || campaignError || !campaign) {
+    console.error("Campaign page 404:", { clientError, campaignError, clientId, campaignId });
+    notFound();
+  }
+
+  // Step 2: Auto-run rule engine so actions are always fresh
+  try {
+    await generateCampaignActions(clientId, campaignId);
+  } catch (e) {
+    console.error("Auto-generate actions on page load:", e);
+  }
+
+  // Step 3: Fetch actions + learnings (after rules have run)
+  const [{ data: actionRows }, { data: learningRows }] = await Promise.all([
     supabase
       .from("actions")
       .select("*")
@@ -57,18 +72,6 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
   ]);
-
-  if (
-    clientError ||
-    !client ||
-    campaignError ||
-    !campaign ||
-    adsError ||
-    actionsError ||
-    learningsError
-  ) {
-    notFound();
-  }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 

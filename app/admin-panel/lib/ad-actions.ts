@@ -64,8 +64,12 @@ export async function createAdAction(
     throw new Error(`Could not create ad: ${error.message}`);
   }
 
-  // Auto-run campaign rules after creating an ad
-  await generateCampaignActions(clientId, campaignId);
+  // Auto-run rule engine after ad creation
+  try {
+    await generateCampaignActions(clientId, campaignId);
+  } catch (e) {
+    console.error("Auto-generate actions after ad create:", e);
+  }
 
   revalidatePath(`/app/clients/${clientId}`);
   revalidatePath(`/app/clients/${clientId}/ads`);
@@ -130,8 +134,12 @@ export async function updateAdAction(
     throw new Error("Could not update ad.");
   }
 
-  // Auto-run campaign rules after updating an ad
-  await generateCampaignActions(clientId, campaignId);
+  // Auto-run rule engine after ad update
+  try {
+    await generateCampaignActions(clientId, campaignId);
+  } catch (e) {
+    console.error("Auto-generate actions after ad update:", e);
+  }
 
   revalidatePath(`/app/clients/${clientId}`);
   revalidatePath(`/app/clients/${clientId}/ads`);
