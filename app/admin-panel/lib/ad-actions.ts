@@ -55,7 +55,7 @@ export async function createAdAction(
 
   if (error) {
     console.error("createAdAction error:", error);
-    throw new Error("Could not create ad.");
+    throw new Error(`Could not create ad: ${error.message}`);
   }
 
   revalidatePath(`/app/clients/${clientId}`);
