@@ -1,30 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { createClient } from "../../../../../../../lib/supabase/server";
-import CampaignForm from "../../../../../components/CampaignForm";
-import { updateCampaignAction } from "../../../../../lib/campaign-actions";
+import { createClient } from "../../../../../lib/supabase/server";
+import ClientForm from "../../../components/ClientForm";
+import { updateClientAction } from "../../../lib/client-actions";
+import { mapClientStatus } from "../../../lib/mappers";
 
 type Props = {
-  params: Promise<{ clientId: string; campaignId: string }>;
+  params: Promise<{ clientId: string }>;
 };
 
-export default async function EditCampaignPage({ params }: Props) {
-  const { clientId, campaignId } = await params;
+export default async function EditClientPage({ params }: Props) {
+  const { clientId } = await params;
   const supabase = await createClient();
 
-  const [{ data: client, error: clientError }, { data: campaign, error: campaignError }] =
-    await Promise.all([
-      supabase.from("clients").select("id, name").eq("id", clientId).single(),
-      supabase
-        .from("campaigns")
-        .select("*")
-        .eq("id", campaignId)
-        .eq("client_id", clientId)
-        .single(),
-    ]);
+  const { data: client, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", clientId)
+    .single();
 
-  if (clientError || !client || campaignError || !campaign) {
+  if (error || !client) {
     notFound();
   }
 
@@ -35,7 +31,7 @@ export default async function EditCampaignPage({ params }: Props) {
     "use server";
 
     try {
-      await updateCampaignAction(clientId, campaignId, formData);
+      await updateClientAction(clientId, formData);
       return { error: null };
     } catch (error) {
       if (isRedirectError(error)) throw error;
@@ -44,7 +40,7 @@ export default async function EditCampaignPage({ params }: Props) {
         error:
           error instanceof Error
             ? error.message
-            : "Could not update campaign.",
+            : "Could not update client.",
       };
     }
   }
@@ -79,48 +75,40 @@ export default async function EditCampaignPage({ params }: Props) {
             style={{
               margin: 0,
               fontSize: 28,
-              lineHeight: 1.05,
               fontWeight: 700,
               color: "#18181b",
               letterSpacing: "-0.02em",
             }}
           >
-            Edit campaign
+            Edit client
           </h1>
 
           <p
             style={{
-              margin: "10px 0 0",
+              marginTop: 10,
               fontSize: 14,
               color: "#71717a",
-              maxWidth: 700,
             }}
           >
-            Update the campaign settings for{" "}
-            <strong style={{ color: "#18181b" }}>{client.name}</strong>. Adjust
-            objective, audience, budget, and status without losing campaign
-            history.
+            Update details for{" "}
+            <strong style={{ color: "#18181b" }}>
+              {client.name}
+            </strong>
           </p>
         </div>
       </div>
 
-      <CampaignForm
-        title={`Edit ${campaign.name}`}
+      <ClientForm
+        title={`Edit ${client.name}`}
         submitLabel="Save changes"
         action={action}
         initialValues={{
-          name: campaign.name ?? "",
-          objective: campaign.objective ?? "engagement",
-          audience: campaign.audience ?? "",
-          budget: Number(campaign.budget ?? 0),
-          status:
-            campaign.status === "draft" ||
-            campaign.status === "testing" ||
-            campaign.status === "live" ||
-            campaign.status === "paused" ||
-            campaign.status === "completed"
-              ? campaign.status
-              : "testing",
+          name: client.name ?? "",
+          platform: client.platform ?? "Meta",
+          monthlyBudget: Number(client.monthly_budget ?? 0),
+          status: mapClientStatus(client.status ?? "testing"),
+          websiteUrl: client.website_url ?? "",
+          notes: client.notes ?? "",
         }}
       />
     </div>
