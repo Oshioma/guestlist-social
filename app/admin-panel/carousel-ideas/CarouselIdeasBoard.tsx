@@ -7,6 +7,7 @@ import {
   deleteCarouselThemeAction,
   addCarouselIdeaAction,
   updateCarouselIdeaAction,
+  updateCarouselCaptionsAction,
   deleteCarouselIdeaAction,
 } from "../lib/carousel-idea-actions";
 import type { CarouselIdea, CarouselTheme } from "../lib/types";
@@ -489,6 +490,7 @@ function AddThemeForm({
 
 function IdeaRow({ idea }: { idea: CarouselIdea }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showCaptions, setShowCaptions] = useState(false);
   const [editText, setEditText] = useState(idea.idea);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
@@ -496,6 +498,7 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
 
   const colors = categoryColor(idea.category);
   const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
+  const captionCount = idea.captions.filter((c) => c.trim()).length;
 
   function handleSave() {
     if (!editText.trim()) return;
@@ -554,37 +557,120 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   }
 
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "#fff", border: "1px solid #f4f4f5" }}>
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          padding: "2px 8px",
-          borderRadius: 999,
-          background: colors.bg,
-          color: colors.text,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {idea.category}
-      </span>
-      {monthLabel && (
-        <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
-          {monthLabel}
+    <div style={{ borderRadius: 6, background: "#fff", border: "1px solid #f4f4f5" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px" }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: colors.bg,
+            color: colors.text,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {idea.category}
         </span>
-      )}
-      <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
-        {idea.idea}
-      </span>
-      {idea.createdBy && (
-        <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
-          {idea.createdBy.split("@")[0]}
+        {monthLabel && (
+          <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
+            {monthLabel}
+          </span>
+        )}
+        <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
+          {idea.idea}
         </span>
+        {idea.createdBy && (
+          <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
+            {idea.createdBy.split("@")[0]}
+          </span>
+        )}
+        <button
+          onClick={() => setShowCaptions(!showCaptions)}
+          style={{
+            ...btnStyle(captionCount > 0 ? "#fef9c3" : "#f3f4f6", captionCount > 0 ? "#854d0e" : "#374151"),
+          }}
+        >
+          {captionCount > 0 ? `${captionCount}/8 slides` : "Captions"}
+        </button>
+        <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
+        <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
+          {isPending ? "..." : "Delete"}
+        </button>
+      </div>
+      {showCaptions && (
+        <CaptionsEditor ideaId={idea.id} captions={idea.captions} />
       )}
-      <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
-      <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
-        {isPending ? "..." : "Delete"}
-      </button>
+    </div>
+  );
+}
+
+// ── Captions editor ──
+
+function CaptionsEditor({ ideaId, captions }: { ideaId: string; captions: string[] }) {
+  const initial = Array.from({ length: 8 }, (_, i) => captions[i] ?? "");
+  const [slides, setSlides] = useState(initial);
+  const [isPending, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+
+  function updateSlide(index: number, value: string) {
+    const next = [...slides];
+    next[index] = value;
+    setSlides(next);
+    setSaved(false);
+  }
+
+  function handleSave() {
+    startTransition(async () => {
+      await updateCarouselCaptionsAction(ideaId, slides);
+      setSaved(true);
+    });
+  }
+
+  return (
+    <div style={{ padding: "8px 10px 12px", borderTop: "1px solid #f4f4f5" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#71717a", marginBottom: 8 }}>
+        Slide Captions (up to 8)
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {slides.map((caption, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#a1a1aa",
+              width: 16,
+              textAlign: "center",
+              flexShrink: 0,
+            }}>
+              {i + 1}
+            </span>
+            <textarea
+              value={caption}
+              onChange={(e) => updateSlide(i, e.target.value)}
+              placeholder={`Slide ${i + 1} caption...`}
+              rows={2}
+              style={{
+                ...inputStyle,
+                flex: 1,
+                padding: "6px 8px",
+                fontSize: 13,
+                resize: "vertical",
+                fontFamily: "inherit",
+                lineHeight: 1.4,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+        <button onClick={handleSave} disabled={isPending} style={btnStyle("#18181b", "#fff")}>
+          {isPending ? "Saving..." : "Save Captions"}
+        </button>
+        {saved && (
+          <span style={{ fontSize: 12, color: "#166534", fontWeight: 500 }}>Saved</span>
+        )}
+      </div>
     </div>
   );
 }

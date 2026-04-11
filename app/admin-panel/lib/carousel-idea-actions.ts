@@ -115,6 +115,7 @@ export async function addCarouselIdeaAction(
     idea: idea.trim(),
     category: category || "general",
     month: month || "",
+    captions: [],
     created_by: createdBy,
   });
 
@@ -156,6 +157,32 @@ export async function updateCarouselIdeaAction(
 
   revalidatePath("/app/carousel-ideas");
   revalidatePath("/app/content");
+}
+
+export async function updateCarouselCaptionsAction(
+  id: string,
+  captions: string[]
+) {
+  if (!id) throw new Error("ID is required.");
+
+  const supabase = await createClient();
+
+  const trimmed = captions.map((c) => c.trim()).slice(0, 8);
+
+  const { error } = await supabase
+    .from("carousel_ideas")
+    .update({
+      captions: trimmed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("updateCarouselCaptionsAction error:", error);
+    throw new Error("Could not update captions.");
+  }
+
+  revalidatePath("/app/carousel-ideas");
 }
 
 export async function deleteCarouselIdeaAction(id: string) {

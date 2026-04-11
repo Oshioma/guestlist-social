@@ -183,6 +183,7 @@ export async function getCarouselIdeasData(): Promise<{
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
+    captions: Array.isArray(row.captions) ? row.captions : [],
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));

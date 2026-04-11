@@ -122,6 +122,7 @@ export type CarouselIdea = {
   idea: string;
   category: string;
   month: string;
+  captions: string[];
   createdBy: string;
   createdAt: string;
 };
