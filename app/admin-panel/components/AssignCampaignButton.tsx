@@ -1,8 +1,7 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { assignCampaignToClient } from "../lib/campaign-actions";
 
 export default function AssignCampaignButton({
   campaignId,
@@ -15,8 +14,7 @@ export default function AssignCampaignButton({
   label: string;
   variant?: "primary" | "secondary";
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [status, setStatus] = useState<"idle" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const router = useRouter();
 
   const isPrimary = variant === "primary";
@@ -45,18 +43,28 @@ export default function AssignCampaignButton({
     <div style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
       <button
         type="button"
-        disabled={isPending}
-        onClick={() => {
-          setStatus("idle");
-          startTransition(async () => {
-            try {
-              await assignCampaignToClient(String(campaignId), String(clientId));
-              setStatus("done");
-              router.refresh();
-            } catch {
+        disabled={status === "loading"}
+        onClick={async () => {
+          setStatus("loading");
+          try {
+            const res = await fetch("/api/assign-campaign", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                campaignId: String(campaignId),
+                clientId: String(clientId),
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.ok) {
               setStatus("error");
+              return;
             }
-          });
+            setStatus("done");
+            router.refresh();
+          } catch {
+            setStatus("error");
+          }
         }}
         style={{
           display: "inline-flex",
@@ -68,11 +76,11 @@ export default function AssignCampaignButton({
           border: isPrimary ? "none" : "1px solid #e4e4e7",
           fontSize: 12,
           fontWeight: 600,
-          cursor: isPending ? "wait" : "pointer",
-          opacity: isPending ? 0.6 : 1,
+          cursor: status === "loading" ? "wait" : "pointer",
+          opacity: status === "loading" ? 0.6 : 1,
         }}
       >
-        {isPending ? "Assigning..." : label}
+        {status === "loading" ? "Assigning..." : label}
       </button>
       {status === "error" && (
         <span style={{ fontSize: 11, color: "#dc2626" }}>
