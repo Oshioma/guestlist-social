@@ -295,7 +295,7 @@ export default async function DashboardPage() {
       >
         <SectionCard
           title="Top Performing Ads"
-          right={
+          action={
             <span
               style={{
                 fontSize: 12,
