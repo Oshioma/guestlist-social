@@ -646,7 +646,7 @@ export default async function ClientDetailPage({
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/edit`}
+                        href={`/app/clients/${clientId}/campaigns/${campaign.id}`}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
@@ -654,6 +654,24 @@ export default async function ClientDetailPage({
                           borderRadius: 10,
                           background: "#18181b",
                           color: "#fff",
+                          textDecoration: "none",
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Open campaign
+                      </Link>
+
+                      <Link
+                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/edit`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                          border: "1px solid #e4e4e7",
+                          background: "#fff",
+                          color: "#18181b",
                           textDecoration: "none",
                           fontSize: 13,
                           fontWeight: 600,
