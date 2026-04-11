@@ -1,77 +1,78 @@
-import { dashboardStats, actions, suggestions, ads } from "../lib/data";
-import StatCard from "../components/StatCard";
+import AppShell from "../components/AppShell";
 import SectionCard from "../components/SectionCard";
+import StatCard from "../components/StatCard";
 import ActionList from "../components/ActionList";
+import ClientCard from "../components/ClientCard";
 import SuggestionCard from "../components/SuggestionCard";
 import AdRow from "../components/AdRow";
 
-export default function Dashboard() {
-  const activeAds = ads.filter((a) => a.status === "active");
+import { clients, actions, ads, suggestions } from "../lib/data";
+
+export default function DashboardPage() {
+  const winningAds = ads.filter((ad) => ad.status === "winner");
+  const problemClients = clients.filter((c) => c.status === "needs_attention");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Stats row */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 16,
-        }}
-      >
-        {dashboardStats.map((stat) => (
-          <StatCard key={stat.label} stat={stat} />
-        ))}
-      </div>
+    <AppShell title="Dashboard">
+      <div className="space-y-8">
+        {/* TOP STATS */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatCard label="Clients" value={clients.length.toString()} />
+          <StatCard label="Active Ads" value={ads.length.toString()} />
+          <StatCard
+            label="Winning Ads"
+            value={winningAds.length.toString()}
+          />
+        </div>
 
-      {/* Two-column: Actions + Suggestions */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-        }}
-      >
-        <SectionCard title="Actions">
+        {/* ACTIONS */}
+        <SectionCard title="Today’s Actions">
           <ActionList actions={actions} />
         </SectionCard>
 
-        <SectionCard title="Suggestions">
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: 10 }}
-          >
-            {suggestions.map((s) => (
-              <SuggestionCard key={s.id} suggestion={s} />
+        {/* MAIN GRID */}
+        <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+          {/* WINNING ADS */}
+          <SectionCard title="Top Performing Ads">
+            <div className="space-y-4">
+              {winningAds.length > 0 ? (
+                winningAds.map((ad) => <AdRow key={ad.id} ad={ad} />)
+              ) : (
+                <p className="text-sm text-gray-500">
+                  No winning ads yet — keep testing.
+                </p>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* SUGGESTIONS */}
+          <SuggestionCard suggestions={suggestions} />
+        </div>
+
+        {/* CLIENTS NEEDING ATTENTION */}
+        <SectionCard title="Needs Attention">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {problemClients.length > 0 ? (
+              problemClients.map((client) => (
+                <ClientCard key={client.id} client={client} />
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">
+                All clients are performing well.
+              </p>
+            )}
+          </div>
+        </SectionCard>
+
+        {/* ALL CLIENTS */}
+        <SectionCard title="All Clients">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {clients.map((client) => (
+              <ClientCard key={client.id} client={client} />
             ))}
           </div>
         </SectionCard>
       </div>
-
-      {/* Active ads */}
-      <SectionCard title="Active Ads">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "8px 0",
-            borderBottom: "1px solid #e4e4e7",
-            gap: 12,
-            fontSize: 12,
-            color: "#a1a1aa",
-            fontWeight: 500,
-          }}
-        >
-          <div style={{ flex: 2 }}>Name</div>
-          <div style={{ flex: 1 }}>Platform</div>
-          <div style={{ width: 90 }}>Status</div>
-          <div style={{ width: 80, textAlign: "right" }}>Spend</div>
-          <div style={{ width: 90, textAlign: "right" }}>Impr.</div>
-          <div style={{ width: 60, textAlign: "right" }}>Clicks</div>
-          <div style={{ width: 60, textAlign: "right" }}>CTR</div>
-        </div>
-        {activeAds.map((ad) => (
-          <AdRow key={ad.id} ad={ad} />
-        ))}
-      </SectionCard>
-    </div>
+    </AppShell>
   );
 }
