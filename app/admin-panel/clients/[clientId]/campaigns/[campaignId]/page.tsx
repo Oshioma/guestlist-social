@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
 import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
 import { createLearningFromAction } from "@/app/admin-panel/lib/learning-actions";
+import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
@@ -110,6 +111,8 @@ export default async function CampaignDetailPage({ params }: Props) {
   const openActions = generatedActions.filter((a) => a.status === "open");
   const inProgressActions = generatedActions.filter((a) => a.status === "in_progress");
   const completedActions = generatedActions.filter((a) => a.status === "completed");
+
+  const learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
 
   async function handleGenerateActions() {
     "use server";
@@ -574,6 +577,37 @@ export default async function CampaignDetailPage({ params }: Props) {
           <EmptyState
             title="No learnings yet"
             description="Completed actions can be turned into learnings."
+          />
+        )}
+      </SectionCard>
+
+      {/* Suggestions from past learnings */}
+      <SectionCard title="Suggestions from past learnings">
+        {learningSuggestions.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {learningSuggestions.map((s, i) => (
+              <div
+                key={`${s.title}-${i}`}
+                style={{
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 12,
+                  padding: 14,
+                  background: "#fafafa",
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
+                  {s.title}
+                </div>
+                <div style={{ fontSize: 13, color: "#71717a" }}>
+                  {s.description}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No learning-based suggestions yet"
+            description="As more learnings are saved, the system will start recommending proven fixes."
           />
         )}
       </SectionCard>
