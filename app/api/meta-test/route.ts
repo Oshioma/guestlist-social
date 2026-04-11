@@ -1,15 +1,13 @@
+import { getAdAccount } from "@/lib/meta";
+
 export async function GET() {
-  const token = process.env.META_ACCESS_TOKEN;
-  const account = process.env.META_AD_ACCOUNT_ID;
-
-  if (!token || !account) {
-    return new Response("Missing env vars", { status: 500 });
+  try {
+    const account = await getAdAccount();
+    return Response.json(account);
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Failed" },
+      { status: 500 }
+    );
   }
-
-  const url = `https://graph.facebook.com/v25.0/${account}?fields=id,name&access_token=${token}`;
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  return Response.json(data);
 }
