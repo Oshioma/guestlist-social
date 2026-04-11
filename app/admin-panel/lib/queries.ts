@@ -55,6 +55,7 @@ export async function getContentDashboardData(): Promise<{
       .from("clients")
       .select("id, name")
       .eq("archived", false)
+      .neq("status", "paused")
       .order("name", { ascending: true }),
     supabase.from("content_progress").select("*"),
   ]);
@@ -90,6 +91,7 @@ export async function getVideoIdeasData(): Promise<{
       .from("clients")
       .select("id, name")
       .eq("archived", false)
+      .neq("status", "paused")
       .order("name", { ascending: true }),
     supabase
       .from("content_themes")
@@ -147,6 +149,7 @@ export async function getCarouselIdeasData(): Promise<{
       .from("clients")
       .select("id, name")
       .eq("archived", false)
+      .neq("status", "paused")
       .order("name", { ascending: true }),
     supabase
       .from("carousel_themes")
@@ -206,6 +209,7 @@ export async function getStoryIdeasData(): Promise<{
       .from("clients")
       .select("id, name")
       .eq("archived", false)
+      .neq("status", "paused")
       .order("name", { ascending: true }),
     supabase
       .from("story_themes")
