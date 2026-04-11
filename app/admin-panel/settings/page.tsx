@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
-import { syncMetaData } from "../lib/meta-sync-action";
+import { syncMetaData, importFromMeta } from "../lib/meta-sync-action";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +53,32 @@ export default async function SettingsPage() {
             Meta ad account. Syncs the last 12 months of data and 30 days of
             daily trend snapshots.
           </p>
+
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+              Import from Meta
+            </div>
+            <p style={{ fontSize: 13, color: "#71717a", margin: "0 0 12px" }}>
+              Creates a client from your Meta ad account name and imports all
+              campaigns, ads, and performance data into it. Safe to run multiple
+              times — it won't create duplicates.
+            </p>
+            <MetaSyncButton
+              action={async () => {
+                "use server";
+                return await importFromMeta();
+              }}
+              label="Import from Meta"
+              pendingLabel="Importing from Meta..."
+            />
+          </div>
 
           {clientList.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

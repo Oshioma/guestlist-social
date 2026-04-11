@@ -4,8 +4,12 @@ import { useTransition, useState } from "react";
 
 export default function MetaSyncButton({
   action,
+  label,
+  pendingLabel,
 }: {
   action: () => Promise<{ ok: boolean; log?: string[]; error?: string }>;
+  label?: string;
+  pendingLabel?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{
@@ -48,7 +52,7 @@ export default function MetaSyncButton({
           minWidth: 200,
         }}
       >
-        {isPending ? "Syncing from Meta..." : "Sync from Meta"}
+        {isPending ? (pendingLabel ?? "Syncing from Meta...") : (label ?? "Sync from Meta")}
       </button>
 
       {result && (

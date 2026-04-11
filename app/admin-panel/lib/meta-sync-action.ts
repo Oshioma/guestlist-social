@@ -13,6 +13,68 @@ import {
   insightToAdRow,
   targetingToAudience,
 } from "@/lib/meta";
+import { getAdAccount } from "@/lib/meta";
+
+/**
+ * Import from Meta: creates a client from the ad account name,
+ * then syncs all campaigns, ads, and insights into it.
+ */
+export async function importFromMeta() {
+  const supabase = await createClient();
+
+  try {
+    const account = await getAdAccount();
+    const accountName = account.name ?? "Meta Ad Account";
+
+    // Check if client already exists with this name
+    const { data: existing } = await supabase
+      .from("clients")
+      .select("id, name")
+      .eq("name", accountName)
+      .limit(1);
+
+    let clientId: string;
+
+    if (existing && existing.length > 0) {
+      clientId = String(existing[0].id);
+    } else {
+      const { data: newClient, error } = await supabase
+        .from("clients")
+        .insert({
+          name: accountName,
+          platform: "Meta",
+          status: "growing",
+          archived: false,
+        })
+        .select("id")
+        .single();
+
+      if (error || !newClient) {
+        return { ok: false, error: `Could not create client: ${error?.message}` };
+      }
+
+      clientId = String(newClient.id);
+    }
+
+    // Now run the full sync into this client
+    const result = await syncMetaData(clientId);
+
+    if (result.ok) {
+      result.log?.unshift(`Client "${accountName}" ready (id: ${clientId})`);
+    }
+
+    revalidatePath("/app/settings");
+    revalidatePath("/app/clients");
+
+    return result;
+  } catch (err) {
+    console.error("importFromMeta error:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Import failed",
+    };
+  }
+}
 
 export async function syncMetaData(clientId: string) {
   const supabase = await createClient();
