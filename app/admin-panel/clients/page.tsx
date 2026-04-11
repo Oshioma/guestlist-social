@@ -53,7 +53,11 @@ export default async function ClientsPage() {
     );
   }
 
-  const clients = (clientsRes.data ?? []) as ClientRow[];
+  const clients = ((clientsRes.data ?? []) as ClientRow[]).sort((a, b) => {
+    const aPaused = a.status === "paused" ? 1 : 0;
+    const bPaused = b.status === "paused" ? 1 : 0;
+    return aPaused - bPaused;
+  });
   const campaigns = (campaignsRes.data ?? []) as CampaignRow[];
   const ads = (adsRes.data ?? []) as AdRow[];
 
