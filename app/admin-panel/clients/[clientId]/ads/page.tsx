@@ -11,6 +11,7 @@ import {
 import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-truth";
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
+import AdActionRow from "@/app/admin-panel/components/AdActionRow";
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +36,17 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
       .select("*, campaigns(id, name)")
       .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("ad_actions")
+      .select("*, ads!inner(name, client_id)")
+      .eq("ads.client_id", clientId)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -50,6 +56,7 @@ export default async function ClientAdsPage({
 
   const client = clientRes.data;
   const rawAds = adsRes.data ?? [];
+  const rawActions = actionsRes.data ?? [];
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -358,6 +365,33 @@ export default async function ClientAdsPage({
           />
         )}
       </SectionCard>
+
+      {rawActions.length > 0 && (
+        <SectionCard title={`Actions (${rawActions.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rawActions.map((a: any) => (
+              <AdActionRow
+                key={a.id}
+                action={{
+                  id: a.id,
+                  ad_id: a.ad_id,
+                  ad_name: (a.ads as any)?.name ?? "Unknown ad",
+                  problem: a.problem ?? "",
+                  action: a.action ?? "",
+                  priority: a.priority ?? "medium",
+                  status: a.status ?? "pending",
+                  hypothesis: a.hypothesis,
+                  outcome: a.outcome,
+                  result_summary: a.result_summary,
+                  metric_snapshot_before: a.metric_snapshot_before,
+                  metric_snapshot_after: a.metric_snapshot_after,
+                  completed_at: a.completed_at,
+                }}
+              />
+            ))}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }
