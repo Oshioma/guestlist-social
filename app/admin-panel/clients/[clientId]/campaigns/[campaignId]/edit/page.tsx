@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "@/lib/supabase/server";
 import CampaignForm from "@/app/admin-panel/components/CampaignForm";
+import ClientMemories from "@/app/admin-panel/components/ClientMemories";
 import { updateCampaignAction } from "@/app/admin-panel/lib/campaign-actions";
 
 type Props = {
@@ -13,20 +14,34 @@ export default async function EditCampaignPage({ params }: Props) {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
 
-  const [{ data: client, error: clientError }, { data: campaign, error: campaignError }] =
-    await Promise.all([
-      supabase.from("clients").select("name").eq("id", clientId).single(),
-      supabase
-        .from("campaigns")
-        .select("*")
-        .eq("id", campaignId)
-        .eq("client_id", clientId)
-        .single(),
-    ]);
+  const [
+    { data: client, error: clientError },
+    { data: campaign, error: campaignError },
+    { data: memoryRows },
+  ] = await Promise.all([
+    supabase.from("clients").select("name").eq("id", clientId).single(),
+    supabase
+      .from("campaigns")
+      .select("*")
+      .eq("id", campaignId)
+      .eq("client_id", clientId)
+      .single(),
+    supabase
+      .from("memories")
+      .select("id, note, tag")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (clientError || !client || campaignError || !campaign) {
     notFound();
   }
+
+  const memories = (memoryRows ?? []).map((m) => ({
+    id: String(m.id),
+    note: String(m.note),
+    tag: String(m.tag),
+  }));
 
   async function action(
     _state: { error: string | null },
@@ -101,6 +116,8 @@ export default async function EditCampaignPage({ params }: Props) {
           </p>
         </div>
       </div>
+
+      <ClientMemories memories={memories} clientName={client.name} />
 
       <CampaignForm
         title={`Edit ${campaign.name}`}

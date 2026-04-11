@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "@/lib/supabase/server";
 import AdForm from "@/app/admin-panel/components/AdForm";
+import ClientMemories from "@/app/admin-panel/components/ClientMemories";
 import { updateAdAction } from "@/app/admin-panel/lib/ad-actions";
 
 type Props = {
@@ -13,21 +14,35 @@ export default async function EditAdPage({ params }: Props) {
   const { clientId, campaignId, adId } = await params;
   const supabase = await createClient();
 
-  const [{ data: client, error: clientError }, { data: ad, error: adError }] =
-    await Promise.all([
-      supabase.from("clients").select("name").eq("id", clientId).single(),
-      supabase
-        .from("ads")
-        .select("*")
-        .eq("id", adId)
-        .eq("client_id", clientId)
-        .eq("campaign_id", campaignId)
-        .single(),
-    ]);
+  const [
+    { data: client, error: clientError },
+    { data: ad, error: adError },
+    { data: memoryRows },
+  ] = await Promise.all([
+    supabase.from("clients").select("name").eq("id", clientId).single(),
+    supabase
+      .from("ads")
+      .select("*")
+      .eq("id", adId)
+      .eq("client_id", clientId)
+      .eq("campaign_id", campaignId)
+      .single(),
+    supabase
+      .from("memories")
+      .select("id, note, tag")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (clientError || !client || adError || !ad) {
     notFound();
   }
+
+  const memories = (memoryRows ?? []).map((m) => ({
+    id: String(m.id),
+    note: String(m.note),
+    tag: String(m.tag),
+  }));
 
   async function action(
     _state: { error: string | null },
@@ -100,6 +115,8 @@ export default async function EditAdPage({ params }: Props) {
           </p>
         </div>
       </div>
+
+      <ClientMemories memories={memories} clientName={client.name} />
 
       <AdForm
         title={`Edit ${ad.name}`}

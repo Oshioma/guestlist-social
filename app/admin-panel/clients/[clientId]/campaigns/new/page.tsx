@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../../lib/supabase/server";
 import CampaignForm from "../../../../components/CampaignForm";
+import ClientMemories from "../../../../components/ClientMemories";
 import { createCampaignAction } from "../../../../lib/campaign-actions";
 
 type Props = {
@@ -13,15 +14,24 @@ export default async function NewCampaignPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const { data: client, error } = await supabase
-    .from("clients")
-    .select("name")
-    .eq("id", clientId)
-    .single();
+  const [{ data: client, error }, { data: memoryRows }] = await Promise.all([
+    supabase.from("clients").select("name").eq("id", clientId).single(),
+    supabase
+      .from("memories")
+      .select("id, note, tag")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (error || !client) {
     notFound();
   }
+
+  const memories = (memoryRows ?? []).map((m) => ({
+    id: String(m.id),
+    note: String(m.note),
+    tag: String(m.tag),
+  }));
 
   async function action(
     _state: { error: string | null },
@@ -97,6 +107,8 @@ export default async function NewCampaignPage({ params }: Props) {
           </p>
         </div>
       </div>
+
+      <ClientMemories memories={memories} clientName={client.name} />
 
       <CampaignForm action={action} />
     </div>
