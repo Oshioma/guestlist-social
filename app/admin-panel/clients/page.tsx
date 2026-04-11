@@ -255,7 +255,7 @@ export default async function ClientsPage() {
                       >
                         {client.name}
                       </h2>
-                      <StatusPill status={client.status ?? "active"} />
+                      <StatusPill status={(client.status as "active" | "paused" | "onboarding") ?? "active"} />
                     </div>
 
                     <p
