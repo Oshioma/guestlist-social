@@ -118,7 +118,87 @@ export async function generateCampaignActions(
     }
   }
 
+  // Auto-close stale actions whose rules no longer apply
+  await closeStaleActions(supabase, clientId, rows);
+
   revalidatePath(`/app/clients/${clientId}`);
   revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
   revalidatePath("/app/dashboard");
+}
+
+async function closeStaleActions(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clientId: string,
+  adsRows: any[]
+) {
+  const { data: openActions, error } = await supabase
+    .from("actions")
+    .select("id, title")
+    .eq("client_id", clientId)
+    .eq("is_complete", false);
+
+  if (error || !openActions) return;
+
+  // Build a lookup of current ad metrics by id
+  const adMetrics = new Map<string, { spend: number; impressions: number; clicks: number; ctr: number }>();
+  for (const ad of adsRows) {
+    const impressions = Number(ad.impressions ?? 0);
+    const clicks = Number(ad.clicks ?? 0);
+    adMetrics.set(String(ad.id), {
+      spend: Number(ad.spend ?? 0),
+      impressions,
+      clicks,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+    });
+  }
+
+  const staleIds: string[] = [];
+
+  for (const action of openActions) {
+    const title = String(action.title ?? "");
+    const autoMatch = title.match(/\[AUTO:(\w[\w-]*):([^\]]+)\]/);
+    if (!autoMatch) continue;
+
+    const rule = autoMatch[1];
+    const adId = autoMatch[2];
+    const metrics = adMetrics.get(adId);
+
+    // If the ad no longer exists in this campaign, mark stale
+    if (!metrics) {
+      staleIds.push(action.id);
+      continue;
+    }
+
+    let stillApplies = false;
+
+    switch (rule) {
+      case "weak-ctr":
+        stillApplies = metrics.spend >= 5 && metrics.ctr > 0 && metrics.ctr < 1.0;
+        break;
+      case "scale":
+        stillApplies = metrics.ctr >= 2.5 && metrics.spend >= 3;
+        break;
+      case "pause":
+        stillApplies = metrics.spend >= 8 && metrics.clicks <= 2;
+        break;
+      case "delivery":
+        stillApplies = metrics.spend === 0 && metrics.impressions === 0;
+        break;
+    }
+
+    if (!stillApplies) {
+      staleIds.push(action.id);
+    }
+  }
+
+  if (staleIds.length === 0) return;
+
+  const { error: updateError } = await supabase
+    .from("actions")
+    .update({ is_complete: true })
+    .in("id", staleIds);
+
+  if (updateError) {
+    console.error("closeStaleActions error:", updateError);
+  }
 }
