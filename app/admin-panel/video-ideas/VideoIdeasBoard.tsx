@@ -13,6 +13,20 @@ import type { VideoIdea, ContentTheme } from "../lib/types";
 
 type Client = { id: string; name: string };
 
+function getNextFiveMonths(): { value: string; label: string }[] {
+  const now = new Date();
+  const months: { value: string; label: string }[] = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    months.push({ value, label });
+  }
+  return months;
+}
+
+const MONTHS = getNextFiveMonths();
+
 const CATEGORIES = [
   { value: "reel", label: "Reel" },
   { value: "carousel", label: "Carousel" },
@@ -145,9 +159,16 @@ export default function VideoIdeasBoard({
           nextSort={clientThemes.length}
         />
 
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 8 }}>
+            Quick Add Idea
+          </div>
+          <AddIdeaForm clientId={selectedClient} themeId={null} />
+        </div>
+
         {clientThemes.length === 0 && unlinkedIdeas.length === 0 ? (
           <div style={emptyStyle}>
-            No content strategy yet for this client. Add a theme above to get started.
+            No content strategy yet for this client. Add a theme or idea above to get started.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 20 }}>
@@ -470,14 +491,16 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(idea.idea);
   const [editCategory, setEditCategory] = useState(idea.category);
+  const [editMonth, setEditMonth] = useState(idea.month);
   const [isPending, startTransition] = useTransition();
 
   const colors = categoryColor(idea.category);
+  const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
 
   function handleSave() {
     if (!editText.trim()) return;
     startTransition(async () => {
-      await updateVideoIdeaAction(idea.id, editText, editCategory);
+      await updateVideoIdeaAction(idea.id, editText, editCategory, editMonth);
       setIsEditing(false);
     });
   }
@@ -490,7 +513,7 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
 
   if (isEditing) {
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7", flexWrap: "wrap" }}>
         <select
           value={editCategory}
           onChange={(e) => setEditCategory(e.target.value)}
@@ -500,20 +523,30 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
             <option key={c.value} value={c.value}>{c.label}</option>
           ))}
         </select>
+        <select
+          value={editMonth}
+          onChange={(e) => setEditMonth(e.target.value)}
+          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+        >
+          <option value="">No month</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
         <input
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setIsEditing(false); }
+            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }
           }}
           style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
         />
         <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
           {isPending ? "..." : "Save"}
         </button>
-        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
           Cancel
         </button>
       </div>
@@ -535,9 +568,19 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
       >
         {idea.category}
       </span>
+      {monthLabel && (
+        <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
+          {monthLabel}
+        </span>
+      )}
       <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
         {idea.idea}
       </span>
+      {idea.createdBy && (
+        <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
+          {idea.createdBy.split("@")[0]}
+        </span>
+      )}
       <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
       <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
         {isPending ? "..." : "Delete"}
@@ -557,13 +600,14 @@ function AddIdeaForm({
 }) {
   const [text, setText] = useState("");
   const [category, setCategory] = useState("reel");
+  const [month, setMonth] = useState(MONTHS[0]?.value ?? "");
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
     startTransition(async () => {
-      await addVideoIdeaAction(clientId, themeId, text, category);
+      await addVideoIdeaAction(clientId, themeId, text, category, month);
       setText("");
     });
   }
@@ -571,7 +615,7 @@ function AddIdeaForm({
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}
+      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}
     >
       <select
         value={category}
@@ -580,6 +624,16 @@ function AddIdeaForm({
       >
         {CATEGORIES.map((c) => (
           <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+      </select>
+      <select
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+      >
+        <option value="">No month</option>
+        {MONTHS.map((m) => (
+          <option key={m.value} value={m.value}>{m.label}</option>
         ))}
       </select>
       <input

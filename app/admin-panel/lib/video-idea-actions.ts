@@ -98,7 +98,8 @@ export async function addVideoIdeaAction(
   clientId: string,
   themeId: string | null,
   idea: string,
-  category: string
+  category: string,
+  month: string = ""
 ) {
   if (!clientId || !idea.trim()) {
     throw new Error("Client and idea text are required.");
@@ -106,11 +107,16 @@ export async function addVideoIdeaAction(
 
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  const createdBy = user?.email ?? "unknown";
+
   const { error } = await supabase.from("video_ideas").insert({
     client_id: clientId,
     theme_id: themeId || null,
     idea: idea.trim(),
     category: category || "general",
+    month: month || "",
+    created_by: createdBy,
   });
 
   if (error) {
@@ -125,7 +131,8 @@ export async function addVideoIdeaAction(
 export async function updateVideoIdeaAction(
   id: string,
   idea: string,
-  category: string
+  category: string,
+  month: string = ""
 ) {
   if (!id || !idea.trim()) {
     throw new Error("ID and idea text are required.");
@@ -138,6 +145,7 @@ export async function updateVideoIdeaAction(
     .update({
       idea: idea.trim(),
       category: category || "general",
+      month: month || "",
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

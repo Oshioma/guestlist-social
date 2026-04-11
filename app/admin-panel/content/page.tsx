@@ -171,15 +171,10 @@ export default async function ContentDashboardPage() {
                 </thead>
                 <tbody>
                   {clients.map((client, idx) => {
-                    const clientThemes = ideasData.themes.filter(
-                      (t) => t.clientId === client.id
+                    const clientIdeas = ideasData.ideas.filter(
+                      (i) => i.clientId === client.id
                     );
-                    const clientIdeaIds = new Set(
-                      ideasData.ideas
-                        .filter((i) => i.clientId === client.id)
-                        .map((i) => i.id)
-                    );
-                    const total = clientIdeaIds.size;
+                    const total = clientIdeas.length;
 
                     return (
                       <tr
@@ -189,30 +184,17 @@ export default async function ContentDashboardPage() {
                         }}
                       >
                         <td style={tdStyle}>{client.name}</td>
-                        {months.map((m, mIdx) => {
-                          // Map calendar month index to theme month ranges
-                          // mIdx 0-1 → themes with "1-2", mIdx 2-3 → "3-4", mIdx 4 → "5-6"
-                          const pairIndex = Math.floor(mIdx / 2);
-                          const pairLabel = `${pairIndex * 2 + 1}-${pairIndex * 2 + 2}`;
-                          const matchingThemes = clientThemes.filter((t) =>
-                            t.monthLabel.includes(pairLabel)
-                          );
-                          const count = matchingThemes.reduce(
-                            (sum, t) =>
-                              sum +
-                              ideasData.ideas.filter((i) => i.themeId === t.id)
-                                .length,
-                            0
-                          );
-                          // Split evenly across the 2 months in a pair, show full on first
-                          const display = mIdx % 2 === 0 ? count : 0;
+                        {months.map((m) => {
+                          const count = clientIdeas.filter(
+                            (i) => i.month === m.key
+                          ).length;
                           return (
                             <td
                               key={m.key}
                               style={{ ...tdStyle, textAlign: "center" }}
                             >
-                              {display > 0 ? (
-                                <span style={badgeGreen}>{display}</span>
+                              {count > 0 ? (
+                                <span style={badgeGreen}>{count}</span>
                               ) : (
                                 <span style={{ color: "#d4d4d8" }}>0</span>
                               )}

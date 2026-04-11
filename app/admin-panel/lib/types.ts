@@ -100,6 +100,8 @@ export type VideoIdea = {
   themeId: string | null;
   idea: string;
   category: string;
+  month: string;
+  createdBy: string;
   createdAt: string;
 };
 

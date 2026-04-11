@@ -126,6 +126,8 @@ export async function getVideoIdeasData(): Promise<{
     themeId: row.theme_id ?? null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
+    month: row.month ?? "",
+    createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 

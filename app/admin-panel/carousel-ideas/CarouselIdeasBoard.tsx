@@ -159,9 +159,16 @@ export default function CarouselIdeasBoard({
           nextSort={clientThemes.length}
         />
 
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 8 }}>
+            Quick Add Idea
+          </div>
+          <AddIdeaForm clientId={selectedClient} themeId={null} />
+        </div>
+
         {clientThemes.length === 0 && unlinkedIdeas.length === 0 ? (
           <div style={emptyStyle}>
-            No carousel strategy yet for this client. Add a theme above to get started.
+            No carousel strategy yet for this client. Add a theme or idea above to get started.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 20 }}>
