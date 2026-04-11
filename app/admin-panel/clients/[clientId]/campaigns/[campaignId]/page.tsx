@@ -28,8 +28,9 @@ export default async function CampaignDetailPage({ params }: Props) {
   const [
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
-    { data: adsRows },
-    { data: actionRows },
+    { data: adsRows, error: adsError },
+    { data: actionRows, error: actionsError },
+    { data: learningRows, error: learningsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -49,25 +50,24 @@ export default async function CampaignDetailPage({ params }: Props) {
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
-  ]);
-
-  if (clientError || !client || campaignError || !campaign) {
-    console.error("Campaign page 404:", { clientError, campaignError, clientId, campaignId });
-    notFound();
-  }
-
-  // Learnings table may not exist yet — query separately so it can't break the page
-  let learningRows: any[] | null = null;
-  try {
-    const { data } = await supabase
+    supabase
       .from("learnings")
       .select("*")
       .eq("client_id", clientId)
       .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: false });
-    learningRows = data;
-  } catch {
-    // table may not exist
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (
+    clientError ||
+    !client ||
+    campaignError ||
+    !campaign ||
+    adsError ||
+    actionsError ||
+    learningsError
+  ) {
+    notFound();
   }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
@@ -98,12 +98,12 @@ export default async function CampaignDetailPage({ params }: Props) {
     campaignStatus === "live"
       ? { background: "#dcfce7", color: "#166534" }
       : campaignStatus === "paused"
-      ? { background: "#fef2f2", color: "#b91c1c" }
-      : campaignStatus === "completed"
-      ? { background: "#e4e4e7", color: "#3f3f46" }
-      : campaignStatus === "draft"
-        ? { background: "#f4f4f5", color: "#52525b" }
-        : { background: "#fef3c7", color: "#92400e" };
+        ? { background: "#fef2f2", color: "#b91c1c" }
+        : campaignStatus === "completed"
+          ? { background: "#e4e4e7", color: "#3f3f46" }
+          : campaignStatus === "draft"
+            ? { background: "#f4f4f5", color: "#52525b" }
+            : { background: "#fef3c7", color: "#92400e" };
 
   const campaignAdIds = new Set(ads.map((ad) => ad.id));
 
@@ -119,12 +119,10 @@ export default async function CampaignDetailPage({ params }: Props) {
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
-  let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
-  try {
-    learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
-  } catch {
-    // learnings table may not exist yet
-  }
+  const learningSuggestions = await generateSuggestionsFromLearnings(
+    clientId,
+    campaignId
+  );
 
   async function handleGenerateActions() {
     "use server";
@@ -287,7 +285,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         <StatCard
           stat={{
             label: "CTR",
-            value: avgCtr > 0 ? `${avgCtr}%` : "\u2014",
+            value: avgCtr > 0 ? `${avgCtr}%` : "—",
             change: `${totalClicks} clicks`,
             trend: avgCtr >= 2.5 ? "up" : avgCtr > 0 ? "flat" : "down",
           }}
