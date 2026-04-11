@@ -48,6 +48,8 @@ export default async function EditClientPage({ params }: Props) {
         platform: client.platform ?? "Meta",
         monthlyBudget: Number(client.monthly_budget ?? 0),
         status: mapClientStatus(client.status ?? "testing"),
+        websiteUrl: client.website_url ?? "",
+        notes: client.notes ?? "",
       }}
     />
   );

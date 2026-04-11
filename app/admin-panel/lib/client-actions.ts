@@ -18,6 +18,8 @@ export async function createClientAction(formData: FormData) {
   const platform = String(formData.get("platform") ?? "Meta").trim();
   const monthlyBudget = Number(formData.get("monthlyBudget") ?? 0);
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
+  const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
 
   if (!name) {
     throw new Error("Client name is required.");
@@ -35,6 +37,8 @@ export async function createClientAction(formData: FormData) {
     platform,
     monthly_budget: monthlyBudget,
     status: dbStatus,
+    website_url: websiteUrl || null,
+    notes: notes || null,
   });
 
   if (error) {
@@ -54,6 +58,8 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   const platform = String(formData.get("platform") ?? "Meta").trim();
   const monthlyBudget = Number(formData.get("monthlyBudget") ?? 0);
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
+  const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
 
   if (!clientId) {
     throw new Error("Missing client id.");
@@ -77,6 +83,8 @@ export async function updateClientAction(clientId: string, formData: FormData) {
       platform,
       monthly_budget: monthlyBudget,
       status: dbStatus,
+      website_url: websiteUrl || null,
+      notes: notes || null,
     })
     .eq("id", clientId);
 

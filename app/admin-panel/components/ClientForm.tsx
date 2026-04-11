@@ -7,6 +7,8 @@ type ClientFormValues = {
   platform: string;
   monthlyBudget: number;
   status: "active" | "paused" | "onboarding";
+  websiteUrl?: string;
+  notes?: string;
 };
 
 type Props = {
@@ -90,6 +92,30 @@ export default function ClientForm({
               style={inputStyle}
             />
           </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Website URL</label>
+          <input
+            name="websiteUrl"
+            defaultValue={initialValues?.websiteUrl ?? ""}
+            style={inputStyle}
+            placeholder="https://example.com"
+          />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Notes</label>
+          <textarea
+            name="notes"
+            defaultValue={initialValues?.notes ?? ""}
+            style={{
+              ...inputStyle,
+              minHeight: 110,
+              resize: "vertical",
+            }}
+            placeholder="Client notes, context, positioning, priorities..."
+          />
         </div>
 
         <div>
