@@ -35,8 +35,9 @@ export default async function ContentDashboardPage() {
     ]);
 
     const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
+    const activeClientIds = new Set(clients.map((c) => c.id));
     const relevantProgress = progress.filter((p) =>
-      allKeys.includes(p.month)
+      allKeys.includes(p.month) && activeClientIds.has(p.clientId)
     );
 
     const totalSlots = clients.length * allKeys.length;
