@@ -60,8 +60,11 @@ export default function StoryIdeasBoard({
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id ?? "");
   const [selectedMonth, setSelectedMonth] = useState("");
 
+  const selectedMonthName = MONTHS.find((m) => m.value === selectedMonth)?.label.split(" ")[0] ?? "";
+
   const clientThemes = themes
     .filter((t) => t.clientId === selectedClient)
+    .filter((t) => !selectedMonth || t.monthLabel === selectedMonthName)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const allClientIdeas = ideas.filter((i) => i.clientId === selectedClient);
