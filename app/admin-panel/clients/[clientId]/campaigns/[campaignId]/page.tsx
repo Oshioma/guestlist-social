@@ -48,8 +48,27 @@ export default async function CampaignDetailPage({ params }: Props) {
   ]);
 
   if (clientError || !client || campaignError || !campaign) {
-    console.error("Campaign page 404:", { clientError, campaignError, clientId, campaignId });
-    notFound();
+    console.error("Campaign page error:", { clientError, campaignError, clientId, campaignId });
+    return (
+      <div style={{ padding: 24, maxWidth: 600 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
+          Could not load campaign
+        </h2>
+        {clientError && (
+          <p style={{ fontSize: 14, color: "#dc2626", margin: "0 0 8px" }}>
+            Client error: {clientError.message}
+          </p>
+        )}
+        {campaignError && (
+          <p style={{ fontSize: 14, color: "#dc2626", margin: "0 0 8px" }}>
+            Campaign error: {campaignError.message}
+          </p>
+        )}
+        <p style={{ fontSize: 13, color: "#71717a", margin: "12px 0 0" }}>
+          Looked for client_id={clientId}, campaign_id={campaignId}
+        </p>
+      </div>
+    );
   }
 
   // Step 2: Auto-run rule engine so actions are always fresh
