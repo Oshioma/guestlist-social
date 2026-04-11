@@ -34,6 +34,7 @@ export function mapDbAdToUiAd(row: any): Ad {
   return {
     id: row.id,
     clientId: row.client_id,
+    campaignId: row.campaign_id ?? null,
     name: row.name ?? "Untitled ad",
     platform: row.platform ?? "Meta",
     status: mapAdStatus(row.status ?? "testing"),
