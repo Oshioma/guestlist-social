@@ -28,9 +28,8 @@ export default async function CampaignDetailPage({ params }: Props) {
   const [
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
-    { data: adsRows, error: adsError },
-    { data: actionRows, error: actionsError },
-    { data: learningRows, error: learningsError },
+    { data: adsRows },
+    { data: actionRows },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -50,12 +49,6 @@ export default async function CampaignDetailPage({ params }: Props) {
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("learnings")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("campaign_id", campaignId)
-      .order("created_at", { ascending: false }),
   ]);
 
   if (clientError || !client || campaignError || !campaign) {
@@ -63,8 +56,19 @@ export default async function CampaignDetailPage({ params }: Props) {
     notFound();
   }
 
-  if (adsError) console.error("Campaign ads query error (non-fatal):", adsError);
-  if (actionsError) console.error("Campaign actions query error (non-fatal):", actionsError);
+  // Learnings table may not exist yet — query separately so it can't break the page
+  let learningRows: any[] | null = null;
+  try {
+    const { data } = await supabase
+      .from("learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false });
+    learningRows = data;
+  } catch {
+    // table may not exist
+  }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
