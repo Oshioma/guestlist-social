@@ -16,6 +16,8 @@ import StatCard from "../../components/StatCard";
 import SuggestionCard from "../../components/SuggestionCard";
 import { formatCurrency } from "../../lib/utils";
 import DeleteClientButton from "../../components/DeleteClientButton";
+import GenerateReportsButton from "../../components/GenerateReportsButton";
+import { generateClientReport } from "../../lib/report-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -767,7 +769,18 @@ export default async function ClientDetailPage({
       </SectionCard>
 
       {/* Reports */}
-      <SectionCard title={`Reports (${reports.length})`}>
+      <SectionCard
+        title={`Reports (${reports.length})`}
+        action={
+          <GenerateReportsButton
+            action={async () => {
+              "use server";
+              await generateClientReport(clientId);
+            }}
+            label="Generate report"
+          />
+        }
+      >
         {reports.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {reports.slice(0, 3).map((report) => (
@@ -798,7 +811,7 @@ export default async function ClientDetailPage({
         ) : (
           <EmptyState
             title="No reports yet"
-            description="Reports will appear here once reporting is added for this client."
+            description='Click "Generate report" to create a report from real data.'
           />
         )}
       </SectionCard>
