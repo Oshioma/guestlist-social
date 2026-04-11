@@ -18,7 +18,7 @@ import { formatCurrency } from "../../lib/utils";
 import DeleteClientButton from "../../components/DeleteClientButton";
 import GenerateReportsButton from "../../components/GenerateReportsButton";
 import { generateClientReport } from "../../lib/report-actions";
-import AssignCampaignButton from "../../components/AssignCampaignButton";
+import UnassignedCampaigns from "../../components/UnassignedCampaigns";
 
 export const dynamic = "force-dynamic";
 
@@ -392,197 +392,25 @@ export default async function ClientDetailPage({
       <SectionCard
         title={`Unassigned Meta campaigns (${unassignedCampaigns.length})`}
       >
-        {unassignedCampaigns.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {unassignedCampaigns.map((campaign) => (
-              <div
-                key={campaign.id}
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 16,
-                  padding: 16,
-                  background: "#fff",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    alignItems: "flex-start",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 16,
-                        fontWeight: 600,
-                        color: "#18181b",
-                      }}
-                    >
-                      {campaign.name}
-                    </p>
-                    <p
-                      style={{
-                        margin: "6px 0 0",
-                        fontSize: 13,
-                        color: "#71717a",
-                      }}
-                    >
-                      {campaign.objective ?? "No objective"} ·{" "}
-                      {campaign.meta_ad_account_name ?? "Unknown Meta account"}
-                    </p>
-                    <p
-                      style={{
-                        margin: "6px 0 0",
-                        fontSize: 12,
-                        color: "#a1a1aa",
-                      }}
-                    >
-                      Meta ID: {campaign.meta_id ?? "—"}
-                    </p>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        background: "#f4f4f5",
-                        color: "#52525b",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {campaign.meta_status ?? campaign.status ?? "unknown"}
-                    </span>
-
-                    <AssignCampaignButton
-                      campaignId={campaign.id}
-                      clientId={clientId}
-                      label={`Assign to ${client.name}`}
-                    />
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                    gap: 12,
-                    marginTop: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      border: "1px solid #f4f4f5",
-                      borderRadius: 12,
-                      padding: 12,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Budget
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 15,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {formatCurrency(Number(campaign.budget ?? 0))}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid #f4f4f5",
-                      borderRadius: 12,
-                      padding: 12,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Meta account
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 15,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {campaign.meta_ad_account_name ?? "—"}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      border: "1px solid #f4f4f5",
-                      borderRadius: 12,
-                      padding: 12,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "#71717a" }}>
-                      Created
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 15,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {campaign.created_at
-                        ? new Date(campaign.created_at).toLocaleDateString()
-                        : "—"}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 14,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  {assignableClients
-                    .filter((c) => String(c.id) !== String(clientId))
-                    .map((targetClient) => (
-                      <AssignCampaignButton
-                        key={targetClient.id}
-                        campaignId={campaign.id}
-                        clientId={targetClient.id}
-                        label={`Assign to ${targetClient.name}`}
-                        variant="secondary"
-                      />
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No unassigned Meta campaigns"
-            description="Everything imported from Meta is either already assigned or nothing new has synced in."
-          />
-        )}
+        <UnassignedCampaigns
+          campaigns={unassignedCampaigns.map((c) => ({
+            id: c.id,
+            name: c.name,
+            objective: c.objective,
+            status: c.status,
+            meta_status: c.meta_status,
+            meta_id: c.meta_id,
+            meta_ad_account_name: c.meta_ad_account_name,
+            budget: c.budget,
+            created_at: c.created_at,
+          }))}
+          currentClientId={clientId}
+          currentClientName={client.name}
+          assignableClients={assignableClients.map((c) => ({
+            id: c.id,
+            name: c.name,
+          }))}
+        />
       </SectionCard>
 
       <SectionCard title={`Learnings (${learningRows.length})`}>
