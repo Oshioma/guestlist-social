@@ -6,7 +6,7 @@ import {
   mapDbReportToUiReport,
   mapDbSuggestionToUiSuggestion,
 } from "../../lib/mappers";
-import { supabase } from "../../lib/supabase";
+import { createClient } from "../../../../lib/supabase/server";
 import StatusPill from "../../components/StatusPill";
 import SectionCard from "../../components/SectionCard";
 import AdRow from "../../components/AdRow";
@@ -24,6 +24,7 @@ export default async function ClientDetailPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
+  const supabase = await createClient();
 
   const [clientRes, adsRes, creativesRes, reportsRes, suggestionsRes] =
     await Promise.all([

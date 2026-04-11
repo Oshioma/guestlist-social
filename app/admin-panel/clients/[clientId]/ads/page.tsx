@@ -1,5 +1,5 @@
 import { mapDbAdToUiAd, mapDbClientToUiClient } from "../../../lib/mappers";
-import { supabase } from "../../../lib/supabase";
+import { createClient } from "../../../../../lib/supabase/server";
 import SectionCard from "../../../components/SectionCard";
 import AdRow from "../../../components/AdRow";
 import EmptyState from "../../../components/EmptyState";
@@ -12,6 +12,7 @@ export default async function ClientAdsPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
+  const supabase = await createClient();
 
   const [clientRes, adsRes] = await Promise.all([
     supabase.from("clients").select("*").eq("id", clientId).single(),

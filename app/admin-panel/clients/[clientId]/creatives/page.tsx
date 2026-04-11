@@ -1,5 +1,5 @@
 import { mapDbClientToUiClient, mapDbCreativeToUiCreative } from "../../../lib/mappers";
-import { supabase } from "../../../lib/supabase";
+import { createClient } from "../../../../../lib/supabase/server";
 import CreativeCard from "../../../components/CreativeCard";
 import EmptyState from "../../../components/EmptyState";
 
@@ -11,6 +11,7 @@ export default async function ClientCreativesPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
+  const supabase = await createClient();
 
   const [clientRes, creativesRes] = await Promise.all([
     supabase.from("clients").select("*").eq("id", clientId).single(),

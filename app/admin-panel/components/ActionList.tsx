@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Action } from "../lib/types";
 import { formatDate } from "../lib/utils";
-import { supabase } from "../lib/supabase";
+import { createClient } from "../../../lib/supabase/client";
 
 export default function ActionList({
   actions: initial,
@@ -39,6 +39,8 @@ export default function ActionList({
       next.add(id);
       return next;
     });
+
+    const supabase = createClient();
 
     const { error: updateError } = await supabase
       .from("actions")

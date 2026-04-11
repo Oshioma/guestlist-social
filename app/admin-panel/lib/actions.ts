@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabase } from "./supabase";
+import { createClient } from "../../../lib/supabase/server";
 
 export async function createAction(input: {
   clientId: string | null;
@@ -9,6 +9,8 @@ export async function createAction(input: {
   priority: "low" | "medium" | "high";
   kind: "pause" | "scale" | "creative" | "review";
 }) {
+  const supabase = await createClient();
+
   const { error } = await supabase.from("actions").insert({
     client_id: input.clientId,
     title: input.title,

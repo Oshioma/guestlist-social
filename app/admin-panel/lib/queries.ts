@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { createClient } from "../../../lib/supabase/server";
 import {
   mapDbAdToUiAd,
   mapDbClientToUiClient,
@@ -13,6 +13,8 @@ export async function getDashboardData(): Promise<{
   actions: Action[];
   suggestions: Suggestion[];
 }> {
+  const supabase = await createClient();
+
   const [clientsRes, adsRes, actionsRes, suggestionsRes] = await Promise.all([
     supabase.from("clients").select("*").order("created_at", { ascending: false }),
     supabase.from("ads").select("*").order("created_at", { ascending: false }),
