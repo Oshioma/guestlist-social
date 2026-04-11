@@ -1,33 +1,55 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function CreateActionFromSuggestionButton({
-  action,
+  clientId,
+  campaignId,
+  title,
+  description,
+  priority,
 }: {
-  action: () => Promise<void>;
+  clientId: string;
+  campaignId: string;
+  title: string;
+  description: string;
+  priority: string;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/create-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, campaignId, title, description, priority }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error || "Failed to create action");
+      } else {
+        setDone(true);
+        router.refresh();
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <button
         type="button"
-        disabled={isPending || done}
-        onClick={() => {
-          setError(null);
-          startTransition(async () => {
-            try {
-              await action();
-              setDone(true);
-            } catch (err) {
-              console.error(err);
-              setError("Could not create action.");
-            }
-          });
-        }}
+        disabled={loading || done}
+        onClick={handleClick}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -39,10 +61,10 @@ export default function CreateActionFromSuggestionButton({
           color: done ? "#71717a" : "#fff",
           fontSize: 12,
           fontWeight: 600,
-          cursor: isPending || done ? "default" : "pointer",
+          cursor: loading || done ? "default" : "pointer",
         }}
       >
-        {done ? "Action created" : isPending ? "Creating..." : "Create action"}
+        {done ? "Action created" : loading ? "Creating..." : "Create action"}
       </button>
 
       {error ? (
