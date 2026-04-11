@@ -139,62 +139,121 @@ export default async function ContentDashboardPage() {
             </Link>
           }
         >
-          {clients.length === 0 ? (
-            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
-              No clients yet.
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: 0,
-                  fontSize: 14,
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Client</th>
-                    <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
-                    <th style={{ ...thStyle, textAlign: "center" }}>Ideas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client, idx) => {
-                    const themeCount = ideasData.themes.filter(
-                      (t) => t.clientId === client.id
-                    ).length;
-                    const ideaCount = ideasData.ideas.filter(
-                      (i) => i.clientId === client.id
-                    ).length;
-                    return (
-                      <tr
-                        key={client.id}
-                        style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}
-                      >
-                        <td style={tdStyle}>{client.name}</td>
-                        <td style={{ ...tdStyle, textAlign: "center" }}>
-                          {themeCount > 0 ? (
-                            <span style={badgeGreen}>{themeCount}</span>
-                          ) : (
-                            <span style={{ color: "#d4d4d8" }}>0</span>
-                          )}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "center" }}>
-                          {ideaCount > 0 ? (
-                            <span style={badgeGreen}>{ideaCount}</span>
-                          ) : (
-                            <span style={{ color: "#d4d4d8" }}>0</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {(() => {
+            // Build a list of all unique month labels from themes
+            const allMonthLabels = Array.from(
+              new Set(ideasData.themes.map((t) => t.monthLabel).filter(Boolean))
+            );
+
+            // Build a map: clientId -> monthLabel -> idea count
+            const clientMonthCounts = new Map<string, Map<string, number>>();
+            for (const client of clients) {
+              const monthMap = new Map<string, number>();
+              const clientThemes = ideasData.themes.filter(
+                (t) => t.clientId === client.id
+              );
+              for (const theme of clientThemes) {
+                const count = ideasData.ideas.filter(
+                  (i) => i.themeId === theme.id
+                ).length;
+                const label = theme.monthLabel || "Other";
+                monthMap.set(label, (monthMap.get(label) ?? 0) + count);
+              }
+              // Count unlinked ideas
+              const unlinked = ideasData.ideas.filter(
+                (i) => i.clientId === client.id && !i.themeId
+              ).length;
+              if (unlinked > 0) {
+                monthMap.set("Other", (monthMap.get("Other") ?? 0) + unlinked);
+              }
+              clientMonthCounts.set(client.id, monthMap);
+            }
+
+            const columnLabels = allMonthLabels.length > 0 ? allMonthLabels : [];
+            if (
+              clients.some((c) => {
+                const m = clientMonthCounts.get(c.id);
+                return m?.has("Other");
+              })
+            ) {
+              if (!columnLabels.includes("Other")) columnLabels.push("Other");
+            }
+
+            return clients.length === 0 ? (
+              <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
+                No clients yet.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "separate",
+                    borderSpacing: 0,
+                    fontSize: 14,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Client</th>
+                      {columnLabels.map((label) => (
+                        <th
+                          key={label}
+                          style={{ ...thStyle, textAlign: "center" }}
+                        >
+                          {label}
+                        </th>
+                      ))}
+                      <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.map((client, idx) => {
+                      const monthMap = clientMonthCounts.get(client.id);
+                      const total = ideasData.ideas.filter(
+                        (i) => i.clientId === client.id
+                      ).length;
+                      return (
+                        <tr
+                          key={client.id}
+                          style={{
+                            background: idx % 2 === 0 ? "#fff" : "#fafafa",
+                          }}
+                        >
+                          <td style={tdStyle}>{client.name}</td>
+                          {columnLabels.map((label) => {
+                            const count = monthMap?.get(label) ?? 0;
+                            return (
+                              <td
+                                key={label}
+                                style={{ ...tdStyle, textAlign: "center" }}
+                              >
+                                {count > 0 ? (
+                                  <span style={badgeGreen}>{count}</span>
+                                ) : (
+                                  <span style={{ color: "#d4d4d8" }}>0</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td
+                            style={{
+                              ...tdStyle,
+                              textAlign: "center",
+                              fontWeight: 600,
+                              color: total > 0 ? "#18181b" : "#d4d4d8",
+                            }}
+                          >
+                            {total}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </SectionCard>
       </div>
     );

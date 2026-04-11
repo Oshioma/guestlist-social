@@ -116,6 +116,7 @@ export async function getVideoIdeasData(): Promise<{
     monthLabel: row.month_label ?? "",
     theme: row.theme ?? "",
     goal: row.goal ?? "",
+    notes: row.notes ?? "",
     sortOrder: row.sort_order ?? 0,
   }));
 

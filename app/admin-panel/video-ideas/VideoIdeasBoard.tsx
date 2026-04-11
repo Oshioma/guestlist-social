@@ -201,11 +201,12 @@ function ThemeBlock({
   const [monthLabel, setMonthLabel] = useState(theme.monthLabel);
   const [themeName, setThemeName] = useState(theme.theme);
   const [goal, setGoal] = useState(theme.goal);
+  const [notes, setNotes] = useState(theme.notes);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
     startTransition(async () => {
-      await updateThemeAction(theme.id, monthLabel, themeName, goal);
+      await updateThemeAction(theme.id, monthLabel, themeName, goal, notes);
       setIsEditing(false);
     });
   }
@@ -241,6 +242,18 @@ function ThemeBlock({
             placeholder="Goal"
             style={inputStyle}
           />
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Notes (e.g. posting schedule, guidelines, extra context...)"
+            rows={4}
+            style={{
+              ...inputStyle,
+              resize: "vertical",
+              fontFamily: "inherit",
+              lineHeight: 1.5,
+            }}
+          />
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
               {isPending ? "..." : "Save"}
@@ -250,6 +263,7 @@ function ThemeBlock({
                 setMonthLabel(theme.monthLabel);
                 setThemeName(theme.theme);
                 setGoal(theme.goal);
+                setNotes(theme.notes);
                 setIsEditing(false);
               }}
               style={btnStyle("#f3f4f6", "#374151")}
@@ -259,42 +273,61 @@ function ThemeBlock({
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              {theme.monthLabel && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: "3px 10px",
-                    borderRadius: 999,
-                    background: "#18181b",
-                    color: "#fff",
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  {theme.monthLabel}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                {theme.monthLabel && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: "3px 10px",
+                      borderRadius: 999,
+                      background: "#18181b",
+                      color: "#fff",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {theme.monthLabel}
+                  </span>
+                )}
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+                  {theme.theme}
                 </span>
-              )}
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#18181b" }}>
-                {theme.theme}
-              </span>
-            </div>
-            {theme.goal && (
-              <div style={{ fontSize: 13, color: "#71717a", marginTop: 4 }}>
-                Goal: {theme.goal}
               </div>
-            )}
+              {theme.goal && (
+                <div style={{ fontSize: 13, color: "#71717a", marginTop: 4 }}>
+                  Goal: {theme.goal}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>
+                Edit
+              </button>
+              <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
+                {isPending ? "..." : "Delete"}
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>
-              Edit
-            </button>
-            <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
-              {isPending ? "..." : "Delete"}
-            </button>
-          </div>
+          {theme.notes && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 12px",
+                background: "#fff",
+                border: "1px solid #e4e4e7",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#52525b",
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {theme.notes}
+            </div>
+          )}
         </div>
       )}
 
@@ -322,16 +355,18 @@ function AddThemeForm({
   const [monthLabel, setMonthLabel] = useState("");
   const [theme, setTheme] = useState("");
   const [goal, setGoal] = useState("");
+  const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!theme.trim()) return;
     startTransition(async () => {
-      await addThemeAction(clientId, monthLabel, theme, goal, nextSort);
+      await addThemeAction(clientId, monthLabel, theme, goal, nextSort, notes);
       setMonthLabel("");
       setTheme("");
       setGoal("");
+      setNotes("");
       setOpen(false);
     });
   }
@@ -393,6 +428,18 @@ function AddThemeForm({
         onChange={(e) => setGoal(e.target.value)}
         placeholder="Goal (e.g. Make people fall in love)"
         style={inputStyle}
+      />
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (e.g. posting schedule, guidelines, extra context...)"
+        rows={3}
+        style={{
+          ...inputStyle,
+          resize: "vertical",
+          fontFamily: "inherit",
+          lineHeight: 1.5,
+        }}
       />
       <div style={{ display: "flex", gap: 8 }}>
         <button

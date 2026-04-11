@@ -10,7 +10,8 @@ export async function addThemeAction(
   monthLabel: string,
   theme: string,
   goal: string,
-  sortOrder: number
+  sortOrder: number,
+  notes: string = ""
 ) {
   if (!clientId || !theme.trim()) {
     throw new Error("Client and theme name are required.");
@@ -23,6 +24,7 @@ export async function addThemeAction(
     month_label: monthLabel.trim(),
     theme: theme.trim(),
     goal: goal.trim(),
+    notes: notes.trim(),
     sort_order: sortOrder,
   });
 
@@ -39,7 +41,8 @@ export async function updateThemeAction(
   id: string,
   monthLabel: string,
   theme: string,
-  goal: string
+  goal: string,
+  notes: string = ""
 ) {
   if (!id || !theme.trim()) {
     throw new Error("ID and theme name are required.");
@@ -53,6 +56,7 @@ export async function updateThemeAction(
       month_label: monthLabel.trim(),
       theme: theme.trim(),
       goal: goal.trim(),
+      notes: notes.trim(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

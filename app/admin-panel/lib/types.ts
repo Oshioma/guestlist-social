@@ -109,5 +109,6 @@ export type ContentTheme = {
   monthLabel: string;
   theme: string;
   goal: string;
+  notes: string;
   sortOrder: number;
 };
