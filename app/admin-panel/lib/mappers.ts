@@ -6,6 +6,11 @@ import type {
   Report,
   Suggestion,
 } from "./types";
+import {
+  getAppPerformanceStatus,
+  getPerformanceScore,
+  explainPerformanceStatus,
+} from "./performance-truth";
 
 export function mapClientStatus(status: string): Client["status"] {
   if (status === "growing") return "active";
@@ -30,6 +35,35 @@ export function mapCreativeStatus(performance: string): Creative["status"] {
 export function mapDbAdToUiAd(row: any): Ad {
   const impressions = Number(row.impressions ?? 0);
   const clicks = Number(row.clicks ?? 0);
+  const spend = Number(row.spend ?? 0);
+  const ctr = impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
+  const cpc = clicks > 0 ? Number((spend / clicks).toFixed(4)) : 0;
+  const conversions = Number(row.conversions ?? 0);
+  const costPerResult = Number(row.cost_per_result ?? 0);
+
+  const adForScoring = {
+    status: row.status,
+    meta_status: row.meta_status,
+    spend,
+    impressions,
+    clicks,
+    ctr,
+    cpc,
+    conversions,
+    cost_per_result: costPerResult,
+  };
+
+  const perfStatus = getAppPerformanceStatus(adForScoring);
+  const perfScore = getPerformanceScore(adForScoring);
+  const perfReason = explainPerformanceStatus(adForScoring);
+
+  // Map performance status to UI status
+  const statusMap: Record<string, Ad["status"]> = {
+    winner: "active",
+    losing: "ended",
+    paused: "paused",
+    testing: "draft",
+  };
 
   return {
     id: row.id,
@@ -37,11 +71,17 @@ export function mapDbAdToUiAd(row: any): Ad {
     campaignId: row.campaign_id ?? null,
     name: row.name ?? "Untitled ad",
     platform: row.platform ?? "Meta",
-    status: mapAdStatus(row.status ?? "testing"),
-    spend: Number(row.spend ?? 0),
+    status: statusMap[perfStatus] ?? "draft",
+    spend,
     impressions,
     clicks,
-    ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(1)) : 0,
+    ctr,
+    conversions,
+    cpc,
+    costPerResult,
+    performanceStatus: perfStatus,
+    performanceScore: perfScore,
+    performanceReason: perfReason,
   };
 }
 

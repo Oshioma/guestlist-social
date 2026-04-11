@@ -1,5 +1,6 @@
 export type ClientStatus = "active" | "paused" | "onboarding";
 export type AdStatus = "active" | "paused" | "draft" | "ended";
+export type AppPerformanceStatus = "winner" | "losing" | "testing" | "paused";
 export type CreativeStatus = "approved" | "pending" | "rejected";
 export type CreativeType = "image" | "video" | "carousel";
 export type Priority = "high" | "medium" | "low";
@@ -26,6 +27,12 @@ export type Ad = {
   impressions: number;
   clicks: number;
   ctr: number;
+  conversions: number;
+  cpc: number;
+  costPerResult: number;
+  performanceStatus: AppPerformanceStatus;
+  performanceScore: number;
+  performanceReason: string;
 };
 
 export type Creative = {
