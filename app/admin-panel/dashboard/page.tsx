@@ -95,7 +95,10 @@ export default async function DashboardPage() {
   const suggestions = (suggestionsRes.data ?? []).map((suggestion) => ({
     id: suggestion.id,
     clientId: suggestion.client_id,
-    text: suggestion.text,
+    title: suggestion.priority
+      ? `${String(suggestion.priority).toUpperCase()} priority`
+      : "Suggestion",
+    description: suggestion.text ?? "",
     priority: suggestion.priority ?? "medium",
     source: suggestion.source ?? "manual",
     createdAt: suggestion.created_at,
