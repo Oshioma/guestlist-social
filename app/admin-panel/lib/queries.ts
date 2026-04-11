@@ -5,7 +5,7 @@ import {
   mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea } from "./types";
+import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme } from "./types";
 
 export async function getDashboardData(): Promise<{
   clients: Client[];
@@ -80,16 +80,21 @@ export async function getContentDashboardData(): Promise<{
 
 export async function getVideoIdeasData(): Promise<{
   clients: { id: string; name: string }[];
+  themes: ContentTheme[];
   ideas: VideoIdea[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, ideasRes] = await Promise.all([
+  const [clientsRes, themesRes, ideasRes] = await Promise.all([
     supabase
       .from("clients")
       .select("id, name")
       .eq("archived", false)
       .order("name", { ascending: true }),
+    supabase
+      .from("content_themes")
+      .select("*")
+      .order("sort_order", { ascending: true }),
     supabase
       .from("video_ideas")
       .select("*")
@@ -97,6 +102,7 @@ export async function getVideoIdeasData(): Promise<{
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
+  if (themesRes.error) throw new Error(`content_themes: ${themesRes.error.message}`);
   if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? []).map((row) => ({
@@ -104,13 +110,23 @@ export async function getVideoIdeasData(): Promise<{
     name: row.name ?? "Untitled client",
   }));
 
+  const themes: ContentTheme[] = (themesRes.data ?? []).map((row) => ({
+    id: row.id,
+    clientId: row.client_id,
+    monthLabel: row.month_label ?? "",
+    theme: row.theme ?? "",
+    goal: row.goal ?? "",
+    sortOrder: row.sort_order ?? 0,
+  }));
+
   const ideas: VideoIdea[] = (ideasRes.data ?? []).map((row) => ({
     id: row.id,
     clientId: row.client_id,
-    month: row.month,
+    themeId: row.theme_id ?? null,
     idea: row.idea ?? "",
+    category: row.category ?? "general",
     createdAt: row.created_at ?? "",
   }));
 
-  return { clients, ideas };
+  return { clients, themes, ideas };
 }

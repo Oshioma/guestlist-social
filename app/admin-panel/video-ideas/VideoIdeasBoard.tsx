@@ -2,112 +2,81 @@
 
 import { useState, useTransition } from "react";
 import {
+  addThemeAction,
+  updateThemeAction,
+  deleteThemeAction,
   addVideoIdeaAction,
   updateVideoIdeaAction,
   deleteVideoIdeaAction,
 } from "../lib/video-idea-actions";
-import type { VideoIdea } from "../lib/types";
+import type { VideoIdea, ContentTheme } from "../lib/types";
 
 type Client = { id: string; name: string };
 
+const CATEGORIES = [
+  { value: "reel", label: "Reel" },
+  { value: "carousel", label: "Carousel" },
+  { value: "story", label: "Story" },
+  { value: "post", label: "Post" },
+  { value: "general", label: "General" },
+];
+
+function categoryColor(cat: string): { bg: string; text: string } {
+  const map: Record<string, { bg: string; text: string }> = {
+    reel: { bg: "#ede9fe", text: "#5b21b6" },
+    carousel: { bg: "#dbeafe", text: "#1e40af" },
+    story: { bg: "#fef9c3", text: "#854d0e" },
+    post: { bg: "#dcfce7", text: "#166534" },
+    general: { bg: "#f3f4f6", text: "#374151" },
+  };
+  return map[cat] ?? map.general;
+}
+
 export default function VideoIdeasBoard({
   clients,
+  themes,
   ideas,
-  months,
 }: {
   clients: Client[];
+  themes: ContentTheme[];
   ideas: VideoIdea[];
-  months: { key: string; label: string }[];
 }) {
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id ?? "");
-  const [selectedMonth, setSelectedMonth] = useState(months[0]?.key ?? "");
 
-  const filteredIdeas = ideas.filter(
-    (i) => i.clientId === selectedClient && i.month === selectedMonth
+  const clientThemes = themes
+    .filter((t) => t.clientId === selectedClient)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const clientIdeas = ideas.filter((i) => i.clientId === selectedClient);
+  const unlinkedIdeas = clientIdeas.filter(
+    (i) => !i.themeId || !clientThemes.some((t) => t.id === i.themeId)
   );
 
-  // Build summary: client -> month -> count
-  const summaryMap = new Map<string, Map<string, number>>();
-  for (const idea of ideas) {
-    if (!months.some((m) => m.key === idea.month)) continue;
-    if (!summaryMap.has(idea.clientId)) summaryMap.set(idea.clientId, new Map());
-    const monthMap = summaryMap.get(idea.clientId)!;
-    monthMap.set(idea.month, (monthMap.get(idea.month) ?? 0) + 1);
+  // Summary for "at a glance"
+  const summaryMap = new Map<string, { themes: number; ideas: number }>();
+  for (const client of clients) {
+    const ct = themes.filter((t) => t.clientId === client.id).length;
+    const ci = ideas.filter((i) => i.clientId === client.id).length;
+    summaryMap.set(client.id, { themes: ct, ideas: ci });
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Summary grid */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #e4e4e7",
-          borderRadius: 12,
-          padding: 20,
-        }}
-      >
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: "0 0 16px" }}>
-          Ideas at a Glance
-        </h2>
+      {/* At a glance */}
+      <div style={cardStyle}>
+        <h2 style={sectionTitleStyle}>At a Glance</h2>
         <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              fontSize: 14,
-            }}
-          >
+          <table style={tableStyle}>
             <thead>
               <tr>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: "10px 14px",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    color: "#71717a",
-                    borderBottom: "2px solid #e4e4e7",
-                  }}
-                >
-                  Client
-                </th>
-                {months.map((m) => (
-                  <th
-                    key={m.key}
-                    style={{
-                      textAlign: "center",
-                      padding: "10px 14px",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      color: "#71717a",
-                      borderBottom: "2px solid #e4e4e7",
-                    }}
-                  >
-                    {m.label}
-                  </th>
-                ))}
-                <th
-                  style={{
-                    textAlign: "center",
-                    padding: "10px 14px",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    color: "#71717a",
-                    borderBottom: "2px solid #e4e4e7",
-                  }}
-                >
-                  Total
-                </th>
+                <th style={thStyle}>Client</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Ideas</th>
               </tr>
             </thead>
             <tbody>
               {clients.map((client, idx) => {
-                const monthMap = summaryMap.get(client.id);
-                const total = months.reduce(
-                  (sum, m) => sum + (monthMap?.get(m.key) ?? 0),
-                  0
-                );
+                const summary = summaryMap.get(client.id);
                 return (
                   <tr
                     key={client.id}
@@ -119,11 +88,8 @@ export default function VideoIdeasBoard({
                   >
                     <td
                       style={{
-                        padding: "12px 14px",
+                        ...tdStyle,
                         fontWeight: 500,
-                        color:
-                          selectedClient === client.id ? "#18181b" : "#52525b",
-                        borderBottom: "1px solid #f4f4f5",
                         borderLeft:
                           selectedClient === client.id
                             ? "3px solid #18181b"
@@ -132,55 +98,11 @@ export default function VideoIdeasBoard({
                     >
                       {client.name}
                     </td>
-                    {months.map((m) => {
-                      const count = monthMap?.get(m.key) ?? 0;
-                      return (
-                        <td
-                          key={m.key}
-                          style={{
-                            textAlign: "center",
-                            padding: "12px 14px",
-                            borderBottom: "1px solid #f4f4f5",
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedClient(client.id);
-                            setSelectedMonth(m.key);
-                          }}
-                        >
-                          {count > 0 ? (
-                            <span
-                              style={{
-                                display: "inline-block",
-                                minWidth: 28,
-                                padding: "3px 8px",
-                                borderRadius: 999,
-                                fontSize: 13,
-                                fontWeight: 600,
-                                background: "#dcfce7",
-                                color: "#166534",
-                              }}
-                            >
-                              {count}
-                            </span>
-                          ) : (
-                            <span style={{ color: "#d4d4d8", fontSize: 13 }}>
-                              0
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td
-                      style={{
-                        textAlign: "center",
-                        padding: "12px 14px",
-                        fontWeight: 600,
-                        borderBottom: "1px solid #f4f4f5",
-                        color: total > 0 ? "#18181b" : "#d4d4d8",
-                      }}
-                    >
-                      {total}
+                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                      <CountBadge count={summary?.themes ?? 0} />
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                      <CountBadge count={summary?.ideas ?? 0} />
                     </td>
                   </tr>
                 );
@@ -190,15 +112,8 @@ export default function VideoIdeasBoard({
         </div>
       </div>
 
-      {/* Idea management area */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #e4e4e7",
-          borderRadius: 12,
-          padding: 20,
-        }}
-      >
+      {/* Client strategy editor */}
+      <div style={cardStyle}>
         <div
           style={{
             display: "flex",
@@ -209,60 +124,61 @@ export default function VideoIdeasBoard({
             marginBottom: 20,
           }}
         >
-          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-            Manage Ideas
+          <h2 style={sectionTitleStyle}>
+            Content Strategy
           </h2>
-          <div style={{ display: "flex", gap: 10 }}>
-            <select
-              value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              style={selectStyle}
-            >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              style={selectStyle}
-            >
-              {months.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedClient}
+            onChange={(e) => setSelectedClient(e.target.value)}
+            style={selectStyle}
+          >
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <AddIdeaForm clientId={selectedClient} month={selectedMonth} />
+        <AddThemeForm
+          clientId={selectedClient}
+          nextSort={clientThemes.length}
+        />
 
-        {filteredIdeas.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "32px 20px",
-              color: "#a1a1aa",
-              fontSize: 14,
-            }}
-          >
-            No ideas yet for this client and month. Add one above.
+        {clientThemes.length === 0 && unlinkedIdeas.length === 0 ? (
+          <div style={emptyStyle}>
+            No content strategy yet for this client. Add a theme above to get started.
           </div>
         ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              marginTop: 16,
-            }}
-          >
-            {filteredIdeas.map((idea) => (
-              <IdeaRow key={idea.id} idea={idea} />
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 20 }}>
+            {clientThemes.map((theme) => {
+              const themeIdeas = clientIdeas.filter(
+                (i) => i.themeId === theme.id
+              );
+              return (
+                <ThemeBlock
+                  key={theme.id}
+                  theme={theme}
+                  ideas={themeIdeas}
+                  clientId={selectedClient}
+                />
+              );
+            })}
+
+            {unlinkedIdeas.length > 0 && (
+              <div style={themeBlockStyle}>
+                <div style={{ marginBottom: 12 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#71717a" }}>
+                    Unlinked Ideas
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {unlinkedIdeas.map((idea) => (
+                    <IdeaRow key={idea.id} idea={idea} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -270,76 +186,251 @@ export default function VideoIdeasBoard({
   );
 }
 
-function AddIdeaForm({
+// ── Theme block ──
+
+function ThemeBlock({
+  theme,
+  ideas,
   clientId,
-  month,
+}: {
+  theme: ContentTheme;
+  ideas: VideoIdea[];
+  clientId: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [monthLabel, setMonthLabel] = useState(theme.monthLabel);
+  const [themeName, setThemeName] = useState(theme.theme);
+  const [goal, setGoal] = useState(theme.goal);
+  const [isPending, startTransition] = useTransition();
+
+  function handleSave() {
+    startTransition(async () => {
+      await updateThemeAction(theme.id, monthLabel, themeName, goal);
+      setIsEditing(false);
+    });
+  }
+
+  function handleDelete() {
+    if (!confirm("Delete this theme and all its ideas?")) return;
+    startTransition(async () => {
+      await deleteThemeAction(theme.id);
+    });
+  }
+
+  return (
+    <div style={themeBlockStyle}>
+      {isEditing ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              value={monthLabel}
+              onChange={(e) => setMonthLabel(e.target.value)}
+              placeholder="e.g. Month 1-2"
+              style={{ ...inputStyle, flex: "0 0 140px" }}
+            />
+            <input
+              value={themeName}
+              onChange={(e) => setThemeName(e.target.value)}
+              placeholder="Theme name"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+          </div>
+          <input
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="Goal"
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button
+              onClick={() => {
+                setMonthLabel(theme.monthLabel);
+                setThemeName(theme.theme);
+                setGoal(theme.goal);
+                setIsEditing(false);
+              }}
+              style={btnStyle("#f3f4f6", "#374151")}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {theme.monthLabel && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    background: "#18181b",
+                    color: "#fff",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {theme.monthLabel}
+                </span>
+              )}
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+                {theme.theme}
+              </span>
+            </div>
+            {theme.goal && (
+              <div style={{ fontSize: 13, color: "#71717a", marginTop: 4 }}>
+                Goal: {theme.goal}
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>
+              Edit
+            </button>
+            <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
+              {isPending ? "..." : "Delete"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {ideas.map((idea) => (
+          <IdeaRow key={idea.id} idea={idea} />
+        ))}
+      </div>
+
+      <AddIdeaForm clientId={clientId} themeId={theme.id} />
+    </div>
+  );
+}
+
+// ── Add theme form ──
+
+function AddThemeForm({
+  clientId,
+  nextSort,
 }: {
   clientId: string;
-  month: string;
+  nextSort: number;
 }) {
-  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [monthLabel, setMonthLabel] = useState("");
+  const [theme, setTheme] = useState("");
+  const [goal, setGoal] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!text.trim()) return;
+    if (!theme.trim()) return;
     startTransition(async () => {
-      await addVideoIdeaAction(clientId, month, text);
-      setText("");
+      await addThemeAction(clientId, monthLabel, theme, goal, nextSort);
+      setMonthLabel("");
+      setTheme("");
+      setGoal("");
+      setOpen(false);
     });
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          width: "100%",
+          padding: "12px 16px",
+          fontSize: 14,
+          fontWeight: 500,
+          border: "2px dashed #e4e4e7",
+          borderRadius: 10,
+          background: "transparent",
+          color: "#71717a",
+          cursor: "pointer",
+        }}
+      >
+        + Add Theme Block
+      </button>
+    );
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: "flex", gap: 10, alignItems: "center" }}
+      style={{
+        padding: 16,
+        background: "#fafafa",
+        borderRadius: 10,
+        border: "1px solid #e4e4e7",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
     >
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 4 }}>
+        New Theme Block
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={monthLabel}
+          onChange={(e) => setMonthLabel(e.target.value)}
+          placeholder="e.g. Month 1-2, Recurring, etc."
+          style={{ ...inputStyle, flex: "0 0 200px" }}
+        />
+        <input
+          value={theme}
+          onChange={(e) => setTheme(e.target.value)}
+          placeholder="Theme name (e.g. DESIRE & DISCOVERY)"
+          required
+          style={{ ...inputStyle, flex: 1 }}
+        />
+      </div>
       <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add a new video idea..."
-        style={{
-          flex: 1,
-          padding: "10px 12px",
-          fontSize: 14,
-          border: "1px solid #e4e4e7",
-          borderRadius: 8,
-          background: "#fff",
-          color: "#18181b",
-          outline: "none",
-        }}
+        value={goal}
+        onChange={(e) => setGoal(e.target.value)}
+        placeholder="Goal (e.g. Make people fall in love)"
+        style={inputStyle}
       />
-      <button
-        type="submit"
-        disabled={isPending || !text.trim()}
-        style={{
-          padding: "10px 18px",
-          fontSize: 13,
-          fontWeight: 600,
-          border: "none",
-          borderRadius: 8,
-          background: "#18181b",
-          color: "#fff",
-          cursor: isPending ? "wait" : "pointer",
-          opacity: isPending || !text.trim() ? 0.5 : 1,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {isPending ? "Adding..." : "Add Idea"}
-      </button>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="submit"
+          disabled={isPending || !theme.trim()}
+          style={{
+            ...btnStyle("#18181b", "#fff"),
+            opacity: isPending || !theme.trim() ? 0.5 : 1,
+          }}
+        >
+          {isPending ? "Adding..." : "Add Theme"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          style={btnStyle("#f3f4f6", "#374151")}
+        >
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
 
+// ── Idea row ──
+
 function IdeaRow({ idea }: { idea: VideoIdea }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(idea.idea);
+  const [editCategory, setEditCategory] = useState(idea.category);
   const [isPending, startTransition] = useTransition();
+
+  const colors = categoryColor(idea.category);
 
   function handleSave() {
     if (!editText.trim()) return;
     startTransition(async () => {
-      await updateVideoIdeaAction(idea.id, editText);
+      await updateVideoIdeaAction(idea.id, editText, editCategory);
       setIsEditing(false);
     });
   }
@@ -352,51 +443,30 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
 
   if (isEditing) {
     return (
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          padding: "10px 14px",
-          background: "#fafafa",
-          borderRadius: 8,
-          border: "1px solid #e4e4e7",
-        }}
-      >
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7" }}>
+        <select
+          value={editCategory}
+          onChange={(e) => setEditCategory(e.target.value)}
+          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
         <input
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") {
-              setEditText(idea.idea);
-              setIsEditing(false);
-            }
+            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setIsEditing(false); }
           }}
-          style={{
-            flex: 1,
-            padding: "8px 10px",
-            fontSize: 14,
-            border: "1px solid #e4e4e7",
-            borderRadius: 6,
-            outline: "none",
-          }}
+          style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
         />
-        <button
-          onClick={handleSave}
-          disabled={isPending || !editText.trim()}
-          style={actionBtnStyle("#dcfce7", "#166534")}
-        >
+        <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
           {isPending ? "..." : "Save"}
         </button>
-        <button
-          onClick={() => {
-            setEditText(idea.idea);
-            setIsEditing(false);
-          }}
-          style={actionBtnStyle("#f3f4f6", "#374151")}
-        >
+        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
           Cancel
         </button>
       </div>
@@ -404,42 +474,163 @@ function IdeaRow({ idea }: { idea: VideoIdea }) {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center",
-        padding: "12px 14px",
-        background: "#fafafa",
-        borderRadius: 8,
-        border: "1px solid #f4f4f5",
-      }}
-    >
+    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "#fff", border: "1px solid #f4f4f5" }}>
       <span
         style={{
-          flex: 1,
-          fontSize: 14,
-          color: "#18181b",
+          fontSize: 11,
+          fontWeight: 600,
+          padding: "2px 8px",
+          borderRadius: 999,
+          background: colors.bg,
+          color: colors.text,
+          whiteSpace: "nowrap",
         }}
       >
+        {idea.category}
+      </span>
+      <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
         {idea.idea}
       </span>
-      <button
-        onClick={() => setIsEditing(true)}
-        style={actionBtnStyle("#dbeafe", "#1e40af")}
-      >
-        Edit
-      </button>
-      <button
-        onClick={handleDelete}
-        disabled={isPending}
-        style={actionBtnStyle("#fee2e2", "#991b1b")}
-      >
+      <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
+      <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
         {isPending ? "..." : "Delete"}
       </button>
     </div>
   );
 }
+
+// ── Add idea form ──
+
+function AddIdeaForm({
+  clientId,
+  themeId,
+}: {
+  clientId: string;
+  themeId: string | null;
+}) {
+  const [text, setText] = useState("");
+  const [category, setCategory] = useState("reel");
+  const [isPending, startTransition] = useTransition();
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    startTransition(async () => {
+      await addVideoIdeaAction(clientId, themeId, text, category);
+      setText("");
+    });
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}
+    >
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+      >
+        {CATEGORIES.map((c) => (
+          <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+      </select>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Add an idea..."
+        style={{ ...inputStyle, flex: 1 }}
+      />
+      <button
+        type="submit"
+        disabled={isPending || !text.trim()}
+        style={{
+          ...btnStyle("#18181b", "#fff"),
+          padding: "8px 16px",
+          opacity: isPending || !text.trim() ? 0.5 : 1,
+        }}
+      >
+        {isPending ? "..." : "Add"}
+      </button>
+    </form>
+  );
+}
+
+// ── Small helpers ──
+
+function CountBadge({ count }: { count: number }) {
+  return count > 0 ? (
+    <span
+      style={{
+        display: "inline-block",
+        minWidth: 26,
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 13,
+        fontWeight: 600,
+        background: "#dcfce7",
+        color: "#166534",
+      }}
+    >
+      {count}
+    </span>
+  ) : (
+    <span style={{ color: "#d4d4d8", fontSize: 13 }}>0</span>
+  );
+}
+
+// ── Shared styles ──
+
+const cardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 12,
+  padding: 20,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 600,
+  margin: "0 0 16px",
+};
+
+const themeBlockStyle: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 10,
+  border: "1px solid #e4e4e7",
+  background: "#fafafa",
+};
+
+const tableStyle: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "separate",
+  borderSpacing: 0,
+  fontSize: 14,
+};
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "10px 14px",
+  fontWeight: 600,
+  fontSize: 13,
+  color: "#71717a",
+  borderBottom: "2px solid #e4e4e7",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderBottom: "1px solid #f4f4f5",
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 14,
+  border: "1px solid #e4e4e7",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#18181b",
+  outline: "none",
+};
 
 const selectStyle: React.CSSProperties = {
   appearance: "none",
@@ -458,10 +649,15 @@ const selectStyle: React.CSSProperties = {
   outline: "none",
 };
 
-function actionBtnStyle(
-  bg: string,
-  color: string
-): React.CSSProperties {
+const emptyStyle: React.CSSProperties = {
+  textAlign: "center",
+  padding: "32px 20px",
+  color: "#a1a1aa",
+  fontSize: 14,
+  marginTop: 16,
+};
+
+function btnStyle(bg: string, color: string): React.CSSProperties {
   return {
     padding: "6px 12px",
     fontSize: 12,

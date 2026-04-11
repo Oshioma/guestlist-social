@@ -4,38 +4,14 @@ import VideoIdeasBoard from "./VideoIdeasBoard";
 
 export const dynamic = "force-dynamic";
 
-function getNextTwoMonths(): { key: string; label: string }[] {
-  const now = new Date();
-  const months: { key: string; label: string }[] = [];
-
-  for (let i = 0; i < 2; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const label = d.toLocaleDateString("en-GB", {
-      month: "long",
-      year: "numeric",
-    });
-    months.push({ key, label });
-  }
-
-  return months;
-}
-
 export default async function VideoIdeasPage() {
-  const months = getNextTwoMonths();
-
   try {
-    const { clients, ideas } = await getVideoIdeasData();
+    const { clients, themes, ideas } = await getVideoIdeasData();
 
-    const totalIdeas = ideas.filter((i) =>
-      months.some((m) => m.key === i.month)
-    ).length;
-
-    const clientsWithIdeas = new Set(
-      ideas
-        .filter((i) => months.some((m) => m.key === i.month))
-        .map((i) => i.clientId)
-    ).size;
+    const clientsWithContent = new Set([
+      ...themes.map((t) => t.clientId),
+      ...ideas.map((i) => i.clientId),
+    ]).size;
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -58,7 +34,7 @@ export default async function VideoIdeasPage() {
               color: "#71717a",
             }}
           >
-            Plan and manage video content ideas for each client by month.
+            Plan content strategy with monthly themes, goals, and categorized ideas for each client.
           </p>
         </div>
 
@@ -69,15 +45,16 @@ export default async function VideoIdeasPage() {
             gap: 12,
           }}
         >
-          <StatBox label="Total Ideas" value={String(totalIdeas)} />
-          <StatBox label="Clients with Ideas" value={String(clientsWithIdeas)} />
+          <StatBox label="Themes" value={String(themes.length)} />
+          <StatBox label="Total Ideas" value={String(ideas.length)} />
+          <StatBox label="Clients with Strategy" value={String(clientsWithContent)} />
           <StatBox
-            label="Clients without Ideas"
-            value={String(clients.length - clientsWithIdeas)}
+            label="Clients without Strategy"
+            value={String(Math.max(0, clients.length - clientsWithContent))}
           />
         </div>
 
-        <VideoIdeasBoard clients={clients} ideas={ideas} months={months} />
+        <VideoIdeasBoard clients={clients} themes={themes} ideas={ideas} />
       </div>
     );
   } catch (error) {

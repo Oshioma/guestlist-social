@@ -29,15 +29,8 @@ export default async function ContentDashboardPage() {
   try {
     const [{ clients, progress }, ideasData] = await Promise.all([
       getContentDashboardData(),
-      getVideoIdeasData().catch(() => ({ clients: [], ideas: [] })),
+      getVideoIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
     ]);
-
-    const ideasByClient = new Map<string, number>();
-    for (const idea of ideasData.ideas) {
-      if (months.some((m) => m.key === idea.month)) {
-        ideasByClient.set(idea.clientId, (ideasByClient.get(idea.clientId) ?? 0) + 1);
-      }
-    }
 
     const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
     const relevantProgress = progress.filter((p) =>
@@ -163,21 +156,17 @@ export default async function ContentDashboardPage() {
                 <thead>
                   <tr>
                     <th style={thStyle}>Client</th>
-                    {months.map((m) => (
-                      <th key={m.key} style={{ ...thStyle, textAlign: "center" }}>
-                        {m.label}
-                      </th>
-                    ))}
-                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                    <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
+                    <th style={{ ...thStyle, textAlign: "center" }}>Ideas</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clients.map((client, idx) => {
-                    const clientIdeas = ideasData.ideas.filter(
+                    const themeCount = ideasData.themes.filter(
+                      (t) => t.clientId === client.id
+                    ).length;
+                    const ideaCount = ideasData.ideas.filter(
                       (i) => i.clientId === client.id
-                    );
-                    const total = clientIdeas.filter((i) =>
-                      months.some((m) => m.key === i.month)
                     ).length;
                     return (
                       <tr
@@ -185,42 +174,19 @@ export default async function ContentDashboardPage() {
                         style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}
                       >
                         <td style={tdStyle}>{client.name}</td>
-                        {months.map((m) => {
-                          const count = clientIdeas.filter(
-                            (i) => i.month === m.key
-                          ).length;
-                          return (
-                            <td key={m.key} style={{ ...tdStyle, textAlign: "center" }}>
-                              {count > 0 ? (
-                                <span
-                                  style={{
-                                    display: "inline-block",
-                                    minWidth: 26,
-                                    padding: "2px 8px",
-                                    borderRadius: 999,
-                                    fontSize: 13,
-                                    fontWeight: 600,
-                                    background: "#dcfce7",
-                                    color: "#166534",
-                                  }}
-                                >
-                                  {count}
-                                </span>
-                              ) : (
-                                <span style={{ color: "#d4d4d8" }}>0</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td
-                          style={{
-                            ...tdStyle,
-                            textAlign: "center",
-                            fontWeight: 600,
-                            color: total > 0 ? "#18181b" : "#d4d4d8",
-                          }}
-                        >
-                          {total}
+                        <td style={{ ...tdStyle, textAlign: "center" }}>
+                          {themeCount > 0 ? (
+                            <span style={badgeGreen}>{themeCount}</span>
+                          ) : (
+                            <span style={{ color: "#d4d4d8" }}>0</span>
+                          )}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "center" }}>
+                          {ideaCount > 0 ? (
+                            <span style={badgeGreen}>{ideaCount}</span>
+                          ) : (
+                            <span style={{ color: "#d4d4d8" }}>0</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -242,6 +208,17 @@ export default async function ContentDashboardPage() {
     );
   }
 }
+
+const badgeGreen: React.CSSProperties = {
+  display: "inline-block",
+  minWidth: 26,
+  padding: "2px 8px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 600,
+  background: "#dcfce7",
+  color: "#166534",
+};
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",

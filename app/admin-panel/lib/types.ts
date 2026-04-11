@@ -97,7 +97,17 @@ export type ContentProgress = {
 export type VideoIdea = {
   id: string;
   clientId: string;
-  month: string;
+  themeId: string | null;
   idea: string;
+  category: string;
   createdAt: string;
+};
+
+export type ContentTheme = {
+  id: string;
+  clientId: string;
+  monthLabel: string;
+  theme: string;
+  goal: string;
+  sortOrder: number;
 };
