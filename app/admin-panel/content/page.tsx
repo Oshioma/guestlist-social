@@ -125,20 +125,20 @@ export default async function ContentDashboardPage() {
         <SectionCard
           title="Video Ideas"
           action={
-            <Link
-              href="/app/video-ideas"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#18181b",
-                background: "#f4f4f5",
-                padding: "6px 12px",
-                borderRadius: 999,
-                textDecoration: "none",
-              }}
-            >
-              Manage Ideas
-            </Link>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Link
+                href="/app/video-ideas"
+                style={actionLinkStyle("#18181b", "#fff")}
+              >
+                + Add Idea
+              </Link>
+              <Link
+                href="/app/video-ideas"
+                style={actionLinkStyle("#f4f4f5", "#18181b")}
+              >
+                Manage Ideas
+              </Link>
+            </div>
           }
         >
           {clients.length === 0 ? (
@@ -241,20 +241,20 @@ export default async function ContentDashboardPage() {
         <SectionCard
           title="Carousel Ideas"
           action={
-            <Link
-              href="/app/carousel-ideas"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#18181b",
-                background: "#f4f4f5",
-                padding: "6px 12px",
-                borderRadius: 999,
-                textDecoration: "none",
-              }}
-            >
-              Manage Ideas
-            </Link>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Link
+                href="/app/carousel-ideas"
+                style={actionLinkStyle("#18181b", "#fff")}
+              >
+                + Add Idea
+              </Link>
+              <Link
+                href="/app/carousel-ideas"
+                style={actionLinkStyle("#f4f4f5", "#18181b")}
+              >
+                Manage Ideas
+              </Link>
+            </div>
           }
         >
           {clients.length === 0 ? (
@@ -287,15 +287,10 @@ export default async function ContentDashboardPage() {
                 </thead>
                 <tbody>
                   {clients.map((client, idx) => {
-                    const clientThemes = carouselData.themes.filter(
-                      (t) => t.clientId === client.id
+                    const clientIdeas = carouselData.ideas.filter(
+                      (i) => i.clientId === client.id
                     );
-                    const clientIdeaIds = new Set(
-                      carouselData.ideas
-                        .filter((i) => i.clientId === client.id)
-                        .map((i) => i.id)
-                    );
-                    const total = clientIdeaIds.size;
+                    const total = clientIdeas.length;
 
                     return (
                       <tr
@@ -305,27 +300,17 @@ export default async function ContentDashboardPage() {
                         }}
                       >
                         <td style={tdStyle}>{client.name}</td>
-                        {months.map((m, mIdx) => {
-                          const pairIndex = Math.floor(mIdx / 2);
-                          const pairLabel = `${pairIndex * 2 + 1}-${pairIndex * 2 + 2}`;
-                          const matchingThemes = clientThemes.filter((t) =>
-                            t.monthLabel.includes(pairLabel)
-                          );
-                          const count = matchingThemes.reduce(
-                            (sum, t) =>
-                              sum +
-                              carouselData.ideas.filter((i) => i.themeId === t.id)
-                                .length,
-                            0
-                          );
-                          const display = mIdx % 2 === 0 ? count : 0;
+                        {months.map((m) => {
+                          const count = clientIdeas.filter(
+                            (i) => i.month === m.key
+                          ).length;
                           return (
                             <td
                               key={m.key}
                               style={{ ...tdStyle, textAlign: "center" }}
                             >
-                              {display > 0 ? (
-                                <span style={badgeBlue}>{display}</span>
+                              {count > 0 ? (
+                                <span style={badgeBlue}>{count}</span>
                               ) : (
                                 <span style={{ color: "#d4d4d8" }}>0</span>
                               )}
@@ -354,20 +339,20 @@ export default async function ContentDashboardPage() {
         <SectionCard
           title="Story Ideas"
           action={
-            <Link
-              href="/app/story-ideas"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#18181b",
-                background: "#f4f4f5",
-                padding: "6px 12px",
-                borderRadius: 999,
-                textDecoration: "none",
-              }}
-            >
-              Manage Ideas
-            </Link>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Link
+                href="/app/story-ideas"
+                style={actionLinkStyle("#18181b", "#fff")}
+              >
+                + Add Idea
+              </Link>
+              <Link
+                href="/app/story-ideas"
+                style={actionLinkStyle("#f4f4f5", "#18181b")}
+              >
+                Manage Ideas
+              </Link>
+            </div>
           }
         >
           {clients.length === 0 ? (
@@ -400,15 +385,10 @@ export default async function ContentDashboardPage() {
                 </thead>
                 <tbody>
                   {clients.map((client, idx) => {
-                    const clientThemes = storyData.themes.filter(
-                      (t) => t.clientId === client.id
+                    const clientIdeas = storyData.ideas.filter(
+                      (i) => i.clientId === client.id
                     );
-                    const clientIdeaIds = new Set(
-                      storyData.ideas
-                        .filter((i) => i.clientId === client.id)
-                        .map((i) => i.id)
-                    );
-                    const total = clientIdeaIds.size;
+                    const total = clientIdeas.length;
 
                     return (
                       <tr
@@ -418,27 +398,17 @@ export default async function ContentDashboardPage() {
                         }}
                       >
                         <td style={tdStyle}>{client.name}</td>
-                        {months.map((m, mIdx) => {
-                          const pairIndex = Math.floor(mIdx / 2);
-                          const pairLabel = `${pairIndex * 2 + 1}-${pairIndex * 2 + 2}`;
-                          const matchingThemes = clientThemes.filter((t) =>
-                            t.monthLabel.includes(pairLabel)
-                          );
-                          const count = matchingThemes.reduce(
-                            (sum, t) =>
-                              sum +
-                              storyData.ideas.filter((i) => i.themeId === t.id)
-                                .length,
-                            0
-                          );
-                          const display = mIdx % 2 === 0 ? count : 0;
+                        {months.map((m) => {
+                          const count = clientIdeas.filter(
+                            (i) => i.month === m.key
+                          ).length;
                           return (
                             <td
                               key={m.key}
                               style={{ ...tdStyle, textAlign: "center" }}
                             >
-                              {display > 0 ? (
-                                <span style={badgeYellow}>{display}</span>
+                              {count > 0 ? (
+                                <span style={badgeYellow}>{count}</span>
                               ) : (
                                 <span style={{ color: "#d4d4d8" }}>0</span>
                               )}
@@ -474,6 +444,19 @@ export default async function ContentDashboardPage() {
       />
     );
   }
+}
+
+function actionLinkStyle(bg: string, color: string): React.CSSProperties {
+  return {
+    fontSize: 12,
+    fontWeight: 600,
+    color,
+    background: bg,
+    padding: "6px 12px",
+    borderRadius: 999,
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+  };
 }
 
 const badgeGreen: React.CSSProperties = {

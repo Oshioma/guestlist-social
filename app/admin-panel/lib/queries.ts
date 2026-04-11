@@ -180,6 +180,8 @@ export async function getCarouselIdeasData(): Promise<{
     themeId: row.theme_id ?? null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
+    month: row.month ?? "",
+    createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 
@@ -234,6 +236,8 @@ export async function getStoryIdeasData(): Promise<{
     themeId: row.theme_id ?? null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
+    month: row.month ?? "",
+    createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 

@@ -119,6 +119,8 @@ export type CarouselIdea = {
   themeId: string | null;
   idea: string;
   category: string;
+  month: string;
+  createdBy: string;
   createdAt: string;
 };
 
@@ -138,6 +140,8 @@ export type StoryIdea = {
   themeId: string | null;
   idea: string;
   category: string;
+  month: string;
+  createdBy: string;
   createdAt: string;
 };
 
