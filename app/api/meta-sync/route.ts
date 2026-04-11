@@ -21,8 +21,8 @@ import {
  * - preserves any existing manual client assignment
  * - stores which Meta ad account the data came from
  *
- * Optional query params:
- *   range=last_year | last_30d | last_7d etc. (only used for insights if your meta helpers support it)
+ * Query params:
+ *   range — optional, default "last_year"
  *
  * Important:
  * - New campaigns are created with client_id = null
@@ -42,11 +42,13 @@ export async function GET(request: Request) {
     // 0. Verify Meta account and capture account identity
     // ---------------------------------------------------------------
     const adAccount = await getAdAccount();
+
     const metaAdAccountId = adAccount?.id
       ? String(adAccount.id).startsWith("act_")
         ? String(adAccount.id)
         : `act_${adAccount.id}`
       : null;
+
     const metaAdAccountName = adAccount?.name ?? null;
 
     log.push(
@@ -59,7 +61,6 @@ export async function GET(request: Request) {
     const metaCampaigns = await getCampaigns();
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
 
-    // Existing campaigns by meta_id across ALL clients
     const existingCampaignMetaIds = metaCampaigns
       .map((c) => c.id)
       .filter(Boolean);
@@ -83,28 +84,29 @@ export async function GET(request: Request) {
       }
 
       for (const row of existingCampaigns ?? []) {
-        if (row.meta_id) {
-          existingCampaignsByMetaId.set(String(row.meta_id), {
-            id: Number(row.id),
-            client_id:
-              row.client_id === null || row.client_id === undefined
-                ? null
-                : Number(row.client_id),
-          });
-        }
+        if (!row.meta_id) continue;
+
+        existingCampaignsByMetaId.set(String(row.meta_id), {
+          id: Number(row.id),
+          client_id:
+            row.client_id === null || row.client_id === undefined
+              ? null
+              : Number(row.client_id),
+        });
       }
     }
 
     const campaignMap = new Map<
       string,
       { id: number; client_id: number | null }
-    >(); // meta campaign id -> supabase campaign info
+    >();
 
     let campaignsCreated = 0;
     let campaignsUpdated = 0;
 
     for (const mc of metaCampaigns) {
-      const budget = Number(mc.daily_budget ?? mc.lifetime_budget ?? 0) / 100;
+      const budget =
+        Number(mc.daily_budget ?? mc.lifetime_budget ?? 0) / 100;
 
       const existing = existingCampaignsByMetaId.get(String(mc.id));
 
@@ -125,19 +127,22 @@ export async function GET(request: Request) {
           .eq("id", existing.id);
 
         if (updateError) {
-          throw new Error(`Failed updating campaign ${mc.name}: ${updateError.message}`);
+          throw new Error(
+            `Failed updating campaign ${mc.name}: ${updateError.message}`
+          );
         }
 
         campaignMap.set(String(mc.id), {
           id: existing.id,
           client_id: existing.client_id,
         });
+
         campaignsUpdated++;
       } else {
         const { data: newCampaign, error: insertError } = await supabase
           .from("campaigns")
           .insert({
-            client_id: null, // intentionally unassigned on first import
+            client_id: null,
             meta_id: mc.id,
             ...campaignData,
           })
@@ -145,17 +150,21 @@ export async function GET(request: Request) {
           .single();
 
         if (insertError) {
-          throw new Error(`Failed creating campaign ${mc.name}: ${insertError.message}`);
+          throw new Error(
+            `Failed creating campaign ${mc.name}: ${insertError.message}`
+          );
         }
 
         if (newCampaign) {
           campaignMap.set(String(mc.id), {
             id: Number(newCampaign.id),
             client_id:
-              newCampaign.client_id === null || newCampaign.client_id === undefined
+              newCampaign.client_id === null ||
+              newCampaign.client_id === undefined
                 ? null
                 : Number(newCampaign.client_id),
           });
+
           campaignsCreated++;
         }
       }
@@ -177,7 +186,7 @@ export async function GET(request: Request) {
     }
 
     // ---------------------------------------------------------------
-    // 3. Ads + aggregated insights
+    // 3. Ads + Insights
     // ---------------------------------------------------------------
     const [metaAds, insights] = await Promise.all([
       getAds(),
@@ -189,7 +198,9 @@ export async function GET(request: Request) {
     );
 
     const insightByAdId = new Map(
-      insights.filter((i) => i.ad_id).map((i) => [String(i.ad_id), i])
+      insights
+        .filter((i) => i.ad_id)
+        .map((i) => [String(i.ad_id), i])
     );
 
     const existingAdMetaIds = metaAds.map((a) => a.id).filter(Boolean);
@@ -210,23 +221,25 @@ export async function GET(request: Request) {
         .in("meta_id", existingAdMetaIds);
 
       if (existingAdsError) {
-        throw new Error(`Failed loading existing ads: ${existingAdsError.message}`);
+        throw new Error(
+          `Failed loading existing ads: ${existingAdsError.message}`
+        );
       }
 
       for (const row of existingAds ?? []) {
-        if (row.meta_id) {
-          existingAdsByMetaId.set(String(row.meta_id), {
-            id: Number(row.id),
-            client_id:
-              row.client_id === null || row.client_id === undefined
-                ? null
-                : Number(row.client_id),
-            campaign_id:
-              row.campaign_id === null || row.campaign_id === undefined
-                ? null
-                : Number(row.campaign_id),
-          });
-        }
+        if (!row.meta_id) continue;
+
+        existingAdsByMetaId.set(String(row.meta_id), {
+          id: Number(row.id),
+          client_id:
+            row.client_id === null || row.client_id === undefined
+              ? null
+              : Number(row.client_id),
+          campaign_id:
+            row.campaign_id === null || row.campaign_id === undefined
+              ? null
+              : Number(row.campaign_id),
+        });
       }
     }
 
@@ -239,6 +252,7 @@ export async function GET(request: Request) {
       const inheritedClientId = campaignInfo?.client_id ?? null;
 
       const insight = insightByAdId.get(String(metaAd.id));
+
       const adData = insight
         ? insightToAdRow(insight)
         : {
@@ -255,7 +269,9 @@ export async function GET(request: Request) {
       const audience = adSetAudienceMap.get(String(metaAd.adset_id)) ?? null;
 
       const creativeHook = metaAd.creative
-        ? [metaAd.creative.title, metaAd.creative.body].filter(Boolean).join(" — ") || null
+        ? [metaAd.creative.title, metaAd.creative.body]
+            .filter(Boolean)
+            .join(" — ") || null
         : null;
 
       const existingAd = existingAdsByMetaId.get(String(metaAd.id));
@@ -277,15 +293,15 @@ export async function GET(request: Request) {
             creative_hook: creativeHook,
             meta_ad_account_id: metaAdAccountId,
             meta_ad_account_name: metaAdAccountName,
-            // preserve existing manual client assignment if already present
             client_id: existingAd.client_id ?? inheritedClientId ?? null,
-            // keep campaign linked if we know it
             campaign_id: linkedCampaignId ?? existingAd.campaign_id ?? null,
           })
           .eq("id", existingAd.id);
 
         if (updateError) {
-          throw new Error(`Failed updating ad ${metaAd.name}: ${updateError.message}`);
+          throw new Error(
+            `Failed updating ad ${metaAd.name}: ${updateError.message}`
+          );
         }
 
         adsUpdated++;
@@ -311,7 +327,9 @@ export async function GET(request: Request) {
         });
 
         if (insertError) {
-          throw new Error(`Failed creating ad ${metaAd.name}: ${insertError.message}`);
+          throw new Error(
+            `Failed creating ad ${metaAd.name}: ${insertError.message}`
+          );
         }
 
         adsCreated++;
@@ -334,14 +352,15 @@ export async function GET(request: Request) {
         `Fetched ${dailyInsights.length} daily insight rows for snapshots`
       );
 
-      // Load all ads for the current Meta ad account so snapshots inherit client/campaign when available
       const { data: allAds, error: allAdsError } = await supabase
         .from("ads")
         .select("id, meta_id, campaign_id, client_id, meta_ad_account_id")
         .eq("meta_ad_account_id", metaAdAccountId);
 
       if (allAdsError) {
-        throw new Error(`Failed loading ads for snapshots: ${allAdsError.message}`);
+        throw new Error(
+          `Failed loading ads for snapshots: ${allAdsError.message}`
+        );
       }
 
       const metaToSupabaseAd = new Map<
@@ -350,19 +369,19 @@ export async function GET(request: Request) {
       >();
 
       for (const ad of allAds ?? []) {
-        if (ad.meta_id) {
-          metaToSupabaseAd.set(String(ad.meta_id), {
-            id: Number(ad.id),
-            campaignId:
-              ad.campaign_id === null || ad.campaign_id === undefined
-                ? null
-                : Number(ad.campaign_id),
-            clientId:
-              ad.client_id === null || ad.client_id === undefined
-                ? null
-                : Number(ad.client_id),
-          });
-        }
+        if (!ad.meta_id) continue;
+
+        metaToSupabaseAd.set(String(ad.meta_id), {
+          id: Number(ad.id),
+          campaignId:
+            ad.campaign_id === null || ad.campaign_id === undefined
+              ? null
+              : Number(ad.campaign_id),
+          clientId:
+            ad.client_id === null || ad.client_id === undefined
+              ? null
+              : Number(ad.client_id),
+        });
       }
 
       for (const day of dailyInsights) {
@@ -434,7 +453,7 @@ export async function GET(request: Request) {
     }
 
     // ---------------------------------------------------------------
-    // 5. Summary counts for admin use
+    // 5. Summary
     // ---------------------------------------------------------------
     const { count: unassignedCampaigns } = await supabase
       .from("campaigns")
