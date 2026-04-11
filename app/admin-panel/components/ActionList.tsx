@@ -27,7 +27,6 @@ export default function ActionList({
     const currentlyDone = doneIds.has(id);
     const nextDone = !currentlyDone;
 
-    // optimistic UI
     setDoneIds((prev) => {
       const next = new Set(prev);
       if (nextDone) next.add(id);
@@ -53,7 +52,6 @@ export default function ActionList({
     });
 
     if (updateError) {
-      // rollback if save failed
       setDoneIds((prev) => {
         const next = new Set(prev);
         if (currentlyDone) next.add(id);
