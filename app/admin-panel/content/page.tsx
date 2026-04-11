@@ -28,11 +28,12 @@ export default async function ContentDashboardPage() {
   try {
     const { clients, progress } = await getContentDashboardData();
 
+    const allKeys = [...months.map((m) => m.key), "video", "images"];
     const relevantProgress = progress.filter((p) =>
-      months.some((m) => m.key === p.month)
+      allKeys.includes(p.month)
     );
 
-    const totalSlots = clients.length * months.length;
+    const totalSlots = clients.length * allKeys.length;
     const completedSlots = relevantProgress.filter(
       (p) => p.status === "complete"
     ).length;
@@ -107,7 +108,7 @@ export default async function ContentDashboardPage() {
           />
         </div>
 
-        <SectionCard title="Content Progress">
+        <SectionCard title="Progress">
           <ContentGrid
             clients={clients}
             progress={relevantProgress}

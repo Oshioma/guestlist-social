@@ -77,6 +77,11 @@ function StatusDropdown({
   );
 }
 
+const extraColumns = [
+  { key: "video", label: "Video" },
+  { key: "images", label: "Images" },
+];
+
 export default function ContentGrid({
   clients,
   progress,
@@ -86,9 +91,9 @@ export default function ContentGrid({
   progress: ContentProgress[];
   months: { key: string; label: string }[];
 }) {
-  function getStatus(clientId: string, month: string): ContentStatus {
+  function getStatus(clientId: string, key: string): ContentStatus {
     const entry = progress.find(
-      (p) => p.clientId === clientId && p.month === month
+      (p) => p.clientId === clientId && p.month === key
     );
     return entry?.status ?? "not_started";
   }
@@ -153,6 +158,23 @@ export default function ContentGrid({
                 {m.label}
               </th>
             ))}
+            {extraColumns.map((col) => (
+              <th
+                key={col.key}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 16px",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: "#71717a",
+                  borderBottom: "2px solid #e4e4e7",
+                  whiteSpace: "nowrap",
+                  minWidth: 160,
+                }}
+              >
+                {col.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -186,6 +208,21 @@ export default function ContentGrid({
                     clientId={client.id}
                     month={m.key}
                     current={getStatus(client.id, m.key)}
+                  />
+                </td>
+              ))}
+              {extraColumns.map((col) => (
+                <td
+                  key={col.key}
+                  style={{
+                    padding: "10px 16px",
+                    borderBottom: "1px solid #f4f4f5",
+                  }}
+                >
+                  <StatusDropdown
+                    clientId={client.id}
+                    month={col.key}
+                    current={getStatus(client.id, col.key)}
                   />
                 </td>
               ))}
