@@ -9,6 +9,7 @@ const navItems = [
   { label: "Content", href: "/app/content" },
   { label: "Video Ideas", href: "/app/video-ideas" },
   { label: "Carousel Ideas", href: "/app/carousel-ideas" },
+  { label: "Story Ideas", href: "/app/story-ideas" },
   { label: "Launch", href: "/app/launch" },
   { label: "Reports", href: "/app/reports" },
   { label: "Memory", href: "/app/memory" },

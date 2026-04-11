@@ -5,7 +5,7 @@ import {
   mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme } from "./types";
+import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme } from "./types";
 
 export async function getDashboardData(): Promise<{
   clients: Client[];
@@ -175,6 +175,60 @@ export async function getCarouselIdeasData(): Promise<{
   }));
 
   const ideas: CarouselIdea[] = (ideasRes.data ?? []).map((row) => ({
+    id: row.id,
+    clientId: row.client_id,
+    themeId: row.theme_id ?? null,
+    idea: row.idea ?? "",
+    category: row.category ?? "general",
+    createdAt: row.created_at ?? "",
+  }));
+
+  return { clients, themes, ideas };
+}
+
+export async function getStoryIdeasData(): Promise<{
+  clients: { id: string; name: string }[];
+  themes: StoryTheme[];
+  ideas: StoryIdea[];
+}> {
+  const supabase = await createClient();
+
+  const [clientsRes, themesRes, ideasRes] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+    supabase
+      .from("story_themes")
+      .select("*")
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("story_ideas")
+      .select("*")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
+  if (themesRes.error) throw new Error(`story_themes: ${themesRes.error.message}`);
+  if (ideasRes.error) throw new Error(`story_ideas: ${ideasRes.error.message}`);
+
+  const clients = (clientsRes.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name ?? "Untitled client",
+  }));
+
+  const themes: StoryTheme[] = (themesRes.data ?? []).map((row) => ({
+    id: row.id,
+    clientId: row.client_id,
+    monthLabel: row.month_label ?? "",
+    theme: row.theme ?? "",
+    goal: row.goal ?? "",
+    notes: row.notes ?? "",
+    sortOrder: row.sort_order ?? 0,
+  }));
+
+  const ideas: StoryIdea[] = (ideasRes.data ?? []).map((row) => ({
     id: row.id,
     clientId: row.client_id,
     themeId: row.theme_id ?? null,

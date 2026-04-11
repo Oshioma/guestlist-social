@@ -1,4 +1,4 @@
-import { getContentDashboardData, getVideoIdeasData, getCarouselIdeasData } from "../lib/queries";
+import { getContentDashboardData, getVideoIdeasData, getCarouselIdeasData, getStoryIdeasData } from "../lib/queries";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import ContentGrid from "./ContentGrid";
@@ -27,10 +27,11 @@ export default async function ContentDashboardPage() {
   const months = getNextFiveMonths();
 
   try {
-    const [{ clients, progress }, ideasData, carouselData] = await Promise.all([
+    const [{ clients, progress }, ideasData, carouselData, storyData] = await Promise.all([
       getContentDashboardData(),
       getVideoIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
       getCarouselIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
+      getStoryIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
     ]);
 
     const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
@@ -349,6 +350,119 @@ export default async function ContentDashboardPage() {
             </div>
           )}
         </SectionCard>
+
+        <SectionCard
+          title="Story Ideas"
+          action={
+            <Link
+              href="/app/story-ideas"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#18181b",
+                background: "#f4f4f5",
+                padding: "6px 12px",
+                borderRadius: 999,
+                textDecoration: "none",
+              }}
+            >
+              Manage Ideas
+            </Link>
+          }
+        >
+          {clients.length === 0 ? (
+            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
+              No clients yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
+                  fontSize: 14,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Client</th>
+                    {months.map((m) => (
+                      <th
+                        key={m.key}
+                        style={{ ...thStyle, textAlign: "center" }}
+                      >
+                        {m.label.split(" ")[0]}
+                      </th>
+                    ))}
+                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((client, idx) => {
+                    const clientThemes = storyData.themes.filter(
+                      (t) => t.clientId === client.id
+                    );
+                    const clientIdeaIds = new Set(
+                      storyData.ideas
+                        .filter((i) => i.clientId === client.id)
+                        .map((i) => i.id)
+                    );
+                    const total = clientIdeaIds.size;
+
+                    return (
+                      <tr
+                        key={client.id}
+                        style={{
+                          background: idx % 2 === 0 ? "#fff" : "#fafafa",
+                        }}
+                      >
+                        <td style={tdStyle}>{client.name}</td>
+                        {months.map((m, mIdx) => {
+                          const pairIndex = Math.floor(mIdx / 2);
+                          const pairLabel = `${pairIndex * 2 + 1}-${pairIndex * 2 + 2}`;
+                          const matchingThemes = clientThemes.filter((t) =>
+                            t.monthLabel.includes(pairLabel)
+                          );
+                          const count = matchingThemes.reduce(
+                            (sum, t) =>
+                              sum +
+                              storyData.ideas.filter((i) => i.themeId === t.id)
+                                .length,
+                            0
+                          );
+                          const display = mIdx % 2 === 0 ? count : 0;
+                          return (
+                            <td
+                              key={m.key}
+                              style={{ ...tdStyle, textAlign: "center" }}
+                            >
+                              {display > 0 ? (
+                                <span style={badgeYellow}>{display}</span>
+                              ) : (
+                                <span style={{ color: "#d4d4d8" }}>0</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td
+                          style={{
+                            ...tdStyle,
+                            textAlign: "center",
+                            fontWeight: 600,
+                            color: total > 0 ? "#18181b" : "#d4d4d8",
+                          }}
+                        >
+                          {total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
       </div>
     );
   } catch (error) {
@@ -382,6 +496,17 @@ const badgeBlue: React.CSSProperties = {
   fontWeight: 600,
   background: "#dbeafe",
   color: "#1e40af",
+};
+
+const badgeYellow: React.CSSProperties = {
+  display: "inline-block",
+  minWidth: 26,
+  padding: "2px 8px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: 600,
+  background: "#fef9c3",
+  color: "#854d0e",
 };
 
 const thStyle: React.CSSProperties = {

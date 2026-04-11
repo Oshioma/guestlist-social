@@ -131,3 +131,22 @@ export type CarouselTheme = {
   notes: string;
   sortOrder: number;
 };
+
+export type StoryIdea = {
+  id: string;
+  clientId: string;
+  themeId: string | null;
+  idea: string;
+  category: string;
+  createdAt: string;
+};
+
+export type StoryTheme = {
+  id: string;
+  clientId: string;
+  monthLabel: string;
+  theme: string;
+  goal: string;
+  notes: string;
+  sortOrder: number;
+};
