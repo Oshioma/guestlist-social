@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
 import { generateCampaignActions } from "./rule-actions";
+import { captureAdSnapshot } from "./snapshot-actions";
 
 function normalizeAdStatus(status: string) {
   if (
@@ -42,26 +43,39 @@ export async function createAdAction(
   const costPerResult =
     clicks > 0 && spend > 0 ? Number((spend / clicks).toFixed(4)) : 0;
 
-  const { error } = await supabase.from("ads").insert({
-    client_id: clientId,
-    campaign_id: campaignId,
-    name,
-    status,
-    spend,
-    cost_per_result: costPerResult,
-    followers_gained: 0,
-    clicks,
-    engagement,
-    impressions,
-    conversions,
-    audience: audience || null,
-    creative_hook: creativeHook || null,
-    notes: notes || null,
-  });
+  const { data: newAd, error } = await supabase
+    .from("ads")
+    .insert({
+      client_id: clientId,
+      campaign_id: campaignId,
+      name,
+      status,
+      spend,
+      cost_per_result: costPerResult,
+      followers_gained: 0,
+      clicks,
+      engagement,
+      impressions,
+      conversions,
+      audience: audience || null,
+      creative_hook: creativeHook || null,
+      notes: notes || null,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     console.error("createAdAction error:", error);
     throw new Error(`Could not create ad: ${error.message}`);
+  }
+
+  // Capture performance snapshot for trend tracking
+  try {
+    if (newAd) {
+      await captureAdSnapshot(String(newAd.id), clientId, campaignId, spend, impressions, clicks);
+    }
+  } catch (e) {
+    console.error("Snapshot after ad create:", e);
   }
 
   // Auto-run rule engine after ad creation
@@ -132,6 +146,13 @@ export async function updateAdAction(
   if (error) {
     console.error("updateAdAction error:", error);
     throw new Error("Could not update ad.");
+  }
+
+  // Capture performance snapshot for trend tracking
+  try {
+    await captureAdSnapshot(adId, clientId, campaignId, spend, impressions, clicks);
+  } catch (e) {
+    console.error("Snapshot after ad update:", e);
   }
 
   // Auto-run rule engine after ad update

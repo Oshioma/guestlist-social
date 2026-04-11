@@ -7,6 +7,7 @@ import {
 } from "@/app/admin-panel/lib/mappers";
 import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
+import { getAdTrends, type AdTrend } from "@/app/admin-panel/lib/snapshot-actions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
@@ -58,7 +59,8 @@ export default async function CampaignDetailPage({ params }: Props) {
     console.error("Auto-generate actions on page load:", e);
   }
 
-  // Step 3: Fetch actions + learnings (after rules have run)
+  // Step 3: Fetch actions, learnings, and trends (after rules have run)
+  let adTrends: AdTrend[] = [];
   const [{ data: actionRows }, { data: learningRows }] = await Promise.all([
     supabase
       .from("actions")
@@ -72,6 +74,14 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
   ]);
+
+  try {
+    adTrends = await getAdTrends(clientId, campaignId);
+  } catch {
+    // ad_snapshots table may not exist yet
+  }
+
+  const trendMap = new Map(adTrends.map((t) => [t.adId, t]));
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
 
@@ -648,6 +658,11 @@ export default async function CampaignDetailPage({ params }: Props) {
                 <strong>No delivery</strong> — if spend and impressions are both
                 0, a &ldquo;Check delivery/setup&rdquo; action is created
               </li>
+              <li>
+                <strong>CTR declining</strong> — if CTR dropped 30%+ over
+                recent days and spend &ge; 5, a &ldquo;CTR declining&rdquo;
+                action is created
+              </li>
             </ul>
             <p style={{ margin: "8px 0 0", fontSize: 12, color: "#71717a" }}>
               Actions that no longer match their rule are automatically
@@ -736,37 +751,71 @@ export default async function CampaignDetailPage({ params }: Props) {
         </p>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {ads.map((ad) => (
-              <div key={ad.id}>
-                <AdRow ad={ad} />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    marginTop: 8,
-                    marginBottom: 12,
-                  }}
-                >
-                  <Link
-                    href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
+            {ads.map((ad) => {
+              const trend = trendMap.get(String(ad.id));
+              return (
+                <div key={ad.id}>
+                  <AdRow ad={ad} />
+                  <div
                     style={{
-                      display: "inline-flex",
+                      display: "flex",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      padding: "7px 11px",
-                      borderRadius: 9,
-                      border: "1px solid #e4e4e7",
-                      background: "#fff",
-                      color: "#18181b",
-                      textDecoration: "none",
-                      fontSize: 12,
-                      fontWeight: 600,
+                      marginTop: 8,
+                      marginBottom: 12,
                     }}
                   >
-                    Edit ad
-                  </Link>
+                    {trend ? (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color:
+                            trend.direction === "up"
+                              ? "#16a34a"
+                              : trend.direction === "down"
+                                ? "#dc2626"
+                                : "#71717a",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {trend.direction === "up"
+                          ? "\u25B2"
+                          : trend.direction === "down"
+                            ? "\u25BC"
+                            : "\u2014"}{" "}
+                        CTR {trend.ctrChange > 0 ? "+" : ""}
+                        {trend.ctrChange}% over {trend.daysCompared}d
+                        <span style={{ color: "#a1a1aa", fontWeight: 400 }}>
+                          {" "}
+                          ({trend.ctrBefore}% &rarr; {trend.ctrNow}%)
+                        </span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#a1a1aa" }}>
+                        No trend data yet
+                      </span>
+                    )}
+                    <Link
+                      href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "7px 11px",
+                        borderRadius: 9,
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        color: "#18181b",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Edit ad
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <EmptyState
