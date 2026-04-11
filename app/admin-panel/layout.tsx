@@ -1,20 +1,13 @@
-import type { Metadata } from "next";
 import "./admin.css";
 import AppShell from "./components/AppShell";
+import { requireAdminPanelAccess } from "./lib/auth";
 
-export const metadata: Metadata = {
-  title: "Admin — Guestlist Social",
-  description: "Guestlist Social ad ops admin dashboard",
-};
-
-export default function AdminLayout({
+export default async function AdminPanelLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="admin-root">
-      <AppShell>{children}</AppShell>
-    </div>
-  );
+  await requireAdminPanelAccess(["admin", "operator", "viewer"]);
+
+  return <AppShell>{children}</AppShell>;
 }
