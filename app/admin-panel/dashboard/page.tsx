@@ -71,15 +71,19 @@ export default async function DashboardPage() {
     notes: ad.notes ?? "",
   }));
 
-  const actions = (actionsRes.data ?? []).map((action) => ({
-    id: action.id,
-    clientId: action.client_id,
-    title: action.title,
-    kind: action.kind,
-    priority: action.priority ?? "medium",
-    isComplete: action.is_complete ?? false,
-    createdAt: action.created_at,
-  }));
+  const actions = (actionsRes.data ?? []).map((action) => {
+    const client = clients.find((c) => c.id === action.client_id);
+
+    return {
+      id: action.id,
+      label: action.title,
+      clientName: client?.name ?? "Unknown client",
+      due: action.created_at ?? "",
+      done: action.is_complete ?? false,
+      kind: action.kind ?? "review",
+      priority: action.priority ?? "medium",
+    };
+  });
 
   const suggestions = (suggestionsRes.data ?? []).map((suggestion) => ({
     id: suggestion.id,
