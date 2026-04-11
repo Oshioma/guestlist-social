@@ -10,6 +10,7 @@ import {
 } from "@/app/admin-panel/lib/performance-truth";
 import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-truth";
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
+import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,9 @@ export default async function ClientAdsPage({
         <p style={{ fontSize: 14, color: "#71717a", margin: "6px 0 0" }}>
           Performance scored automatically. Each ad is rated by CTR, CPC, conversions, and spend.
         </p>
+        <div style={{ marginTop: 12 }}>
+          <ScoreAndGenerateButton clientId={clientId} />
+        </div>
       </div>
 
       <div

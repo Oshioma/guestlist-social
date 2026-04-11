@@ -16,6 +16,7 @@ import StatCard from "../../components/StatCard";
 import SuggestionCard from "../../components/SuggestionCard";
 import { formatCurrency } from "../../lib/utils";
 import DeleteClientButton from "../../components/DeleteClientButton";
+import ScoreAndGenerateButton from "../../components/ScoreAndGenerateButton";
 import GenerateReportsButton from "../../components/GenerateReportsButton";
 import { generateClientReport } from "../../lib/report-actions";
 import UnassignedCampaigns from "../../components/UnassignedCampaigns";
@@ -818,6 +819,9 @@ export default async function ClientDetailPage({
       </SectionCard>
 
       <SectionCard title={`Ads (${ads.length})`}>
+        <div style={{ marginBottom: 12 }}>
+          <ScoreAndGenerateButton clientId={clientId} />
+        </div>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {ads.slice(0, 4).map((ad) => (
