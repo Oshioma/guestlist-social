@@ -5,7 +5,7 @@ import {
   mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion } from "./types";
+import type { Ad, Client, Action, Suggestion, ContentProgress } from "./types";
 
 export async function getDashboardData(): Promise<{
   clients: Client[];
@@ -42,4 +42,38 @@ export async function getDashboardData(): Promise<{
   const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
 
   return { clients, ads, actions, suggestions };
+}
+
+export async function getContentDashboardData(): Promise<{
+  clients: { id: string; name: string }[];
+  progress: ContentProgress[];
+}> {
+  const supabase = await createClient();
+
+  const [clientsRes, progressRes] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+    supabase.from("content_progress").select("*"),
+  ]);
+
+  if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
+  if (progressRes.error)
+    throw new Error(`content_progress: ${progressRes.error.message}`);
+
+  const clients = (clientsRes.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name ?? "Untitled client",
+  }));
+
+  const progress: ContentProgress[] = (progressRes.data ?? []).map((row) => ({
+    id: row.id,
+    clientId: row.client_id,
+    month: row.month,
+    status: row.status ?? "not_started",
+  }));
+
+  return { clients, progress };
 }

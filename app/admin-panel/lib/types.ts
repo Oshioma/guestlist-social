@@ -80,3 +80,16 @@ export type MemoryEntry = {
   createdAt: string;
   tag: string;
 };
+
+export type ContentStatus =
+  | "not_started"
+  | "in_progress"
+  | "proof"
+  | "complete";
+
+export type ContentProgress = {
+  id: string;
+  clientId: string;
+  month: string;
+  status: ContentStatus;
+};
