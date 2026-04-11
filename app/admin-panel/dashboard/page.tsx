@@ -7,6 +7,8 @@ import EmptyState from "../components/EmptyState";
 import ActionList from "../components/ActionList";
 import { supabase } from "../lib/supabase";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const [clientsRes, adsRes, actionsRes, suggestionsRes] = await Promise.all([
     supabase.from("clients").select("*").order("created_at", { ascending: false }),
@@ -40,10 +42,53 @@ export default async function DashboardPage() {
     );
   }
 
-  const clients = clientsRes.data ?? [];
-  const ads = adsRes.data ?? [];
-  const actions = actionsRes.data ?? [];
-  const suggestions = suggestionsRes.data ?? [];
+  const clients = (clientsRes.data ?? []).map((client) => ({
+    id: client.id,
+    name: client.name,
+    platform: client.platform ?? "Meta",
+    industry: client.industry ?? "",
+    monthlyBudget: Number(client.monthly_budget ?? 0),
+    status: client.status ?? "testing",
+    websiteUrl: client.website_url ?? "",
+    notes: client.notes ?? "",
+  }));
+
+  const ads = (adsRes.data ?? []).map((ad) => ({
+    id: ad.id,
+    clientId: ad.client_id,
+    campaignId: ad.campaign_id,
+    name: ad.name,
+    status: ad.status ?? "testing",
+    spend: Number(ad.spend ?? 0),
+    costPerResult: Number(ad.cost_per_result ?? 0),
+    followersGained: Number(ad.followers_gained ?? 0),
+    clicks: Number(ad.clicks ?? 0),
+    engagement: Number(ad.engagement ?? 0),
+    impressions: Number(ad.impressions ?? 0),
+    conversions: Number(ad.conversions ?? 0),
+    audience: ad.audience ?? "",
+    creativeHook: ad.creative_hook ?? "",
+    notes: ad.notes ?? "",
+  }));
+
+  const actions = (actionsRes.data ?? []).map((action) => ({
+    id: action.id,
+    clientId: action.client_id,
+    title: action.title,
+    kind: action.kind,
+    priority: action.priority ?? "medium",
+    isComplete: action.is_complete ?? false,
+    createdAt: action.created_at,
+  }));
+
+  const suggestions = (suggestionsRes.data ?? []).map((suggestion) => ({
+    id: suggestion.id,
+    clientId: suggestion.client_id,
+    text: suggestion.text,
+    priority: suggestion.priority ?? "medium",
+    source: suggestion.source ?? "manual",
+    createdAt: suggestion.created_at,
+  }));
 
   const winningAds = ads.filter((ad) => ad.status === "winner");
   const problemClients = clients.filter(
