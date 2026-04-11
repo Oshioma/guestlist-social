@@ -1,26 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { createClient } from "../../../../../lib/supabase/server";
-import ClientForm from "../../../components/ClientForm";
-import { updateClientAction } from "../../../lib/client-actions";
-import { mapClientStatus } from "../../../lib/mappers";
+import { createClient } from "../../../../../../../lib/supabase/server";
+import CampaignForm from "../../../../../components/CampaignForm";
+import { updateCampaignAction } from "../../../../../lib/campaign-actions";
 
 type Props = {
-  params: Promise<{ clientId: string }>;
+  params: Promise<{ clientId: string; campaignId: string }>;
 };
 
-export default async function EditClientPage({ params }: Props) {
-  const { clientId } = await params;
+export default async function EditCampaignPage({ params }: Props) {
+  const { clientId, campaignId } = await params;
   const supabase = await createClient();
 
-  const { data: client, error } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", clientId)
-    .single();
+  const [{ data: client, error: clientError }, { data: campaign, error: campaignError }] =
+    await Promise.all([
+      supabase.from("clients").select("id, name").eq("id", clientId).single(),
+      supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", campaignId)
+        .eq("client_id", clientId)
+        .single(),
+    ]);
 
-  if (error || !client) {
+  if (clientError || !client || campaignError || !campaign) {
     notFound();
   }
 
@@ -31,7 +35,7 @@ export default async function EditClientPage({ params }: Props) {
     "use server";
 
     try {
-      await updateClientAction(clientId, formData);
+      await updateCampaignAction(clientId, campaignId, formData);
       return { error: null };
     } catch (error) {
       if (isRedirectError(error)) throw error;
@@ -40,7 +44,7 @@ export default async function EditClientPage({ params }: Props) {
         error:
           error instanceof Error
             ? error.message
-            : "Could not update client.",
+            : "Could not update campaign.",
       };
     }
   }
@@ -81,7 +85,7 @@ export default async function EditClientPage({ params }: Props) {
               letterSpacing: "-0.02em",
             }}
           >
-            Edit client
+            Edit campaign
           </h1>
 
           <p
@@ -92,24 +96,31 @@ export default async function EditClientPage({ params }: Props) {
               maxWidth: 700,
             }}
           >
-            Update the core details for{" "}
-            <strong style={{ color: "#18181b" }}>{client.name}</strong>,
-            including platform, budget, status, website, and notes.
+            Update the campaign settings for{" "}
+            <strong style={{ color: "#18181b" }}>{client.name}</strong>. Adjust
+            objective, audience, budget, and status without losing campaign
+            history.
           </p>
         </div>
       </div>
 
-      <ClientForm
-        title={`Edit ${client.name}`}
+      <CampaignForm
+        title={`Edit ${campaign.name}`}
         submitLabel="Save changes"
         action={action}
         initialValues={{
-          name: client.name ?? "",
-          platform: client.platform ?? "Meta",
-          monthlyBudget: Number(client.monthly_budget ?? 0),
-          status: mapClientStatus(client.status ?? "testing"),
-          websiteUrl: client.website_url ?? "",
-          notes: client.notes ?? "",
+          name: campaign.name ?? "",
+          objective: campaign.objective ?? "engagement",
+          audience: campaign.audience ?? "",
+          budget: Number(campaign.budget ?? 0),
+          status:
+            campaign.status === "draft" ||
+            campaign.status === "testing" ||
+            campaign.status === "live" ||
+            campaign.status === "paused" ||
+            campaign.status === "completed"
+              ? campaign.status
+              : "testing",
         }}
       />
     </div>
