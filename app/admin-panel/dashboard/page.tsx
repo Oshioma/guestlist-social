@@ -42,17 +42,6 @@ export default async function DashboardPage() {
     );
   }
 
-  const clients = (clientsRes.data ?? []).map((client) => ({
-    id: client.id,
-    name: client.name,
-    platform: client.platform ?? "Meta",
-    industry: client.industry ?? "",
-    monthlyBudget: Number(client.monthly_budget ?? 0),
-    status: client.status ?? "testing",
-    websiteUrl: client.website_url ?? "",
-    notes: client.notes ?? "",
-  }));
-
   const ads = (adsRes.data ?? []).map((ad) => {
     const impressions = Number(ad.impressions ?? 0);
     const clicks = Number(ad.clicks ?? 0);
@@ -75,6 +64,28 @@ export default async function DashboardPage() {
       audience: ad.audience ?? "",
       creativeHook: ad.creative_hook ?? "",
       notes: ad.notes ?? "",
+      createdAt: ad.created_at ?? "",
+    };
+  });
+
+  const clients = (clientsRes.data ?? []).map((client) => {
+    const clientAds = ads.filter((ad) => ad.clientId === client.id);
+
+    return {
+      id: client.id,
+      name: client.name,
+      platform: client.platform ?? "Meta",
+      industry: client.industry ?? "",
+      monthlyBudget: Number(client.monthly_budget ?? 0),
+      status: client.status ?? "testing",
+      websiteUrl: client.website_url ?? "",
+      notes: client.notes ?? "",
+      adCount: clientAds.length,
+      lastActivity:
+        client.updated_at ??
+        client.created_at ??
+        clientAds[0]?.createdAt ??
+        "",
     };
   });
 
