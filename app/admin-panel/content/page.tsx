@@ -123,289 +123,86 @@ export default async function ContentDashboardPage() {
         </SectionCard>
 
         <SectionCard
-          title="Video Ideas"
+          title="Content Ideas Overview"
           action={
             <div style={{ display: "flex", gap: 8 }}>
-              <Link
-                href="/app/video-ideas"
-                style={actionLinkStyle("#18181b", "#fff")}
-              >
-                + Add Idea
-              </Link>
-              <Link
-                href="/app/video-ideas"
-                style={actionLinkStyle("#f4f4f5", "#18181b")}
-              >
-                Manage Ideas
-              </Link>
+              <Link href="/app/video-ideas" style={actionLinkStyle("#dcfce7", "#166534")}>+ Video</Link>
+              <Link href="/app/carousel-ideas" style={actionLinkStyle("#dbeafe", "#1e40af")}>+ Carousel</Link>
+              <Link href="/app/story-ideas" style={actionLinkStyle("#fef9c3", "#854d0e")}>+ Story</Link>
             </div>
           }
         >
-          {clients.length === 0 ? (
-            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
-              No clients yet.
+          {/* Legend */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 11, color: "#71717a", alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ ...tagDot, background: "#166534" }} /> Video
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ ...tagDot, background: "#1e40af" }} /> Carousel
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ ...tagDot, background: "#854d0e" }} /> Story
+            </span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              <Link href="/app/video-ideas" style={{ fontSize: 11, color: "#166534", textDecoration: "underline" }}>Manage Video</Link>
+              <Link href="/app/carousel-ideas" style={{ fontSize: 11, color: "#1e40af", textDecoration: "underline" }}>Manage Carousel</Link>
+              <Link href="/app/story-ideas" style={{ fontSize: 11, color: "#854d0e", textDecoration: "underline" }}>Manage Story</Link>
             </div>
+          </div>
+
+          {clients.length === 0 ? (
+            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>No clients yet.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: 0,
-                  fontSize: 14,
-                }}
-              >
+              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 13 }}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Client</th>
                     {months.map((m) => (
-                      <th
-                        key={m.key}
-                        style={{ ...thStyle, textAlign: "center" }}
-                      >
+                      <th key={m.key} style={{ ...thStyle, textAlign: "center", padding: "8px 6px" }}>
                         {m.label.split(" ")[0]}
                       </th>
                     ))}
-                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
+                    <th style={{ ...thStyle, textAlign: "center", padding: "8px 6px" }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clients.map((client, idx) => {
-                    const clientIdeas = ideasData.ideas.filter(
-                      (i) => i.clientId === client.id
-                    );
-                    const total = clientIdeas.length;
+                    const vAll = ideasData.ideas.filter((i) => i.clientId === client.id);
+                    const cAll = carouselData.ideas.filter((i) => i.clientId === client.id);
+                    const sAll = storyData.ideas.filter((i) => i.clientId === client.id);
 
                     return (
-                      <tr
-                        key={client.id}
-                        style={{
-                          background: idx % 2 === 0 ? "#fff" : "#fafafa",
-                        }}
-                      >
-                        <td style={tdStyle}>{client.name}</td>
-                        {months.map((m) => {
-                          const count = clientIdeas.filter(
-                            (i) => i.month === m.key
-                          ).length;
-                          return (
-                            <td
-                              key={m.key}
-                              style={{ ...tdStyle, textAlign: "center" }}
-                            >
-                              {count > 0 ? (
-                                <span style={badgeGreen}>{count}</span>
-                              ) : (
-                                <span style={{ color: "#d4d4d8" }}>0</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td
-                          style={{
-                            ...tdStyle,
-                            textAlign: "center",
-                            fontWeight: 600,
-                            color: total > 0 ? "#18181b" : "#d4d4d8",
-                          }}
-                        >
-                          {total}
+                      <tr key={client.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
+                        <td style={{ ...tdStyle, fontWeight: 500, fontSize: 13, padding: "10px 12px" }}>
+                          {client.name}
                         </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Carousel Ideas"
-          action={
-            <div style={{ display: "flex", gap: 8 }}>
-              <Link
-                href="/app/carousel-ideas"
-                style={actionLinkStyle("#18181b", "#fff")}
-              >
-                + Add Idea
-              </Link>
-              <Link
-                href="/app/carousel-ideas"
-                style={actionLinkStyle("#f4f4f5", "#18181b")}
-              >
-                Manage Ideas
-              </Link>
-            </div>
-          }
-        >
-          {clients.length === 0 ? (
-            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
-              No clients yet.
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: 0,
-                  fontSize: 14,
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Client</th>
-                    {months.map((m) => (
-                      <th
-                        key={m.key}
-                        style={{ ...thStyle, textAlign: "center" }}
-                      >
-                        {m.label.split(" ")[0]}
-                      </th>
-                    ))}
-                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client, idx) => {
-                    const clientIdeas = carouselData.ideas.filter(
-                      (i) => i.clientId === client.id
-                    );
-                    const total = clientIdeas.length;
-
-                    return (
-                      <tr
-                        key={client.id}
-                        style={{
-                          background: idx % 2 === 0 ? "#fff" : "#fafafa",
-                        }}
-                      >
-                        <td style={tdStyle}>{client.name}</td>
                         {months.map((m) => {
-                          const count = clientIdeas.filter(
-                            (i) => i.month === m.key
-                          ).length;
+                          const vCount = vAll.filter((i) => i.month === m.key).length;
+                          const cCount = cAll.filter((i) => i.month === m.key).length;
+                          const sCount = sAll.filter((i) => i.month === m.key).length;
+                          const hasAny = vCount + cCount + sCount > 0;
+
                           return (
-                            <td
-                              key={m.key}
-                              style={{ ...tdStyle, textAlign: "center" }}
-                            >
-                              {count > 0 ? (
-                                <span style={badgeBlue}>{count}</span>
+                            <td key={m.key} style={{ ...tdStyle, textAlign: "center", padding: "6px 4px", verticalAlign: "middle" }}>
+                              {hasAny ? (
+                                <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+                                  {vCount > 0 && <span style={miniTag("#dcfce7", "#166534")}>{vCount}</span>}
+                                  {cCount > 0 && <span style={miniTag("#dbeafe", "#1e40af")}>{cCount}</span>}
+                                  {sCount > 0 && <span style={miniTag("#fef9c3", "#854d0e")}>{sCount}</span>}
+                                </div>
                               ) : (
-                                <span style={{ color: "#d4d4d8" }}>0</span>
+                                <span style={{ color: "#e4e4e7", fontSize: 12 }}>-</span>
                               )}
                             </td>
                           );
                         })}
-                        <td
-                          style={{
-                            ...tdStyle,
-                            textAlign: "center",
-                            fontWeight: 600,
-                            color: total > 0 ? "#18181b" : "#d4d4d8",
-                          }}
-                        >
-                          {total}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Story Ideas"
-          action={
-            <div style={{ display: "flex", gap: 8 }}>
-              <Link
-                href="/app/story-ideas"
-                style={actionLinkStyle("#18181b", "#fff")}
-              >
-                + Add Idea
-              </Link>
-              <Link
-                href="/app/story-ideas"
-                style={actionLinkStyle("#f4f4f5", "#18181b")}
-              >
-                Manage Ideas
-              </Link>
-            </div>
-          }
-        >
-          {clients.length === 0 ? (
-            <div style={{ color: "#a1a1aa", fontSize: 14, padding: "16px 0" }}>
-              No clients yet.
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: 0,
-                  fontSize: 14,
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Client</th>
-                    {months.map((m) => (
-                      <th
-                        key={m.key}
-                        style={{ ...thStyle, textAlign: "center" }}
-                      >
-                        {m.label.split(" ")[0]}
-                      </th>
-                    ))}
-                    <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client, idx) => {
-                    const clientIdeas = storyData.ideas.filter(
-                      (i) => i.clientId === client.id
-                    );
-                    const total = clientIdeas.length;
-
-                    return (
-                      <tr
-                        key={client.id}
-                        style={{
-                          background: idx % 2 === 0 ? "#fff" : "#fafafa",
-                        }}
-                      >
-                        <td style={tdStyle}>{client.name}</td>
-                        {months.map((m) => {
-                          const count = clientIdeas.filter(
-                            (i) => i.month === m.key
-                          ).length;
-                          return (
-                            <td
-                              key={m.key}
-                              style={{ ...tdStyle, textAlign: "center" }}
-                            >
-                              {count > 0 ? (
-                                <span style={badgeYellow}>{count}</span>
-                              ) : (
-                                <span style={{ color: "#d4d4d8" }}>0</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td
-                          style={{
-                            ...tdStyle,
-                            textAlign: "center",
-                            fontWeight: 600,
-                            color: total > 0 ? "#18181b" : "#d4d4d8",
-                          }}
-                        >
-                          {total}
+                        <td style={{ ...tdStyle, textAlign: "center", padding: "6px 4px" }}>
+                          <div style={{ display: "flex", gap: 3, justifyContent: "center", alignItems: "center" }}>
+                            <span style={miniTag("#dcfce7", "#166534")}>{vAll.length}</span>
+                            <span style={miniTag("#dbeafe", "#1e40af")}>{cAll.length}</span>
+                            <span style={miniTag("#fef9c3", "#854d0e")}>{sAll.length}</span>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -441,38 +238,27 @@ function actionLinkStyle(bg: string, color: string): React.CSSProperties {
   };
 }
 
-const badgeGreen: React.CSSProperties = {
+const tagDot: React.CSSProperties = {
   display: "inline-block",
-  minWidth: 26,
-  padding: "2px 8px",
+  width: 8,
+  height: 8,
   borderRadius: 999,
-  fontSize: 13,
-  fontWeight: 600,
-  background: "#dcfce7",
-  color: "#166534",
 };
 
-const badgeBlue: React.CSSProperties = {
-  display: "inline-block",
-  minWidth: 26,
-  padding: "2px 8px",
-  borderRadius: 999,
-  fontSize: 13,
-  fontWeight: 600,
-  background: "#dbeafe",
-  color: "#1e40af",
-};
-
-const badgeYellow: React.CSSProperties = {
-  display: "inline-block",
-  minWidth: 26,
-  padding: "2px 8px",
-  borderRadius: 999,
-  fontSize: 13,
-  fontWeight: 600,
-  background: "#fef9c3",
-  color: "#854d0e",
-};
+function miniTag(bg: string, color: string): React.CSSProperties {
+  return {
+    display: "inline-block",
+    minWidth: 18,
+    padding: "1px 5px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 700,
+    background: bg,
+    color,
+    lineHeight: "16px",
+    textAlign: "center",
+  };
+}
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",
