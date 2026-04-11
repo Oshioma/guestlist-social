@@ -381,6 +381,82 @@ export function insightToAdRow(insight: MetaInsight) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Write operations — push changes to Meta
+// ---------------------------------------------------------------------------
+
+/** Update an ad's status (ACTIVE / PAUSED). */
+export async function updateAdStatus(
+  metaAdId: string,
+  status: "ACTIVE" | "PAUSED"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { token } = getCredentials();
+    const url = `${BASE_URL}/${metaAdId}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ access_token: token, status }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      return { success: false, error: data.error.message ?? "Meta API error" };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+/** Update a campaign's daily budget (in cents). */
+export async function updateCampaignBudget(
+  metaCampaignId: string,
+  dailyBudgetCents: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { token } = getCredentials();
+    const url = `${BASE_URL}/${metaCampaignId}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        access_token: token,
+        daily_budget: String(dailyBudgetCents),
+      }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      return { success: false, error: data.error.message ?? "Meta API error" };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+/** Update a campaign's status (ACTIVE / PAUSED). */
+export async function updateCampaignStatus(
+  metaCampaignId: string,
+  status: "ACTIVE" | "PAUSED"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { token } = getCredentials();
+    const url = `${BASE_URL}/${metaCampaignId}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ access_token: token, status }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      return { success: false, error: data.error.message ?? "Meta API error" };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 /** Flatten ad set targeting into a readable audience string. */
 export function targetingToAudience(adSet: MetaAdSet): string {
   const parts: string[] = [];
