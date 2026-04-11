@@ -2,11 +2,27 @@
 
 import { useActionState } from "react";
 
-type Props = {
-  action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+type CampaignFormValues = {
+  name: string;
+  objective: string;
+  budget: number;
+  audience: string;
+  status: string;
 };
 
-export default function CampaignForm({ action }: Props) {
+type Props = {
+  title?: string;
+  submitLabel?: string;
+  action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+  initialValues?: CampaignFormValues;
+};
+
+export default function CampaignForm({
+  title = "New Campaign",
+  submitLabel = "Create campaign",
+  action,
+  initialValues,
+}: Props) {
   const [state, formAction, pending] = useActionState(action, { error: null });
 
   return (
@@ -19,13 +35,6 @@ export default function CampaignForm({ action }: Props) {
         padding: 24,
       }}
     >
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 28 }}>New Campaign</h1>
-        <p style={{ margin: "8px 0 0", fontSize: 14, color: "#71717a" }}>
-          Launch a new ad campaign for this client.
-        </p>
-      </div>
-
       <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {state.error && (
           <div
@@ -46,6 +55,7 @@ export default function CampaignForm({ action }: Props) {
           <label style={labelStyle}>Campaign name</label>
           <input
             name="name"
+            defaultValue={initialValues?.name ?? ""}
             style={inputStyle}
             placeholder="Summer sale — image test"
             required
@@ -55,7 +65,7 @@ export default function CampaignForm({ action }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div>
             <label style={labelStyle}>Objective</label>
-            <select name="objective" defaultValue="engagement" style={inputStyle}>
+            <select name="objective" defaultValue={initialValues?.objective ?? "engagement"} style={inputStyle}>
               <option value="engagement">Engagement</option>
               <option value="conversions">Conversions</option>
               <option value="traffic">Traffic</option>
@@ -71,7 +81,7 @@ export default function CampaignForm({ action }: Props) {
               type="number"
               min="0"
               step="0.01"
-              defaultValue={0}
+              defaultValue={initialValues?.budget ?? 0}
               style={inputStyle}
             />
           </div>
@@ -81,6 +91,7 @@ export default function CampaignForm({ action }: Props) {
           <label style={labelStyle}>Audience</label>
           <input
             name="audience"
+            defaultValue={initialValues?.audience ?? ""}
             style={inputStyle}
             placeholder="18-35, London, interests: nightlife"
           />
@@ -88,7 +99,7 @@ export default function CampaignForm({ action }: Props) {
 
         <div>
           <label style={labelStyle}>Status</label>
-          <select name="status" defaultValue="testing" style={inputStyle}>
+          <select name="status" defaultValue={initialValues?.status ?? "testing"} style={inputStyle}>
             <option value="testing">Testing</option>
             <option value="winner">Winner</option>
             <option value="paused">Paused</option>
@@ -111,7 +122,7 @@ export default function CampaignForm({ action }: Props) {
             opacity: pending ? 0.7 : 1,
           }}
         >
-          {pending ? "Creating..." : "Create campaign"}
+          {pending ? (submitLabel === "Create campaign" ? "Creating..." : "Saving...") : submitLabel}
         </button>
       </form>
     </div>
