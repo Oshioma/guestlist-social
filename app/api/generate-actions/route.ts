@@ -88,10 +88,10 @@ export async function POST(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // First, score all ads (ensure scores are up to date)
+    // Fetch ads with full metrics for snapshot
     let adsQuery = supabase
       .from("ads")
-      .select("id, name, client_id, performance_status, performance_reason");
+      .select("id, name, client_id, performance_status, performance_reason, performance_score, spend, impressions, clicks, conversions, cost_per_result");
 
     if (clientId) {
       adsQuery = adsQuery.eq("client_id", clientId);
@@ -139,12 +139,30 @@ export async function POST(req: Request) {
         continue;
       }
 
+      // Capture before-snapshot at action creation time
+      const impressions = Number(ad.impressions ?? 0);
+      const clicks = Number(ad.clicks ?? 0);
+      const spend = Number(ad.spend ?? 0);
+      const snapshot = {
+        spend,
+        impressions,
+        clicks,
+        ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
+        cpc: clicks > 0 ? Number((spend / clicks).toFixed(4)) : 0,
+        conversions: Number(ad.conversions ?? 0),
+        cost_per_result: Number(ad.cost_per_result ?? 0),
+        performance_status: ad.performance_status,
+        performance_score: ad.performance_score,
+        captured_at: new Date().toISOString(),
+      };
+
       const { error: insertError } = await supabase.from("ad_actions").insert({
         ad_id: ad.id,
         problem: suggestion.problem,
         action: suggestion.action,
         priority: suggestion.priority,
         status: "pending",
+        metric_snapshot_before: snapshot,
       });
 
       if (insertError) {

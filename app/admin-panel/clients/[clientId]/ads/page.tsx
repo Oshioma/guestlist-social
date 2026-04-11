@@ -36,7 +36,7 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [clientRes, adsRes, actionsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
@@ -48,6 +48,11 @@ export default async function ClientAdsPage({
       .select("*, ads!inner(name, client_id)")
       .eq("ads.client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("action_learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -57,6 +62,7 @@ export default async function ClientAdsPage({
   const client = clientRes.data;
   const rawAds = adsRes.data ?? [];
   const rawActions = actionsRes.data ?? [];
+  const learnings = learningsRes.data ?? [];
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -389,6 +395,95 @@ export default async function ClientAdsPage({
                 }}
               />
             ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {learnings.length > 0 && (
+        <SectionCard title={`Learnings (${learnings.length})`}>
+          <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 12px" }}>
+            Auto-generated from completed actions. These compound over time.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {learnings.map((l: any) => {
+              const oColors: Record<string, { bg: string; text: string }> = {
+                positive: { bg: "#dcfce7", text: "#166534" },
+                neutral: { bg: "#fef3c7", text: "#92400e" },
+                negative: { bg: "#fee2e2", text: "#991b1b" },
+              };
+              const oc = oColors[l.outcome] ?? oColors.neutral;
+
+              return (
+                <div
+                  key={l.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 10,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        padding: "1px 8px",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: oc.bg,
+                        color: oc.text,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {l.outcome}
+                    </span>
+                    {l.tags?.map((tag: string) => (
+                      <span
+                        key={tag}
+                        style={{
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 500,
+                          background: "#f4f4f5",
+                          color: "#52525b",
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 13,
+                      color: "#18181b",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {l.learning}
+                  </p>
+                  {l.created_at && (
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        fontSize: 11,
+                        color: "#a1a1aa",
+                      }}
+                    >
+                      {new Date(l.created_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </SectionCard>
       )}
