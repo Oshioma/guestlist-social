@@ -11,6 +11,7 @@ const navItems = [
   { label: "Memory", href: "/app/memory" },
   { label: "Settings", href: "/app/settings" },
   { label: "Guide", href: "/app/guide" },
+  { label: "About", href: "/app/about" },
 ];
 
 export default function Sidebar() {

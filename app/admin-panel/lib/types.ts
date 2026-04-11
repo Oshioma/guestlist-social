@@ -60,12 +60,16 @@ export type Stat = {
   trend?: Trend;
 };
 
+export type ActionStatus = "open" | "in_progress" | "completed";
+
 export type Action = {
   id: string;
   label: string;
   clientName: string;
   due: string;
   done: boolean;
+  status: ActionStatus;
+  workNote: string;
 };
 
 export type MemoryEntry = {

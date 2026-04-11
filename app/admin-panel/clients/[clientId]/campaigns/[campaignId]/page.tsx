@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { mapDbAdToUiAd, mapDbActionToUiAction } from "@/app/admin-panel/lib/mappers";
+import {
+  mapDbAdToUiAd,
+  mapDbActionToUiAction,
+} from "@/app/admin-panel/lib/mappers";
 import { generateCampaignActions } from "@/app/admin-panel/lib/rule-actions";
+import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
@@ -26,6 +30,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: campaign, error: campaignError },
     { data: adsRows, error: adsError },
     { data: actionRows, error: actionsError },
+    { data: learningRows, error: learningsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -45,9 +50,23 @@ export default async function CampaignDetailPage({ params }: Props) {
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false }),
   ]);
 
-  if (clientError || !client || campaignError || !campaign || adsError || actionsError) {
+  if (
+    clientError ||
+    !client ||
+    campaignError ||
+    !campaign ||
+    adsError ||
+    actionsError ||
+    learningsError
+  ) {
     notFound();
   }
 
@@ -83,8 +102,8 @@ export default async function CampaignDetailPage({ params }: Props) {
       : campaignStatus === "completed"
       ? { background: "#e4e4e7", color: "#3f3f46" }
       : campaignStatus === "draft"
-      ? { background: "#f4f4f5", color: "#52525b" }
-      : { background: "#fef3c7", color: "#92400e" };
+        ? { background: "#f4f4f5", color: "#52525b" }
+        : { background: "#fef3c7", color: "#92400e" };
 
   const campaignAdIds = new Set(ads.map((ad) => ad.id));
 
@@ -99,6 +118,11 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   const openGeneratedActions = generatedActions.filter((action) => !action.done);
   const completedGeneratedActions = generatedActions.filter((action) => action.done);
+
+  const learningSuggestions = await generateSuggestionsFromLearnings(
+    clientId,
+    campaignId
+  );
 
   async function handleGenerateActions() {
     "use server";
@@ -261,7 +285,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         <StatCard
           stat={{
             label: "CTR",
-            value: avgCtr > 0 ? `${avgCtr}%` : "—",
+            value: avgCtr > 0 ? `${avgCtr}%` : "\u2014",
             change: `${totalClicks} clicks`,
             trend: avgCtr >= 2.5 ? "up" : avgCtr > 0 ? "flat" : "down",
           }}
@@ -394,6 +418,164 @@ export default async function CampaignDetailPage({ params }: Props) {
               </div>
             </div>
           </div>
+        </SectionCard>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 20,
+        }}
+      >
+        <SectionCard title={`Learnings (${(learningRows ?? []).length})`}>
+          {(learningRows ?? []).length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {(learningRows ?? []).map((learning) => (
+                <div
+                  key={learning.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 14,
+                    padding: 14,
+                    background: "#fff",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#18181b",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {learning.problem || "Untitled learning"}
+                  </div>
+
+                  {learning.change_made ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
+                      {learning.change_made}
+                    </div>
+                  ) : null}
+
+                  {learning.result ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
+                      {learning.result}
+                    </div>
+                  ) : null}
+
+                  {learning.outcome ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#71717a",
+                      }}
+                    >
+                      <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
+                      {learning.outcome}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No learnings yet"
+              description="Completed actions can be turned into campaign learnings."
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={`Suggestions from past learnings (${learningSuggestions.length})`}
+        >
+          {learningSuggestions.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {learningSuggestions.map((suggestion, index) => (
+                <div
+                  key={`${suggestion.title}-${index}`}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 14,
+                    padding: 14,
+                    background: "#fafafa",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#18181b",
+                      }}
+                    >
+                      {suggestion.title}
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        background:
+                          suggestion.priority === "high"
+                            ? "#fee2e2"
+                            : suggestion.priority === "medium"
+                              ? "#fef3c7"
+                              : "#e0f2fe",
+                        color:
+                          suggestion.priority === "high"
+                            ? "#991b1b"
+                            : suggestion.priority === "medium"
+                              ? "#92400e"
+                              : "#075985",
+                        textTransform: "capitalize",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {suggestion.priority}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#71717a",
+                    }}
+                  >
+                    {suggestion.description}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No learning-based suggestions yet"
+              description="As more learnings are saved, the system will start recommending proven fixes."
+            />
+          )}
         </SectionCard>
       </div>
 

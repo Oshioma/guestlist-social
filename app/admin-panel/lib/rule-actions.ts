@@ -4,49 +4,91 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 
 type RuleKind = "pause" | "scale" | "creative" | "review";
+type ActionStatus = "open" | "in_progress" | "completed";
 
 function buildRuleSignature(adId: string, rule: string) {
   return `[AUTO:${rule}:${adId}]`;
 }
 
-async function createActionIfMissing(args: {
+async function upsertRuleAction(args: {
   clientId: string;
   title: string;
   kind: RuleKind;
   priority: "low" | "medium" | "high";
-  notesSignature: string;
+  signature: string;
+  shouldExist: boolean;
 }) {
   const supabase = await createClient();
 
-  const { data: existing, error: existingError } = await supabase
+  const { data: existingRows, error: existingError } = await supabase
     .from("actions")
-    .select("id,title")
+    .select("id,title,status,is_complete")
     .eq("client_id", args.clientId);
 
   if (existingError) {
-    console.error("createActionIfMissing lookup error:", existingError);
+    console.error("upsertRuleAction lookup error:", existingError);
     throw new Error("Could not check existing actions.");
   }
 
-  const alreadyExists = (existing ?? []).some((row) =>
-    String(row.title ?? "").includes(args.notesSignature)
+  const existing = (existingRows ?? []).find((row) =>
+    String(row.title ?? "").includes(args.signature)
   );
 
-  if (alreadyExists) {
+  if (args.shouldExist) {
+    if (existing) {
+      // If it already exists and was previously completed, reopen it.
+      if (existing.status === "completed" || existing.is_complete === true) {
+        const { error: reopenError } = await supabase
+          .from("actions")
+          .update({
+            status: "open" satisfies ActionStatus,
+            is_complete: false,
+          })
+          .eq("id", existing.id);
+
+        if (reopenError) {
+          console.error("upsertRuleAction reopen error:", reopenError);
+          throw new Error("Could not reopen action.");
+        }
+      }
+
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("actions").insert({
+      client_id: args.clientId,
+      title: args.title,
+      kind: args.kind,
+      priority: args.priority,
+      status: "open" satisfies ActionStatus,
+      is_complete: false,
+    });
+
+    if (insertError) {
+      console.error("upsertRuleAction insert error:", insertError);
+      throw new Error("Could not create action.");
+    }
+
     return;
   }
 
-  const { error } = await supabase.from("actions").insert({
-    client_id: args.clientId,
-    title: args.title,
-    kind: args.kind,
-    priority: args.priority,
-    is_complete: false,
-  });
+  if (!existing) return;
 
-  if (error) {
-    console.error("createActionIfMissing insert error:", error);
-    throw new Error("Could not create action.");
+  // Only auto-complete actions that are still open.
+  // If a human has moved it to in_progress, leave it alone.
+  if (existing.status === "open" || existing.status == null) {
+    const { error: completeError } = await supabase
+      .from("actions")
+      .update({
+        status: "completed" satisfies ActionStatus,
+        is_complete: true,
+      })
+      .eq("id", existing.id);
+
+    if (completeError) {
+      console.error("upsertRuleAction complete error:", completeError);
+      throw new Error("Could not complete action.");
+    }
   }
 }
 
@@ -77,128 +119,54 @@ export async function generateCampaignActions(
     const clicks = Number(ad.clicks ?? 0);
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
 
-    if (spend >= 5 && ctr > 0 && ctr < 1.0) {
-      await createActionIfMissing({
-        clientId,
-        title: `Review weak ad: ${adName} ${buildRuleSignature(adId, "weak-ctr")}`,
-        kind: "creative",
-        priority: "high",
-        notesSignature: buildRuleSignature(adId, "weak-ctr"),
-      });
-    }
+    const weakCtrSignature = buildRuleSignature(adId, "weak-ctr");
+    const scaleSignature = buildRuleSignature(adId, "scale");
+    const pauseSignature = buildRuleSignature(adId, "pause");
+    const deliverySignature = buildRuleSignature(adId, "delivery");
 
-    if (ctr >= 2.5 && spend >= 3) {
-      await createActionIfMissing({
-        clientId,
-        title: `Consider scaling winner: ${adName} ${buildRuleSignature(adId, "scale")}`,
-        kind: "scale",
-        priority: "medium",
-        notesSignature: buildRuleSignature(adId, "scale"),
-      });
-    }
+    const weakCtrCondition = spend >= 5 && ctr > 0 && ctr < 1.0;
+    const scaleCondition = ctr >= 2.5 && spend >= 3;
+    const pauseCondition = spend >= 8 && clicks <= 2;
+    const deliveryCondition = spend === 0 && impressions === 0;
 
-    if (spend >= 8 && clicks <= 2) {
-      await createActionIfMissing({
-        clientId,
-        title: `Pause underperforming ad: ${adName} ${buildRuleSignature(adId, "pause")}`,
-        kind: "pause",
-        priority: "high",
-        notesSignature: buildRuleSignature(adId, "pause"),
-      });
-    }
+    await upsertRuleAction({
+      clientId,
+      title: `Review weak ad: ${adName} ${weakCtrSignature}`,
+      kind: "creative",
+      priority: "high",
+      signature: weakCtrSignature,
+      shouldExist: weakCtrCondition,
+    });
 
-    if (spend === 0 && impressions === 0) {
-      await createActionIfMissing({
-        clientId,
-        title: `Check delivery/setup: ${adName} ${buildRuleSignature(adId, "delivery")}`,
-        kind: "review",
-        priority: "low",
-        notesSignature: buildRuleSignature(adId, "delivery"),
-      });
-    }
+    await upsertRuleAction({
+      clientId,
+      title: `Consider scaling winner: ${adName} ${scaleSignature}`,
+      kind: "scale",
+      priority: "medium",
+      signature: scaleSignature,
+      shouldExist: scaleCondition,
+    });
+
+    await upsertRuleAction({
+      clientId,
+      title: `Pause underperforming ad: ${adName} ${pauseSignature}`,
+      kind: "pause",
+      priority: "high",
+      signature: pauseSignature,
+      shouldExist: pauseCondition,
+    });
+
+    await upsertRuleAction({
+      clientId,
+      title: `Check delivery/setup: ${adName} ${deliverySignature}`,
+      kind: "review",
+      priority: "low",
+      signature: deliverySignature,
+      shouldExist: deliveryCondition,
+    });
   }
-
-  // Auto-close stale actions whose rules no longer apply
-  await closeStaleActions(supabase, clientId, rows);
 
   revalidatePath(`/app/clients/${clientId}`);
   revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
   revalidatePath("/app/dashboard");
-}
-
-async function closeStaleActions(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  clientId: string,
-  adsRows: any[]
-) {
-  const { data: openActions, error } = await supabase
-    .from("actions")
-    .select("id, title")
-    .eq("client_id", clientId)
-    .eq("is_complete", false);
-
-  if (error || !openActions) return;
-
-  // Build a lookup of current ad metrics by id
-  const adMetrics = new Map<string, { spend: number; impressions: number; clicks: number; ctr: number }>();
-  for (const ad of adsRows) {
-    const impressions = Number(ad.impressions ?? 0);
-    const clicks = Number(ad.clicks ?? 0);
-    adMetrics.set(String(ad.id), {
-      spend: Number(ad.spend ?? 0),
-      impressions,
-      clicks,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-    });
-  }
-
-  const staleIds: string[] = [];
-
-  for (const action of openActions) {
-    const title = String(action.title ?? "");
-    const autoMatch = title.match(/\[AUTO:(\w[\w-]*):([^\]]+)\]/);
-    if (!autoMatch) continue;
-
-    const rule = autoMatch[1];
-    const adId = autoMatch[2];
-    const metrics = adMetrics.get(adId);
-
-    // If the ad no longer exists in this campaign, mark stale
-    if (!metrics) {
-      staleIds.push(action.id);
-      continue;
-    }
-
-    let stillApplies = false;
-
-    switch (rule) {
-      case "weak-ctr":
-        stillApplies = metrics.spend >= 5 && metrics.ctr > 0 && metrics.ctr < 1.0;
-        break;
-      case "scale":
-        stillApplies = metrics.ctr >= 2.5 && metrics.spend >= 3;
-        break;
-      case "pause":
-        stillApplies = metrics.spend >= 8 && metrics.clicks <= 2;
-        break;
-      case "delivery":
-        stillApplies = metrics.spend === 0 && metrics.impressions === 0;
-        break;
-    }
-
-    if (!stillApplies) {
-      staleIds.push(action.id);
-    }
-  }
-
-  if (staleIds.length === 0) return;
-
-  const { error: updateError } = await supabase
-    .from("actions")
-    .update({ is_complete: true })
-    .in("id", staleIds);
-
-  if (updateError) {
-    console.error("closeStaleActions error:", updateError);
-  }
 }

@@ -60,12 +60,20 @@ export function mapDbClientToUiClient(row: any, adCount: number): Client {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapDbActionToUiAction(row: any, clientName: string): Action {
+  const rawStatus = String(row.status ?? "open");
+  const status =
+    rawStatus === "open" || rawStatus === "in_progress" || rawStatus === "completed"
+      ? (rawStatus as Action["status"])
+      : ("open" as const);
+
   return {
     id: row.id,
     label: row.title ?? "Untitled action",
     clientName,
     due: row.created_at ?? "",
     done: Boolean(row.is_complete),
+    status,
+    workNote: row.work_note ?? "",
   };
 }
 

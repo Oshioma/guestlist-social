@@ -240,6 +240,8 @@ export const actions: Action[] = [
     clientName: "Cirio",
     due: "2026-04-12",
     done: false,
+    status: "open",
+    workNote: "",
   },
   {
     id: "act-2",
@@ -247,6 +249,8 @@ export const actions: Action[] = [
     clientName: "Mama Buci",
     due: "2026-04-11",
     done: false,
+    status: "open",
+    workNote: "",
   },
   {
     id: "act-3",
@@ -254,6 +258,8 @@ export const actions: Action[] = [
     clientName: "Flaming Licks",
     due: "2026-04-13",
     done: false,
+    status: "in_progress",
+    workNote: "Waiting on brand guidelines from client",
   },
   {
     id: "act-4",
@@ -261,6 +267,8 @@ export const actions: Action[] = [
     clientName: "Wrappz Skins",
     due: "2026-04-10",
     done: true,
+    status: "completed",
+    workNote: "Paused weak version and launched new creative",
   },
 ];
 
