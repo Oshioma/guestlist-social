@@ -58,12 +58,16 @@ export default function VideoIdeasBoard({
   ideas: VideoIdea[];
 }) {
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id ?? "");
+  const [selectedMonth, setSelectedMonth] = useState("");
 
   const clientThemes = themes
     .filter((t) => t.clientId === selectedClient)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const clientIdeas = ideas.filter((i) => i.clientId === selectedClient);
+  const allClientIdeas = ideas.filter((i) => i.clientId === selectedClient);
+  const clientIdeas = selectedMonth
+    ? allClientIdeas.filter((i) => i.month === selectedMonth)
+    : allClientIdeas;
   const unlinkedIdeas = clientIdeas.filter(
     (i) => !i.themeId || !clientThemes.some((t) => t.id === i.themeId)
   );
@@ -73,13 +77,39 @@ export default function VideoIdeasBoard({
       {/* At a glance */}
       <div style={cardStyle}>
         <h2 style={sectionTitleStyle}>At a Glance</h2>
+        {selectedMonth && (
+          <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "#71717a" }}>
+              Filtered: <strong style={{ color: "#18181b" }}>{MONTHS.find((m) => m.value === selectedMonth)?.label}</strong>
+            </span>
+            <button
+              onClick={() => setSelectedMonth("")}
+              style={{ fontSize: 11, fontWeight: 600, border: "none", background: "#f3f4f6", color: "#374151", padding: "2px 8px", borderRadius: 6, cursor: "pointer" }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
         <div style={{ overflowX: "auto" }}>
           <table style={tableStyle}>
             <thead>
               <tr>
                 <th style={thStyle}>Client</th>
                 {MONTHS.map((m) => (
-                  <th key={m.value} style={{ ...thStyle, textAlign: "center" }}>{m.label.split(" ")[0]}</th>
+                  <th
+                    key={m.value}
+                    onClick={() => setSelectedMonth(selectedMonth === m.value ? "" : m.value)}
+                    style={{
+                      ...thStyle,
+                      textAlign: "center",
+                      cursor: "pointer",
+                      background: selectedMonth === m.value ? "#18181b" : "transparent",
+                      color: selectedMonth === m.value ? "#fff" : "#71717a",
+                      borderRadius: selectedMonth === m.value ? 6 : 0,
+                    }}
+                  >
+                    {m.label.split(" ")[0]}
+                  </th>
                 ))}
                 <th style={{ ...thStyle, textAlign: "center" }}>Themes</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Total</th>
@@ -250,12 +280,16 @@ function ThemeBlock({
       {isEditing ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input
+            <select
               value={monthLabel}
               onChange={(e) => setMonthLabel(e.target.value)}
-              placeholder="e.g. Month 1-2"
-              style={{ ...inputStyle, flex: "0 0 140px" }}
-            />
+              style={{ ...selectStyle, flex: "0 0 160px" }}
+            >
+              <option value="">No month</option>
+              {MONTHS.map((m) => (
+                <option key={m.value} value={m.label.split(" ")[0]}>{m.label.split(" ")[0]}</option>
+              ))}
+            </select>
             <input
               value={themeName}
               onChange={(e) => setThemeName(e.target.value)}
@@ -436,12 +470,16 @@ function AddThemeForm({
         New Theme Block
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input
+        <select
           value={monthLabel}
           onChange={(e) => setMonthLabel(e.target.value)}
-          placeholder="e.g. Month 1-2, Recurring, etc."
-          style={{ ...inputStyle, flex: "0 0 200px" }}
-        />
+          style={{ ...selectStyle, flex: "0 0 160px" }}
+        >
+          <option value="">No month</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.label.split(" ")[0]}>{m.label.split(" ")[0]}</option>
+          ))}
+        </select>
         <input
           value={theme}
           onChange={(e) => setTheme(e.target.value)}
