@@ -128,6 +128,27 @@ const SCHEMA = {
     "role",
     "created_at",
   ],
+  meta_execution_queue: [
+    "id",
+    "client_id",
+    "campaign_id",
+    "ad_id",
+    "adset_meta_id",
+    "ad_meta_id",
+    "decision_type",
+    "proposed_payload",
+    "reason",
+    "risk_level",
+    "status",
+    "approved_by",
+    "approved_at",
+    "executed_at",
+    "execution_result",
+    "execution_error",
+    "last_checked_at",
+    "last_checked_state",
+    "created_at",
+  ],
 };
 
 const RED = "\x1b[31m";

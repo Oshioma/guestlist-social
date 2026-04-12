@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  seedPauseAd,
+  seedIncreaseAdsetBudget,
+} from "@/lib/meta-queue-seed";
 
 export const dynamic = "force-dynamic";
 
@@ -151,7 +155,7 @@ export async function POST(req: Request) {
     const [adsRes, learningsRes, playbookRes] = await Promise.all([
       supabase
         .from("ads")
-        .select("id, name, status, meta_status, spend, impressions, clicks, conversions, cost_per_result, performance_status, performance_score, ctr, cpc")
+        .select("id, name, status, meta_status, meta_id, campaign_id, adset_meta_id, spend, impressions, clicks, conversions, cost_per_result, performance_status, performance_score, ctr, cpc")
         .eq("client_id", clientId),
       supabase
         .from("action_learnings")
@@ -198,6 +202,10 @@ export async function POST(req: Request) {
 
     let generated = 0;
     const errors: string[] = [];
+    // Stats for the queue seeder so the response shows what landed where.
+    let queuedPause = 0;
+    let queuedBudget = 0;
+    let queueDeduped = 0;
 
     for (const ad of enrichedAds) {
       const decision = getDecision(ad, learnings, playbook);
@@ -219,12 +227,76 @@ export async function POST(req: Request) {
       } else {
         generated++;
       }
+
+      // ---------------------------------------------------------------
+      // Mirror eligible decisions into meta_execution_queue.
+      //
+      // Only the safest two decision types get a queue row right now:
+      //   - pause_or_replace / kill_test → seedPauseAd
+      //   - scale_budget                 → seedIncreaseAdsetBudget
+      //
+      // The seeders dedupe internally — if there's already a pending or
+      // approved row for the same Meta object, we surface it as
+      // `deduped` rather than inserting a duplicate.
+      //
+      // Anything that doesn't have a Meta id is silently skipped: the
+      // ad_decisions row still exists for the operator to see, but the
+      // queue can't act on it without a real Meta target.
+      // ---------------------------------------------------------------
+      const adMetaId = ad.meta_id ? String(ad.meta_id) : null;
+      const adsetMetaId = ad.adset_meta_id ? String(ad.adset_meta_id) : null;
+      const localCampaignId =
+        ad.campaign_id != null ? Number(ad.campaign_id) : null;
+      const localAdId = ad.id != null ? Number(ad.id) : null;
+
+      const isPauseLike =
+        decision.type === "pause_or_replace" || decision.type === "kill_test";
+
+      if (isPauseLike && adMetaId) {
+        const seeded = await seedPauseAd(supabase, {
+          clientId: Number(clientId),
+          campaignId: localCampaignId,
+          adId: localAdId,
+          adMetaId,
+          reason: decision.reason,
+          riskLevel: decision.confidence === "high" ? "low" : "medium",
+        });
+        if (seeded.ok) {
+          if (seeded.deduped) queueDeduped++;
+          else queuedPause++;
+        } else {
+          errors.push(`Queue (pause) ad ${ad.id}: ${seeded.error}`);
+        }
+      }
+
+      if (decision.type === "scale_budget" && adsetMetaId) {
+        const seeded = await seedIncreaseAdsetBudget(supabase, {
+          clientId: Number(clientId),
+          campaignId: localCampaignId,
+          adId: localAdId,
+          adsetMetaId,
+          // Default +15% — under the executor's +20% hard cap.
+          reason: decision.reason,
+          riskLevel: decision.confidence === "high" ? "low" : "medium",
+        });
+        if (seeded.ok) {
+          if (seeded.deduped) queueDeduped++;
+          else queuedBudget++;
+        } else {
+          errors.push(`Queue (budget) ad ${ad.id}: ${seeded.error}`);
+        }
+      }
     }
 
     return NextResponse.json({
       ok: true,
       generated,
       total: ads.length,
+      queue: {
+        pause_ad: queuedPause,
+        increase_adset_budget: queuedBudget,
+        deduped: queueDeduped,
+      },
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
