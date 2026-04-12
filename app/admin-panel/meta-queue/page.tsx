@@ -185,6 +185,40 @@ export default async function MetaQueuePage() {
             is. Writes are signed with appsecret_proof, which requires it.
           </div>
         )}
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            gap: 12,
+            fontSize: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <a
+            href="/api/meta-execute-preflight"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              color: dryRunOn ? "#1d4ed8" : "#854d0e",
+              textDecoration: "underline",
+              fontWeight: 600,
+            }}
+          >
+            Run preflight ↗
+          </a>
+          <a
+            href="https://github.com/oshioma/guestlist-social/blob/main/docs/meta-execute-runbook.md"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              color: dryRunOn ? "#1d4ed8" : "#854d0e",
+              textDecoration: "underline",
+              fontWeight: 600,
+            }}
+          >
+            Operator runbook ↗
+          </a>
+        </div>
       </div>
 
       {/* Pending */}
