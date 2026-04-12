@@ -112,7 +112,11 @@ export default function AdRow({ ad }: { ad: Ad }) {
         {ad.performanceReason}
       </div>
 
-      {suggestion && (
+      {suggestion && (() => {
+        const isOpportunity = /winning|winner|scale/i.test(suggestion.problem);
+        const labelText = isOpportunity ? "Opportunity" : "Problem";
+        const labelColor = isOpportunity ? "#166534" : "#991b1b";
+        return (
         <div
           style={{
             display: "flex",
@@ -123,7 +127,7 @@ export default function AdRow({ ad }: { ad: Ad }) {
             fontSize: 12,
           }}
         >
-          <span style={{ color: "#991b1b" }}>Problem: {suggestion.problem}</span>
+          <span style={{ color: labelColor }}>{labelText}: {suggestion.problem}</span>
           <span style={{ color: "#18181b" }}>Action: {suggestion.action}</span>
           <span
             style={{
@@ -139,7 +143,8 @@ export default function AdRow({ ad }: { ad: Ad }) {
             {suggestion.priority}
           </span>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

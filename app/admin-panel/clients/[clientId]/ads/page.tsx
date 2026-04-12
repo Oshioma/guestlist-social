@@ -540,9 +540,10 @@ export default async function ClientAdsPage({
                         const source = queued ?? ad._suggestion;
                         if (!source) return null;
 
+                        const isOpportunity = /winning|winner|scale/i.test(source.problem);
                         const actionLabels: Record<string, string> = {
                           high: "Fix",
-                          medium: "Optimize",
+                          medium: isOpportunity ? "Scale" : "Optimize",
                           low: "Monitor",
                         };
                         const actionBadge = queued
@@ -554,41 +555,51 @@ export default async function ClientAdsPage({
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 8,
-                              marginTop: 6,
-                              padding: "5px 10px",
-                              borderRadius: 8,
+                              gap: 10,
+                              marginTop: 8,
+                              padding: "8px 12px",
+                              borderRadius: 10,
                               background: queued ? (
+                                isOpportunity ? "#ecfdf5" :
                                 source.priority === "high" ? "#fef2f2" :
                                 source.priority === "medium" ? "#fffbeb" : "#fafafa"
                               ) : "#fafafa",
                               border: `1px solid ${
                                 queued ? (
+                                  isOpportunity ? "#bbf7d0" :
                                   source.priority === "high" ? "#fecaca" :
                                   source.priority === "medium" ? "#fde68a" : "#e4e4e7"
                                 ) : "#f4f4f5"
                               }`,
-                              fontSize: 12,
+                              fontSize: 13,
+                              lineHeight: 1.4,
                             }}
                           >
                             {queued && (
                               <span
                                 style={{
-                                  padding: "1px 8px",
+                                  padding: "2px 9px",
                                   borderRadius: 999,
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   fontWeight: 700,
-                                  background:
-                                    priorityColors[source.priority]?.text ?? "#71717a",
+                                  background: isOpportunity
+                                    ? "#166534"
+                                    : priorityColors[source.priority]?.text ?? "#71717a",
                                   color: "#fff",
                                   textTransform: "uppercase",
+                                  flexShrink: 0,
                                 }}
                               >
                                 {actionBadge}
                               </span>
                             )}
-                            <span style={{ color: "#991b1b", fontWeight: 500 }}>
-                              {source.problem}
+                            <span
+                              style={{
+                                color: isOpportunity ? "#166534" : "#991b1b",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {isOpportunity ? "Opportunity" : "Problem"}: {source.problem}
                             </span>
                             <span style={{ color: "#71717a" }}>→</span>
                             <span style={{ color: "#18181b" }}>
