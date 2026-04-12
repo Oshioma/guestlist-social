@@ -194,7 +194,12 @@ export type Task = {
   updatedAt: string;
 };
 
-export type ProoferStatus = "none" | "improve" | "check" | "proofed";
+export type ProoferStatus =
+  | "none"
+  | "improve"
+  | "check"
+  | "proofed"
+  | "approved";
 
 export type ProoferComment = {
   id: string;
