@@ -5,10 +5,12 @@ import EmptyState from "../../../../components/EmptyState";
 import ReviewApprovalRow from "../../../../components/ReviewApprovalRow";
 import ReviewLifecycleControls from "../../../../components/ReviewLifecycleControls";
 import RewriteWithAIButton from "../../../../components/RewriteWithAIButton";
+import EditableNarrativeField from "../../../../components/EditableNarrativeField";
 import {
   approveProposal,
   markReviewApproved,
   sendReviewForApproval,
+  updateReviewNarrative,
 } from "../../../../lib/review-actions";
 import { rewriteReviewWithClaude } from "../../../../lib/review-rewrite";
 
@@ -178,6 +180,21 @@ export default async function ReviewDetailPage({
   const learned = review.what_we_learned ?? [];
   const next = review.what_next ?? [];
 
+  // Inline editing is gated to drafts — once a review is sent or approved,
+  // the narrative is immutable so the share link stays consistent.
+  const isDraft = review.status === "draft";
+
+  // Server action shim — keeps the page a server component while letting the
+  // client editor invoke the action via prop.
+  async function handleNarrativeSave(
+    id: number,
+    field: "headline" | "subhead" | "what_happened",
+    value: string
+  ) {
+    "use server";
+    await updateReviewNarrative(id, field, value);
+  }
+
   // Group approvals by proposal_type for the "What's next" section
   const approvalsByType = new Map<string, Approval[]>();
   for (const a of approvals) {
@@ -264,29 +281,60 @@ export default async function ReviewDetailPage({
         >
           {review.period_label} · {review.period_type}
         </div>
-        <h1
-          style={{
-            fontSize: 32,
-            fontWeight: 700,
-            margin: 0,
-            lineHeight: 1.15,
-          }}
+        <EditableNarrativeField
+          reviewId={review.id}
+          field="headline"
+          initialValue={review.headline ?? ""}
+          rows={2}
+          editable={isDraft}
+          onSave={handleNarrativeSave}
         >
-          {review.headline ?? "Review"}
-        </h1>
-        {review.subhead && (
-          <p
+          <h1
             style={{
-              margin: "12px 0 0",
-              fontSize: 16,
-              color: "#e4e4e7",
-              lineHeight: 1.5,
-              maxWidth: 700,
+              fontSize: 32,
+              fontWeight: 700,
+              margin: 0,
+              lineHeight: 1.15,
             }}
           >
-            {review.subhead}
-          </p>
-        )}
+            {review.headline ?? "Review"}
+          </h1>
+        </EditableNarrativeField>
+        <div style={{ marginTop: 12 }}>
+          <EditableNarrativeField
+            reviewId={review.id}
+            field="subhead"
+            initialValue={review.subhead ?? ""}
+            rows={3}
+            editable={isDraft}
+            onSave={handleNarrativeSave}
+          >
+            {review.subhead ? (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  color: "#e4e4e7",
+                  lineHeight: 1.5,
+                  maxWidth: 700,
+                }}
+              >
+                {review.subhead}
+              </p>
+            ) : isDraft ? (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: "#71717a",
+                  fontStyle: "italic",
+                }}
+              >
+                No subhead yet — click Edit to add one.
+              </p>
+            ) : null}
+          </EditableNarrativeField>
+        </div>
         <div
           style={{
             marginTop: 18,
@@ -303,16 +351,26 @@ export default async function ReviewDetailPage({
 
       {/* What happened */}
       <SectionCard title="What happened">
-        <p
-          style={{
-            margin: 0,
-            fontSize: 15,
-            color: "#27272a",
-            lineHeight: 1.6,
-          }}
+        <EditableNarrativeField
+          reviewId={review.id}
+          field="what_happened"
+          initialValue={review.what_happened ?? ""}
+          rows={6}
+          editable={isDraft}
+          onSave={handleNarrativeSave}
         >
-          {review.what_happened ?? "No summary available."}
-        </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 15,
+              color: "#27272a",
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {review.what_happened ?? "No summary available."}
+          </p>
+        </EditableNarrativeField>
       </SectionCard>
 
       {/* What improved */}
