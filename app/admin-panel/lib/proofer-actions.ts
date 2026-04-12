@@ -12,8 +12,6 @@ function normalizeStatus(value: string): Status {
     : "none";
 }
 
-// ---------------- POSTS ----------------
-
 export async function saveProoferPostAction(
   clientId: string,
   postDate: string,
@@ -58,9 +56,14 @@ export async function saveProoferPostAction(
       })
       .eq("id", existing.id);
 
-    if (error) throw new Error("Could not save post.");
+    if (error) {
+      console.error("saveProoferPostAction update error:", error);
+      throw new Error("Could not save post.");
+    }
   } else {
-    if (!hasContent) return;
+    if (!hasContent) {
+      return;
+    }
 
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
@@ -71,7 +74,10 @@ export async function saveProoferPostAction(
       created_by: authorEmail,
     });
 
-    if (error) throw new Error("Could not save post.");
+    if (error) {
+      console.error("saveProoferPostAction insert error:", error);
+      throw new Error("Could not save post.");
+    }
   }
 
   revalidatePath("/app/proofer");
@@ -82,6 +88,10 @@ export async function updateProoferStatusAction(
   postDate: string,
   status: string
 ) {
+  if (!clientId || !postDate) {
+    throw new Error("Client and date are required.");
+  }
+
   const normalized = normalizeStatus(status);
   const supabase = await createClient();
 
@@ -98,15 +108,20 @@ export async function updateProoferStatusAction(
     .maybeSingle();
 
   if (existing) {
-    await supabase
+    const { error } = await supabase
       .from("proofer_posts")
       .update({
         status: normalized,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
+
+    if (error) {
+      console.error("updateProoferStatusAction update error:", error);
+      throw new Error("Could not update status.");
+    }
   } else {
-    await supabase.from("proofer_posts").insert({
+    const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
       post_date: postDate,
       caption: "",
@@ -114,6 +129,11 @@ export async function updateProoferStatusAction(
       status: normalized,
       created_by: authorEmail,
     });
+
+    if (error) {
+      console.error("updateProoferStatusAction insert error:", error);
+      throw new Error("Could not update status.");
+    }
   }
 
   revalidatePath("/app/proofer");
@@ -123,25 +143,33 @@ export async function deleteProoferPostAction(
   clientId: string,
   postDate: string
 ) {
+  if (!clientId || !postDate) {
+    throw new Error("Client and date are required.");
+  }
+
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from("proofer_posts")
     .delete()
     .eq("client_id", clientId)
     .eq("post_date", postDate);
 
+  if (error) {
+    console.error("deleteProoferPostAction error:", error);
+    throw new Error("Could not delete post.");
+  }
+
   revalidatePath("/app/proofer");
 }
 
-// ---------------- COMMENTS ----------------
+export async function addProoferCommentAction(postId: string, comment: string) {
+  if (!postId) {
+    throw new Error("Post is required.");
+  }
 
-export async function addProoferCommentAction(
-  postId: string,
-  comment: string
-) {
-  if (!postId || !comment.trim()) {
-    throw new Error("Comment required.");
+  if (!comment.trim()) {
+    throw new Error("Comment is required.");
   }
 
   const supabase = await createClient();
@@ -149,12 +177,19 @@ export async function addProoferCommentAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const authorEmail = user?.email ?? "unknown";
 
-  await supabase.from("proofer_comments").insert({
+  const { error } = await supabase.from("proofer_comments").insert({
     post_id: postId,
-    comment,
-    created_by: user?.email ?? "unknown",
+    comment: comment.trim(),
+    created_by: authorEmail,
+    resolved: false,
   });
+
+  if (error) {
+    console.error("addProoferCommentAction error:", error);
+    throw new Error("Could not add comment.");
+  }
 
   revalidatePath("/app/proofer");
 }
@@ -163,12 +198,21 @@ export async function toggleProoferCommentResolvedAction(
   commentId: string,
   resolved: boolean
 ) {
+  if (!commentId) {
+    throw new Error("Comment is required.");
+  }
+
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from("proofer_comments")
     .update({ resolved })
     .eq("id", commentId);
+
+  if (error) {
+    console.error("toggleProoferCommentResolvedAction error:", error);
+    throw new Error("Could not update comment.");
+  }
 
   revalidatePath("/app/proofer");
 }
