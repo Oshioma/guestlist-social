@@ -66,11 +66,12 @@ function lastFullMonth(now: Date = new Date()): {
 }
 
 function getBaseUrl(req: Request): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
-    new URL(req.url).origin
-  );
+  // Prefer the request origin over VERCEL_URL — VERCEL_URL is the
+  // deployment-specific hostname, which is gated by Vercel
+  // Authentication when enabled, so internal fetches to it return the
+  // SSO HTML page instead of JSON. NEXT_PUBLIC_APP_URL is honoured first
+  // as an explicit override.
+  return process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
 }
 
 function isAuthorized(req: Request): boolean {

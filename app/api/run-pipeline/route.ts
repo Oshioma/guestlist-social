@@ -286,11 +286,21 @@ export async function POST(req: Request) {
 
     const jobId = Number(job.id);
 
-    // Resolve a base URL for internal fetches. In Vercel this is VERCEL_URL,
-    // locally it's whatever host the request came in on.
+    // Resolve a base URL for internal fetches.
+    //
+    // We deliberately prefer the request's own origin over VERCEL_URL.
+    // VERCEL_URL points at the deployment-specific hostname
+    // (`<project>-<hash>.vercel.app`), which is gated by Vercel
+    // Authentication when it's enabled — so internal fetches to it come
+    // back as the SSO HTML page and every downstream JSON.parse fails
+    // with "Unexpected token '<'". The host the user just hit (e.g.
+    // `www.guestlistsocial.com`) is always the right callback target.
+    //
+    // NEXT_PUBLIC_APP_URL is still honoured first as an explicit override
+    // for environments where the request origin isn't trustworthy (e.g.
+    // a cron run with no inbound request).
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
       new URL(req.url).origin;
 
     // after() runs post-response so the browser isn't blocked.
