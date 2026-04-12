@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { updateAdStatus, updateCampaignBudget } from "@/lib/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -78,9 +79,15 @@ export async function POST(req: Request) {
 
     // --- EXECUTE ---
     if (action === "execute") {
-      // For now: mark as executed and apply DB-side changes
-      // Meta API push can be added later
       let executionResult = "Executed locally";
+      const metaResults: string[] = [];
+
+      // Look up the ad's meta_id for Meta API calls
+      const { data: adRow } = await supabase
+        .from("ads")
+        .select("meta_id, campaign_id")
+        .eq("id", decision.ad_id)
+        .single();
 
       if (decision.type === "pause_or_replace" || decision.type === "kill_test") {
         // Update ad status in DB
@@ -89,14 +96,70 @@ export async function POST(req: Request) {
           .update({ status: "paused", meta_status: "PAUSED" })
           .eq("id", decision.ad_id);
 
-        executionResult = adError
-          ? `DB update failed: ${adError.message}`
-          : "Ad paused in database";
+        if (adError) {
+          metaResults.push(`DB update failed: ${adError.message}`);
+        } else {
+          metaResults.push("Ad paused in database");
+        }
+
+        // Push to Meta if ad has a meta_id
+        if (adRow?.meta_id) {
+          const metaRes = await updateAdStatus(adRow.meta_id, "PAUSED");
+          if (metaRes.success) {
+            metaResults.push("Ad paused on Meta");
+          } else {
+            metaResults.push(`Meta pause failed: ${metaRes.error}`);
+          }
+        } else {
+          metaResults.push("No meta_id — skipped Meta push");
+        }
+
+        executionResult = metaResults.join(". ");
       }
 
       if (decision.type === "scale_budget") {
-        // We can't change budget without Meta API, just note it
-        executionResult = "Budget increase flagged. Apply manually in Meta Ads Manager.";
+        // Look up the campaign to get its meta_id and current budget
+        let campaignMetaId: string | null = null;
+        let currentBudgetCents = 0;
+
+        if (adRow?.campaign_id) {
+          const { data: campaignRow } = await supabase
+            .from("campaigns")
+            .select("meta_id, daily_budget")
+            .eq("id", adRow.campaign_id)
+            .single();
+
+          campaignMetaId = campaignRow?.meta_id ?? null;
+          currentBudgetCents = Number(campaignRow?.daily_budget ?? 0);
+        }
+
+        if (campaignMetaId && currentBudgetCents > 0) {
+          // Increase budget by 25%
+          const newBudgetCents = Math.round(currentBudgetCents * 1.25);
+          const metaRes = await updateCampaignBudget(campaignMetaId, newBudgetCents);
+
+          if (metaRes.success) {
+            // Update local DB too
+            await supabase
+              .from("campaigns")
+              .update({ daily_budget: newBudgetCents })
+              .eq("id", adRow!.campaign_id);
+
+            metaResults.push(
+              `Budget scaled on Meta: $${(currentBudgetCents / 100).toFixed(2)} → $${(newBudgetCents / 100).toFixed(2)}`
+            );
+          } else {
+            metaResults.push(`Meta budget update failed: ${metaRes.error}`);
+          }
+        } else if (!campaignMetaId) {
+          metaResults.push("No campaign meta_id — cannot push budget to Meta");
+        } else {
+          metaResults.push("No current budget found — cannot compute scale amount");
+        }
+
+        executionResult = metaResults.length > 0
+          ? metaResults.join(". ")
+          : "Budget scale flagged but no Meta push possible";
       }
 
       const { error } = await supabase
