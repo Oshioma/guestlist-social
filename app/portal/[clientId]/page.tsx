@@ -48,6 +48,30 @@ type Decision = {
   created_at: string;
 };
 
+// "What we changed since last review" — one row per executed action / decision.
+// Bundles together completed ad_actions (the operator-driven side) and
+// executed ad_decisions (the engine-driven side) into a single visual list.
+type Movement = {
+  key: string;
+  kind: "action" | "decision";
+  at: string;
+  label: string;
+  detail: string | null;
+  operatorNote: string | null;
+  outcome: "positive" | "neutral" | "negative" | null;
+  adId: number | null;
+  adName: string | null;
+};
+
+const OUTCOME_BADGE: Record<
+  NonNullable<Movement["outcome"]>,
+  { bg: string; fg: string; symbol: string; label: string }
+> = {
+  positive: { bg: "#dcfce7", fg: "#166534", symbol: "▲", label: "Positive" },
+  neutral: { bg: "#f1f5f9", fg: "#475569", symbol: "·", label: "Neutral" },
+  negative: { bg: "#fee2e2", fg: "#991b1b", symbol: "▼", label: "Negative" },
+};
+
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 export default async function PortalClientDashboard({
@@ -72,29 +96,41 @@ export default async function PortalClientDashboard({
   const ads = (adsRes.data ?? []) as Ad[];
   const adIds = ads.map((a) => a.id);
 
-  const [actionsRes, decisionsRes, reviewsRes] = await Promise.all([
-    adIds.length === 0
-      ? Promise.resolve({ data: [] as Action[] })
-      : supabase
-          .from("ad_actions")
-          .select("id, ad_id, problem, action, priority, created_at")
-          .eq("status", "pending")
-          .in("ad_id", adIds)
-          .order("created_at", { ascending: false }),
-    supabase
-      .from("ad_decisions")
-      .select("id, ad_id, type, reason, action, confidence, created_at")
-      .eq("client_id", clientId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("reviews")
-      .select("id, period_label, headline, status, sent_at, approved_at")
-      .eq("client_id", clientId)
-      .in("status", ["sent", "approved"])
-      .order("period_end", { ascending: false })
-      .limit(1),
-  ]);
+  // Find the most recent approved review *first* — its approved_at is the
+  // cutoff for the "what changed since" panel below. We do this in parallel
+  // with the pending lists so it's free latency-wise.
+  const [actionsRes, decisionsRes, reviewsRes, lastApprovedRes] =
+    await Promise.all([
+      adIds.length === 0
+        ? Promise.resolve({ data: [] as Action[] })
+        : supabase
+            .from("ad_actions")
+            .select("id, ad_id, problem, action, priority, created_at")
+            .eq("status", "pending")
+            .in("ad_id", adIds)
+            .order("created_at", { ascending: false }),
+      supabase
+        .from("ad_decisions")
+        .select("id, ad_id, type, reason, action, confidence, created_at")
+        .eq("client_id", clientId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("reviews")
+        .select("id, period_label, headline, status, sent_at, approved_at")
+        .eq("client_id", clientId)
+        .in("status", ["sent", "approved"])
+        .order("period_end", { ascending: false })
+        .limit(1),
+      supabase
+        .from("reviews")
+        .select("id, period_label, approved_at")
+        .eq("client_id", clientId)
+        .eq("status", "approved")
+        .not("approved_at", "is", null)
+        .order("approved_at", { ascending: false })
+        .limit(1),
+    ]);
 
   const actions = (actionsRes.data ?? []) as Action[];
   const decisions = (decisionsRes.data ?? []) as Decision[];
@@ -108,6 +144,91 @@ export default async function PortalClientDashboard({
         approved_at: string | null;
       }
     | null;
+  const lastApproved = ((lastApprovedRes.data ?? [])[0] ?? null) as
+    | { id: number; period_label: string; approved_at: string }
+    | null;
+
+  // ── "What we changed since last review" panel ──────────────────────────
+  // Only renders for clients who have at least one signed-off review — the
+  // whole point of the panel is to show a *returning* client what moved
+  // since they last looked. New clients see nothing here, by design.
+  let movements: Movement[] = [];
+  if (lastApproved && adIds.length > 0) {
+    const cutoff = lastApproved.approved_at;
+    const adNameById = new Map(ads.map((a) => [a.id, a.name] as const));
+
+    const [completedActionsRes, executedDecisionsRes] = await Promise.all([
+      supabase
+        .from("ad_actions")
+        .select(
+          "id, ad_id, problem, action, completed_at, outcome, result_summary, operator_note"
+        )
+        .in("ad_id", adIds)
+        .eq("status", "completed")
+        .gt("completed_at", cutoff)
+        .order("completed_at", { ascending: false }),
+      supabase
+        .from("ad_decisions")
+        .select("id, ad_id, type, reason, action, executed_at, execution_result")
+        .eq("client_id", clientId)
+        .not("executed_at", "is", null)
+        .gt("executed_at", cutoff)
+        .order("executed_at", { ascending: false }),
+    ]);
+
+    for (const a of (completedActionsRes.data ?? []) as Array<{
+      id: string;
+      ad_id: number | null;
+      problem: string | null;
+      action: string | null;
+      completed_at: string;
+      outcome: string | null;
+      result_summary: string | null;
+      operator_note: string | null;
+    }>) {
+      const outcome = (() => {
+        if (a.outcome === "positive" || a.outcome === "negative" || a.outcome === "neutral") {
+          return a.outcome;
+        }
+        return null;
+      })();
+      movements.push({
+        key: `action-${a.id}`,
+        kind: "action",
+        at: a.completed_at,
+        label: a.action ?? a.problem ?? "Action completed",
+        detail: a.result_summary,
+        operatorNote: a.operator_note,
+        outcome,
+        adId: a.ad_id,
+        adName: a.ad_id ? adNameById.get(a.ad_id) ?? null : null,
+      });
+    }
+
+    for (const d of (executedDecisionsRes.data ?? []) as Array<{
+      id: number;
+      ad_id: number | null;
+      type: string | null;
+      reason: string | null;
+      action: string | null;
+      executed_at: string;
+      execution_result: string | null;
+    }>) {
+      movements.push({
+        key: `decision-${d.id}`,
+        kind: "decision",
+        at: d.executed_at,
+        label: d.action ?? d.reason ?? `Decision · ${d.type ?? "executed"}`,
+        detail: d.execution_result ?? d.reason,
+        operatorNote: null,
+        outcome: null,
+        adId: d.ad_id,
+        adName: d.ad_id ? adNameById.get(d.ad_id) ?? null : null,
+      });
+    }
+
+    movements.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }
 
   // ── Soft "what's happening" line ────────────────────────────────────────
   const activeAds = ads.filter(
@@ -395,6 +516,200 @@ export default async function PortalClientDashboard({
           </div>
         )}
       </section>
+
+      {/* ── What we changed since last review ─────────────────────────── */}
+      {lastApproved && (
+        <section
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: 16,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              marginBottom: 4,
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                margin: 0,
+                color: "#0f172a",
+              }}
+            >
+              What we&rsquo;ve done since {lastApproved.period_label}
+            </h2>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>
+              {movements.length}{" "}
+              {movements.length === 1 ? "change" : "changes"}
+            </span>
+          </div>
+          <p
+            style={{
+              margin: "4px 0 16px",
+              fontSize: 12,
+              color: "#64748b",
+            }}
+          >
+            Everything your operator has shipped since you signed off your
+            last review. The next review will fold these in.
+          </p>
+
+          {movements.length === 0 ? (
+            <div
+              style={{
+                padding: 24,
+                textAlign: "center",
+                color: "#94a3b8",
+                fontSize: 13,
+              }}
+            >
+              Nothing new yet. Your next review will pick up from here.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {movements.map((m) => {
+                const badge = m.outcome ? OUTCOME_BADGE[m.outcome] : null;
+                return (
+                  <div
+                    key={m.key}
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      padding: 14,
+                      background: "#f8fafc",
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {/* Outcome / kind dot */}
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: badge?.bg ?? "#e0f2fe",
+                        color: badge?.fg ?? "#0c4a6e",
+                        fontSize: 13,
+                        fontWeight: 700,
+                      }}
+                      title={badge?.label ?? "Decision executed"}
+                    >
+                      {badge?.symbol ?? "→"}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#0f172a",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {m.label}
+                      </div>
+                      {m.detail && m.detail !== m.label && (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 13,
+                            color: "#475569",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {m.detail}
+                        </div>
+                      )}
+                      {m.operatorNote && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: "8px 12px",
+                            background: "#f0f9ff",
+                            border: "1px solid #bae6fd",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: "#0c4a6e",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <strong style={{ fontWeight: 600 }}>
+                            Note from your team:
+                          </strong>{" "}
+                          {m.operatorNote}
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            background:
+                              m.kind === "action" ? "#fef3c7" : "#dbeafe",
+                            color:
+                              m.kind === "action" ? "#92400e" : "#1e40af",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
+                          {m.kind}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#94a3b8",
+                          }}
+                        >
+                          {new Date(m.at).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                        {m.adId && m.adName && (
+                          <Link
+                            href={`/portal/${clientId}/ads/${m.adId}`}
+                            style={{
+                              fontSize: 12,
+                              color: "#1e40af",
+                              textDecoration: "none",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {m.adName} →
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Latest review ──────────────────────────────────────────────── */}
       {latestReview && (
