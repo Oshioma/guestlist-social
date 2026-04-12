@@ -684,237 +684,237 @@ export default function ProoferBoard({
       </SectionCard>
 
       {clients.length > 0 && (
-        <SectionCard title="Content pillars">
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 6,
             }}
           >
-            <div style={{ fontSize: 12, color: "#71717a" }}>
-              Define the evergreen buckets every post for this client rolls
-              into (e.g. Education, Behind-the-scenes, Promo).
-            </div>
-
-            {initialPillars.length === 0 ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#a1a1aa",
-                  fontStyle: "italic",
-                }}
-              >
-                No pillars yet — add one below.
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                }}
-              >
-                {initialPillars.map((pillar) =>
-                  editingPillarId === pillar.id ? (
-                    <div
-                      key={pillar.id}
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        alignItems: "center",
-                        padding: "6px 8px",
-                        borderRadius: 10,
-                        border: "1px solid #e4e4e7",
-                        background: "#fafafa",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <input
-                        type="color"
-                        value={pillarEditDraft.color}
-                        onChange={(e) =>
-                          setPillarEditDraft((prev) => ({
-                            ...prev,
-                            color: e.target.value,
-                          }))
-                        }
-                        style={{
-                          width: 28,
-                          height: 28,
-                          border: "none",
-                          padding: 0,
-                          background: "transparent",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={pillarEditDraft.name}
-                        onChange={(e) =>
-                          setPillarEditDraft((prev) => ({
-                            ...prev,
-                            name: e.target.value,
-                          }))
-                        }
-                        style={{ ...inputStyle, width: 140 }}
-                      />
-                      <input
-                        type="text"
-                        value={pillarEditDraft.description}
-                        onChange={(e) =>
-                          setPillarEditDraft((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                          }))
-                        }
-                        placeholder="Short description"
-                        style={{ ...inputStyle, width: 200 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleSavePillar(pillar.id)}
-                        disabled={isPending}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 8,
-                          background: "#18181b",
-                          color: "#fff",
-                          border: "none",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingPillarId(null)}
-                        style={secondaryButtonStyle}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleArchivePillar(pillar.id)}
-                        disabled={isPending}
-                        style={{
-                          ...secondaryButtonStyle,
-                          color: "#991b1b",
-                        }}
-                      >
-                        Archive
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      key={pillar.id}
-                      type="button"
-                      onClick={() => handleStartEditPillar(pillar)}
-                      title={pillar.description || "Edit pillar"}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "6px 12px",
-                        borderRadius: 999,
-                        border: "1px solid #e4e4e7",
-                        background: "#fff",
-                        cursor: "pointer",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#27272a",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "50%",
-                          background: pillar.color,
-                          display: "inline-block",
-                        }}
-                      />
-                      {pillar.name}
-                    </button>
-                  )
-                )}
-              </div>
+            {initialPillars.map((pillar) =>
+              editingPillarId === pillar.id ? (
+                <div
+                  key={pillar.id}
+                  style={{
+                    display: "inline-flex",
+                    gap: 6,
+                    alignItems: "center",
+                    padding: "4px 6px",
+                    borderRadius: 10,
+                    border: "1px solid #e4e4e7",
+                    background: "#fafafa",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={pillarEditDraft.color}
+                    onChange={(e) =>
+                      setPillarEditDraft((prev) => ({
+                        ...prev,
+                        color: e.target.value,
+                      }))
+                    }
+                    style={{
+                      width: 24,
+                      height: 24,
+                      border: "none",
+                      padding: 0,
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={pillarEditDraft.name}
+                    onChange={(e) =>
+                      setPillarEditDraft((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Name"
+                    style={{ ...inputStyle, width: 120, padding: "4px 8px" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSavePillar(pillar.id)}
+                    disabled={isPending}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 6,
+                      background: "#18181b",
+                      color: "#fff",
+                      border: "none",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPillarId(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#71717a",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      lineHeight: 1,
+                      padding: 2,
+                    }}
+                    aria-label="Cancel"
+                  >
+                    ×
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleArchivePillar(pillar.id)}
+                    disabled={isPending}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#991b1b",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "4px 6px",
+                    }}
+                  >
+                    Archive
+                  </button>
+                </div>
+              ) : (
+                <button
+                  key={pillar.id}
+                  type="button"
+                  onClick={() => handleStartEditPillar(pillar)}
+                  title={pillar.description || "Edit pillar"}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    border: "1px solid #e4e4e7",
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#27272a",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: pillar.color,
+                      display: "inline-block",
+                    }}
+                  />
+                  {pillar.name}
+                </button>
+              )
             )}
 
             <button
               type="button"
               onClick={() => setPillarManagerOpen((v) => !v)}
+              title={pillarManagerOpen ? "Cancel" : "Add pillar"}
+              aria-label={pillarManagerOpen ? "Cancel" : "Add pillar"}
               style={{
-                alignSelf: "flex-start",
-                ...secondaryButtonStyle,
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                border: "1px dashed #a1a1aa",
+                background: "#fff",
+                color: "#71717a",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 0,
               }}
             >
-              {pillarManagerOpen ? "Cancel" : "Add pillar"}
+              {pillarManagerOpen ? "×" : "+"}
             </button>
+          </div>
 
-            {pillarManagerOpen && (
-              <div
+          {pillarManagerOpen && (
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                flexWrap: "wrap",
+                alignItems: "center",
+                padding: 8,
+                borderRadius: 10,
+                border: "1px solid #e4e4e7",
+                background: "#fafafa",
+              }}
+            >
+              <input
+                type="color"
+                value={newPillarColor}
+                onChange={(e) => setNewPillarColor(e.target.value)}
                 style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid #e4e4e7",
-                  background: "#fafafa",
+                  width: 28,
+                  height: 28,
+                  border: "none",
+                  padding: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                }}
+              />
+              <input
+                type="text"
+                value={newPillarName}
+                onChange={(e) => setNewPillarName(e.target.value)}
+                placeholder="Pillar name"
+                autoFocus
+                style={{ ...inputStyle, width: 160 }}
+              />
+              <input
+                type="text"
+                value={newPillarDescription}
+                onChange={(e) => setNewPillarDescription(e.target.value)}
+                placeholder="Description (optional)"
+                style={{ ...inputStyle, width: 220 }}
+              />
+              <button
+                type="button"
+                onClick={handleCreatePillar}
+                disabled={isPending || !newPillarName.trim()}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: newPillarName.trim() ? "#18181b" : "#e4e4e7",
+                  color: newPillarName.trim() ? "#fff" : "#a1a1aa",
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: newPillarName.trim() ? "pointer" : "not-allowed",
                 }}
               >
-                <input
-                  type="color"
-                  value={newPillarColor}
-                  onChange={(e) => setNewPillarColor(e.target.value)}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    border: "none",
-                    padding: 0,
-                    background: "transparent",
-                    cursor: "pointer",
-                  }}
-                />
-                <input
-                  type="text"
-                  value={newPillarName}
-                  onChange={(e) => setNewPillarName(e.target.value)}
-                  placeholder="Pillar name"
-                  style={{ ...inputStyle, width: 160 }}
-                />
-                <input
-                  type="text"
-                  value={newPillarDescription}
-                  onChange={(e) => setNewPillarDescription(e.target.value)}
-                  placeholder="Short description (optional)"
-                  style={{ ...inputStyle, width: 240 }}
-                />
-                <button
-                  type="button"
-                  onClick={handleCreatePillar}
-                  disabled={isPending || !newPillarName.trim()}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    background: newPillarName.trim() ? "#18181b" : "#e4e4e7",
-                    color: newPillarName.trim() ? "#fff" : "#a1a1aa",
-                    border: "none",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: newPillarName.trim() ? "pointer" : "not-allowed",
-                  }}
-                >
-                  Create
-                </button>
-              </div>
-            )}
-          </div>
-        </SectionCard>
+                Create
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {clients.length === 0 ? (
