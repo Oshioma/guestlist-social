@@ -72,6 +72,25 @@ function formatDayLong(d: Date): string {
   });
 }
 
+// Pull a friendly filename out of a URL (or return the URL if we can't).
+// Strips the `timestamp_` prefix that /api/upload and ImageUpload inject.
+function prettyFileName(url: string): string {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    const decoded = decodeURIComponent(last);
+    // Strip leading "<digits>_" that our uploader adds for uniqueness.
+    return decoded.replace(/^\d{10,}_/, "") || url;
+  } catch {
+    return url.split("/").pop() || url;
+  }
+}
+
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url);
+}
+
 const inputStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -461,15 +480,60 @@ export default function ProoferBoard({
                       flexWrap: "wrap",
                     }}
                   >
-                    <input
-                      type="text"
-                      value={draft.imageUrl}
-                      onChange={(e) =>
-                        updateDraft(key, { imageUrl: e.target.value })
-                      }
-                      placeholder="Paste media URL or upload"
-                      style={{ ...inputStyle, flex: 1, minWidth: 200 }}
-                    />
+                    {draft.imageUrl ? (
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          background: "#f4f4f5",
+                          border: "1px solid #e4e4e7",
+                          fontSize: 12,
+                          color: "#3f3f46",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: 260,
+                          }}
+                          title={draft.imageUrl}
+                        >
+                          {prettyFileName(draft.imageUrl)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateDraft(key, { imageUrl: "" })}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "#71717a",
+                            cursor: "pointer",
+                            fontSize: 14,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                          aria-label="Remove media"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={draft.imageUrl}
+                        onChange={(e) =>
+                          updateDraft(key, { imageUrl: e.target.value })
+                        }
+                        placeholder="Paste media URL or upload"
+                        style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                      />
+                    )}
                     <ImageUpload
                       bucket="postimages"
                       folder={`proofer/${clientId}/${month}`}
@@ -482,41 +546,115 @@ export default function ProoferBoard({
                   {draft.imageUrl && (
                     <div
                       style={{
+                        width: "100%",
+                        maxWidth: 500,
+                        background: "#fff",
                         border: "1px solid #e4e4e7",
-                        borderRadius: 10,
+                        borderRadius: 12,
                         overflow: "hidden",
-                        maxWidth: 240,
-                        background: "#fafafa",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                       }}
                     >
-                      {/\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(draft.imageUrl) ? (
-                        <video
-                          src={draft.imageUrl}
-                          controls
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 12px",
+                        }}
+                      >
+                        <div
                           style={{
-                            display: "block",
-                            width: "100%",
-                            height: "auto",
-                            maxHeight: 240,
+                            width: 32,
+                            height: 32,
+                            borderRadius: "50%",
+                            background: "#e4e4e7",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#71717a",
                           }}
-                        />
-                      ) : (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={draft.imageUrl}
-                          alt="Preview"
+                        >
+                          {(
+                            clients.find((c) => c.id === clientId)?.name ?? "?"
+                          )
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#18181b",
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {clients.find((c) => c.id === clientId)?.name ??
+                              "Client"}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "#71717a",
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {formatDayLong(d)}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          width: "100%",
+                          aspectRatio: "1 / 1",
+                          background: "#fafafa",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {isVideoUrl(draft.imageUrl) ? (
+                          <video
+                            src={draft.imageUrl}
+                            controls
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={draft.imageUrl}
+                            alt="Preview"
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display =
+                                "none";
+                            }}
+                          />
+                        )}
+                      </div>
+                      {draft.caption.trim() && (
+                        <div
                           style={{
-                            display: "block",
-                            width: "100%",
-                            height: "auto",
-                            maxHeight: 240,
-                            objectFit: "cover",
+                            padding: "10px 12px 12px",
+                            fontSize: 13,
+                            color: "#18181b",
+                            whiteSpace: "pre-wrap",
+                            lineHeight: 1.4,
                           }}
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display =
-                              "none";
-                          }}
-                        />
+                        >
+                          {draft.caption}
+                        </div>
                       )}
                     </div>
                   )}
