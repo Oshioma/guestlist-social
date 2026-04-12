@@ -138,6 +138,7 @@ export type MetaAd = {
     title?: string;
     image_url?: string;
     thumbnail_url?: string;
+    video_id?: string;
     object_type?: string;
     call_to_action_type?: string;
     link_url?: string;
@@ -256,12 +257,40 @@ export async function getAdSets(): Promise<MetaAdSet[]> {
 export async function getAds(): Promise<MetaAd[]> {
   const { accountId } = getCredentials();
   return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
+    // Note `video_id` in the creative subselect — Meta doesn't expose a
+    // direct video URL on creatives, only the video object id. We resolve
+    // the playable URL via a separate /{video_id}?fields=source call in
+    // resolveVideoSource() below.
     fields:
       "id,name,status,effective_status,configured_status,adset_id,campaign_id,created_time,updated_time," +
-      "creative{id,name,body,title,image_url,thumbnail_url,object_type,call_to_action_type," +
+      "creative{id,name,body,title,image_url,thumbnail_url,video_id,object_type,call_to_action_type," +
       "link_url,effective_object_story_id,instagram_permalink_url,object_story_spec,asset_feed_spec}",
     limit: "200",
   });
+}
+
+/**
+ * Resolve a Meta video_id into a playable source URL via the Graph API.
+ *
+ * The `creative.video_id` we get from /ads is just an opaque id — there's
+ * no direct URL on the creative object. This call hits /{video_id}?fields=source
+ * which returns the playable mp4 URL Meta hosts.
+ *
+ * Returns null on any failure (missing source, deleted video, permission
+ * error) — we never want a single bad video to break the whole sync, and
+ * the column is nullable.
+ */
+export async function resolveVideoSource(videoId: string): Promise<string | null> {
+  try {
+    const data = await metaFetch<{ source?: string; id?: string }>(
+      `/${videoId}`,
+      { fields: "source" }
+    );
+    return data.source ?? null;
+  } catch (err) {
+    console.warn(`[meta] resolveVideoSource(${videoId}) failed:`, err);
+    return null;
+  }
 }
 
 // Shared field set for ad-level insights. Kept in one place so it's easy
@@ -643,13 +672,130 @@ export function insightToAdRow(insight: MetaInsight) {
   };
 }
 
-/** Extract the creative structure bits we care about from a MetaAd. */
+// ---------------------------------------------------------------------------
+// Classifiers — heuristic, rule-based labels for the creative trust layer.
+//
+// These are deliberately simple, conservative, and inspectable. They run on
+// every sync and write into hook_type / format_style on the ads table. The
+// engine then aggregates by these labels to surface things like "how-to
+// hooks beat direct-offer hooks by 28% CTR" without anyone hand-tagging
+// creatives.
+//
+// Both functions return null when no rule fires confidently — we'd rather
+// have a sparse, honest classification than a noisy one.
+//
+// v1 is text-only (body + headline). A future v2 should pipe the
+// creative_image_url through a vision model to confirm format_style on
+// videos and detect text-heavy graphics from the actual pixels.
+// ---------------------------------------------------------------------------
+
+export type HookType =
+  | "direct_offer"
+  | "curiosity"
+  | "problem_solution"
+  | "testimonial"
+  | "how_to"
+  | "emotional";
+
+export type FormatStyle =
+  | "talking_head"
+  | "product_shot"
+  | "ugc"
+  | "graphic"
+  | "text_heavy";
+
+export function classifyHookType(
+  body: string | null,
+  headline: string | null
+): HookType | null {
+  const text = [headline, body].filter(Boolean).join(" ").toLowerCase().trim();
+  if (!text) return null;
+
+  // Order matters — earlier rules win when multiple match. We rank from
+  // most-specific to least so a "how to save 50%" lands as how_to, not
+  // direct_offer.
+  if (/^how (to|i|we)\b|\b(step[- ]by[- ]step|tutorial|guide)\b/.test(text)) {
+    return "how_to";
+  }
+  if (/(^|["'\s])(i used to|i tried|here['']?s how i|my (story|journey)|★|⭐|5[- ]?star)/.test(text)) {
+    return "testimonial";
+  }
+  if (/\b(tired of|stop|no more|stuck|struggling|frustrated|sick of|fed up)\b/.test(text)) {
+    return "problem_solution";
+  }
+  if (/(\$\d|\d+%\s*off|\bsave\b|\bfree\b|\bbuy now\b|\bshop now\b|\blimited (time|offer)\b|\bdeal\b|\bsale\b)/.test(text)) {
+    return "direct_offer";
+  }
+  if (/\?|\b(the secret|you won['']?t believe|the truth about|here['']?s why|what (if|nobody))\b/.test(text)) {
+    return "curiosity";
+  }
+  if (/\b(love|feel|transform|life[- ]chang|amazing|change your|finally|imagine|dream)\b/.test(text)) {
+    return "emotional";
+  }
+
+  return null;
+}
+
+export function classifyFormatStyle(
+  creativeType: string | null,
+  body: string | null,
+  headline: string | null
+): FormatStyle | null {
+  const text = [headline, body].filter(Boolean).join(" ").toLowerCase();
+  const longCopy = (body?.length ?? 0) > 220;
+  const ct = (creativeType ?? "").toUpperCase();
+
+  // UGC reads pretty reliably from copy markers, regardless of media type.
+  if (/\b(real (people|story)|honest review|i tried|i used|authentic|unfiltered|caught on camera|ugc)\b/.test(text)) {
+    return "ugc";
+  }
+
+  // Video paths — talking head is the default when copy is first-person
+  // and lacks UGC markers; otherwise we don't guess.
+  if (ct === "VIDEO") {
+    if (/\b(i['']?m|we['']?re|here['']?s|let me show|in this video)\b/.test(text)) {
+      return "talking_head";
+    }
+    return null;
+  }
+
+  // Static images with very long body copy are usually graphic-with-text
+  // overlays; short body copy with a product-led headline is a product shot.
+  if (ct === "IMAGE" || ct === "PHOTO") {
+    if (longCopy) return "text_heavy";
+    if (/\b(buy|shop|new|now available|in stock|delivery|priced)\b/.test(text)) {
+      return "product_shot";
+    }
+    return "graphic";
+  }
+
+  // Carousel and dynamic creatives don't fit a single format_style cleanly.
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// creativeToAdRow — extracts the human-readable creative fields plus the
+// structured/classified bits the engine reads. The extraction follows the
+// shape Meta returns: object_story_spec.link_data carries the canonical
+// link-ad copy, falling back to the top-level creative.body / .title
+// fields when the creative isn't a link ad.
+// ---------------------------------------------------------------------------
 export function creativeToAdRow(metaAd: MetaAd): {
   creative_type: string | null;
   cta_type: string | null;
   destination_url: string | null;
   object_story_id: string | null;
   asset_feed_spec: Record<string, unknown> | null;
+  creative_image_url: string | null;
+  // Note: creative_video_url is NOT set here — it requires a separate
+  // /{video_id}?fields=source call. meta-sync-action.ts handles that and
+  // layers it onto the row before write.
+  creative_video_id: string | null;
+  creative_body: string | null;
+  creative_headline: string | null;
+  creative_cta: string | null;
+  hook_type: HookType | null;
+  format_style: FormatStyle | null;
 } {
   const c = metaAd.creative;
   if (!c) {
@@ -659,6 +805,13 @@ export function creativeToAdRow(metaAd: MetaAd): {
       destination_url: null,
       object_story_id: null,
       asset_feed_spec: null,
+      creative_image_url: null,
+      creative_video_id: null,
+      creative_body: null,
+      creative_headline: null,
+      creative_cta: null,
+      hook_type: null,
+      format_style: null,
     };
   }
 
@@ -681,12 +834,53 @@ export function creativeToAdRow(metaAd: MetaAd): {
     creativeType = c.object_type;
   }
 
+  // Pull human-readable copy following the priority Meta documents:
+  // link_data.message (the "primary text") and link_data.name (the
+  // "headline") are the canonical fields for link ads, with the top-level
+  // body/title as legacy fallbacks for older creatives.
+  const spec = (c.object_story_spec ?? {}) as {
+    link_data?: { message?: string; name?: string; picture?: string; call_to_action?: { type?: string } };
+    video_data?: { message?: string; title?: string; image_url?: string; call_to_action?: { type?: string } };
+  };
+
+  const body =
+    spec.link_data?.message ??
+    spec.video_data?.message ??
+    c.body ??
+    null;
+
+  const headline =
+    spec.link_data?.name ??
+    spec.video_data?.title ??
+    c.title ??
+    null;
+
+  const imageUrl =
+    c.image_url ??
+    c.thumbnail_url ??
+    spec.link_data?.picture ??
+    spec.video_data?.image_url ??
+    null;
+
+  const cta =
+    c.call_to_action_type ??
+    spec.link_data?.call_to_action?.type ??
+    spec.video_data?.call_to_action?.type ??
+    null;
+
   return {
     creative_type: creativeType,
-    cta_type: c.call_to_action_type ?? null,
+    cta_type: cta,
     destination_url: c.link_url ?? null,
     object_story_id: c.effective_object_story_id ?? null,
     asset_feed_spec: (c.asset_feed_spec as Record<string, unknown>) ?? null,
+    creative_image_url: imageUrl,
+    creative_video_id: c.video_id ?? null,
+    creative_body: body,
+    creative_headline: headline,
+    creative_cta: cta,
+    hook_type: classifyHookType(body, headline),
+    format_style: classifyFormatStyle(creativeType, body, headline),
   };
 }
 
