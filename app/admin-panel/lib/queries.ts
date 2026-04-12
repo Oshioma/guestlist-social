@@ -4,7 +4,7 @@ import {
   mapDbClientToUiClient,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme, Task, TaskCategory, TaskStatus, TaskRecurrence } from "./types";
+import type { Ad, Client, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme, Task, TaskCategory, TaskStatus, TaskRecurrence, ProoferPost, ProoferStatus } from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
 // list. That surface has been replaced by <TopPriorities />, which reads from
@@ -320,4 +320,72 @@ export async function getStoryIdeasData(): Promise<{
   }));
 
   return { clients, themes, ideas };
+}
+
+// Proofer: one caption+image slot per (client, day). Returns the list of
+// active clients and (optionally) the posts for a specific client+month.
+export async function getProoferData(
+  clientId?: string,
+  month?: string // "YYYY-MM"
+): Promise<{
+  clients: { id: string; name: string }[];
+  posts: ProoferPost[];
+}> {
+  const supabase = await createClient();
+
+  const clientsRes = await supabase
+    .from("clients")
+    .select("id, name, status")
+    .eq("archived", false)
+    .order("name", { ascending: true });
+
+  if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
+
+  const clients = (clientsRes.data ?? [])
+    .filter((row) => row.status !== "needs_attention")
+    .map((row) => ({
+      id: String(row.id),
+      name: row.name ?? "Untitled client",
+    }));
+
+  if (!clientId || !month) {
+    return { clients, posts: [] };
+  }
+
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const m = Number(monthStr);
+  if (!year || !m) {
+    return { clients, posts: [] };
+  }
+  const start = `${yearStr}-${monthStr}-01`;
+  const nextMonthDate = new Date(year, m, 1);
+  const end = `${nextMonthDate.getFullYear()}-${String(
+    nextMonthDate.getMonth() + 1
+  ).padStart(2, "0")}-01`;
+
+  const postsRes = await supabase
+    .from("proofer_posts")
+    .select("*")
+    .eq("client_id", clientId)
+    .gte("post_date", start)
+    .lt("post_date", end)
+    .order("post_date", { ascending: true });
+
+  if (postsRes.error)
+    throw new Error(`proofer_posts: ${postsRes.error.message}`);
+
+  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    postDate: row.post_date ?? "",
+    caption: row.caption ?? "",
+    imageUrl: row.image_url ?? "",
+    status: ((row.status ?? "none") as ProoferStatus),
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  return { clients, posts };
 }
