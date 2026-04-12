@@ -21,6 +21,9 @@ import type {
   TaskRecurrence,
   ProoferPost,
   ProoferStatus,
+  ProoferPublishQueueItem,
+  PublishQueueStatus,
+  PublishQueuePlatform,
 } from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
@@ -50,12 +53,12 @@ export async function getDashboardData(): Promise<{
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
   if (adsRes.error) throw new Error(`ads: ${adsRes.error.message}`);
-  if (suggestionsRes.error)
+  if (suggestionsRes.error) {
     throw new Error(`suggestions: ${suggestionsRes.error.message}`);
+  }
 
   const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
 
-  // Build O(1) lookup map to avoid quadratic client/ad matching
   const adCountByClient = new Map<string, number>();
   for (const a of ads) {
     const key = String(a.clientId);
@@ -205,7 +208,6 @@ export async function getTasksData(): Promise<{
     updatedAt: row.updated_at ?? "",
   }));
 
-  // Build a distinct list of known users from existing task rows + current user
   const userSet = new Set<string>();
   if (currentUserEmail) userSet.add(currentUserEmail);
   tasks.forEach((t) => {
@@ -213,7 +215,6 @@ export async function getTasksData(): Promise<{
     if (t.createdBy) userSet.add(t.createdBy);
   });
 
-  // Also include any users who have created content ideas (so you can assign to teammates)
   const [videoRes, carouselRes, storyRes] = await Promise.all([
     supabase.from("video_ideas").select("created_by"),
     supabase.from("carousel_ideas").select("created_by"),
@@ -289,7 +290,9 @@ export async function getCarouselIdeasData(): Promise<{
     category: row.category ?? "general",
     month: row.month ?? "",
     captions: Array.isArray(row.captions) ? row.captions : [],
-    captionImages: Array.isArray(row.caption_images) ? row.caption_images : [],
+    captionImages: Array.isArray(row.caption_images)
+      ? row.caption_images
+      : [],
     designLink: row.design_link ?? "",
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
@@ -363,7 +366,7 @@ export async function getStoryIdeasData(): Promise<{
 // active clients and (optionally) the posts for a specific client+month.
 export async function getProoferData(
   clientId?: string,
-  month?: string // "YYYY-MM"
+  month?: string
 ): Promise<{
   clients: { id: string; name: string }[];
   posts: ProoferPost[];
@@ -429,17 +432,29 @@ export async function getProoferData(
 
   const postIds = posts.map((p) => p.id);
 
-  const commentsMap = new Map<string, any[]>();
+  const commentsMap = new Map<string, ProoferPost["comments"]>();
+  const publishQueueMap = new Map<string, ProoferPublishQueueItem[]>();
 
   if (postIds.length > 0) {
-    const commentsRes = await supabase
-      .from("proofer_comments")
-      .select("*")
-      .in("post_id", postIds)
-      .order("created_at", { ascending: true });
+    const [commentsRes, queueRes] = await Promise.all([
+      supabase
+        .from("proofer_comments")
+        .select("*")
+        .in("post_id", postIds)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("proofer_publish_queue")
+        .select("*")
+        .in("post_id", postIds)
+        .order("created_at", { ascending: true }),
+    ]);
 
     if (commentsRes.error) {
       throw new Error(`proofer_comments: ${commentsRes.error.message}`);
+    }
+
+    if (queueRes.error) {
+      throw new Error(`proofer_publish_queue: ${queueRes.error.message}`);
     }
 
     (commentsRes.data ?? []).forEach((commentRow) => {
@@ -457,12 +472,159 @@ export async function getProoferData(
 
       commentsMap.set(postId, existing);
     });
+
+    (queueRes.data ?? []).forEach((queueRow) => {
+      const postId = String(queueRow.post_id);
+      const existing = publishQueueMap.get(postId) ?? [];
+
+      existing.push({
+        id: String(queueRow.id),
+        postId,
+        platform: (queueRow.platform ?? "instagram") as PublishQueuePlatform,
+        status: (queueRow.status ?? "queued") as PublishQueueStatus,
+        scheduledFor: queueRow.scheduled_for ?? null,
+        publishedAt: queueRow.published_at ?? null,
+        publishUrl: queueRow.publish_url ?? null,
+        notes: queueRow.notes ?? null,
+        createdBy: queueRow.created_by ?? "",
+        createdAt: queueRow.created_at ?? "",
+        updatedAt: queueRow.updated_at ?? "",
+      });
+
+      publishQueueMap.set(postId, existing);
+    });
   }
 
-  const postsWithComments: ProoferPost[] = posts.map((post) => ({
+  const postsWithRelations: ProoferPost[] = posts.map((post) => ({
     ...post,
     comments: commentsMap.get(post.id) ?? [],
+    publishQueue: publishQueueMap.get(post.id) ?? [],
   }));
 
-  return { clients, posts: postsWithComments };
+  return { clients, posts: postsWithRelations };
+}
+
+export async function getProoferPublishQueueData(): Promise<{
+  readyPosts: Array<ProoferPost & { clientName: string }>;
+  queueItems: Array<
+    ProoferPublishQueueItem & {
+      clientName: string;
+      postDate: string;
+      caption: string;
+      imageUrl: string;
+      postStatus: ProoferStatus;
+    }
+  >;
+}> {
+  const supabase = await createClient();
+
+  const [postsRes, clientsRes, queueRes] = await Promise.all([
+    supabase
+      .from("proofer_posts")
+      .select("*")
+      .eq("status", "approved")
+      .order("post_date", { ascending: true }),
+    supabase
+      .from("clients")
+      .select("id, name")
+      .eq("archived", false),
+    supabase
+      .from("proofer_publish_queue")
+      .select("*")
+      .order("created_at", { ascending: true }),
+  ]);
+
+  if (postsRes.error) {
+    throw new Error(`proofer_posts: ${postsRes.error.message}`);
+  }
+  if (clientsRes.error) {
+    throw new Error(`clients: ${clientsRes.error.message}`);
+  }
+  if (queueRes.error) {
+    throw new Error(`proofer_publish_queue: ${queueRes.error.message}`);
+  }
+
+  const clientNameById = new Map<string, string>();
+  (clientsRes.data ?? []).forEach((row) => {
+    clientNameById.set(String(row.id), row.name ?? "Untitled client");
+  });
+
+  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    postDate: row.post_date ?? "",
+    caption: row.caption ?? "",
+    imageUrl: row.image_url ?? "",
+    status: (row.status ?? "none") as ProoferStatus,
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  const queueItems: ProoferPublishQueueItem[] = (queueRes.data ?? []).map(
+    (row) => ({
+      id: String(row.id),
+      postId: String(row.post_id),
+      platform: (row.platform ?? "instagram") as PublishQueuePlatform,
+      status: (row.status ?? "queued") as PublishQueueStatus,
+      scheduledFor: row.scheduled_for ?? null,
+      publishedAt: row.published_at ?? null,
+      publishUrl: row.publish_url ?? null,
+      notes: row.notes ?? null,
+      createdBy: row.created_by ?? "",
+      createdAt: row.created_at ?? "",
+      updatedAt: row.updated_at ?? "",
+    })
+  );
+
+  const queueByPostId = new Map<string, ProoferPublishQueueItem[]>();
+  queueItems.forEach((item) => {
+    const existing = queueByPostId.get(item.postId) ?? [];
+    existing.push(item);
+    queueByPostId.set(item.postId, existing);
+  });
+
+  const readyPosts = posts
+    .filter((post) => (queueByPostId.get(post.id) ?? []).length === 0)
+    .map((post) => ({
+      ...post,
+      clientName: clientNameById.get(post.clientId) ?? "Untitled client",
+      publishQueue: [],
+    }));
+
+  const postById = new Map<string, ProoferPost>();
+  posts.forEach((post) => {
+    postById.set(post.id, post);
+  });
+
+  const enrichedQueueItems = queueItems
+    .map((item) => {
+      const post = postById.get(item.postId);
+      if (!post) return null;
+
+      return {
+        ...item,
+        clientName: clientNameById.get(post.clientId) ?? "Untitled client",
+        postDate: post.postDate,
+        caption: post.caption,
+        imageUrl: post.imageUrl,
+        postStatus: post.status,
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is ProoferPublishQueueItem & {
+        clientName: string;
+        postDate: string;
+        caption: string;
+        imageUrl: string;
+        postStatus: ProoferStatus;
+      } => Boolean(item)
+    );
+
+  return {
+    readyPosts,
+    queueItems: enrichedQueueItems,
+  };
 }
