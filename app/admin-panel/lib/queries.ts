@@ -29,14 +29,26 @@ export async function getDashboardData(): Promise<{
 
   const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
 
+  // Build O(1) lookup maps to avoid quadratic client/ad/action matching
+  const adCountByClient = new Map<string, number>();
+  for (const a of ads) {
+    const key = String(a.clientId);
+    adCountByClient.set(key, (adCountByClient.get(key) ?? 0) + 1);
+  }
+
   const clients = (clientsRes.data ?? []).map((row) => {
-    const adCount = ads.filter((a) => a.clientId === row.id).length;
+    const adCount = adCountByClient.get(String(row.id)) ?? 0;
     return mapDbClientToUiClient(row, adCount);
   });
 
+  const clientNameById = new Map<string, string>();
+  for (const c of clients) {
+    clientNameById.set(String(c.id), c.name);
+  }
+
   const actions = (actionsRes.data ?? []).map((row) => {
-    const client = clients.find((c) => c.id === row.client_id);
-    return mapDbActionToUiAction(row, client?.name ?? "Unknown client");
+    const name = clientNameById.get(String(row.client_id)) ?? "Unknown client";
+    return mapDbActionToUiAction(row, name);
   });
 
   const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);

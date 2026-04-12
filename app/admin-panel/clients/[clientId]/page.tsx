@@ -40,6 +40,7 @@ export default async function ClientDetailPage({
     campaignsRes,
     unassignedCampaignsRes,
     clientsForAssignmentRes,
+    learningsRes,
   ] = await Promise.all([
     supabase.from("clients").select("*").eq("id", clientId).single(),
     supabase
@@ -71,12 +72,18 @@ export default async function ClientDetailPage({
       .from("campaigns")
       .select("*")
       .is("client_id", null)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(50),
     supabase
       .from("clients")
       .select("id, name")
       .eq("archived", false)
       .order("name", { ascending: true }),
+    supabase
+      .from("learnings")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -103,17 +110,8 @@ export default async function ClientDetailPage({
     mapDbSuggestionToUiSuggestion
   );
 
-  let learningRows: any[] = [];
-  try {
-    const { data } = await supabase
-      .from("learnings")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false });
-    learningRows = data ?? [];
-  } catch {
-    // table may not exist
-  }
+  // Learnings table may not exist in some environments — tolerate errors silently
+  const learningRows: any[] = learningsRes.error ? [] : (learningsRes.data ?? []);
 
   const winnerAds = ads.filter((a) => a.status === "active" && a.ctr >= 2.5);
   const losingAds = ads.filter((a) => a.status === "ended");
