@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
+import { sendReviewDigest } from "./review-email";
 
 // ---------------------------------------------------------------------------
 // Server actions for the client review layer.
@@ -194,7 +195,17 @@ export async function sendReviewForApproval(reviewId: number) {
   revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
   revalidatePath(`/app/clients/${clientId}/reviews`);
 
-  return { token };
+  // Best-effort digest. Failures here must not roll back the status flip —
+  // the operator can resend manually if Resend is down or the env vars are
+  // missing. We log but never throw.
+  let email: Awaited<ReturnType<typeof sendReviewDigest>> | null = null;
+  try {
+    email = await sendReviewDigest(reviewId);
+  } catch (e) {
+    console.error("[review-actions] sendReviewDigest threw", e);
+  }
+
+  return { token, email };
 }
 
 // ---------------------------------------------------------------------------
