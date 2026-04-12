@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
-import GenerateGlobalLearningsButton from "@/app/admin-panel/components/GenerateGlobalLearningsButton";
+import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
 
 export const dynamic = "force-dynamic";
 
@@ -29,41 +29,39 @@ type GlobalLearning = {
   last_updated: string | null;
 };
 
-function fmtPct(n: number | null | undefined, digits = 0): string {
-  if (n === null || n === undefined) return "—";
-  const v = Number(n);
-  if (Number.isNaN(v)) return "—";
-  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
-}
-
 function consistencyColor(score: number): string {
   if (score >= 75) return "#166534";
   if (score >= 50) return "#92400e";
   return "#991b1b";
 }
 
-function MetricChip({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "baseline",
-        gap: 4,
-        fontSize: 12,
-      }}
-    >
-      <span style={{ color: "#71717a" }}>{label}</span>
-      <span style={{ color: color ?? "#18181b", fontWeight: 600 }}>{value}</span>
-    </span>
-  );
+// Build one plain-English sentence that captures what this pattern tells us.
+// No percentage chips, no jargon — just: "Works N/10 times, tried by X clients,
+// clicks went up by Y%."
+function storyLine(pattern: GlobalLearning): string {
+  const worked = Math.round(pattern.consistency_score / 10);
+  const parts: string[] = [];
+  parts.push(`Worked ${worked} out of 10 times`);
+  if (pattern.unique_clients > 0) {
+    parts.push(
+      `across ${pattern.unique_clients} client${
+        pattern.unique_clients === 1 ? "" : "s"
+      }`
+    );
+  }
+  if (pattern.avg_ctr_lift && pattern.avg_ctr_lift !== 0) {
+    const dir = pattern.avg_ctr_lift > 0 ? "up" : "down";
+    parts.push(
+      `clicks went ${dir} by ${Math.abs(pattern.avg_ctr_lift).toFixed(0)}%`
+    );
+  }
+  if (pattern.avg_cpc_change && pattern.avg_cpc_change !== 0) {
+    const dir = pattern.avg_cpc_change < 0 ? "cheaper" : "more expensive";
+    parts.push(
+      `clicks got ${Math.abs(pattern.avg_cpc_change).toFixed(0)}% ${dir}`
+    );
+  }
+  return parts.join(", ") + ".";
 }
 
 function PatternCard({ pattern }: { pattern: GlobalLearning }) {
@@ -78,92 +76,33 @@ function PatternCard({ pattern }: { pattern: GlobalLearning }) {
         background: "#fff",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
-            {pattern.pattern_label}
-          </div>
-          <div style={{ fontSize: 13, color: "#52525b", marginTop: 3 }}>
-            {pattern.action_summary}
-          </div>
-        </div>
-        <div
-          style={{
-            padding: "2px 10px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            background: "#f4f4f5",
-            color: consistencyColor(pattern.consistency_score),
-            whiteSpace: "nowrap",
-          }}
-        >
-          {pattern.consistency_score.toFixed(0)}% work
-        </div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
+        {pattern.pattern_label}
+      </div>
+      <div style={{ fontSize: 13, color: "#52525b", marginTop: 4 }}>
+        {pattern.action_summary}
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 14,
-          flexWrap: "wrap",
-          padding: "6px 0",
-          borderTop: "1px solid #f4f4f5",
-          borderBottom: pattern.sample_learnings?.length ? "1px solid #f4f4f5" : "none",
-        }}
-      >
-        <MetricChip label="Seen" value={`${pattern.times_seen}×`} />
-        <MetricChip
-          label="Clients"
-          value={String(pattern.unique_clients)}
-        />
-        <MetricChip
-          label="CTR lift"
-          value={fmtPct(pattern.avg_ctr_lift, 1)}
-          color={
-            pattern.avg_ctr_lift && pattern.avg_ctr_lift > 0
-              ? "#166534"
-              : pattern.avg_ctr_lift && pattern.avg_ctr_lift < 0
-              ? "#991b1b"
-              : undefined
-          }
-        />
-        <MetricChip
-          label="CPC Δ"
-          value={fmtPct(pattern.avg_cpc_change, 1)}
-          color={
-            pattern.avg_cpc_change && pattern.avg_cpc_change < 0
-              ? "#166534"
-              : pattern.avg_cpc_change && pattern.avg_cpc_change > 0
-              ? "#991b1b"
-              : undefined
-          }
-        />
-        <MetricChip
-          label="Score"
-          value={
-            pattern.avg_reliability !== null
-              ? pattern.avg_reliability.toFixed(1)
-              : "—"
-          }
-        />
-        <MetricChip
-          label="Outcomes"
-          value={`${pattern.positive_count}✓ ${pattern.neutral_count}• ${pattern.negative_count}✗`}
-        />
-      </div>
+      {total > 0 && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "8px 12px",
+            background: "#fafafa",
+            border: "1px solid #f4f4f5",
+            borderRadius: 8,
+            fontSize: 12,
+            color: consistencyColor(pattern.consistency_score),
+            fontWeight: 600,
+          }}
+        >
+          {storyLine(pattern)}
+        </div>
+      )}
 
       {pattern.sample_learnings && pattern.sample_learnings.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          {pattern.sample_learnings.slice(0, 2).map((s, i) => (
+          {pattern.sample_learnings.slice(0, 1).map((s, i) => (
             <div
               key={i}
               style={{
@@ -181,35 +120,9 @@ function PatternCard({ pattern }: { pattern: GlobalLearning }) {
         </div>
       )}
 
-      {pattern.top_tags && pattern.top_tags.length > 0 && (
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 4,
-          }}
-        >
-          {pattern.top_tags.map((tag) => (
-            <span
-              key={tag}
-              style={{
-                fontSize: 10,
-                padding: "1px 6px",
-                borderRadius: 4,
-                background: "#f4f4f5",
-                color: "#71717a",
-              }}
-            >
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-
       {total === 0 && (
         <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 6 }}>
-          No outcome data yet.
+          Not enough data to say for sure yet.
         </div>
       )}
     </div>
@@ -291,11 +204,11 @@ export default async function WhatsWorkingPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
-          What&rsquo;s Working Right Now
+          What&rsquo;s working right now
         </h2>
         <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
-          Cross-client intelligence aggregated from every action taken on every
-          ad. Patterns get stronger as more clients run them.
+          Everything we&rsquo;ve tried, across every client, turned into one
+          shared playbook. The more we run, the sharper this gets.
         </p>
       </div>
 
@@ -314,15 +227,15 @@ export default async function WhatsWorkingPage() {
       >
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>
-            Knowledge engine
+            Playbook
           </div>
           <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
-            {patterns.length} pattern{patterns.length === 1 ? "" : "s"} indexed
+            {patterns.length} proven move{patterns.length === 1 ? "" : "s"}
             {lastUpdated &&
-              ` · last updated ${new Date(lastUpdated).toLocaleString()}`}
+              ` · last checked ${new Date(lastUpdated).toLocaleString()}`}
           </div>
         </div>
-        <GenerateGlobalLearningsButton />
+        <RefreshEverythingButton />
       </div>
 
       {error && (
@@ -351,53 +264,53 @@ export default async function WhatsWorkingPage() {
             textAlign: "center",
           }}
         >
-          No patterns yet. Complete a few ad actions across clients, then click
-          &ldquo;Regenerate Global Learnings&rdquo; above to aggregate them.
+          Nothing to show yet. Run a few ads, mark the outcomes, then tap
+          &ldquo;Refresh everything&rdquo; above to build the playbook.
         </div>
       )}
 
       <Section
-        title="Top Performing Hooks"
-        subtitle="Hook and copy changes that consistently lifted engagement."
+        title="Hooks that work"
+        subtitle="Ways of opening the ad that got more people reading."
         patterns={hooks}
-        emptyText="No hook patterns yet."
+        emptyText="No hook wins yet."
       />
 
       <Section
-        title="Top Creatives"
-        subtitle="Creative swaps, tests and format changes ordered by consistency."
+        title="Images and videos that work"
+        subtitle="Creative swaps that lifted performance when we tried them."
         patterns={creatives}
-        emptyText="No creative patterns yet."
+        emptyText="No creative wins yet."
       />
 
       <Section
-        title="Top Audiences"
-        subtitle="Targeting moves that have repeatedly paid off."
+        title="Audiences that work"
+        subtitle="Who to show the ad to, based on what's actually converted."
         patterns={audiences}
-        emptyText="No audience patterns yet."
+        emptyText="No audience wins yet."
       />
 
       {budgets.length > 0 && (
         <Section
-          title="Budget Moves"
-          subtitle="When to scale up, pull back, or pause."
+          title="When to spend more (and less)"
+          subtitle="Budget moves that paid off or saved us money."
           patterns={budgets}
-          emptyText="No budget patterns yet."
+          emptyText="No budget wins yet."
         />
       )}
 
       <Section
-        title="Fastest Wins"
-        subtitle="Actions that worked on the first try — not proven yet, but promising."
+        title="Quick wins spotted"
+        subtitle="Things that worked on the first try. Promising but not yet proven."
         patterns={fastWins}
-        emptyText="No fast wins recorded yet."
+        emptyText="Nothing spotted yet."
       />
 
       <Section
-        title="Biggest Failures to Avoid"
-        subtitle="Problem signatures that have burned multiple clients. Don&rsquo;t repeat these."
+        title="Mistakes to avoid"
+        subtitle="Things that have burned us more than once. Don&rsquo;t repeat these."
         patterns={failures}
-        emptyText="No recurring failures yet."
+        emptyText="No recurring mistakes yet."
       />
     </div>
   );
