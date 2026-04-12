@@ -8,9 +8,12 @@ import {
   getAdSets,
   getAdInsights,
   getDailyAdInsights,
+  getAdPlacementInsights,
+  getAdDemographicInsights,
   mapMetaStatus,
   mapMetaObjective,
   insightToAdRow,
+  creativeToAdRow,
   targetingToAudience,
 } from "@/lib/meta";
 import { getAdAccount } from "@/lib/meta";
@@ -224,6 +227,22 @@ export async function syncMetaData(clientId: string) {
             .join(" — ") || null
         : null;
 
+      const creativeData = creativeToAdRow(metaAd);
+
+      // Everything we want to write on every sync (update OR insert).
+      // Spread adData (which contains all the new delivery/funnel/video
+      // columns from insightToAdRow) and then layer on the Meta-truth
+      // status + creative structure fields.
+      const writable = {
+        ...adData,
+        status: mapMetaStatus(metaAd.status),
+        audience,
+        creative_hook: creativeHook,
+        meta_effective_status: metaAd.effective_status ?? null,
+        meta_configured_status: metaAd.configured_status ?? null,
+        ...creativeData,
+      };
+
       const { data: existingAd } = await supabase
         .from("ads")
         .select("id")
@@ -234,18 +253,7 @@ export async function syncMetaData(clientId: string) {
       if (existingAd && existingAd.length > 0) {
         await supabase
           .from("ads")
-          .update({
-            name: adData.name,
-            status: mapMetaStatus(metaAd.status),
-            spend: adData.spend,
-            impressions: adData.impressions,
-            clicks: adData.clicks,
-            cost_per_result: adData.cost_per_result,
-            conversions: adData.conversions,
-            engagement: adData.engagement,
-            audience,
-            creative_hook: creativeHook,
-          })
+          .update(writable)
           .eq("id", existingAd[0].id);
         adsUpdated++;
       } else {
@@ -253,10 +261,7 @@ export async function syncMetaData(clientId: string) {
           client_id: clientId,
           campaign_id: supabaseCampaignId,
           meta_id: metaAd.id,
-          status: mapMetaStatus(metaAd.status),
-          audience,
-          creative_hook: creativeHook,
-          ...adData,
+          ...writable,
         });
         adsCreated++;
       }
@@ -324,6 +329,96 @@ export async function syncMetaData(clientId: string) {
       log.push(`Snapshots: ${snapshotsCreated} created`);
     } catch {
       log.push("Snapshots skipped (ad_snapshots table may not exist)");
+    }
+
+    // 5. Placement + demographic breakdowns (last 30d).
+    // Wrapped in its own try so a schema-not-yet-migrated or API
+    // permission hiccup doesn't kill the whole sync.
+    try {
+      const { data: adRowsForBreakdown } = await supabase
+        .from("ads")
+        .select("id, meta_id")
+        .eq("client_id", clientId);
+
+      const metaToId = new Map<string, string>();
+      for (const a of adRowsForBreakdown ?? []) {
+        if (a.meta_id) metaToId.set(a.meta_id, String(a.id));
+      }
+
+      const [placementRows, demoRows] = await Promise.all([
+        getAdPlacementInsights({ datePreset: "last_30d" }),
+        getAdDemographicInsights({ datePreset: "last_30d" }),
+      ]);
+
+      // Clear the last 30d window for this client's ads so we don't
+      // accumulate stale buckets as placements shift.
+      const adIds = Array.from(metaToId.values());
+      if (adIds.length > 0) {
+        await supabase
+          .from("ad_placement_insights")
+          .delete()
+          .in("ad_id", adIds);
+        await supabase
+          .from("ad_demographic_insights")
+          .delete()
+          .in("ad_id", adIds);
+      }
+
+      let placementsCreated = 0;
+      for (const row of placementRows) {
+        if (!row.ad_id) continue;
+        const localAdId = metaToId.get(row.ad_id);
+        if (!localAdId) continue;
+        const { error } = await supabase.from("ad_placement_insights").insert({
+          ad_id: localAdId,
+          client_id: clientId,
+          publisher_platform: row.publisher_platform ?? null,
+          platform_position: row.platform_position ?? null,
+          device_platform: row.device_platform ?? null,
+          impressions: Number(row.impressions ?? 0),
+          clicks: Number(row.clicks ?? 0),
+          spend: Number(row.spend ?? 0),
+          ctr: row.ctr ? Number(row.ctr) : null,
+          cpm: row.cpm ? Number(row.cpm) : null,
+          actions: row.actions ?? null,
+          date_start: row.date_start,
+          date_stop: row.date_stop,
+        });
+        if (!error) placementsCreated++;
+      }
+
+      let demosCreated = 0;
+      for (const row of demoRows) {
+        if (!row.ad_id) continue;
+        const localAdId = metaToId.get(row.ad_id);
+        if (!localAdId) continue;
+        const { error } = await supabase
+          .from("ad_demographic_insights")
+          .insert({
+            ad_id: localAdId,
+            client_id: clientId,
+            age: row.age ?? null,
+            gender: row.gender ?? null,
+            impressions: Number(row.impressions ?? 0),
+            clicks: Number(row.clicks ?? 0),
+            spend: Number(row.spend ?? 0),
+            ctr: row.ctr ? Number(row.ctr) : null,
+            actions: row.actions ?? null,
+            date_start: row.date_start,
+            date_stop: row.date_stop,
+          });
+        if (!error) demosCreated++;
+      }
+
+      log.push(
+        `Breakdowns: ${placementsCreated} placement, ${demosCreated} demographic`
+      );
+    } catch (err) {
+      log.push(
+        `Breakdowns skipped (${
+          err instanceof Error ? err.message : "unknown error"
+        })`
+      );
     }
 
     // Revalidate everything

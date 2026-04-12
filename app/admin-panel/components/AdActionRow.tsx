@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  confidencePalette,
+  type Confidence,
+} from "@/app/admin-panel/lib/action-confidence";
 
 type AdAction = {
   id: string;
@@ -12,11 +16,19 @@ type AdAction = {
   priority: string;
   status: string;
   hypothesis?: string | null;
+  validated_by?: string | null;
   outcome?: string | null;
   result_summary?: string | null;
   metric_snapshot_before?: Record<string, unknown> | null;
   metric_snapshot_after?: Record<string, unknown> | null;
   completed_at?: string | null;
+  // Trust pass enrichment — populated by the page from global_learnings
+  // and a "last similar action" lookup. All optional so a row without a
+  // matching pattern still renders cleanly.
+  confidence?: Confidence;
+  evidence?: string | null;
+  expected_outcome?: string | null;
+  last_similar?: string | null;
 };
 
 const priorityColors: Record<string, { bg: string; text: string }> = {
@@ -66,6 +78,11 @@ export default function AdActionRow({ action }: { action: AdAction }) {
   const [message, setMessage] = useState<string | null>(null);
 
   const pColors = priorityColors[action.priority] ?? priorityColors.medium;
+  const confidence: Confidence = action.confidence ?? "unknown";
+  const confPalette = confidencePalette(confidence);
+  const showTrustPanel = Boolean(
+    action.evidence || action.expected_outcome || action.last_similar
+  );
 
   async function handleStart() {
     setLoading(true);
@@ -185,6 +202,23 @@ export default function AdActionRow({ action }: { action: AdAction }) {
             {action.outcome}
           </span>
         )}
+        <span
+          style={{
+            marginLeft: "auto",
+            padding: "2px 10px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 600,
+            background: confPalette.bg,
+            color: confPalette.fg,
+            border: `1px solid ${confPalette.border}`,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+          title="How confident we are in this suggestion based on past results across all clients"
+        >
+          {confPalette.label}
+        </span>
       </div>
 
       {/* Problem + Action */}
@@ -202,6 +236,76 @@ export default function AdActionRow({ action }: { action: AdAction }) {
           </div>
         );
       })()}
+
+      {/* Trust panel: why we're suggesting this, what we expect, last result */}
+      {showTrustPanel ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            background: "#fafafa",
+            border: "1px solid #f4f4f5",
+            borderRadius: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#71717a",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: 2,
+            }}
+          >
+            Why we&rsquo;re suggesting this
+          </div>
+          {action.evidence && (
+            <div style={{ fontSize: 13, color: "#27272a", lineHeight: 1.5 }}>
+              {action.evidence}
+            </div>
+          )}
+          {action.expected_outcome && (
+            <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
+              {action.expected_outcome}
+            </div>
+          )}
+          {action.last_similar && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#52525b",
+                lineHeight: 1.5,
+                marginTop: 2,
+                fontStyle: "italic",
+              }}
+            >
+              {action.last_similar}
+            </div>
+          )}
+        </div>
+      ) : (
+        confidence === "unknown" && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "8px 12px",
+              background: "#fafafa",
+              border: "1px dashed #e4e4e7",
+              borderRadius: 10,
+              fontSize: 12,
+              color: "#71717a",
+              lineHeight: 1.5,
+            }}
+          >
+            No prior pattern matches this suggestion yet. Treat it as a fresh
+            test — we&rsquo;ll learn from the outcome.
+          </div>
+        )
+      )}
 
       {/* Hypothesis */}
       {action.hypothesis && (

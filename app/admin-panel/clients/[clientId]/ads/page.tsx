@@ -12,6 +12,18 @@ import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-tru
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
 import AdActionRow from "@/app/admin-panel/components/AdActionRow";
+import {
+  deriveConfidence,
+  formatEvidence,
+  formatExpectedOutcome,
+  formatLastSimilar,
+  formatDecisionEvidence,
+  formatDecisionLastSimilar,
+  type PatternStats,
+  type LastSimilar,
+  type DecisionTypeStats,
+  type LastDecision,
+} from "@/app/admin-panel/lib/action-confidence";
 import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
 import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
 import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlaybookButton";
@@ -95,6 +107,178 @@ export default async function ClientAdsPage({
   const highPriorityActions = pendingActions.filter((a: any) => a.priority === "high");
   const mediumPriorityActions = pendingActions.filter((a: any) => a.priority === "medium");
   const lowPriorityActions = pendingActions.filter((a: any) => a.priority === "low");
+
+  // ── Trust enrichment ────────────────────────────────────────────────────
+  // Pull the global pattern stats + the most recent completed similar action
+  // for every pattern_key referenced by a pending action. The action card
+  // uses these to render confidence, evidence and a "last similar move" line.
+  const patternKeys = Array.from(
+    new Set(
+      pendingActions
+        .map((a: any) => a.validated_pattern_key)
+        .filter((k: any): k is string => typeof k === "string" && k.length > 0)
+    )
+  );
+
+  const patternStatsByKey = new Map<string, PatternStats>();
+  const lastSimilarByKey = new Map<string, LastSimilar>();
+
+  if (patternKeys.length > 0) {
+    const [globalRes, similarRes] = await Promise.all([
+      supabase
+        .from("global_learnings")
+        .select(
+          "pattern_key, pattern_label, action_summary, times_seen, unique_clients, positive_count, neutral_count, negative_count, consistency_score, avg_ctr_lift, avg_cpc_change"
+        )
+        .in("pattern_key", patternKeys),
+      supabase
+        .from("ad_actions")
+        .select(
+          "validated_pattern_key, outcome, completed_at, metric_snapshot_before, metric_snapshot_after, ads(name)"
+        )
+        .in("validated_pattern_key", patternKeys)
+        .eq("status", "completed")
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: false })
+        .limit(200),
+    ]);
+
+    for (const row of globalRes.data ?? []) {
+      patternStatsByKey.set((row as any).pattern_key, row as PatternStats);
+    }
+
+    // Take the most recent completed action per pattern_key — the query is
+    // already ordered desc, so the first hit per key wins.
+    for (const row of similarRes.data ?? []) {
+      const key = (row as any).validated_pattern_key as string;
+      if (lastSimilarByKey.has(key)) continue;
+      const before = (row as any).metric_snapshot_before as
+        | Record<string, number>
+        | null;
+      const after = (row as any).metric_snapshot_after as
+        | Record<string, number>
+        | null;
+      const adRel = (row as any).ads;
+      const adName = Array.isArray(adRel)
+        ? adRel[0]?.name ?? null
+        : adRel?.name ?? null;
+      lastSimilarByKey.set(key, {
+        ad_name: adName,
+        outcome: (row as any).outcome ?? null,
+        ctr_before: before?.ctr ?? null,
+        ctr_after: after?.ctr ?? null,
+        completed_at: (row as any).completed_at ?? null,
+      });
+    }
+  }
+
+  // ── Decision enrichment ─────────────────────────────────────────────────
+  // Decisions are typed (scale_budget, pause_or_replace, ...). The trust
+  // story for a pending decision is the history of past decisions of the
+  // same type — both on this client and across all clients. We pull both
+  // batches once and aggregate in JS.
+  const pendingDecisionTypes = Array.from(
+    new Set(
+      pendingDecisions
+        .map((d: any) => d.type)
+        .filter((t: any): t is string => typeof t === "string" && t.length > 0)
+    )
+  );
+
+  const decisionStatsByType = new Map<string, DecisionTypeStats>();
+  const lastDecisionByType = new Map<string, LastDecision>();
+
+  if (pendingDecisionTypes.length > 0) {
+    const { data: historyRows } = await supabase
+      .from("ad_decisions")
+      .select(
+        "type, status, executed_at, execution_result, ads(name)"
+      )
+      .in("type", pendingDecisionTypes)
+      .neq("status", "pending")
+      .order("executed_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+
+    for (const row of historyRows ?? []) {
+      const type = (row as any).type as string;
+      const status = (row as any).status as string;
+
+      // Aggregate counts per type
+      const stats = decisionStatsByType.get(type) ?? {
+        type,
+        total: 0,
+        executed: 0,
+        approved: 0,
+        rejected: 0,
+      };
+      stats.total += 1;
+      if (status === "executed") stats.executed += 1;
+      else if (status === "approved") stats.approved += 1;
+      else if (status === "rejected") stats.rejected += 1;
+      decisionStatsByType.set(type, stats);
+
+      // First row wins (the query is already sorted recent-first)
+      if (!lastDecisionByType.has(type) && status !== "rejected") {
+        const adRel = (row as any).ads;
+        const adName = Array.isArray(adRel)
+          ? adRel[0]?.name ?? null
+          : adRel?.name ?? null;
+        lastDecisionByType.set(type, {
+          ad_name: adName,
+          status,
+          executed_at: (row as any).executed_at ?? null,
+          execution_result: (row as any).execution_result ?? null,
+        });
+      }
+    }
+  }
+
+  function decisionCardProps(d: any) {
+    const type = d.type as string | null;
+    const stats = type ? decisionStatsByType.get(type) ?? null : null;
+    const last = type ? lastDecisionByType.get(type) ?? null : null;
+    return {
+      id: d.id,
+      ad_id: d.ad_id,
+      ad_name: (d.ads as any)?.name ?? "Unknown ad",
+      type: d.type,
+      reason: d.reason,
+      action: d.action,
+      confidence: d.confidence,
+      meta_action: d.meta_action,
+      status: d.status,
+      execution_result: d.execution_result,
+      evidence: formatDecisionEvidence(stats),
+      last_similar: formatDecisionLastSimilar(last),
+    };
+  }
+
+  // Build the props bag once per row so the JSX below stays small.
+  function actionCardProps(a: any, defaultPriority: string) {
+    const key = a.validated_pattern_key as string | null;
+    const stats = key ? patternStatsByKey.get(key) ?? null : null;
+    const lastSimilar = key ? lastSimilarByKey.get(key) ?? null : null;
+    return {
+      id: a.id,
+      ad_id: a.ad_id,
+      ad_name: (a.ads as any)?.name ?? "Unknown ad",
+      problem: a.problem ?? "",
+      action: a.action ?? "",
+      priority: a.priority ?? defaultPriority,
+      status: a.status ?? "pending",
+      hypothesis: a.hypothesis,
+      validated_by: a.validated_by,
+      outcome: a.outcome,
+      result_summary: a.result_summary,
+      metric_snapshot_before: a.metric_snapshot_before,
+      metric_snapshot_after: a.metric_snapshot_after,
+      completed_at: a.completed_at,
+      confidence: deriveConfidence(stats),
+      evidence: formatEvidence(stats),
+      expected_outcome: formatExpectedOutcome(stats),
+      last_similar: formatLastSimilar(lastSimilar),
+    };
+  }
 
   // Score every ad
   const ads = rawAds.map((ad) => {
@@ -266,24 +450,7 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {highPriorityActions.map((a: any) => (
-                  <AdActionRow
-                    key={a.id}
-                    action={{
-                      id: a.id,
-                      ad_id: a.ad_id,
-                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
-                      problem: a.problem ?? "",
-                      action: a.action ?? "",
-                      priority: a.priority ?? "high",
-                      status: a.status ?? "pending",
-                      hypothesis: a.hypothesis,
-                      outcome: a.outcome,
-                      result_summary: a.result_summary,
-                      metric_snapshot_before: a.metric_snapshot_before,
-                      metric_snapshot_after: a.metric_snapshot_after,
-                      completed_at: a.completed_at,
-                    }}
-                  />
+                  <AdActionRow key={a.id} action={actionCardProps(a, "high")} />
                 ))}
               </div>
             </div>
@@ -322,24 +489,7 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {mediumPriorityActions.map((a: any) => (
-                  <AdActionRow
-                    key={a.id}
-                    action={{
-                      id: a.id,
-                      ad_id: a.ad_id,
-                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
-                      problem: a.problem ?? "",
-                      action: a.action ?? "",
-                      priority: a.priority ?? "medium",
-                      status: a.status ?? "pending",
-                      hypothesis: a.hypothesis,
-                      outcome: a.outcome,
-                      result_summary: a.result_summary,
-                      metric_snapshot_before: a.metric_snapshot_before,
-                      metric_snapshot_after: a.metric_snapshot_after,
-                      completed_at: a.completed_at,
-                    }}
-                  />
+                  <AdActionRow key={a.id} action={actionCardProps(a, "medium")} />
                 ))}
               </div>
             </div>
@@ -378,24 +528,7 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {lowPriorityActions.map((a: any) => (
-                  <AdActionRow
-                    key={a.id}
-                    action={{
-                      id: a.id,
-                      ad_id: a.ad_id,
-                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
-                      problem: a.problem ?? "",
-                      action: a.action ?? "",
-                      priority: a.priority ?? "low",
-                      status: a.status ?? "pending",
-                      hypothesis: a.hypothesis,
-                      outcome: a.outcome,
-                      result_summary: a.result_summary,
-                      metric_snapshot_before: a.metric_snapshot_before,
-                      metric_snapshot_after: a.metric_snapshot_after,
-                      completed_at: a.completed_at,
-                    }}
-                  />
+                  <AdActionRow key={a.id} action={actionCardProps(a, "low")} />
                 ))}
               </div>
             </div>
@@ -408,24 +541,7 @@ export default async function ClientAdsPage({
               </summary>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
                 {completedActions.map((a: any) => (
-                  <AdActionRow
-                    key={a.id}
-                    action={{
-                      id: a.id,
-                      ad_id: a.ad_id,
-                      ad_name: (a.ads as any)?.name ?? "Unknown ad",
-                      problem: a.problem ?? "",
-                      action: a.action ?? "",
-                      priority: a.priority ?? "medium",
-                      status: a.status ?? "completed",
-                      hypothesis: a.hypothesis,
-                      outcome: a.outcome,
-                      result_summary: a.result_summary,
-                      metric_snapshot_before: a.metric_snapshot_before,
-                      metric_snapshot_after: a.metric_snapshot_after,
-                      completed_at: a.completed_at,
-                    }}
-                  />
+                  <AdActionRow key={a.id} action={actionCardProps(a, "medium")} />
                 ))}
               </div>
             </details>
@@ -667,21 +783,7 @@ export default async function ClientAdsPage({
         {pendingDecisions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pendingDecisions.map((d: any) => (
-              <DecisionRow
-                key={d.id}
-                decision={{
-                  id: d.id,
-                  ad_id: d.ad_id,
-                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                  type: d.type,
-                  reason: d.reason,
-                  action: d.action,
-                  confidence: d.confidence,
-                  meta_action: d.meta_action,
-                  status: d.status,
-                  execution_result: d.execution_result,
-                }}
-              />
+              <DecisionRow key={d.id} decision={decisionCardProps(d)} />
             ))}
           </div>
         ) : (
@@ -696,21 +798,7 @@ export default async function ClientAdsPage({
             </summary>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {pastDecisions.map((d: any) => (
-                <DecisionRow
-                  key={d.id}
-                  decision={{
-                    id: d.id,
-                    ad_id: d.ad_id,
-                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                    type: d.type,
-                    reason: d.reason,
-                    action: d.action,
-                    confidence: d.confidence,
-                    meta_action: d.meta_action,
-                    status: d.status,
-                    execution_result: d.execution_result,
-                  }}
-                />
+                <DecisionRow key={d.id} decision={decisionCardProps(d)} />
               ))}
             </div>
           </details>

@@ -7,6 +7,7 @@ type ActionSuggestion = {
   problem: string;
   action: string;
   priority: "high" | "medium" | "low";
+  patternKey?: string;
 };
 
 function getActionSuggestion(ad: {
@@ -31,6 +32,7 @@ function getActionSuggestion(ad: {
       problem: "Winning ad",
       action: "Increase budget gradually (20-30%)",
       priority: "medium",
+      patternKey: "budget:scale_up",
     };
   }
 
@@ -40,6 +42,7 @@ function getActionSuggestion(ad: {
         problem: "Low engagement",
         action: "Test new creative (hook, image, headline)",
         priority: "high",
+        patternKey: "creative:test_new",
       };
     }
 
@@ -48,6 +51,7 @@ function getActionSuggestion(ad: {
         problem: "High cost per click",
         action: "Refine audience or improve ad relevance",
         priority: "high",
+        patternKey: "audience:narrow",
       };
     }
 
@@ -56,6 +60,7 @@ function getActionSuggestion(ad: {
         problem: "No conversions",
         action: "Fix landing page or improve offer",
         priority: "high",
+        patternKey: "failure:no_conversions",
       };
     }
 
@@ -63,6 +68,7 @@ function getActionSuggestion(ad: {
       problem: "Underperforming",
       action: "Test new variation",
       priority: "medium",
+      patternKey: "creative:test_new",
     };
   }
 
@@ -108,6 +114,56 @@ export async function POST(req: Request) {
 
     if (!ads || ads.length === 0) {
       return NextResponse.json({ ok: true, generated: 0 });
+    }
+
+    // Pull global learnings once so we can enrich suggestions with proof
+    // ("Proven across N clients"). Non-breaking: if the table doesn't exist
+    // yet or the query fails, we just skip the enrichment.
+    const globalByKey = new Map<
+      string,
+      {
+        pattern_label: string;
+        unique_clients: number;
+        consistency_score: number;
+        times_seen: number;
+        avg_ctr_lift: number | null;
+      }
+    >();
+    try {
+      const { data: globalRows } = await supabase
+        .from("global_learnings")
+        .select(
+          "pattern_key, pattern_label, unique_clients, consistency_score, times_seen, avg_ctr_lift"
+        );
+      for (const g of globalRows ?? []) {
+        globalByKey.set(g.pattern_key as string, {
+          pattern_label: g.pattern_label as string,
+          unique_clients: Number(g.unique_clients ?? 0),
+          consistency_score: Number(g.consistency_score ?? 0),
+          times_seen: Number(g.times_seen ?? 0),
+          avg_ctr_lift:
+            g.avg_ctr_lift !== null && g.avg_ctr_lift !== undefined
+              ? Number(g.avg_ctr_lift)
+              : null,
+        });
+      }
+    } catch {
+      // Best-effort enrichment — ignore any failures.
+    }
+
+    function buildValidatedBy(patternKey: string | undefined): string | null {
+      if (!patternKey) return null;
+      const match = globalByKey.get(patternKey);
+      if (!match) return null;
+      // Require at least 2 clients and >50% consistency to cite as proof
+      if (match.unique_clients < 2 || match.consistency_score < 50) return null;
+      const liftBit =
+        match.avg_ctr_lift !== null && match.avg_ctr_lift !== 0
+          ? `, avg CTR ${match.avg_ctr_lift > 0 ? "+" : ""}${match.avg_ctr_lift.toFixed(1)}%`
+          : "";
+      return `Proven across ${match.unique_clients} client${
+        match.unique_clients === 1 ? "" : "s"
+      } (${match.consistency_score.toFixed(0)}% success${liftBit})`;
     }
 
     let generated = 0;
@@ -158,6 +214,8 @@ export async function POST(req: Request) {
         captured_at: new Date().toISOString(),
       };
 
+      const validatedBy = buildValidatedBy(suggestion.patternKey);
+
       const { error: insertError } = await supabase.from("ad_actions").insert({
         ad_id: ad.id,
         problem: suggestion.problem,
@@ -165,6 +223,8 @@ export async function POST(req: Request) {
         priority: suggestion.priority,
         status: "pending",
         metric_snapshot_before: snapshot,
+        validated_by: validatedBy,
+        validated_pattern_key: suggestion.patternKey ?? null,
       });
 
       if (insertError) {
