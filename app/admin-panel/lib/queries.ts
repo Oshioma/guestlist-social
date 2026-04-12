@@ -4,7 +4,24 @@ import {
   mapDbClientToUiClient,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme, Task, TaskCategory, TaskStatus, TaskRecurrence, ProoferPost, ProoferStatus } from "./types";
+import type {
+  Ad,
+  Client,
+  Suggestion,
+  ContentProgress,
+  VideoIdea,
+  ContentTheme,
+  CarouselIdea,
+  CarouselTheme,
+  StoryIdea,
+  StoryTheme,
+  Task,
+  TaskCategory,
+  TaskStatus,
+  TaskRecurrence,
+  ProoferPost,
+  ProoferStatus,
+} from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
 // list. That surface has been replaced by <TopPriorities />, which reads from
@@ -19,14 +36,22 @@ export async function getDashboardData(): Promise<{
   const supabase = await createClient();
 
   const [clientsRes, adsRes, suggestionsRes] = await Promise.all([
-    supabase.from("clients").select("*").eq("archived", false).order("created_at", { ascending: false }),
+    supabase
+      .from("clients")
+      .select("*")
+      .eq("archived", false)
+      .order("created_at", { ascending: false }),
     supabase.from("ads").select("*").order("created_at", { ascending: false }),
-    supabase.from("suggestions").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("suggestions")
+      .select("*")
+      .order("created_at", { ascending: false }),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
   if (adsRes.error) throw new Error(`ads: ${adsRes.error.message}`);
-  if (suggestionsRes.error) throw new Error(`suggestions: ${suggestionsRes.error.message}`);
+  if (suggestionsRes.error)
+    throw new Error(`suggestions: ${suggestionsRes.error.message}`);
 
   const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
 
@@ -42,7 +67,9 @@ export async function getDashboardData(): Promise<{
     return mapDbClientToUiClient(row, adCount);
   });
 
-  const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
+  const suggestions = (suggestionsRes.data ?? []).map(
+    mapDbSuggestionToUiSuggestion
+  );
 
   return { clients, ads, suggestions };
 }
@@ -63,15 +90,16 @@ export async function getContentDashboardData(): Promise<{
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
-  if (progressRes.error)
+  if (progressRes.error) {
     throw new Error(`content_progress: ${progressRes.error.message}`);
+  }
 
   const clients = (clientsRes.data ?? [])
     .filter((row) => row.status !== "needs_attention")
     .map((row) => ({
-    id: row.id,
-    name: row.name ?? "Untitled client",
-  }));
+      id: row.id,
+      name: row.name ?? "Untitled client",
+    }));
 
   const progress: ContentProgress[] = (progressRes.data ?? []).map((row) => ({
     id: row.id,
@@ -107,7 +135,9 @@ export async function getVideoIdeasData(): Promise<{
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
-  if (themesRes.error) throw new Error(`content_themes: ${themesRes.error.message}`);
+  if (themesRes.error) {
+    throw new Error(`content_themes: ${themesRes.error.message}`);
+  }
   if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
@@ -165,12 +195,12 @@ export async function getTasksData(): Promise<{
     id: String(row.id),
     title: row.title ?? "",
     description: row.description ?? "",
-    category: ((row.category ?? "general") as TaskCategory),
+    category: (row.category ?? "general") as TaskCategory,
     assignee: row.assignee ?? "",
     createdBy: row.created_by ?? "",
     dueDate: row.due_date ?? "",
-    status: ((row.status ?? "open") as TaskStatus),
-    recurrence: ((row.recurrence ?? "none") as TaskRecurrence),
+    status: (row.status ?? "open") as TaskStatus,
+    recurrence: (row.recurrence ?? "none") as TaskRecurrence,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   }));
@@ -189,6 +219,7 @@ export async function getTasksData(): Promise<{
     supabase.from("carousel_ideas").select("created_by"),
     supabase.from("story_ideas").select("created_by"),
   ]);
+
   [videoRes.data, carouselRes.data, storyRes.data].forEach((rows) => {
     (rows ?? []).forEach((r: { created_by?: string | null }) => {
       if (r.created_by) userSet.add(r.created_by);
@@ -226,8 +257,12 @@ export async function getCarouselIdeasData(): Promise<{
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
-  if (themesRes.error) throw new Error(`carousel_themes: ${themesRes.error.message}`);
-  if (ideasRes.error) throw new Error(`carousel_ideas: ${ideasRes.error.message}`);
+  if (themesRes.error) {
+    throw new Error(`carousel_themes: ${themesRes.error.message}`);
+  }
+  if (ideasRes.error) {
+    throw new Error(`carousel_ideas: ${ideasRes.error.message}`);
+  }
 
   const clients = (clientsRes.data ?? [])
     .filter((row) => row.status !== "needs_attention")
@@ -287,7 +322,9 @@ export async function getStoryIdeasData(): Promise<{
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
-  if (themesRes.error) throw new Error(`story_themes: ${themesRes.error.message}`);
+  if (themesRes.error) {
+    throw new Error(`story_themes: ${themesRes.error.message}`);
+  }
   if (ideasRes.error) throw new Error(`story_ideas: ${ideasRes.error.message}`);
 
   const clients = (clientsRes.data ?? [])
@@ -355,9 +392,11 @@ export async function getProoferData(
   const [yearStr, monthStr] = month.split("-");
   const year = Number(yearStr);
   const m = Number(monthStr);
+
   if (!year || !m) {
     return { clients, posts: [] };
   }
+
   const start = `${yearStr}-${monthStr}-01`;
   const nextMonthDate = new Date(year, m, 1);
   const end = `${nextMonthDate.getFullYear()}-${String(
@@ -372,8 +411,9 @@ export async function getProoferData(
     .lt("post_date", end)
     .order("post_date", { ascending: true });
 
-  if (postsRes.error)
+  if (postsRes.error) {
     throw new Error(`proofer_posts: ${postsRes.error.message}`);
+  }
 
   const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => ({
     id: String(row.id),
@@ -381,11 +421,48 @@ export async function getProoferData(
     postDate: row.post_date ?? "",
     caption: row.caption ?? "",
     imageUrl: row.image_url ?? "",
-    status: ((row.status ?? "none") as ProoferStatus),
+    status: (row.status ?? "none") as ProoferStatus,
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   }));
 
-  return { clients, posts };
+  const postIds = posts.map((p) => p.id);
+
+  const commentsMap = new Map<string, any[]>();
+
+  if (postIds.length > 0) {
+    const commentsRes = await supabase
+      .from("proofer_comments")
+      .select("*")
+      .in("post_id", postIds)
+      .order("created_at", { ascending: true });
+
+    if (commentsRes.error) {
+      throw new Error(`proofer_comments: ${commentsRes.error.message}`);
+    }
+
+    (commentsRes.data ?? []).forEach((commentRow) => {
+      const postId = String(commentRow.post_id);
+      const existing = commentsMap.get(postId) ?? [];
+
+      existing.push({
+        id: String(commentRow.id),
+        postId,
+        comment: commentRow.comment ?? "",
+        createdBy: commentRow.created_by ?? "",
+        resolved: commentRow.resolved ?? false,
+        createdAt: commentRow.created_at ?? "",
+      });
+
+      commentsMap.set(postId, existing);
+    });
+  }
+
+  const postsWithComments: ProoferPost[] = posts.map((post) => ({
+    ...post,
+    comments: commentsMap.get(post.id) ?? [],
+  }));
+
+  return { clients, posts: postsWithComments };
 }
