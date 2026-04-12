@@ -2,6 +2,13 @@ import Link from "next/link";
 import { createClient } from "../../../../../../lib/supabase/server";
 import SectionCard from "../../../../components/SectionCard";
 import EmptyState from "../../../../components/EmptyState";
+import ReviewApprovalRow from "../../../../components/ReviewApprovalRow";
+import ReviewLifecycleControls from "../../../../components/ReviewLifecycleControls";
+import {
+  approveProposal,
+  markReviewApproved,
+  sendReviewForApproval,
+} from "../../../../lib/review-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +19,10 @@ export const dynamic = "force-dynamic";
 // "60-second narrative" the client can scan: cover block → what happened →
 // what improved → what we tested → what we learned → what we're doing next.
 //
-// The "approve / decline / change" controls in the "What's next" section are
-// rendered here as static checkboxes — wiring them through to ad_actions and
-// ad_decisions is step 2 of the client review layer.
+// The "What's next" section is interactive: each proposal can be approved or
+// declined, which mints a backing ad_action or ad_decision via server actions
+// in lib/review-actions.ts. The whole review can also be sent for client
+// review (which mints a share token) and marked approved.
 // ---------------------------------------------------------------------------
 
 type ImprovementCard = {
@@ -58,6 +66,7 @@ type ReviewRow = {
   period_start: string;
   period_end: string;
   status: string;
+  share_token: string | null;
   headline: string | null;
   subhead: string | null;
   what_happened: string | null;
@@ -68,6 +77,8 @@ type ReviewRow = {
   what_next: NextItem[] | null;
   metrics_snapshot: Record<string, unknown> | null;
   generated_at: string | null;
+  sent_at: string | null;
+  approved_at: string | null;
 };
 
 type Approval = {
@@ -76,7 +87,7 @@ type Approval = {
   proposal_label: string;
   proposal_detail: string | null;
   proposal_type: string;
-  status: string;
+  status: "pending" | "approved" | "declined" | "changed";
   client_note: string | null;
 };
 
@@ -192,6 +203,21 @@ export default async function ReviewDetailPage({
         </Link>{" "}
         › <span style={{ color: "#18181b" }}>{review.period_label}</span>
       </div>
+
+      {/* Lifecycle controls */}
+      <ReviewLifecycleControls
+        reviewId={review.id}
+        status={review.status}
+        shareToken={review.share_token}
+        onSend={async (id: number) => {
+          "use server";
+          return sendReviewForApproval(id);
+        }}
+        onMarkApproved={async (id: number) => {
+          "use server";
+          await markReviewApproved(id);
+        }}
+      />
 
       {/* Cover block */}
       <div
@@ -490,8 +516,9 @@ export default async function ReviewDetailPage({
                 lineHeight: 1.5,
               }}
             >
-              Tick what you&rsquo;re happy with. Approvals will be wired into
-              the action engine in the next step.
+              Approve what you&rsquo;re happy with. Approvals mint a row in
+              the action engine — you&rsquo;ll see them in the per-ad queue
+              right away.
             </p>
             {NEXT_GROUPS.map((group) => {
               const items = next.filter((n) => n.type === group.type);
@@ -522,55 +549,37 @@ export default async function ReviewDetailPage({
                       const approval = groupApprovals.find(
                         (a) => a.proposal_index === item.idx
                       );
-                      const isApproved = approval?.status === "approved";
-                      return (
-                        <label
-                          key={item.idx}
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: 12,
-                            padding: 12,
-                            border: "1px solid #e4e4e7",
-                            borderRadius: 10,
-                            background: isApproved ? "#f0fdf4" : "#fff",
-                            cursor: "default",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            defaultChecked={isApproved}
-                            disabled
+                      if (!approval) {
+                        return (
+                          <div
+                            key={item.idx}
                             style={{
-                              marginTop: 3,
-                              width: 16,
-                              height: 16,
+                              padding: 12,
+                              border: "1px dashed #e4e4e7",
+                              borderRadius: 10,
+                              fontSize: 13,
+                              color: "#a1a1aa",
                             }}
-                          />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontSize: 14,
-                                fontWeight: 600,
-                                color: "#18181b",
-                              }}
-                            >
-                              {item.label}
-                            </div>
-                            {item.detail && (
-                              <div
-                                style={{
-                                  fontSize: 13,
-                                  color: "#52525b",
-                                  marginTop: 4,
-                                  lineHeight: 1.5,
-                                }}
-                              >
-                                {item.detail}
-                              </div>
-                            )}
+                          >
+                            {item.label} (no approval row)
                           </div>
-                        </label>
+                        );
+                      }
+                      return (
+                        <ReviewApprovalRow
+                          key={approval.id}
+                          approvalId={approval.id}
+                          label={item.label}
+                          detail={item.detail}
+                          status={approval.status}
+                          onDecide={async (
+                            id: number,
+                            decision: "approved" | "declined"
+                          ) => {
+                            "use server";
+                            await approveProposal(id, decision);
+                          }}
+                        />
                       );
                     })}
                   </div>
@@ -590,8 +599,10 @@ export default async function ReviewDetailPage({
           padding: "8px 0 24px",
         }}
       >
-        This review is in {review.status}. Sharing and approval wiring come in
-        the next step.
+        This review is in {review.status}.
+        {review.share_token
+          ? " Share link is live."
+          : " Send for client review to mint a share link."}
       </div>
     </div>
   );
