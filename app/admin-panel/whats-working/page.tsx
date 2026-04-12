@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { capitalizeFirst, humanAgo } from "@/app/admin-panel/lib/utils";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
 import GenerateGlobalLearningsButton from "@/app/admin-panel/components/GenerateGlobalLearningsButton";
@@ -272,25 +273,39 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
   const { industry: industryFilterRaw } = await searchParams;
   const industryFilter = industryFilterRaw?.trim() || null;
 
-  const { data: rawPatterns, error } = await supabase
-    .from("global_learnings")
-    .select("*")
-    .order("consistency_score", { ascending: false })
-    .order("times_seen", { ascending: false });
+  // Three independent reads — fired in parallel because the page is
+  // server-rendered on every load and they don't depend on each other.
+  // pattern_feedback failing silently is intentional (e.g. when its
+  // migration hasn't been applied yet) — the badges and panel just
+  // don't render.
+  const [
+    { data: rawPatterns, error },
+    { data: feedbackRows },
+    { data: rawOutcomes },
+  ] = await Promise.all([
+    supabase
+      .from("global_learnings")
+      .select("*")
+      .order("consistency_score", { ascending: false })
+      .order("times_seen", { ascending: false }),
+    supabase
+      .from("pattern_feedback")
+      .select(
+        "pattern_key, industry, engine_uses, positive_verdicts, negative_verdicts, neutral_verdicts, inconclusive_verdicts"
+      ),
+    supabase
+      .from("decision_outcomes")
+      .select(
+        "id, queue_id, decision_type, verdict, verdict_reason, ctr_lift_pct, cpm_change_pct, measured_at, client_id"
+      )
+      .eq("status", "measured")
+      .not("verdict", "is", null)
+      .order("measured_at", { ascending: false })
+      .limit(30),
+  ]);
 
   const allPatterns = (rawPatterns ?? []) as GlobalLearning[];
 
-  // Engine track record. The pattern_feedback table is small (one row per
-  // pattern_key/industry that the engine has actually used) so we just
-  // load the whole thing and build an in-memory lookup. Failing the query
-  // — e.g. when the migration hasn't been applied to this DB yet — is
-  // silently treated as "no engine verdicts to show", which is the
-  // correct behaviour: the badge just doesn't render.
-  const { data: feedbackRows } = await supabase
-    .from("pattern_feedback")
-    .select(
-      "pattern_key, industry, engine_uses, positive_verdicts, negative_verdicts, neutral_verdicts, inconclusive_verdicts"
-    );
   const feedbackByKey = new Map<string, EngineFeedback>();
   for (const f of (feedbackRows ?? []) as {
     pattern_key: string;
@@ -310,23 +325,12 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
     });
   }
 
-  // Recent engine verdicts panel data. We pull the freshest measured
-  // decision_outcomes rows, then look up their queue rows in a second
-  // query to filter down to engine-driven (pattern-backed) decisions
-  // only. Two queries is deliberate — PostgREST nested-filter syntax for
-  // "embed exists AND nested column is not null" is fragile, and the
-  // outcomes table is small enough that 30 rows + a follow-up `in()`
-  // lookup is cheap. Keeping it lazy: if either query fails (e.g. tables
-  // missing on a fresh DB) the panel just doesn't render.
-  const { data: rawOutcomes } = await supabase
-    .from("decision_outcomes")
-    .select(
-      "id, queue_id, decision_type, verdict, verdict_reason, ctr_lift_pct, cpm_change_pct, measured_at, client_id"
-    )
-    .eq("status", "measured")
-    .not("verdict", "is", null)
-    .order("measured_at", { ascending: false })
-    .limit(30);
+  // The outcomes → queue → clients stitch is the second wave: it has
+  // to wait on rawOutcomes to know which queue/client ids to fetch.
+  // The reason this isn't a single PostgREST embed is that we need to
+  // filter on `meta_execution_queue.source_pattern_key IS NOT NULL`,
+  // and nested-embed null filters are fragile in PostgREST. Two
+  // queries is cheap and bulletproof.
 
   type RawOutcome = {
     id: number;
@@ -344,7 +348,9 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
   let engineVerdicts: EngineVerdictRow[] = [];
 
   if (outcomeRows.length > 0) {
-    const queueIds = outcomeRows.map((o) => o.queue_id).filter(Boolean);
+    const queueIds = outcomeRows
+      .map((o) => o.queue_id)
+      .filter((id): id is number => id != null);
     const clientIds = Array.from(
       new Set(
         outcomeRows
@@ -559,7 +565,7 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
             <FilterPill
               key={ind}
               href={`/app/whats-working?industry=${encodeURIComponent(ind)}`}
-              label={ind.charAt(0).toUpperCase() + ind.slice(1)}
+              label={capitalizeFirst(ind)}
               active={industryFilter === ind}
             />
           ))}
@@ -702,18 +708,6 @@ function verdictLabel(verdict: string): string {
     default:
       return verdict;
   }
-}
-
-function humanAgo(iso: string | null): string {
-  if (!iso) return "";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 0) return "just now";
-  const m = Math.round(ms / 60000);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  return `${d}d ago`;
 }
 
 function RecentEngineVerdicts({ verdicts }: { verdicts: EngineVerdictRow[] }) {

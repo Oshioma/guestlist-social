@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { capitalizeFirst } from "@/app/admin-panel/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -187,12 +188,39 @@ export async function POST() {
       Date.now() - GENERATOR_WINDOW_DAYS * 24 * 60 * 60 * 1000
     ).toISOString();
 
-    const { data: rawLearnings, error: fetchError } = await supabase
-      .from("action_learnings")
-      .select(
-        "id, client_id, problem, action_taken, outcome, learning, tags, times_seen, avg_ctr_lift, avg_cpc_change, reliability_score"
-      )
-      .gte("created_at", windowStartIso);
+    // All five inputs to the rebuild are independent — fire them in
+    // parallel. action_learnings drives an early return if empty, but
+    // the other reads are small and the wasted fetch in that cold case
+    // beats serializing five round trips on every common run.
+    const [
+      { data: rawLearnings, error: fetchError },
+      { data: clientsForIndustry },
+      { data: feedbackRows },
+      { data: rawAds },
+      { data: priorRows },
+    ] = await Promise.all([
+      supabase
+        .from("action_learnings")
+        .select(
+          "id, client_id, problem, action_taken, outcome, learning, tags, times_seen, avg_ctr_lift, avg_cpc_change, reliability_score"
+        )
+        .gte("created_at", windowStartIso),
+      supabase.from("clients").select("id, industry"),
+      supabase
+        .from("pattern_feedback")
+        .select(
+          "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts"
+        ),
+      supabase
+        .from("ads")
+        .select(
+          "id, client_id, hook_type, format_style, impressions, clicks, meta_effective_status"
+        )
+        .not("meta_effective_status", "in", "(ARCHIVED,DELETED)"),
+      supabase
+        .from("global_learnings")
+        .select("pattern_key, industry, consistency_score, unique_clients"),
+    ]);
 
     if (fetchError) {
       return NextResponse.json(
@@ -231,14 +259,6 @@ export async function POST() {
       industry: string | null;
     };
 
-    // Industry lookup for action patterns. We need this *before* the
-    // grouping loop so each learning can be slotted into its per-industry
-    // bucket as well as the cross-industry one. The creative-aggregation
-    // block below uses the same lookup — extracted up here so it's loaded
-    // exactly once per request.
-    const { data: clientsForIndustry } = await supabase
-      .from("clients")
-      .select("id, industry");
     const industryByClient = new Map<number, string | null>();
     for (const c of (clientsForIndustry ?? []) as {
       id: number;
@@ -249,10 +269,6 @@ export async function POST() {
 
     const groups = new Map<string, Group>();
 
-    // Helper: get-or-create a group for a (pattern_key, industry) slice.
-    // Cross-industry rows use industry=null and key=pattern_key. Per-
-    // industry rows use industry=<name> and key=`${pattern_key}|${name}`
-    // — same composite-key shape we use for pattern_feedback lookups.
     function ensureGroup(
       type: PatternType,
       key: string,
@@ -265,7 +281,7 @@ export async function POST() {
         g = {
           pattern_type: type,
           pattern_key: key,
-          pattern_label: industry ? `${label} · ${formatIndustry(industry)}` : label,
+          pattern_label: industry ? `${label} · ${capitalizeFirst(industry)}` : label,
           action_candidates: new Map(),
           tag_counts: new Map(),
           client_ids: new Set(),
@@ -282,16 +298,6 @@ export async function POST() {
         groups.set(slotKey, g);
       }
       return g;
-    }
-
-    // Defined here (above ensureGroup's first call) so the per-industry
-    // label suffix can use it. The creative-aggregation block below also
-    // uses this; both call sites end up with consistent capitalisation.
-    function formatIndustry(ind: string): string {
-      // Operators can type freeform — capitalize first letter, leave the
-      // rest alone so multi-word entries like "real estate" don't lose
-      // their spacing.
-      return ind.charAt(0).toUpperCase() + ind.slice(1);
     }
 
     function pushLearning(g: Group, row: LearningRow) {
@@ -359,25 +365,9 @@ export async function POST() {
     const avg = (arr: number[]): number | null =>
       arr.length > 0 ? Number((arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(2)) : null;
 
-    // ----------------------------------------------------------------------
-    // Pattern feedback ledger — fold engine-driven verdicts into the
-    // operator-recorded counts before computing consistency_score. This is
-    // the "outcome → pattern" half of the prediction loop: when the engine
-    // takes a pattern-backed action and measureDueOutcomes records a
-    // verdict, that verdict lives in pattern_feedback. Here we add it to
-    // the operator action_learnings counts so the next decision generation
-    // sees the engine's own track record reflected in the score.
-    //
-    // Action patterns are always industry=null in this builder (the
-    // creative-attribute pass below has its own industry handling). We
-    // look up feedback rows with industry='' (the agency-wide sentinel).
-    // ----------------------------------------------------------------------
-    const { data: feedbackRows } = await supabase
-      .from("pattern_feedback")
-      .select(
-        "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts"
-      );
-
+    // Fold engine-driven verdicts from pattern_feedback into the operator
+    // action_learnings counts before computing consistency_score, so each
+    // generation sees the engine's own track record reflected in the score.
     type FeedbackBuckets = {
       positive: number;
       negative: number;
@@ -492,11 +482,6 @@ export async function POST() {
     const MIN_UNIQUE_CLIENTS = 2;
     const MIN_LIFT_PCT = 15;
 
-    // industryByClient + formatIndustry are now defined above (alongside
-    // the action-pattern grouping pass) so both pipelines share a single
-    // clients(id, industry) read. Reusing the same map here keeps the
-    // baseline math identical between the two passes.
-
     type CreativeAdRow = {
       id: number;
       client_id: number | null;
@@ -507,17 +492,6 @@ export async function POST() {
       meta_effective_status: string | null;
     };
 
-    // Skip dead inventory — ARCHIVED and DELETED ads represent stuff that's
-    // no longer running, so their CTR shouldn't influence "what's working
-    // right now". `meta_effective_status` is null on rows that were never
-    // synced from Meta, so we filter via .not().in() rather than a positive
-    // include list (keeps locally-created or partially-synced ads).
-    const { data: rawAds } = await supabase
-      .from("ads")
-      .select(
-        "id, client_id, hook_type, format_style, impressions, clicks, meta_effective_status"
-      )
-      .not("meta_effective_status", "in", "(ARCHIVED,DELETED)");
     const adRows = (rawAds ?? []) as CreativeAdRow[];
 
     function ctrOf(ad: CreativeAdRow): number | null {
@@ -683,7 +657,7 @@ export async function POST() {
       );
 
       const scope = b.industry
-        ? `in ${formatIndustry(b.industry)}`
+        ? `in ${capitalizeFirst(b.industry)}`
         : `across ${b.client_ids.size} clients`;
       const summary = positive
         ? `${b.pattern_label} outperforms the average by ${liftPct.toFixed(0)}% ${scope}`
@@ -693,7 +667,7 @@ export async function POST() {
       // the playbook page can render them without needing to look up the
       // industry separately for each card.
       const labelWithScope = b.industry
-        ? `${b.pattern_label} · ${formatIndustry(b.industry)}`
+        ? `${b.pattern_label} · ${capitalizeFirst(b.industry)}`
         : b.pattern_label;
 
       creativeRows.push({
@@ -719,19 +693,9 @@ export async function POST() {
 
     rows.push(...creativeRows);
 
-    // -----------------------------------------------------------------------
-    // Backward validation. Before we wipe the table, snapshot the previous
-    // run's consistency_score and unique_clients keyed by pattern_key, then
-    // attach those as prev_* on the new rows. The UI uses the delta between
-    // current and prev to flag "↓ slipping" patterns and the absence of a
-    // prev row to flag "✨ new" patterns. Net effect: every refresh becomes
-    // a check of yesterday's predictions against today's data, instead of
-    // overwriting silently.
-    // -----------------------------------------------------------------------
-    const { data: priorRows } = await supabase
-      .from("global_learnings")
-      .select("pattern_key, industry, consistency_score, unique_clients");
-
+    // Backward validation. Snapshot the previous run's consistency_score
+    // and unique_clients before we wipe the table, then attach as prev_* on
+    // the new rows so the UI can flag "↓ slipping" and "✨ new" patterns.
     // Key on (pattern_key, industry) — same composite the new uniqueness
     // index uses. Without industry in the key, every per-industry row
     // would inherit the cross-industry baseline and the slipping-pattern

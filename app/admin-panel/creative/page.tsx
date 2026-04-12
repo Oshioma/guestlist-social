@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { createClient } from "@/lib/supabase/server";
+import { capitalizeFirst } from "@/app/admin-panel/lib/utils";
 import CreativeLibrary, { type CreativeCard } from "./CreativeLibrary";
 
 export const dynamic = "force-dynamic";
@@ -349,7 +350,7 @@ function computeIntelligenceSummary(cards: CreativeCard[]): SummaryFinding[] {
       if (lift >= 15) {
         findings.push({
           kind: "winner",
-          text: `${cap(top.format)}s outperform ${bottom.format}s by ${lift.toFixed(0)}% on CTR (n=${top.n} vs ${bottom.n}).`,
+          text: `${capitalizeFirst(top.format)}s outperform ${bottom.format}s by ${lift.toFixed(0)}% on CTR (n=${top.n} vs ${bottom.n}).`,
         });
       }
     }
@@ -380,7 +381,7 @@ function computeIntelligenceSummary(cards: CreativeCard[]): SummaryFinding[] {
   if (formatProblem && formatProblem.avg > 0 && formatProblem.avg < 0.6) {
     findings.push({
       kind: "warning",
-      text: `${cap(formatProblem.format)}s are dragging — average CTR ${formatProblem.avg.toFixed(2)}% across ${formatProblem.n} ads.`,
+      text: `${capitalizeFirst(formatProblem.format)}s are dragging — average CTR ${formatProblem.avg.toFixed(2)}% across ${formatProblem.n} ads.`,
     });
   }
 
@@ -396,10 +397,6 @@ function computeIntelligenceSummary(cards: CreativeCard[]): SummaryFinding[] {
   }
 
   return findings;
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function dedupeClients(cards: CreativeCard[]) {
