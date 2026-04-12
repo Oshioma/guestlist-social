@@ -62,7 +62,11 @@ type AdRow = {
   client_id: number | null;
   name: string | null;
   meta_id: string | null;
+  // ads.ctr is NOT a stored column — we compute it from clicks/impressions
+  // below and stash it on the row so the rest of the pipeline can read
+  // ad.ctr without changes.
   ctr: number | null;
+  clicks: number | null;
   impressions: number | null;
   performance_score: number | null;
   performance_status: string | null;
@@ -184,12 +188,36 @@ export async function discoverPatternMatches(
   const { data: adRows, error: adErr } = await supabase
     .from("ads")
     .select(
-      "id, client_id, name, meta_id, ctr, impressions, performance_score, performance_status, creative_type, hook_type, format_style"
+      "id, client_id, name, meta_id, clicks, impressions, performance_score, performance_status, creative_type, hook_type, format_style"
     );
   if (adErr) {
     throw new Error(`discoverPatternMatches: ads query failed: ${adErr.message}`);
   }
-  const ads = (adRows ?? []) as AdRow[];
+  // CTR isn't a stored column. Compute it once here from clicks/impressions
+  // so every downstream caller (combo grouping, donor ranking, evidence
+  // text) can keep reading `ad.ctr` without per-call recomputation.
+  const ads: AdRow[] = (adRows ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const impressions = Number(r.impressions ?? 0);
+    const clicks = Number(r.clicks ?? 0);
+    const ctr =
+      impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
+    return {
+      id: Number(r.id),
+      client_id: r.client_id == null ? null : Number(r.client_id),
+      name: (r.name as string | null) ?? null,
+      meta_id: (r.meta_id as string | null) ?? null,
+      ctr,
+      clicks,
+      impressions,
+      performance_score:
+        r.performance_score == null ? null : Number(r.performance_score),
+      performance_status: (r.performance_status as string | null) ?? null,
+      creative_type: (r.creative_type as string | null) ?? null,
+      hook_type: (r.hook_type as string | null) ?? null,
+      format_style: (r.format_style as string | null) ?? null,
+    };
+  });
 
   const { data: clientRows, error: clientErr } = await supabase
     .from("clients")
