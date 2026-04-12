@@ -6,7 +6,7 @@ begin;
 
 create table if not exists public.content_pillars (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients(id) on delete cascade,
+  client_id bigint not null references public.clients(id) on delete cascade,
   name text not null,
   color text not null default '#18181b',
   description text not null default '',
