@@ -583,15 +583,18 @@ export default async function ClientAdsPage({
                           gap: 8,
                         }}
                       >
-                        <span
+                        <Link
+                          href={`/app/clients/${clientId}/ads/${ad.id}`}
                           style={{
                             fontSize: 15,
                             fontWeight: 600,
                             color: "#18181b",
+                            textDecoration: "none",
                           }}
+                          title="Open audit trail"
                         >
                           {ad.name}
-                        </span>
+                        </Link>
                         <span
                           style={{
                             padding: "2px 10px",
