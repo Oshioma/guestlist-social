@@ -29,6 +29,17 @@ type Suggestion = {
   reason: string;
 };
 
+type TopCombo = {
+  patternKey: string;
+  creative_type: string | null;
+  hook_type: string | null;
+  format_style: string | null;
+  clientCount: number;
+  adCount: number;
+  avgCtr: number;
+  qualified: boolean;
+};
+
 type ApiResponse = {
   ok: boolean;
   mode?: "preview" | "seed";
@@ -39,7 +50,19 @@ type ApiResponse = {
     qualifyingCombos: number;
     suggestionsBeforeCap: number;
     suggestionsAfterCap: number;
+    funnel?: {
+      withMetaId: number;
+      meetingImpressionFloor: number;
+      withAnyCreativeAttr: number;
+      eligibleDonors: number;
+    };
+    rejected?: {
+      emptyPattern: number;
+      tooFewClients: number;
+      ctrBelowFloor: number;
+    };
   };
+  topCombos?: TopCombo[];
   suggestions?: Suggestion[];
   seeded?: number;
   deduped?: number;
@@ -148,6 +171,82 @@ export default function CrossPollinateButton() {
                     {result.stats.qualifyingCombos} qualifying patterns ·{" "}
                     {result.stats.suggestionsAfterCap} suggestions after cap
                   </div>
+                )}
+                {result.stats?.funnel && (
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: "pointer", color: "#3f3f46" }}>
+                      Funnel breakdown
+                    </summary>
+                    <div
+                      style={{
+                        margin: "6px 0 0 18px",
+                        color: "#52525b",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <div>
+                        Has meta_id: <strong>{result.stats.funnel.withMetaId}</strong>{" "}
+                        / {result.stats.adsScanned}
+                      </div>
+                      <div>
+                        Meets impression floor:{" "}
+                        <strong>
+                          {result.stats.funnel.meetingImpressionFloor}
+                        </strong>
+                      </div>
+                      <div>
+                        Has any creative attribute (creative_type / hook_type /
+                        format_style):{" "}
+                        <strong>
+                          {result.stats.funnel.withAnyCreativeAttr}
+                        </strong>
+                      </div>
+                      <div>
+                        Eligible donors:{" "}
+                        <strong>{result.stats.funnel.eligibleDonors}</strong>
+                      </div>
+                      {result.stats.rejected && (
+                        <div style={{ marginTop: 6 }}>
+                          Combos rejected — empty pattern:{" "}
+                          <strong>
+                            {result.stats.rejected.emptyPattern}
+                          </strong>
+                          , single-client:{" "}
+                          <strong>
+                            {result.stats.rejected.tooFewClients}
+                          </strong>
+                          , CTR below floor:{" "}
+                          <strong>
+                            {result.stats.rejected.ctrBelowFloor}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
+                {result.topCombos && result.topCombos.length > 0 && (
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: "pointer", color: "#3f3f46" }}>
+                      Top combos found ({result.topCombos.length})
+                    </summary>
+                    <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+                      {result.topCombos.map((c) => (
+                        <li
+                          key={c.patternKey}
+                          style={{
+                            marginBottom: 4,
+                            color: c.qualified ? "#166534" : "#71717a",
+                          }}
+                        >
+                          {c.format_style ?? "?"} / {c.creative_type ?? "?"} /{" "}
+                          {c.hook_type ?? "?"} · {c.clientCount} client
+                          {c.clientCount === 1 ? "" : "s"} · {c.adCount} ads ·{" "}
+                          {c.avgCtr}% CTR
+                          {c.qualified ? " ✓" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
                 {result.errors && result.errors.length > 0 && (
                   <details style={{ marginTop: 6 }}>

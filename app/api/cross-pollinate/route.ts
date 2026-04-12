@@ -70,6 +70,7 @@ export async function GET() {
       mode: "preview",
       thresholds: THRESHOLDS,
       stats: result.stats,
+      topCombos: result.topCombos,
       suggestions: result.suggestions,
     });
   } catch (err) {
@@ -107,6 +108,7 @@ export async function POST() {
       mode: "seed",
       thresholds: THRESHOLDS,
       stats: result.stats,
+      topCombos: result.topCombos,
       seeded,
       deduped,
       errors: errors.length > 0 ? errors : undefined,

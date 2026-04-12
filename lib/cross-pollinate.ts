@@ -128,11 +128,48 @@ export type DiscoveryStats = {
   qualifyingCombos: number;
   suggestionsBeforeCap: number;
   suggestionsAfterCap: number;
+  /**
+   * Funnel breakdown so the operator (and me) can see WHICH filter is
+   * killing rows when zero combos qualify. Each number is a count of ads
+   * that survived up to that filter, in order.
+   */
+  funnel: {
+    withMetaId: number;
+    meetingImpressionFloor: number;
+    withAnyCreativeAttr: number;
+    eligibleDonors: number;
+  };
+  /**
+   * Reasons combos failed the qualification gate, so it's obvious whether
+   * the bottleneck is "single-client patterns" or "CTR too low".
+   */
+  rejected: {
+    emptyPattern: number;
+    tooFewClients: number;
+    ctrBelowFloor: number;
+  };
+};
+
+/**
+ * Diagnostic preview of the strongest combos found, even if they didn't
+ * qualify. Lets us see what the data actually looks like before tuning
+ * thresholds. Returned alongside suggestions in DiscoveryResult.
+ */
+export type ComboDebug = {
+  patternKey: PatternKey;
+  creative_type: string | null;
+  hook_type: string | null;
+  format_style: string | null;
+  clientCount: number;
+  adCount: number;
+  avgCtr: number;
+  qualified: boolean;
 };
 
 export type DiscoveryResult = {
   suggestions: CrossClientSuggestion[];
   stats: DiscoveryStats;
+  topCombos: ComboDebug[];
 };
 
 // ---------------------------------------------------------------------------
@@ -250,12 +287,19 @@ export async function discoverPatternMatches(
   //   - Have a meta_id (otherwise the executor can't copy it)
   //   - Have at least MIN_DONOR_IMPRESSIONS so we trust the CTR
   //   - Not be a "winner of nothing" — at least some attribute populated
+  let funnelWithMetaId = 0;
+  let funnelMeetingImpressionFloor = 0;
+  let funnelWithAnyCreativeAttr = 0;
+  let funnelEligibleDonors = 0;
+
   const combos = new Map<PatternKey, ComboStats>();
   for (const ad of ads) {
     if (!ad.meta_id) continue;
     if (ad.client_id == null) continue;
+    funnelWithMetaId++;
     const impressions = Number(ad.impressions ?? 0);
     if (impressions < MIN_DONOR_IMPRESSIONS) continue;
+    funnelMeetingImpressionFloor++;
     if (
       ad.creative_type == null &&
       ad.hook_type == null &&
@@ -263,6 +307,8 @@ export async function discoverPatternMatches(
     ) {
       continue;
     }
+    funnelWithAnyCreativeAttr++;
+    funnelEligibleDonors++;
     const key = patternKeyFor(ad);
     let combo = combos.get(key);
     if (!combo) {
@@ -298,11 +344,23 @@ export async function discoverPatternMatches(
 
   // Filter to qualifying patterns: enough cross-client validation AND
   // average CTR above the floor.
+  let rejectedEmptyPattern = 0;
+  let rejectedTooFewClients = 0;
+  let rejectedCtrBelowFloor = 0;
   const qualifying: ComboStats[] = [];
   for (const combo of combos.values()) {
-    if (isEmptyPattern(combo)) continue;
-    if (combo.clientIds.size < MIN_CLIENTS_PER_PATTERN) continue;
-    if (combo.avgCtr < MIN_AVG_CTR) continue;
+    if (isEmptyPattern(combo)) {
+      rejectedEmptyPattern++;
+      continue;
+    }
+    if (combo.clientIds.size < MIN_CLIENTS_PER_PATTERN) {
+      rejectedTooFewClients++;
+      continue;
+    }
+    if (combo.avgCtr < MIN_AVG_CTR) {
+      rejectedCtrBelowFloor++;
+      continue;
+    }
     qualifying.push(combo);
   }
   // Strongest patterns first — by ctr, then by client count.
@@ -385,6 +443,33 @@ export async function discoverPatternMatches(
     capped.push(s);
   }
 
+  // Diagnostic top combos: strongest combos by ctr * client count, with a
+  // qualified flag so the operator can see whether tuning a threshold by 1
+  // notch would unlock anything.
+  const topCombos: ComboDebug[] = Array.from(combos.values())
+    .filter((c) => !isEmptyPattern(c))
+    .sort((a, b) => {
+      // Rank by client count first (cross-client patterns matter most),
+      // then by ctr.
+      if (b.clientIds.size !== a.clientIds.size) {
+        return b.clientIds.size - a.clientIds.size;
+      }
+      return b.avgCtr - a.avgCtr;
+    })
+    .slice(0, 10)
+    .map((c) => ({
+      patternKey: c.patternKey,
+      creative_type: c.creative_type,
+      hook_type: c.hook_type,
+      format_style: c.format_style,
+      clientCount: c.clientIds.size,
+      adCount: c.ads.length,
+      avgCtr: c.avgCtr,
+      qualified:
+        c.clientIds.size >= MIN_CLIENTS_PER_PATTERN &&
+        c.avgCtr >= MIN_AVG_CTR,
+    }));
+
   return {
     suggestions: capped,
     stats: {
@@ -394,7 +479,19 @@ export async function discoverPatternMatches(
       qualifyingCombos: qualifying.length,
       suggestionsBeforeCap: rawSuggestions.length,
       suggestionsAfterCap: capped.length,
+      funnel: {
+        withMetaId: funnelWithMetaId,
+        meetingImpressionFloor: funnelMeetingImpressionFloor,
+        withAnyCreativeAttr: funnelWithAnyCreativeAttr,
+        eligibleDonors: funnelEligibleDonors,
+      },
+      rejected: {
+        emptyPattern: rejectedEmptyPattern,
+        tooFewClients: rejectedTooFewClients,
+        ctrBelowFloor: rejectedCtrBelowFloor,
+      },
     },
+    topCombos,
   };
 }
 
