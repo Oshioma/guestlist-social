@@ -19,6 +19,13 @@ const navItems = [
   { label: "About", href: "/app/about" },
 ];
 
+// Anything in this list points outside /app/* — typically into another shell
+// (the portal lives at /portal). They render below the main nav with a
+// divider so they're visually separated from the operator's day-to-day items.
+const externalNavItems = [
+  { label: "Client view", href: "/portal" },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
 
@@ -75,6 +82,39 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {/* External shells — divider, then a labelled section. */}
+        <div
+          style={{
+            margin: "12px 8px 6px",
+            paddingTop: 12,
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 10,
+            color: "#71717a",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+          }}
+        >
+          Other views
+        </div>
+        {externalNavItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            style={{
+              display: "block",
+              padding: "8px 12px",
+              borderRadius: 6,
+              fontSize: 14,
+              color: "#a1a1aa",
+              background: "transparent",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {item.label}
+          </Link>
+        ))}
       </nav>
 
       <div className="app-sidebar-footer" style={{ padding: "16px 20px" }}>

@@ -119,6 +119,13 @@ const SCHEMA = {
     "resulting_action_id",
     "resulting_decision_id",
   ],
+  client_user_links: [
+    "id",
+    "auth_user_id",
+    "client_id",
+    "role",
+    "created_at",
+  ],
 };
 
 const RED = "\x1b[31m";

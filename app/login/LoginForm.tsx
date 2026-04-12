@@ -6,7 +6,14 @@ import { createClient } from "../../lib/supabase/client";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/app/dashboard";
+  // We always send the user through the server-side dispatcher at /post-login,
+  // which resolves their role (admin vs client portal user) and picks the
+  // right destination. Forwarding the optional `next` lets admins land where
+  // they were trying to go before being bounced to /login.
+  const rawNext = searchParams.get("next");
+  const next = rawNext
+    ? `/post-login?next=${encodeURIComponent(rawNext)}`
+    : "/post-login";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
