@@ -125,17 +125,31 @@ export type MetaAd = {
   id: string;
   name: string;
   status: string;
+  effective_status?: string;
+  configured_status?: string;
   adset_id: string;
   campaign_id: string;
   created_time?: string;
+  updated_time?: string;
   creative?: {
     id: string;
+    name?: string;
     body?: string;
     title?: string;
     image_url?: string;
     thumbnail_url?: string;
+    object_type?: string;
+    call_to_action_type?: string;
+    link_url?: string;
+    effective_object_story_id?: string;
+    instagram_permalink_url?: string;
+    object_story_spec?: Record<string, unknown>;
+    asset_feed_spec?: Record<string, unknown>;
   };
 };
+
+type MetaAction = { action_type: string; value: string };
+type MetaVideoAction = { action_type?: string; value: string };
 
 export type MetaInsight = {
   campaign_id?: string;
@@ -144,18 +158,60 @@ export type MetaInsight = {
   adset_name?: string;
   ad_id?: string;
   ad_name?: string;
+
+  // Core
   impressions: string;
   clicks: string;
   spend: string;
   ctr: string;
   cpc?: string;
   cpm?: string;
+  cpp?: string;
+
+  // Delivery quality
   reach?: string;
   frequency?: string;
-  actions?: { action_type: string; value: string }[];
-  cost_per_action_type?: { action_type: string; value: string }[];
+  unique_clicks?: string;
+  unique_ctr?: string;
+  unique_inline_link_clicks?: string;
+
+  // Funnel
+  inline_link_clicks?: string;
+  outbound_clicks?: MetaAction[];
+  website_ctr?: MetaAction[];
+  cost_per_inline_link_click?: string;
+  cost_per_outbound_click?: MetaAction[];
+
+  // Actions
+  actions?: MetaAction[];
+  cost_per_action_type?: MetaAction[];
+  conversions?: MetaAction[];
+  cost_per_conversion?: MetaAction[];
+
+  // Video
+  video_play_actions?: MetaVideoAction[];
+  video_p25_watched_actions?: MetaVideoAction[];
+  video_p50_watched_actions?: MetaVideoAction[];
+  video_p75_watched_actions?: MetaVideoAction[];
+  video_p100_watched_actions?: MetaVideoAction[];
+  video_avg_time_watched_actions?: MetaVideoAction[];
+  video_thruplay_watched_actions?: MetaVideoAction[];
+
+  // Meta rankings
+  quality_ranking?: string;
+  engagement_rate_ranking?: string;
+  conversion_rate_ranking?: string;
+
   date_start: string;
   date_stop: string;
+};
+
+export type MetaBreakdownInsight = MetaInsight & {
+  publisher_platform?: string;
+  platform_position?: string;
+  device_platform?: string;
+  age?: string;
+  gender?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -201,10 +257,60 @@ export async function getAds(): Promise<MetaAd[]> {
   const { accountId } = getCredentials();
   return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
     fields:
-      "id,name,status,adset_id,campaign_id,created_time,creative{id,body,title,image_url,thumbnail_url}",
+      "id,name,status,effective_status,configured_status,adset_id,campaign_id,created_time,updated_time," +
+      "creative{id,name,body,title,image_url,thumbnail_url,object_type,call_to_action_type," +
+      "link_url,effective_object_story_id,instagram_permalink_url,object_story_spec,asset_feed_spec}",
     limit: "200",
   });
 }
+
+// Shared field set for ad-level insights. Kept in one place so it's easy
+// to tweak without drifting between aggregate and breakdown calls.
+const AD_INSIGHT_FIELDS = [
+  "campaign_id",
+  "campaign_name",
+  "adset_id",
+  "adset_name",
+  "ad_id",
+  "ad_name",
+  // Core
+  "impressions",
+  "clicks",
+  "spend",
+  "ctr",
+  "cpc",
+  "cpm",
+  "cpp",
+  // Delivery quality
+  "reach",
+  "frequency",
+  "unique_clicks",
+  "unique_ctr",
+  "unique_inline_link_clicks",
+  // Funnel
+  "inline_link_clicks",
+  "outbound_clicks",
+  "website_ctr",
+  "cost_per_inline_link_click",
+  "cost_per_outbound_click",
+  // Actions
+  "actions",
+  "cost_per_action_type",
+  "conversions",
+  "cost_per_conversion",
+  // Video
+  "video_play_actions",
+  "video_p25_watched_actions",
+  "video_p50_watched_actions",
+  "video_p75_watched_actions",
+  "video_p100_watched_actions",
+  "video_avg_time_watched_actions",
+  "video_thruplay_watched_actions",
+  // Meta rankings
+  "quality_ranking",
+  "engagement_rate_ranking",
+  "conversion_rate_ranking",
+].join(",");
 
 /**
  * Fetch ad-level insights for a custom date range.
@@ -217,10 +323,11 @@ export async function getAdInsights(opts?: {
 }): Promise<MetaInsight[]> {
   const { accountId } = getCredentials();
   const params: Record<string, string> = {
-    fields:
-      "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type",
+    fields: AD_INSIGHT_FIELDS,
     level: "ad",
     limit: "500",
+    use_unified_attribution_setting: "true",
+    action_attribution_windows: JSON.stringify(["7d_click", "1d_view"]),
   };
 
   if (opts?.since && opts?.until) {
@@ -236,6 +343,54 @@ export async function getAdInsights(opts?: {
 }
 
 /**
+ * Fetch ad-level insights broken down by placement (publisher platform ×
+ * position × device). One row per ad × bucket.
+ */
+export async function getAdPlacementInsights(opts?: {
+  since?: string;
+  until?: string;
+  datePreset?: string;
+}): Promise<MetaBreakdownInsight[]> {
+  const { accountId } = getCredentials();
+  const params: Record<string, string> = {
+    fields:
+      "ad_id,ad_name,impressions,clicks,spend,ctr,cpm,actions,cost_per_action_type",
+    level: "ad",
+    limit: "500",
+    breakdowns: "publisher_platform,platform_position,device_platform",
+  };
+  if (opts?.since && opts?.until) {
+    params.time_range = JSON.stringify({ since: opts.since, until: opts.until });
+  } else {
+    params.date_preset = opts?.datePreset ?? "last_30d";
+  }
+  return metaFetchAll<MetaBreakdownInsight>(`/${accountId}/insights`, params);
+}
+
+/**
+ * Fetch ad-level insights broken down by age × gender.
+ */
+export async function getAdDemographicInsights(opts?: {
+  since?: string;
+  until?: string;
+  datePreset?: string;
+}): Promise<MetaBreakdownInsight[]> {
+  const { accountId } = getCredentials();
+  const params: Record<string, string> = {
+    fields: "ad_id,ad_name,impressions,clicks,spend,ctr,actions",
+    level: "ad",
+    limit: "500",
+    breakdowns: "age,gender",
+  };
+  if (opts?.since && opts?.until) {
+    params.time_range = JSON.stringify({ since: opts.since, until: opts.until });
+  } else {
+    params.date_preset = opts?.datePreset ?? "last_30d";
+  }
+  return metaFetchAll<MetaBreakdownInsight>(`/${accountId}/insights`, params);
+}
+
+/**
  * Fetch campaign-level insights for a custom date range.
  */
 export async function getCampaignInsights(opts?: {
@@ -246,9 +401,14 @@ export async function getCampaignInsights(opts?: {
   const { accountId } = getCredentials();
   const params: Record<string, string> = {
     fields:
-      "campaign_id,campaign_name,impressions,clicks,spend,ctr,cpc,cpm,reach,frequency,actions",
+      "campaign_id,campaign_name,impressions,clicks,spend,ctr,cpc,cpm,cpp,reach,frequency," +
+      "unique_clicks,unique_ctr,inline_link_clicks,outbound_clicks,website_ctr," +
+      "actions,cost_per_action_type,conversions,cost_per_conversion," +
+      "quality_ranking,engagement_rate_ranking,conversion_rate_ranking",
     level: "campaign",
     limit: "200",
+    use_unified_attribution_setting: "true",
+    action_attribution_windows: JSON.stringify(["7d_click", "1d_view"]),
   };
 
   if (opts?.since && opts?.until) {
@@ -335,6 +495,36 @@ export function mapMetaObjective(objective: string): string {
   return map[objective] ?? objective?.toLowerCase().replace(/_/g, " ") ?? "unknown";
 }
 
+// Small helpers for the action-shaped arrays Meta returns.
+function sumAction(
+  arr: { action_type?: string; value: string }[] | undefined,
+  type?: string
+): number {
+  if (!arr) return 0;
+  return arr.reduce((sum, a) => {
+    if (type && a.action_type !== type) return sum;
+    return sum + Number(a.value ?? 0);
+  }, 0);
+}
+
+function firstActionValue(
+  arr: { action_type?: string; value: string }[] | undefined
+): number {
+  if (!arr || arr.length === 0) return 0;
+  return Number(arr[0].value ?? 0);
+}
+
+function actionsByType(
+  arr: { action_type: string; value: string }[] | undefined,
+  types: string[]
+): number {
+  if (!arr) return 0;
+  const set = new Set(types);
+  return arr
+    .filter((a) => set.has(a.action_type))
+    .reduce((sum, a) => sum + Number(a.value ?? 0), 0);
+}
+
 /** Convert a Meta insight row into the shape your ads table expects. */
 export function insightToAdRow(insight: MetaInsight) {
   const spend = Number(insight.spend ?? 0);
@@ -343,34 +533,60 @@ export function insightToAdRow(insight: MetaInsight) {
   const costPerResult =
     clicks > 0 && spend > 0 ? Number((spend / clicks).toFixed(4)) : 0;
 
-  // Extract conversions from actions array
-  const conversionTypes = new Set([
+  const actions = insight.actions ?? [];
+
+  // Broad conversions bucket (legacy column — keep for backwards compat)
+  const conversions = actionsByType(actions, [
     "offsite_conversion",
     "lead",
     "purchase",
     "complete_registration",
     "omni_purchase",
   ]);
-  const conversions =
-    insight.actions
-      ?.filter((a) => conversionTypes.has(a.action_type))
-      .reduce((sum, a) => sum + Number(a.value ?? 0), 0) ?? 0;
 
-  // Extract engagement (likes, comments, shares, reactions)
-  const engagementTypes = new Set([
+  // Engagement (likes, comments, shares, reactions)
+  const engagement = actionsByType(actions, [
     "post_engagement",
     "page_engagement",
     "post_reaction",
     "comment",
     "like",
   ]);
-  const engagement =
-    insight.actions
-      ?.filter((a) => engagementTypes.has(a.action_type))
-      .reduce((sum, a) => sum + Number(a.value ?? 0), 0) ?? 0;
+
+  // Split conversion types — Meta uses a few prefixes for the same event.
+  // Match any of them so we don't under-count when the pixel/capi overlaps.
+  const purchases = actionsByType(actions, [
+    "purchase",
+    "omni_purchase",
+    "offsite_conversion.fb_pixel_purchase",
+  ]);
+  const leads = actionsByType(actions, [
+    "lead",
+    "onsite_conversion.lead_grouped",
+    "offsite_conversion.fb_pixel_lead",
+  ]);
+  const addToCart = actionsByType(actions, [
+    "add_to_cart",
+    "offsite_conversion.fb_pixel_add_to_cart",
+  ]);
+  const initiateCheckout = actionsByType(actions, [
+    "initiate_checkout",
+    "offsite_conversion.fb_pixel_initiate_checkout",
+  ]);
+  const completeRegistration = actionsByType(actions, [
+    "complete_registration",
+    "offsite_conversion.fb_pixel_complete_registration",
+  ]);
+  const viewContent = actionsByType(actions, [
+    "view_content",
+    "offsite_conversion.fb_pixel_view_content",
+  ]);
+  const landingPageViews = actionsByType(actions, ["landing_page_view"]);
 
   return {
     name: insight.ad_name ?? "Meta ad",
+
+    // Legacy/core
     spend,
     impressions,
     clicks,
@@ -378,6 +594,99 @@ export function insightToAdRow(insight: MetaInsight) {
     conversions,
     engagement,
     followers_gained: 0,
+
+    // Delivery quality
+    reach: Number(insight.reach ?? 0),
+    frequency: insight.frequency ? Number(insight.frequency) : null,
+    cpm: insight.cpm ? Number(insight.cpm) : null,
+    cpp: insight.cpp ? Number(insight.cpp) : null,
+    unique_clicks: insight.unique_clicks ? Number(insight.unique_clicks) : null,
+    unique_ctr: insight.unique_ctr ? Number(insight.unique_ctr) : null,
+
+    // Funnel
+    inline_link_clicks: insight.inline_link_clicks
+      ? Number(insight.inline_link_clicks)
+      : null,
+    outbound_clicks: insight.outbound_clicks
+      ? sumAction(insight.outbound_clicks)
+      : null,
+    landing_page_views: landingPageViews || null,
+
+    // Split conversions
+    purchases: purchases || null,
+    leads: leads || null,
+    add_to_cart: addToCart || null,
+    initiate_checkout: initiateCheckout || null,
+    complete_registration: completeRegistration || null,
+    view_content: viewContent || null,
+    actions_raw: actions.length > 0 ? actions : null,
+    cost_per_action_raw:
+      insight.cost_per_action_type && insight.cost_per_action_type.length > 0
+        ? insight.cost_per_action_type
+        : null,
+
+    // Video
+    video_plays: sumAction(insight.video_play_actions) || null,
+    video_thruplays: sumAction(insight.video_thruplay_watched_actions) || null,
+    video_avg_watch_seconds: firstActionValue(
+      insight.video_avg_time_watched_actions
+    ) || null,
+    video_p25: sumAction(insight.video_p25_watched_actions) || null,
+    video_p50: sumAction(insight.video_p50_watched_actions) || null,
+    video_p75: sumAction(insight.video_p75_watched_actions) || null,
+    video_p100: sumAction(insight.video_p100_watched_actions) || null,
+
+    // Meta rankings
+    quality_ranking: insight.quality_ranking ?? null,
+    engagement_rate_ranking: insight.engagement_rate_ranking ?? null,
+    conversion_rate_ranking: insight.conversion_rate_ranking ?? null,
+  };
+}
+
+/** Extract the creative structure bits we care about from a MetaAd. */
+export function creativeToAdRow(metaAd: MetaAd): {
+  creative_type: string | null;
+  cta_type: string | null;
+  destination_url: string | null;
+  object_story_id: string | null;
+  asset_feed_spec: Record<string, unknown> | null;
+} {
+  const c = metaAd.creative;
+  if (!c) {
+    return {
+      creative_type: null,
+      cta_type: null,
+      destination_url: null,
+      object_story_id: null,
+      asset_feed_spec: null,
+    };
+  }
+
+  // Meta's object_type is SHARE/VIDEO/PHOTO/etc — map to something useful.
+  // Dynamic creative shows up via asset_feed_spec; carousel via
+  // object_story_spec.link_data.child_attachments.
+  let creativeType: string | null = null;
+  if (c.asset_feed_spec) {
+    creativeType = "DYNAMIC";
+  } else if (c.object_type === "VIDEO") {
+    creativeType = "VIDEO";
+  } else if (c.object_type === "SHARE" || c.object_type === "PHOTO") {
+    const spec = c.object_story_spec as
+      | { link_data?: { child_attachments?: unknown[] }; video_data?: unknown }
+      | undefined;
+    if (spec?.link_data?.child_attachments?.length) creativeType = "CAROUSEL";
+    else if (spec?.video_data) creativeType = "VIDEO";
+    else creativeType = "IMAGE";
+  } else if (c.object_type) {
+    creativeType = c.object_type;
+  }
+
+  return {
+    creative_type: creativeType,
+    cta_type: c.call_to_action_type ?? null,
+    destination_url: c.link_url ?? null,
+    object_story_id: c.effective_object_story_id ?? null,
+    asset_feed_spec: (c.asset_feed_spec as Record<string, unknown>) ?? null,
   };
 }
 
