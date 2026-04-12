@@ -193,3 +193,17 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type ProoferStatus = "none" | "improve" | "check" | "proofed";
+
+export type ProoferPost = {
+  id: string;
+  clientId: string;
+  postDate: string; // "YYYY-MM-DD"
+  caption: string;
+  imageUrl: string;
+  status: ProoferStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
