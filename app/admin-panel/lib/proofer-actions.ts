@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 
-const VALID_STATUSES = ["none", "improve", "check", "proofed"] as const;
+const VALID_STATUSES = [
+  "none",
+  "improve",
+  "check",
+  "proofed",
+  "approved",
+] as const;
+
 type Status = (typeof VALID_STATUSES)[number];
 
 function normalizeStatus(value: string): Status {
@@ -56,14 +63,9 @@ export async function saveProoferPostAction(
       })
       .eq("id", existing.id);
 
-    if (error) {
-      console.error("saveProoferPostAction update error:", error);
-      throw new Error("Could not save post.");
-    }
+    if (error) throw new Error("Could not save post.");
   } else {
-    if (!hasContent) {
-      return;
-    }
+    if (!hasContent) return;
 
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
@@ -74,10 +76,7 @@ export async function saveProoferPostAction(
       created_by: authorEmail,
     });
 
-    if (error) {
-      console.error("saveProoferPostAction insert error:", error);
-      throw new Error("Could not save post.");
-    }
+    if (error) throw new Error("Could not save post.");
   }
 
   revalidatePath("/app/proofer");
@@ -116,10 +115,7 @@ export async function updateProoferStatusAction(
       })
       .eq("id", existing.id);
 
-    if (error) {
-      console.error("updateProoferStatusAction update error:", error);
-      throw new Error("Could not update status.");
-    }
+    if (error) throw new Error("Could not update status.");
   } else {
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
@@ -130,10 +126,7 @@ export async function updateProoferStatusAction(
       created_by: authorEmail,
     });
 
-    if (error) {
-      console.error("updateProoferStatusAction insert error:", error);
-      throw new Error("Could not update status.");
-    }
+    if (error) throw new Error("Could not update status.");
   }
 
   revalidatePath("/app/proofer");
@@ -155,64 +148,7 @@ export async function deleteProoferPostAction(
     .eq("client_id", clientId)
     .eq("post_date", postDate);
 
-  if (error) {
-    console.error("deleteProoferPostAction error:", error);
-    throw new Error("Could not delete post.");
-  }
-
-  revalidatePath("/app/proofer");
-}
-
-export async function addProoferCommentAction(postId: string, comment: string) {
-  if (!postId) {
-    throw new Error("Post is required.");
-  }
-
-  if (!comment.trim()) {
-    throw new Error("Comment is required.");
-  }
-
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const authorEmail = user?.email ?? "unknown";
-
-  const { error } = await supabase.from("proofer_comments").insert({
-    post_id: postId,
-    comment: comment.trim(),
-    created_by: authorEmail,
-    resolved: false,
-  });
-
-  if (error) {
-    console.error("addProoferCommentAction error:", error);
-    throw new Error("Could not add comment.");
-  }
-
-  revalidatePath("/app/proofer");
-}
-
-export async function toggleProoferCommentResolvedAction(
-  commentId: string,
-  resolved: boolean
-) {
-  if (!commentId) {
-    throw new Error("Comment is required.");
-  }
-
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("proofer_comments")
-    .update({ resolved })
-    .eq("id", commentId);
-
-  if (error) {
-    console.error("toggleProoferCommentResolvedAction error:", error);
-    throw new Error("Could not update comment.");
-  }
+  if (error) throw new Error("Could not delete post.");
 
   revalidatePath("/app/proofer");
 }
