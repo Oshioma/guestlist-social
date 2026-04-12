@@ -330,6 +330,11 @@ export async function POST() {
         consistency_score: consistency,
         sample_learnings: g.samples,
         top_tags: topTags,
+        // Action-pattern rows are always cross-industry — they describe
+        // operator playbook moves, not creative inventory. Industry-specific
+        // action patterns would need a different aggregation pass keyed on
+        // client_id → industry, which is a future enhancement.
+        industry: null as string | null,
         last_updated: new Date().toISOString(),
       };
     });
@@ -341,12 +346,22 @@ export async function POST() {
     // block below describes what's actually working in the live ad data,
     // bucketed by creative attributes (hook_type, format_style) — these
     // are the columns the meta-creative-trust-layer added on the ads
-    // table. We compare each bucket's average CTR against the global mean
-    // and emit a global_learnings row when:
+    // table.
     //
+    // Two passes:
+    //   1. Cross-industry — every bucket compared against the global mean
+    //      CTR. Emits rows with industry=null. These power the agency-wide
+    //      hero card.
+    //   2. Per-industry — every bucket also segmented by the client's
+    //      industry, compared against that industry's own mean CTR. Emits
+    //      rows with industry=<industry>. These power the industry filter
+    //      on the playbook page and avoid the bias of comparing
+    //      hospitality CTR against e-commerce CTR.
+    //
+    // A bucket emits a row when:
     //   - the bucket has impressions from at least 2 distinct clients
     //   - the bucket has at least 5 ads in it
-    //   - the lift vs the global mean is >= 15% in either direction
+    //   - the lift vs the relevant baseline is >= 15% in either direction
     //
     // The thresholds are deliberately conservative — we want this to be
     // the agency-level edge, not noise about a 2% CTR gap on n=3.
@@ -355,6 +370,24 @@ export async function POST() {
     const MIN_ADS_PER_BUCKET = 5;
     const MIN_UNIQUE_CLIENTS = 2;
     const MIN_LIFT_PCT = 15;
+
+    // Industry lookup. We do one read of clients(id, industry) and build a
+    // Map keyed by client_id. Ads with no client_id, or whose client has
+    // no industry set, contribute only to the cross-industry pass.
+    const { data: clientsRaw } = await supabase
+      .from("clients")
+      .select("id, industry");
+    const industryByClient = new Map<number, string | null>();
+    for (const c of (clientsRaw ?? []) as { id: number; industry: string | null }[]) {
+      industryByClient.set(c.id, c.industry ?? null);
+    }
+
+    function formatIndustry(ind: string): string {
+      // Operators can type freeform — capitalize first letter, leave the
+      // rest alone so multi-word entries like "real estate" don't lose
+      // their spacing.
+      return ind.charAt(0).toUpperCase() + ind.slice(1);
+    }
 
     type CreativeAdRow = {
       id: number;
@@ -387,7 +420,7 @@ export async function POST() {
     }
 
     // Global mean CTR over every ad with enough impressions — the
-    // baseline every bucket gets compared against.
+    // baseline cross-industry buckets are compared against.
     const allCtrs = adRows
       .map((a) => ctrOf(a))
       .filter((v): v is number => v !== null);
@@ -396,6 +429,28 @@ export async function POST() {
         ? allCtrs.reduce((s, v) => s + v, 0) / allCtrs.length
         : 0;
 
+    // Per-industry baselines. Each industry gets its own mean CTR so that
+    // an industry-specific bucket is judged against its own peers, not
+    // against the agency average. Industries with no qualifying ads fall
+    // through to the global baseline.
+    const industryCtrs = new Map<string, number[]>();
+    for (const ad of adRows) {
+      const ctr = ctrOf(ad);
+      if (ctr == null) continue;
+      if (ad.client_id == null) continue;
+      const ind = industryByClient.get(ad.client_id);
+      if (!ind) continue;
+      if (!industryCtrs.has(ind)) industryCtrs.set(ind, []);
+      industryCtrs.get(ind)!.push(ctr);
+    }
+    const industryMeanCtr = new Map<string, number>();
+    for (const [ind, ctrs] of industryCtrs) {
+      industryMeanCtr.set(
+        ind,
+        ctrs.reduce((s, v) => s + v, 0) / ctrs.length
+      );
+    }
+
     type CreativeBucket = {
       pattern_type: "creative_format" | "creative_hook";
       pattern_key: string;
@@ -403,6 +458,7 @@ export async function POST() {
       ctrs: number[];
       client_ids: Set<number>;
       ad_count: number;
+      industry: string | null;
     };
 
     const creativeBuckets = new Map<string, CreativeBucket>();
@@ -412,7 +468,8 @@ export async function POST() {
       type: "creative_format" | "creative_hook",
       label: string,
       ad: CreativeAdRow,
-      ctr: number
+      ctr: number,
+      industry: string | null
     ) {
       let b = creativeBuckets.get(bucketKey);
       if (!b) {
@@ -423,6 +480,7 @@ export async function POST() {
           ctrs: [],
           client_ids: new Set(),
           ad_count: 0,
+          industry,
         };
         creativeBuckets.set(bucketKey, b);
       }
@@ -452,15 +510,41 @@ export async function POST() {
       const ctr = ctrOf(ad);
       if (ctr == null) continue;
 
+      // Look up the ad's industry once — used to add the ad to per-industry
+      // buckets in addition to the cross-industry one. An ad with no client
+      // industry contributes to cross-industry only.
+      const adIndustry =
+        ad.client_id != null ? industryByClient.get(ad.client_id) ?? null : null;
+
       if (ad.format_style) {
-        const key = `creative_format:${ad.format_style}`;
+        const baseKey = `creative_format:${ad.format_style}`;
         const label = formatLabels[ad.format_style] ?? ad.format_style;
-        addToBucket(key, "creative_format", label, ad, ctr);
+        addToBucket(baseKey, "creative_format", label, ad, ctr, null);
+        if (adIndustry) {
+          addToBucket(
+            `${baseKey}:industry:${adIndustry}`,
+            "creative_format",
+            label,
+            ad,
+            ctr,
+            adIndustry
+          );
+        }
       }
       if (ad.hook_type) {
-        const key = `creative_hook:${ad.hook_type}`;
+        const baseKey = `creative_hook:${ad.hook_type}`;
         const label = hookLabels[ad.hook_type] ?? ad.hook_type;
-        addToBucket(key, "creative_hook", label, ad, ctr);
+        addToBucket(baseKey, "creative_hook", label, ad, ctr, null);
+        if (adIndustry) {
+          addToBucket(
+            `${baseKey}:industry:${adIndustry}`,
+            "creative_hook",
+            label,
+            ad,
+            ctr,
+            adIndustry
+          );
+        }
       }
     }
 
@@ -469,44 +553,65 @@ export async function POST() {
       if (b.ad_count < MIN_ADS_PER_BUCKET) continue;
       if (b.client_ids.size < MIN_UNIQUE_CLIENTS) continue;
 
-      const meanCtr =
-        b.ctrs.reduce((s, v) => s + v, 0) / b.ctrs.length;
+      // Per-industry buckets compare against the industry's own mean —
+      // hospitality CTR shouldn't be judged against e-commerce CTR. If for
+      // any reason the industry baseline is missing (every ad in that
+      // industry was filtered out by impression threshold), fall back to
+      // the global baseline so we never silently divide by zero.
+      const baseline =
+        b.industry && industryMeanCtr.has(b.industry)
+          ? industryMeanCtr.get(b.industry)!
+          : globalMeanCtr;
+
+      const meanCtr = b.ctrs.reduce((s, v) => s + v, 0) / b.ctrs.length;
       const liftPct =
-        globalMeanCtr > 0 ? ((meanCtr - globalMeanCtr) / globalMeanCtr) * 100 : 0;
+        baseline > 0 ? ((meanCtr - baseline) / baseline) * 100 : 0;
 
       // Skip the unremarkable middle — only emit a finding when the
       // creative attribute moves the needle either way.
       if (Math.abs(liftPct) < MIN_LIFT_PCT) continue;
 
       const positive = liftPct > 0;
-      // Bucket consistency = share of ads in the bucket that are above
-      // the global mean. Different from "lift" — captures whether the
-      // win is broad or driven by a couple of standouts.
-      const aboveMeanCount = b.ctrs.filter((v) => v > globalMeanCtr).length;
+      // Bucket consistency = share of ads in the bucket that beat the
+      // baseline they're being judged against (global or industry).
+      // Different from "lift" — captures whether the win is broad or
+      // driven by a couple of standouts.
+      const aboveBaselineCount = b.ctrs.filter((v) => v > baseline).length;
       const consistency = Number(
-        ((aboveMeanCount / b.ctrs.length) * 100).toFixed(1)
+        ((aboveBaselineCount / b.ctrs.length) * 100).toFixed(1)
       );
 
+      const scope = b.industry
+        ? `in ${formatIndustry(b.industry)}`
+        : `across ${b.client_ids.size} clients`;
       const summary = positive
-        ? `${b.pattern_label} outperforms the average by ${liftPct.toFixed(0)}% across ${b.client_ids.size} clients`
-        : `${b.pattern_label} underperforms the average by ${Math.abs(liftPct).toFixed(0)}% across ${b.client_ids.size} clients`;
+        ? `${b.pattern_label} outperforms the average by ${liftPct.toFixed(0)}% ${scope}`
+        : `${b.pattern_label} underperforms the average by ${Math.abs(liftPct).toFixed(0)}% ${scope}`;
+
+      // Per-industry rows get the industry name appended to the label so
+      // the playbook page can render them without needing to look up the
+      // industry separately for each card.
+      const labelWithScope = b.industry
+        ? `${b.pattern_label} · ${formatIndustry(b.industry)}`
+        : b.pattern_label;
 
       creativeRows.push({
         pattern_type: b.pattern_type,
         pattern_key: b.pattern_key,
-        pattern_label: b.pattern_label,
+        pattern_label: labelWithScope,
         action_summary: summary,
         times_seen: b.ad_count,
         unique_clients: b.client_ids.size,
-        positive_count: positive ? aboveMeanCount : 0,
+        positive_count: positive ? aboveBaselineCount : 0,
         neutral_count: 0,
-        negative_count: positive ? 0 : b.ctrs.length - aboveMeanCount,
+        negative_count: positive ? 0 : b.ctrs.length - aboveBaselineCount,
         avg_ctr_lift: Number(liftPct.toFixed(2)),
         avg_cpc_change: null,
         avg_reliability: null,
         consistency_score: consistency,
         sample_learnings: [],
         top_tags: [],
+        industry: b.industry,
         last_updated: new Date().toISOString(),
       });
     }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
@@ -26,6 +27,7 @@ type GlobalLearning = {
     client_id: number | null;
   }[] | null;
   top_tags: string[] | null;
+  industry: string | null;
   last_updated: string | null;
 };
 
@@ -160,8 +162,14 @@ function Section({
   );
 }
 
-export default async function WhatsWorkingPage() {
+type PageProps = {
+  searchParams: Promise<{ industry?: string }>;
+};
+
+export default async function WhatsWorkingPage({ searchParams }: PageProps) {
   const supabase = await createClient();
+  const { industry: industryFilterRaw } = await searchParams;
+  const industryFilter = industryFilterRaw?.trim() || null;
 
   const { data: rawPatterns, error } = await supabase
     .from("global_learnings")
@@ -169,7 +177,30 @@ export default async function WhatsWorkingPage() {
     .order("consistency_score", { ascending: false })
     .order("times_seen", { ascending: false });
 
-  const patterns = (rawPatterns ?? []) as GlobalLearning[];
+  const allPatterns = (rawPatterns ?? []) as GlobalLearning[];
+
+  // Discover every industry that has at least one row, before filtering, so
+  // the pill row stays consistent regardless of which view is selected.
+  // Sort alphabetically for stable rendering.
+  const availableIndustries = Array.from(
+    new Set(
+      allPatterns
+        .map((p) => p.industry)
+        .filter((v): v is string => Boolean(v))
+    )
+  ).sort();
+
+  // The filter splits the playbook into three modes:
+  //   - null  → "all clients" view, show only industry=null rows (the
+  //             cross-industry aggregates and all action-pattern rows)
+  //   - <ind> → show only rows tagged with that industry
+  //
+  // We deliberately don't blend the two: mixing per-industry creative
+  // findings with cross-industry ones would double-count the underlying
+  // ads and make the panels look duplicative.
+  const patterns = industryFilter
+    ? allPatterns.filter((p) => p.industry === industryFilter)
+    : allPatterns.filter((p) => p.industry === null);
 
   // Group by pattern_type
   const byType: Record<string, GlobalLearning[]> = {};
@@ -253,6 +284,45 @@ export default async function WhatsWorkingPage() {
         </div>
         <RefreshEverythingButton />
       </div>
+
+      {availableIndustries.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: "10px 14px",
+            background: "#fff",
+            border: "1px solid #e4e4e7",
+            borderRadius: 12,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              color: "#71717a",
+              fontWeight: 500,
+              marginRight: 4,
+            }}
+          >
+            Filter by industry:
+          </span>
+          <FilterPill
+            href="/app/whats-working"
+            label="All clients"
+            active={industryFilter === null}
+          />
+          {availableIndustries.map((ind) => (
+            <FilterPill
+              key={ind}
+              href={`/app/whats-working?industry=${encodeURIComponent(ind)}`}
+              label={ind.charAt(0).toUpperCase() + ind.slice(1)}
+              active={industryFilter === ind}
+            />
+          ))}
+        </div>
+      )}
 
       {error && (
         <div
@@ -347,5 +417,35 @@ export default async function WhatsWorkingPage() {
         emptyText="No recurring mistakes yet."
       />
     </div>
+  );
+}
+
+function FilterPill({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 12px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 600,
+        textDecoration: "none",
+        background: active ? "#18181b" : "#fafafa",
+        color: active ? "#fff" : "#52525b",
+        border: active ? "1px solid #18181b" : "1px solid #e4e4e7",
+      }}
+    >
+      {label}
+    </Link>
   );
 }

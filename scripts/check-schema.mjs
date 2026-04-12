@@ -69,6 +69,7 @@ const SCHEMA = {
     "avg_cpc_change",
     "sample_learnings",
     "top_tags",
+    "industry",
   ],
   ad_actions: [
     "id",
