@@ -679,6 +679,7 @@ function IdeaRow({ idea }: { idea: StoryIdea }) {
           <ImageUpload
             folder={`story/${idea.id}`}
             compact
+            accept="image/*,video/*"
             label="Upload"
             onUploaded={(url) => {
               setLinkValue(url);

@@ -691,6 +691,7 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
             <ImageUpload
               folder={`carousel/${idea.id}`}
               compact
+              accept="image/*,video/*"
               label="Upload"
               onUploaded={(url) => {
                 setLinkValue(url);
@@ -798,6 +799,7 @@ function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; c
                 <ImageUpload
                   folder={`carousel/${ideaId}`}
                   compact
+                  accept="image/*,video/*"
                   onUploaded={(url) => updateImageLink(i, url)}
                 />
               </div>

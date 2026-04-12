@@ -467,14 +467,15 @@ export default function ProoferBoard({
                       onChange={(e) =>
                         updateDraft(key, { imageUrl: e.target.value })
                       }
-                      placeholder="Paste image URL or upload"
+                      placeholder="Paste media URL or upload"
                       style={{ ...inputStyle, flex: 1, minWidth: 200 }}
                     />
                     <ImageUpload
                       bucket="postimages"
                       folder={`proofer/${clientId}/${month}`}
                       onUploaded={(url) => updateDraft(key, { imageUrl: url })}
-                      label="Upload image"
+                      label="Upload media"
+                      accept="image/*,video/*"
                     />
                   </div>
 
@@ -488,22 +489,35 @@ export default function ProoferBoard({
                         background: "#fafafa",
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={draft.imageUrl}
-                        alt="Preview"
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          height: "auto",
-                          maxHeight: 240,
-                          objectFit: "cover",
-                        }}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display =
-                            "none";
-                        }}
-                      />
+                      {/\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(draft.imageUrl) ? (
+                        <video
+                          src={draft.imageUrl}
+                          controls
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            height: "auto",
+                            maxHeight: 240,
+                          }}
+                        />
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={draft.imageUrl}
+                          alt="Preview"
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            height: "auto",
+                            maxHeight: 240,
+                            objectFit: "cover",
+                          }}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      )}
                     </div>
                   )}
 
