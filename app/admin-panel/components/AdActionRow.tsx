@@ -48,7 +48,7 @@ function MetricDiff({
   const improved = lowerIsBetter ? diff < 0 : diff > 0;
 
   return (
-    <span style={{ fontSize: 11, color: improved ? "#166534" : "#991b1b" }}>
+    <span style={{ fontSize: 12, color: improved ? "#166534" : "#991b1b" }}>
       {label}: {before.toLocaleString()} → {after.toLocaleString()}{" "}
       ({diff > 0 ? "+" : ""}
       {diff.toLocaleString()})
@@ -129,7 +129,7 @@ export default function AdActionRow({ action }: { action: AdAction }) {
       style={{
         border: "1px solid #e4e4e7",
         borderRadius: 12,
-        padding: 14,
+        padding: 16,
         background: "#fff",
       }}
     >
@@ -142,14 +142,14 @@ export default function AdActionRow({ action }: { action: AdAction }) {
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: "#18181b" }}>
           {action.ad_name}
         </span>
         <span
           style={{
-            padding: "1px 8px",
+            padding: "2px 10px",
             borderRadius: 999,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             background: pColors.bg,
             color: pColors.text,
@@ -160,9 +160,9 @@ export default function AdActionRow({ action }: { action: AdAction }) {
         </span>
         <span
           style={{
-            padding: "1px 8px",
+            padding: "2px 10px",
             borderRadius: 999,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 500,
             background: action.status === "completed" ? "#dcfce7" : action.status === "in_progress" ? "#dbeafe" : "#f4f4f5",
             color: action.status === "completed" ? "#166534" : action.status === "in_progress" ? "#1e40af" : "#71717a",
@@ -173,9 +173,9 @@ export default function AdActionRow({ action }: { action: AdAction }) {
         {action.outcome && (
           <span
             style={{
-              padding: "1px 8px",
+              padding: "2px 10px",
               borderRadius: 999,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 600,
               background: outcomeColors[action.outcome]?.bg ?? "#f4f4f5",
               color: outcomeColors[action.outcome]?.text ?? "#71717a",
@@ -188,24 +188,31 @@ export default function AdActionRow({ action }: { action: AdAction }) {
       </div>
 
       {/* Problem + Action */}
-      <div style={{ marginTop: 6, fontSize: 12 }}>
-        <span style={{ color: "#991b1b", fontWeight: 500 }}>
-          Problem: {action.problem}
-        </span>
-        <span style={{ color: "#71717a", margin: "0 6px" }}>→</span>
-        <span style={{ color: "#18181b" }}>{action.action}</span>
-      </div>
+      {(() => {
+        const isOpportunity = /winning|winner|scale/i.test(action.problem);
+        const labelText = isOpportunity ? "Opportunity" : "Problem";
+        const labelColor = isOpportunity ? "#166534" : "#991b1b";
+        return (
+          <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
+            <span style={{ color: labelColor, fontWeight: 600 }}>
+              {labelText}: {action.problem}
+            </span>
+            <span style={{ color: "#71717a", margin: "0 8px" }}>→</span>
+            <span style={{ color: "#18181b", fontWeight: 500 }}>{action.action}</span>
+          </div>
+        );
+      })()}
 
       {/* Hypothesis */}
       {action.hypothesis && (
-        <div style={{ marginTop: 4, fontSize: 12, color: "#52525b", fontStyle: "italic" }}>
+        <div style={{ marginTop: 6, fontSize: 13, color: "#52525b", fontStyle: "italic" }}>
           Hypothesis: {action.hypothesis}
         </div>
       )}
 
       {/* Result summary */}
       {action.result_summary && (
-        <div style={{ marginTop: 4, fontSize: 12, color: "#52525b" }}>
+        <div style={{ marginTop: 6, fontSize: 13, color: "#52525b" }}>
           Result: {action.result_summary}
         </div>
       )}
