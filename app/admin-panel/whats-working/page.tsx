@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
+import GenerateGlobalLearningsButton from "@/app/admin-panel/components/GenerateGlobalLearningsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,24 @@ type EngineFeedback = {
   negative_verdicts: number;
   neutral_verdicts: number;
   inconclusive_verdicts: number;
+};
+
+// One row in the "Recent engine verdicts" panel. This is a single
+// measured decision_outcomes row stitched to its source pattern (via
+// meta_execution_queue.source_pattern_key) and the client name. We
+// keep it at module scope so the panel component below can take a
+// concrete type instead of `any`.
+type EngineVerdictRow = {
+  id: number;
+  pattern_key: string;
+  pattern_industry: string | null;
+  decision_type: string;
+  verdict: string;
+  verdict_reason: string | null;
+  ctr_lift_pct: number | null;
+  cpm_change_pct: number | null;
+  measured_at: string | null;
+  client_name: string | null;
 };
 
 function engineTrackRecordLine(fb: EngineFeedback): string | null {
@@ -291,6 +310,98 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
     });
   }
 
+  // Recent engine verdicts panel data. We pull the freshest measured
+  // decision_outcomes rows, then look up their queue rows in a second
+  // query to filter down to engine-driven (pattern-backed) decisions
+  // only. Two queries is deliberate — PostgREST nested-filter syntax for
+  // "embed exists AND nested column is not null" is fragile, and the
+  // outcomes table is small enough that 30 rows + a follow-up `in()`
+  // lookup is cheap. Keeping it lazy: if either query fails (e.g. tables
+  // missing on a fresh DB) the panel just doesn't render.
+  const { data: rawOutcomes } = await supabase
+    .from("decision_outcomes")
+    .select(
+      "id, queue_id, decision_type, verdict, verdict_reason, ctr_lift_pct, cpm_change_pct, measured_at, client_id"
+    )
+    .eq("status", "measured")
+    .not("verdict", "is", null)
+    .order("measured_at", { ascending: false })
+    .limit(30);
+
+  type RawOutcome = {
+    id: number;
+    queue_id: number;
+    decision_type: string;
+    verdict: string | null;
+    verdict_reason: string | null;
+    ctr_lift_pct: number | null;
+    cpm_change_pct: number | null;
+    measured_at: string | null;
+    client_id: number | null;
+  };
+  const outcomeRows = (rawOutcomes ?? []) as RawOutcome[];
+
+  let engineVerdicts: EngineVerdictRow[] = [];
+
+  if (outcomeRows.length > 0) {
+    const queueIds = outcomeRows.map((o) => o.queue_id).filter(Boolean);
+    const clientIds = Array.from(
+      new Set(
+        outcomeRows
+          .map((o) => o.client_id)
+          .filter((v): v is number => v !== null)
+      )
+    );
+
+    const [{ data: queueRows }, { data: clientRows }] = await Promise.all([
+      queueIds.length > 0
+        ? supabase
+            .from("meta_execution_queue")
+            .select("id, source_pattern_key, source_pattern_industry")
+            .in("id", queueIds)
+        : Promise.resolve({ data: [] as { id: number; source_pattern_key: string | null; source_pattern_industry: string | null }[] }),
+      clientIds.length > 0
+        ? supabase.from("clients").select("id, name").in("id", clientIds)
+        : Promise.resolve({ data: [] as { id: number; name: string }[] }),
+    ]);
+
+    const queueById = new Map(
+      (queueRows ?? []).map((q) => [
+        Number(q.id),
+        {
+          pattern_key: q.source_pattern_key,
+          pattern_industry: q.source_pattern_industry,
+        },
+      ])
+    );
+    const clientById = new Map(
+      (clientRows ?? []).map((c) => [Number(c.id), String(c.name)])
+    );
+
+    engineVerdicts = outcomeRows
+      .map((o): EngineVerdictRow | null => {
+        const q = queueById.get(Number(o.queue_id));
+        if (!q || !q.pattern_key) return null;
+        if (!o.verdict) return null;
+        return {
+          id: o.id,
+          pattern_key: q.pattern_key,
+          pattern_industry: q.pattern_industry,
+          decision_type: o.decision_type,
+          verdict: o.verdict,
+          verdict_reason: o.verdict_reason,
+          ctr_lift_pct: o.ctr_lift_pct !== null ? Number(o.ctr_lift_pct) : null,
+          cpm_change_pct:
+            o.cpm_change_pct !== null ? Number(o.cpm_change_pct) : null,
+          measured_at: o.measured_at,
+          client_name:
+            o.client_id !== null ? clientById.get(o.client_id) ?? null : null,
+        };
+      })
+      .filter((v): v is EngineVerdictRow => v !== null)
+      .slice(0, 8);
+  }
+
   // Discover every industry that has at least one row, before filtering, so
   // the pill row stays consistent regardless of which view is selected.
   // Sort alphabetically for stable rendering.
@@ -367,7 +478,8 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
         </p>
         <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
           Computed from the last 90 days of action outcomes and ad performance.
-          Re-run from the Memory page after fresh data lands.
+          Use Refresh everything for a full sync, or Regenerate Global Learnings
+          to rebuild only the patterns.
         </p>
       </div>
 
@@ -394,8 +506,26 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
               ` · last checked ${new Date(lastUpdated).toLocaleString()}`}
           </div>
         </div>
-        <RefreshEverythingButton />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 8,
+          }}
+        >
+          <RefreshEverythingButton />
+          {/* Secondary "rebuild patterns only" escape hatch. Useful when
+              testing the pattern_feedback loop or after hand-editing
+              learnings — re-runs only step 5 of the pipeline (no Meta
+              fetch, no scoring), so it lands in seconds. */}
+          <GenerateGlobalLearningsButton />
+        </div>
       </div>
+
+      {engineVerdicts.length > 0 && (
+        <RecentEngineVerdicts verdicts={engineVerdicts} />
+      )}
 
       {availableIndustries.length > 0 && (
         <div
@@ -537,6 +667,177 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
         feedbackByKey={feedbackByKey}
       />
     </div>
+  );
+}
+
+// Recent engine verdicts panel — surfaces the latest pattern-backed
+// decisions that the engine acted on, alongside how they actually
+// played out. Distinct from the per-pattern badge on PatternCard:
+// the badge is the *aggregate* track record for one pattern; this
+// panel is the *individual* verdict timeline so the operator can
+// eyeball "what did the engine just do, and was it right?".
+function verdictColor(verdict: string): string {
+  switch (verdict) {
+    case "positive":
+      return "#166534";
+    case "negative":
+      return "#991b1b";
+    case "neutral":
+      return "#92400e";
+    default:
+      return "#71717a"; // inconclusive / unknown
+  }
+}
+
+function verdictLabel(verdict: string): string {
+  switch (verdict) {
+    case "positive":
+      return "Worked";
+    case "negative":
+      return "Backfired";
+    case "neutral":
+      return "No change";
+    case "inconclusive":
+      return "Too early";
+    default:
+      return verdict;
+  }
+}
+
+function humanAgo(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 0) return "just now";
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
+}
+
+function RecentEngineVerdicts({ verdicts }: { verdicts: EngineVerdictRow[] }) {
+  return (
+    <SectionCard title="Recent engine verdicts">
+      <div
+        style={{
+          fontSize: 12,
+          color: "#71717a",
+          marginTop: -8,
+          marginBottom: 12,
+        }}
+      >
+        The latest pattern-backed moves the engine made, and how they
+        landed once we measured them.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {verdicts.map((v) => {
+          const color = verdictColor(v.verdict);
+          const liftParts: string[] = [];
+          if (v.ctr_lift_pct !== null && v.ctr_lift_pct !== 0) {
+            const dir = v.ctr_lift_pct > 0 ? "up" : "down";
+            liftParts.push(
+              `clicks ${dir} ${Math.abs(v.ctr_lift_pct).toFixed(0)}%`
+            );
+          }
+          if (v.cpm_change_pct !== null && v.cpm_change_pct !== 0) {
+            const dir = v.cpm_change_pct < 0 ? "cheaper" : "more expensive";
+            liftParts.push(
+              `${Math.abs(v.cpm_change_pct).toFixed(0)}% ${dir}`
+            );
+          }
+          return (
+            <div
+              key={v.id}
+              style={{
+                padding: "10px 12px",
+                background: "#fafafa",
+                border: "1px solid #f4f4f5",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#fff",
+                      border: `1px solid ${color}33`,
+                    }}
+                  >
+                    {verdictLabel(v.verdict)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#18181b",
+                    }}
+                  >
+                    {v.pattern_key}
+                  </span>
+                  {v.pattern_industry && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "#71717a",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      ({v.pattern_industry})
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{ fontSize: 12, color: "#52525b", marginTop: 4 }}
+                >
+                  {v.client_name ?? "Unknown client"} ·{" "}
+                  {v.decision_type.replaceAll("_", " ")}
+                  {liftParts.length > 0 && ` · ${liftParts.join(", ")}`}
+                </div>
+                {v.verdict_reason && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#71717a",
+                      marginTop: 4,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    {v.verdict_reason}
+                  </div>
+                )}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#a1a1aa",
+                  whiteSpace: "nowrap",
+                  marginTop: 2,
+                }}
+              >
+                {humanAgo(v.measured_at)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
   );
 }
 
