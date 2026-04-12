@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "migrations:check": "node --env-file=.env.local scripts/check-schema.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
