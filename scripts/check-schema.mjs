@@ -70,6 +70,8 @@ const SCHEMA = {
     "sample_learnings",
     "top_tags",
     "industry",
+    "prev_consistency_score",
+    "prev_unique_clients",
   ],
   ad_actions: [
     "id",

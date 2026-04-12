@@ -34,7 +34,12 @@ type GlobalLearning = {
   consistency_score: number;
   avg_ctr_lift: number | null;
   last_updated: string | null;
+  prev_consistency_score: number | null;
 };
+
+// How many points of consistency a pattern has to drop before we flag it
+// as "slipping". Mirrors the SLIP_THRESHOLD in the generator route.
+const SLIP_THRESHOLD = 10;
 
 // Mirror of GENERATOR_WINDOW_DAYS in app/api/generate-global-learnings.
 // Kept as a literal here so the hero card can render an honest "data window"
@@ -69,7 +74,7 @@ export default async function WhatsWorkingNow() {
   const { data, error } = await supabase
     .from("global_learnings")
     .select(
-      "id, pattern_type, pattern_label, action_summary, unique_clients, times_seen, consistency_score, avg_ctr_lift, last_updated"
+      "id, pattern_type, pattern_label, action_summary, unique_clients, times_seen, consistency_score, avg_ctr_lift, last_updated, prev_consistency_score"
     )
     .gte("unique_clients", 2)
     .order("consistency_score", { ascending: false })
@@ -161,6 +166,18 @@ export default async function WhatsWorkingNow() {
               : null;
           const liftPositive = (lift ?? 0) >= 0;
 
+          // Validation tag: "new" if no prior run had this pattern,
+          // "slipping" if its consistency dropped >SLIP_THRESHOLD points
+          // since last run. Otherwise no tag — the absence of a tag means
+          // "still holding".
+          const prev = r.prev_consistency_score;
+          const validationTag: "new" | "slipping" | null =
+            prev == null
+              ? "new"
+              : Number(r.consistency_score) < Number(prev) - SLIP_THRESHOLD
+              ? "slipping"
+              : null;
+
           return (
             <div
               key={r.id}
@@ -197,9 +214,52 @@ export default async function WhatsWorkingNow() {
                     fontWeight: 600,
                     lineHeight: 1.35,
                     color: "#f1f5f9",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
                   }}
                 >
-                  {r.action_summary}
+                  <span>{r.action_summary}</span>
+                  {validationTag === "new" && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        background: "rgba(74,222,128,0.16)",
+                        color: "#86efac",
+                      }}
+                    >
+                      ✨ New
+                    </span>
+                  )}
+                  {validationTag === "slipping" && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        background: "rgba(251,191,36,0.16)",
+                        color: "#fbbf24",
+                      }}
+                      title={
+                        prev != null
+                          ? `Consistency dropped from ${Number(prev).toFixed(
+                              0
+                            )}% to ${Number(r.consistency_score).toFixed(0)}%`
+                          : undefined
+                      }
+                    >
+                      ↓ Slipping
+                    </span>
+                  )}
                 </div>
                 <div
                   style={{

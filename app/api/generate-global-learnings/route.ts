@@ -618,6 +618,48 @@ export async function POST() {
 
     rows.push(...creativeRows);
 
+    // -----------------------------------------------------------------------
+    // Backward validation. Before we wipe the table, snapshot the previous
+    // run's consistency_score and unique_clients keyed by pattern_key, then
+    // attach those as prev_* on the new rows. The UI uses the delta between
+    // current and prev to flag "↓ slipping" patterns and the absence of a
+    // prev row to flag "✨ new" patterns. Net effect: every refresh becomes
+    // a check of yesterday's predictions against today's data, instead of
+    // overwriting silently.
+    // -----------------------------------------------------------------------
+    const { data: priorRows } = await supabase
+      .from("global_learnings")
+      .select("pattern_key, consistency_score, unique_clients");
+
+    const priorByKey = new Map<
+      string,
+      { consistency_score: number | null; unique_clients: number | null }
+    >();
+    for (const r of (priorRows ?? []) as {
+      pattern_key: string;
+      consistency_score: number | null;
+      unique_clients: number | null;
+    }[]) {
+      priorByKey.set(r.pattern_key, {
+        consistency_score: r.consistency_score,
+        unique_clients: r.unique_clients,
+      });
+    }
+
+    type EnrichedRow = (typeof rows)[number] & {
+      prev_consistency_score: number | null;
+      prev_unique_clients: number | null;
+    };
+
+    const enrichedRows: EnrichedRow[] = rows.map((r) => {
+      const prior = priorByKey.get(r.pattern_key);
+      return {
+        ...r,
+        prev_consistency_score: prior?.consistency_score ?? null,
+        prev_unique_clients: prior?.unique_clients ?? null,
+      };
+    });
+
     // Clear and re-insert — simpler than per-row upsert and ensures
     // stale patterns get cleaned out when learnings are deleted.
     const { error: deleteError } = await supabase
@@ -632,8 +674,10 @@ export async function POST() {
       );
     }
 
-    if (rows.length > 0) {
-      const { error: insertError } = await supabase.from("global_learnings").insert(rows);
+    if (enrichedRows.length > 0) {
+      const { error: insertError } = await supabase
+        .from("global_learnings")
+        .insert(enrichedRows);
       if (insertError) {
         return NextResponse.json(
           { ok: false, error: `Insert failed: ${insertError.message}` },
@@ -642,13 +686,34 @@ export async function POST() {
       }
     }
 
+    // Cheap validation summary in the response: how many patterns slipped,
+    // held, or first appeared this run. Useful as both a smoke test and as
+    // an answer to "did anything important change since last run".
+    const SLIP_THRESHOLD = 10; // consistency points
+    let slipping = 0;
+    let firstSeen = 0;
+    let holding = 0;
+    for (const r of enrichedRows) {
+      if (r.prev_consistency_score == null) {
+        firstSeen++;
+      } else if (
+        Number(r.consistency_score) <
+        Number(r.prev_consistency_score) - SLIP_THRESHOLD
+      ) {
+        slipping++;
+      } else {
+        holding++;
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      generated: rows.length,
+      generated: enrichedRows.length,
       source_learnings: learnings.length,
       window_days: GENERATOR_WINDOW_DAYS,
       window_start: windowStartIso,
-      breakdown: rows.reduce(
+      validation: { slipping, first_seen: firstSeen, holding },
+      breakdown: enrichedRows.reduce(
         (acc, r) => {
           acc[r.pattern_type] = (acc[r.pattern_type] ?? 0) + 1;
           return acc;
