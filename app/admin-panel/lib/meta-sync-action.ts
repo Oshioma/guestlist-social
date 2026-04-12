@@ -248,6 +248,9 @@ export async function syncMetaData(clientId: string) {
         creative_hook: creativeHook,
         meta_effective_status: metaAd.effective_status ?? null,
         meta_configured_status: metaAd.configured_status ?? null,
+        // Cached so the meta_execution_queue seeder can attach the
+        // ad set Meta id without having to re-walk the adsets list.
+        adset_meta_id: metaAd.adset_id ?? null,
         ...creativeData,
         creative_video_url,
       };
