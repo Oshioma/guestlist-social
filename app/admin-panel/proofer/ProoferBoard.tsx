@@ -563,31 +563,58 @@ export default function ProoferBoard({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div>
-        <h1
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 30,
+              lineHeight: 1.05,
+              fontWeight: 700,
+              color: "#18181b",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Proofer
+          </h1>
+          <p
+            style={{
+              margin: "8px 0 0",
+              fontSize: 14,
+              color: "#71717a",
+              maxWidth: 760,
+            }}
+          >
+            Draft captions and upload images for every day of the month, then
+            flag each post as Improve, Check, Proofed or Approved as it moves
+            through review.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/app/proofer/publish")}
           style={{
-            margin: 0,
-            fontSize: 30,
-            lineHeight: 1.05,
+            padding: "10px 16px",
+            borderRadius: 10,
+            border: "1px solid #18181b",
+            background: "#18181b",
+            color: "#fff",
+            fontSize: 13,
             fontWeight: 700,
-            color: "#18181b",
-            letterSpacing: "-0.03em",
+            cursor: "pointer",
           }}
         >
-          Proofer
-        </h1>
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: 14,
-            color: "#71717a",
-            maxWidth: 760,
-          }}
-        >
-          Draft captions and upload images for every day of the month, then
-          flag each post as Improve, Check, Proofed or Approved as it moves
-          through review.
-        </p>
+          Publish Queue →
+        </button>
       </div>
 
       <SectionCard title="Settings">
