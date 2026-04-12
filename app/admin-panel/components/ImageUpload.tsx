@@ -24,6 +24,7 @@ const DEFAULT_BUCKET = "gsocial";
 // never hit the Vercel 4.5 MB serverless body limit and very large files
 // (multi-GB videos) can resume on transient failures.
 const CHUNK_SIZE = 6 * 1024 * 1024;
+const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
 
 export default function ImageUpload({
   folder,
@@ -41,6 +42,11 @@ export default function ImageUpload({
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File too large (max 30 MB)");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
     setError("");
     setProgress(0);
     setUploading(true);
