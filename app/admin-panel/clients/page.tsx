@@ -4,6 +4,7 @@ import EmptyState from "../components/EmptyState";
 import StatusPill from "../components/StatusPill";
 import SectionCard from "../components/SectionCard";
 import { formatCurrency } from "../lib/utils";
+import { mapClientStatus } from "../lib/mappers";
 
 export const dynamic = "force-dynamic";
 
@@ -259,7 +260,7 @@ export default async function ClientsPage() {
                       >
                         {client.name}
                       </h2>
-                      <StatusPill status={(client.status as "active" | "paused" | "onboarding") ?? "active"} />
+                      <StatusPill status={mapClientStatus(client.status ?? "")} />
                     </div>
 
                     <p
