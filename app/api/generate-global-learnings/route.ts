@@ -296,11 +296,53 @@ export async function POST() {
     const avg = (arr: number[]): number | null =>
       arr.length > 0 ? Number((arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(2)) : null;
 
+    // ----------------------------------------------------------------------
+    // Pattern feedback ledger — fold engine-driven verdicts into the
+    // operator-recorded counts before computing consistency_score. This is
+    // the "outcome → pattern" half of the prediction loop: when the engine
+    // takes a pattern-backed action and measureDueOutcomes records a
+    // verdict, that verdict lives in pattern_feedback. Here we add it to
+    // the operator action_learnings counts so the next decision generation
+    // sees the engine's own track record reflected in the score.
+    //
+    // Action patterns are always industry=null in this builder (the
+    // creative-attribute pass below has its own industry handling). We
+    // look up feedback rows with industry='' (the agency-wide sentinel).
+    // ----------------------------------------------------------------------
+    const { data: feedbackRows } = await supabase
+      .from("pattern_feedback")
+      .select(
+        "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts"
+      );
+
+    type FeedbackBuckets = {
+      positive: number;
+      negative: number;
+      neutral: number;
+    };
+    const feedbackByKey = new Map<string, FeedbackBuckets>();
+    for (const f of feedbackRows ?? []) {
+      // Composite key: pattern_key|industry. Empty industry means
+      // agency-wide.
+      const k = `${f.pattern_key}|${f.industry ?? ""}`;
+      feedbackByKey.set(k, {
+        positive: Number(f.positive_verdicts ?? 0),
+        negative: Number(f.negative_verdicts ?? 0),
+        neutral: Number(f.neutral_verdicts ?? 0),
+      });
+    }
+
     // --- Build rows and upsert ---
     const rows = Array.from(groups.values()).map((g) => {
-      const total = g.positive_count + g.neutral_count + g.negative_count;
+      // Action patterns built from action_learnings are always industry=null
+      // → look up the agency-wide ('') feedback bucket.
+      const fb = feedbackByKey.get(`${g.pattern_key}|`);
+      const positive = g.positive_count + (fb?.positive ?? 0);
+      const negative = g.negative_count + (fb?.negative ?? 0);
+      const neutral = g.neutral_count + (fb?.neutral ?? 0);
+      const total = positive + neutral + negative;
       const consistency =
-        total > 0 ? Number(((g.positive_count / total) * 100).toFixed(1)) : 0;
+        total > 0 ? Number(((positive / total) * 100).toFixed(1)) : 0;
 
       // Pick the most common action text as the canonical action_summary
       const actionSummary =
@@ -321,9 +363,9 @@ export async function POST() {
         action_summary: actionSummary,
         times_seen: g.total_times_seen,
         unique_clients: g.client_ids.size,
-        positive_count: g.positive_count,
-        neutral_count: g.neutral_count,
-        negative_count: g.negative_count,
+        positive_count: positive,
+        neutral_count: neutral,
+        negative_count: negative,
         avg_ctr_lift: avg(g.ctr_lifts),
         avg_cpc_change: avg(g.cpc_changes),
         avg_reliability: avg(g.reliabilities),

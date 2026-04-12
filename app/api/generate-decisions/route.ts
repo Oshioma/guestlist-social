@@ -28,6 +28,11 @@ type DecisionResult = {
   action: string;
   confidence: string;
   meta_action: string | null;
+  // Set on pattern-backed decisions so the queue row can record which
+  // global_learnings pattern (and which industry slice) drove the decision.
+  // Both null on rule-engine decisions.
+  source_pattern_key?: string | null;
+  source_pattern_industry?: string | null;
 };
 
 type GlobalPattern = {
@@ -100,6 +105,11 @@ function makePatternDecision(
     action: p.action_summary || p.pattern_label,
     confidence: patternConfidence(p),
     meta_action: metaAction,
+    // Capture provenance so the queue row can record which pattern row
+    // (and industry slice) drove this decision. The verdict feedback loop
+    // uses this to nudge pattern_feedback when an outcome lands.
+    source_pattern_key: p.pattern_key,
+    source_pattern_industry: p.industry,
   };
 }
 
@@ -433,6 +443,11 @@ export async function POST(req: Request) {
           adMetaId,
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
+          // Pattern provenance — null when this came from getDecision().
+          // The verdict feedback loop reads these to attribute outcomes
+          // back to the originating pattern_feedback row.
+          sourcePatternKey: decision.source_pattern_key ?? null,
+          sourcePatternIndustry: decision.source_pattern_industry ?? null,
         });
         if (seeded.ok) {
           if (seeded.deduped) queueDeduped++;
@@ -451,6 +466,8 @@ export async function POST(req: Request) {
           // Default +15% — under the executor's +20% hard cap.
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
+          sourcePatternKey: decision.source_pattern_key ?? null,
+          sourcePatternIndustry: decision.source_pattern_industry ?? null,
         });
         if (seeded.ok) {
           if (seeded.deduped) queueDeduped++;
