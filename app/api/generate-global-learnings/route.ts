@@ -225,20 +225,47 @@ export async function POST() {
       cpc_changes: number[];
       reliabilities: number[];
       samples: { learning: string; outcome: string; ctr_lift: number | null; client_id: number | null }[];
+      // Industry slice this group belongs to. null = cross-industry
+      // (the original behaviour). When non-null, the group only contains
+      // learnings from clients tagged with that industry.
+      industry: string | null;
     };
+
+    // Industry lookup for action patterns. We need this *before* the
+    // grouping loop so each learning can be slotted into its per-industry
+    // bucket as well as the cross-industry one. The creative-aggregation
+    // block below uses the same lookup — extracted up here so it's loaded
+    // exactly once per request.
+    const { data: clientsForIndustry } = await supabase
+      .from("clients")
+      .select("id, industry");
+    const industryByClient = new Map<number, string | null>();
+    for (const c of (clientsForIndustry ?? []) as {
+      id: number;
+      industry: string | null;
+    }[]) {
+      industryByClient.set(c.id, c.industry ?? null);
+    }
 
     const groups = new Map<string, Group>();
 
-    for (const row of learnings) {
-      const type = classifyType(row);
-      const key = getPatternKey(row, type);
-
-      let g = groups.get(key);
+    // Helper: get-or-create a group for a (pattern_key, industry) slice.
+    // Cross-industry rows use industry=null and key=pattern_key. Per-
+    // industry rows use industry=<name> and key=`${pattern_key}|${name}`
+    // — same composite-key shape we use for pattern_feedback lookups.
+    function ensureGroup(
+      type: PatternType,
+      key: string,
+      label: string,
+      industry: string | null
+    ): Group {
+      const slotKey = industry ? `${key}|${industry}` : key;
+      let g = groups.get(slotKey);
       if (!g) {
         g = {
           pattern_type: type,
           pattern_key: key,
-          pattern_label: getPatternLabel(type, key),
+          pattern_label: industry ? `${label} · ${formatIndustry(industry)}` : label,
           action_candidates: new Map(),
           tag_counts: new Map(),
           client_ids: new Set(),
@@ -250,10 +277,24 @@ export async function POST() {
           cpc_changes: [],
           reliabilities: [],
           samples: [],
+          industry,
         };
-        groups.set(key, g);
+        groups.set(slotKey, g);
       }
+      return g;
+    }
 
+    // Defined here (above ensureGroup's first call) so the per-industry
+    // label suffix can use it. The creative-aggregation block below also
+    // uses this; both call sites end up with consistent capitalisation.
+    function formatIndustry(ind: string): string {
+      // Operators can type freeform — capitalize first letter, leave the
+      // rest alone so multi-word entries like "real estate" don't lose
+      // their spacing.
+      return ind.charAt(0).toUpperCase() + ind.slice(1);
+    }
+
+    function pushLearning(g: Group, row: LearningRow) {
       const action = (row.action_taken ?? "").trim();
       if (action) {
         g.action_candidates.set(action, (g.action_candidates.get(action) ?? 0) + 1);
@@ -290,6 +331,28 @@ export async function POST() {
           ctr_lift: row.avg_ctr_lift !== null ? Number(row.avg_ctr_lift) : null,
           client_id: row.client_id,
         });
+      }
+    }
+
+    for (const row of learnings) {
+      const type = classifyType(row);
+      const key = getPatternKey(row, type);
+      const label = getPatternLabel(type, key);
+
+      // Always add to the cross-industry slice — this preserves the
+      // existing agency-wide playbook view.
+      pushLearning(ensureGroup(type, key, label, null), row);
+
+      // Then, if the learning's client has a known industry, also add it
+      // to the per-industry slice. Learnings whose client has no industry
+      // tag (or no client_id at all) only contribute to the cross-industry
+      // pass. This is the same rule the creative-aggregation block uses.
+      const learningIndustry =
+        row.client_id != null
+          ? industryByClient.get(row.client_id) ?? null
+          : null;
+      if (learningIndustry) {
+        pushLearning(ensureGroup(type, key, label, learningIndustry), row);
       }
     }
 
@@ -333,53 +396,69 @@ export async function POST() {
     }
 
     // --- Build rows and upsert ---
-    const rows = Array.from(groups.values()).map((g) => {
-      // Action patterns built from action_learnings are always industry=null
-      // → look up the agency-wide ('') feedback bucket.
-      const fb = feedbackByKey.get(`${g.pattern_key}|`);
-      const positive = g.positive_count + (fb?.positive ?? 0);
-      const negative = g.negative_count + (fb?.negative ?? 0);
-      const neutral = g.neutral_count + (fb?.neutral ?? 0);
-      const total = positive + neutral + negative;
-      const consistency =
-        total > 0 ? Number(((positive / total) * 100).toFixed(1)) : 0;
+    // Per-industry slices need a higher signal floor than the cross-
+    // industry view: a single learning from a one-client industry would
+    // otherwise show up as a 100% consistency win. We require at least
+    // 2 source learnings before emitting a per-industry row. Cross-
+    // industry rows keep the old behaviour (any data shows up).
+    const MIN_LEARNINGS_PER_INDUSTRY_SLICE = 2;
 
-      // Pick the most common action text as the canonical action_summary
-      const actionSummary =
-        Array.from(g.action_candidates.entries())
-          .sort((a, b) => b[1] - a[1])[0]?.[0] ?? g.pattern_label;
+    const rows = Array.from(groups.values())
+      .filter((g) => {
+        if (g.industry === null) return true;
+        const total = g.positive_count + g.neutral_count + g.negative_count;
+        return total >= MIN_LEARNINGS_PER_INDUSTRY_SLICE;
+      })
+      .map((g) => {
+        // Look up the matching pattern_feedback slice. Cross-industry
+        // groups read the agency-wide ('') bucket; per-industry groups
+        // read their own slice. The composite key shape is the same one
+        // the engine seeder writes with — see seedFromPattern.
+        const fbKey = `${g.pattern_key}|${g.industry ?? ""}`;
+        const fb = feedbackByKey.get(fbKey);
+        const positive = g.positive_count + (fb?.positive ?? 0);
+        const negative = g.negative_count + (fb?.negative ?? 0);
+        const neutral = g.neutral_count + (fb?.neutral ?? 0);
+        const total = positive + neutral + negative;
+        const consistency =
+          total > 0 ? Number(((positive / total) * 100).toFixed(1)) : 0;
 
-      // Top 5 tags
-      const topTags =
-        Array.from(g.tag_counts.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([tag]) => tag);
+        // Pick the most common action text as the canonical action_summary
+        const actionSummary =
+          Array.from(g.action_candidates.entries())
+            .sort((a, b) => b[1] - a[1])[0]?.[0] ?? g.pattern_label;
 
-      return {
-        pattern_type: g.pattern_type,
-        pattern_key: g.pattern_key,
-        pattern_label: g.pattern_label,
-        action_summary: actionSummary,
-        times_seen: g.total_times_seen,
-        unique_clients: g.client_ids.size,
-        positive_count: positive,
-        neutral_count: neutral,
-        negative_count: negative,
-        avg_ctr_lift: avg(g.ctr_lifts),
-        avg_cpc_change: avg(g.cpc_changes),
-        avg_reliability: avg(g.reliabilities),
-        consistency_score: consistency,
-        sample_learnings: g.samples,
-        top_tags: topTags,
-        // Action-pattern rows are always cross-industry — they describe
-        // operator playbook moves, not creative inventory. Industry-specific
-        // action patterns would need a different aggregation pass keyed on
-        // client_id → industry, which is a future enhancement.
-        industry: null as string | null,
-        last_updated: new Date().toISOString(),
-      };
-    });
+        // Top 5 tags
+        const topTags =
+          Array.from(g.tag_counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([tag]) => tag);
+
+        return {
+          pattern_type: g.pattern_type,
+          // Pattern key stays the bare key (no industry suffix) so the
+          // playbook UI and pattern_feedback joins can find both the
+          // cross-industry and per-industry rows under the same identifier.
+          // Industry slicing is carried in the `industry` column.
+          pattern_key: g.pattern_key,
+          pattern_label: g.pattern_label,
+          action_summary: actionSummary,
+          times_seen: g.total_times_seen,
+          unique_clients: g.client_ids.size,
+          positive_count: positive,
+          neutral_count: neutral,
+          negative_count: negative,
+          avg_ctr_lift: avg(g.ctr_lifts),
+          avg_cpc_change: avg(g.cpc_changes),
+          avg_reliability: avg(g.reliabilities),
+          consistency_score: consistency,
+          sample_learnings: g.samples,
+          top_tags: topTags,
+          industry: g.industry,
+          last_updated: new Date().toISOString(),
+        };
+      });
 
     // -----------------------------------------------------------------------
     // Cross-client creative aggregation.
@@ -413,23 +492,10 @@ export async function POST() {
     const MIN_UNIQUE_CLIENTS = 2;
     const MIN_LIFT_PCT = 15;
 
-    // Industry lookup. We do one read of clients(id, industry) and build a
-    // Map keyed by client_id. Ads with no client_id, or whose client has
-    // no industry set, contribute only to the cross-industry pass.
-    const { data: clientsRaw } = await supabase
-      .from("clients")
-      .select("id, industry");
-    const industryByClient = new Map<number, string | null>();
-    for (const c of (clientsRaw ?? []) as { id: number; industry: string | null }[]) {
-      industryByClient.set(c.id, c.industry ?? null);
-    }
-
-    function formatIndustry(ind: string): string {
-      // Operators can type freeform — capitalize first letter, leave the
-      // rest alone so multi-word entries like "real estate" don't lose
-      // their spacing.
-      return ind.charAt(0).toUpperCase() + ind.slice(1);
-    }
+    // industryByClient + formatIndustry are now defined above (alongside
+    // the action-pattern grouping pass) so both pipelines share a single
+    // clients(id, industry) read. Reusing the same map here keeps the
+    // baseline math identical between the two passes.
 
     type CreativeAdRow = {
       id: number;
@@ -503,28 +569,35 @@ export async function POST() {
       industry: string | null;
     };
 
+    // The map is keyed on a synthetic slot string that combines pattern_key
+    // + industry, but the bucket itself stores the *bare* pattern_key. The
+    // composite uniqueness lives in global_learnings via the new
+    // (pattern_key, COALESCE(industry,'')) unique index added in
+    // 20260420_global_learnings_industry_composite.sql — so we no longer
+    // encode industry into the key string.
     const creativeBuckets = new Map<string, CreativeBucket>();
 
     function addToBucket(
-      bucketKey: string,
+      patternKey: string,
       type: "creative_format" | "creative_hook",
       label: string,
       ad: CreativeAdRow,
       ctr: number,
       industry: string | null
     ) {
-      let b = creativeBuckets.get(bucketKey);
+      const slotKey = `${patternKey}|${industry ?? ""}`;
+      let b = creativeBuckets.get(slotKey);
       if (!b) {
         b = {
           pattern_type: type,
-          pattern_key: bucketKey,
+          pattern_key: patternKey,
           pattern_label: label,
           ctrs: [],
           client_ids: new Set(),
           ad_count: 0,
           industry,
         };
-        creativeBuckets.set(bucketKey, b);
+        creativeBuckets.set(slotKey, b);
       }
       b.ctrs.push(ctr);
       if (ad.client_id != null) b.client_ids.add(ad.client_id);
@@ -559,33 +632,19 @@ export async function POST() {
         ad.client_id != null ? industryByClient.get(ad.client_id) ?? null : null;
 
       if (ad.format_style) {
-        const baseKey = `creative_format:${ad.format_style}`;
+        const patternKey = `creative_format:${ad.format_style}`;
         const label = formatLabels[ad.format_style] ?? ad.format_style;
-        addToBucket(baseKey, "creative_format", label, ad, ctr, null);
+        addToBucket(patternKey, "creative_format", label, ad, ctr, null);
         if (adIndustry) {
-          addToBucket(
-            `${baseKey}:industry:${adIndustry}`,
-            "creative_format",
-            label,
-            ad,
-            ctr,
-            adIndustry
-          );
+          addToBucket(patternKey, "creative_format", label, ad, ctr, adIndustry);
         }
       }
       if (ad.hook_type) {
-        const baseKey = `creative_hook:${ad.hook_type}`;
+        const patternKey = `creative_hook:${ad.hook_type}`;
         const label = hookLabels[ad.hook_type] ?? ad.hook_type;
-        addToBucket(baseKey, "creative_hook", label, ad, ctr, null);
+        addToBucket(patternKey, "creative_hook", label, ad, ctr, null);
         if (adIndustry) {
-          addToBucket(
-            `${baseKey}:industry:${adIndustry}`,
-            "creative_hook",
-            label,
-            ad,
-            ctr,
-            adIndustry
-          );
+          addToBucket(patternKey, "creative_hook", label, ad, ctr, adIndustry);
         }
       }
     }
@@ -671,18 +730,23 @@ export async function POST() {
     // -----------------------------------------------------------------------
     const { data: priorRows } = await supabase
       .from("global_learnings")
-      .select("pattern_key, consistency_score, unique_clients");
+      .select("pattern_key, industry, consistency_score, unique_clients");
 
+    // Key on (pattern_key, industry) — same composite the new uniqueness
+    // index uses. Without industry in the key, every per-industry row
+    // would inherit the cross-industry baseline and the slipping-pattern
+    // detector would generate phantom alarms.
     const priorByKey = new Map<
       string,
       { consistency_score: number | null; unique_clients: number | null }
     >();
     for (const r of (priorRows ?? []) as {
       pattern_key: string;
+      industry: string | null;
       consistency_score: number | null;
       unique_clients: number | null;
     }[]) {
-      priorByKey.set(r.pattern_key, {
+      priorByKey.set(`${r.pattern_key}|${r.industry ?? ""}`, {
         consistency_score: r.consistency_score,
         unique_clients: r.unique_clients,
       });
@@ -694,7 +758,7 @@ export async function POST() {
     };
 
     const enrichedRows: EnrichedRow[] = rows.map((r) => {
-      const prior = priorByKey.get(r.pattern_key);
+      const prior = priorByKey.get(`${r.pattern_key}|${r.industry ?? ""}`);
       return {
         ...r,
         prev_consistency_score: prior?.consistency_score ?? null,
