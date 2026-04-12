@@ -839,8 +839,25 @@ export function creativeToAdRow(metaAd: MetaAd): {
   // "headline") are the canonical fields for link ads, with the top-level
   // body/title as legacy fallbacks for older creatives.
   const spec = (c.object_story_spec ?? {}) as {
-    link_data?: { message?: string; name?: string; picture?: string; call_to_action?: { type?: string } };
+    link_data?: {
+      message?: string;
+      name?: string;
+      picture?: string;
+      call_to_action?: { type?: string };
+      // Carousel ads — child_attachments[0].picture is the canonical
+      // first-card thumbnail. We pull the first one as the preview.
+      child_attachments?: Array<{ picture?: string; image_url?: string }>;
+    };
     video_data?: { message?: string; title?: string; image_url?: string; call_to_action?: { type?: string } };
+  };
+
+  // Dynamic creative ads ship images via asset_feed_spec.images[].url —
+  // separate from object_story_spec because the asset feed is what Meta
+  // uses to mix and match creative variants. We grab the first image as
+  // the representative preview.
+  const assetFeed = (c.asset_feed_spec ?? {}) as {
+    images?: Array<{ url?: string; hash?: string }>;
+    videos?: Array<{ thumbnail_url?: string; video_id?: string }>;
   };
 
   const body =
@@ -855,11 +872,21 @@ export function creativeToAdRow(metaAd: MetaAd): {
     c.title ??
     null;
 
+  // Image URL fallback chain — order matters. We try the canonical
+  // top-level fields first, then dig into the spec/asset_feed paths
+  // that carry thumbnails for carousel and dynamic creatives. Without
+  // this, those two creative types come back as null and the library
+  // shows "No preview" even though Meta has the image.
   const imageUrl =
     c.image_url ??
     c.thumbnail_url ??
     spec.link_data?.picture ??
     spec.video_data?.image_url ??
+    spec.link_data?.child_attachments?.find((ch) => ch.picture || ch.image_url)
+      ?.picture ??
+    spec.link_data?.child_attachments?.find((ch) => ch.image_url)?.image_url ??
+    assetFeed.images?.find((img) => img.url)?.url ??
+    assetFeed.videos?.find((v) => v.thumbnail_url)?.thumbnail_url ??
     null;
 
   const cta =

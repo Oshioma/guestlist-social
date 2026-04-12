@@ -337,6 +337,27 @@ function Card({ card }: { card: CreativeCard }) {
               display: "block",
             }}
           />
+        ) : card.videoUrl ? (
+          // Video creative with no still thumbnail — fall back to the
+          // playable mp4 from resolveVideoSource(). preload="metadata"
+          // gives us the first frame as a poster without paying for a
+          // full download, and `controls` lets the operator scrub
+          // through it. Muted + playsInline so a tap doesn't blast
+          // audio across the office.
+          <video
+            src={card.videoUrl}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+              background: "#0f172a",
+            }}
+          />
         ) : (
           <div
             style={{
