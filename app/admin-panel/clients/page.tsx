@@ -38,11 +38,11 @@ export default async function ClientsPage() {
   const [clientsRes, campaignsRes, adsRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("*")
+      .select("id, name, platform, monthly_budget, status, website_url, industry, notes, archived, created_at")
       .eq("archived", false)
       .order("created_at", { ascending: false }),
-    supabase.from("campaigns").select("id, client_id"),
-    supabase.from("ads").select("id, client_id, spend"),
+    supabase.from("campaigns").select("client_id"),
+    supabase.from("ads").select("client_id, spend"),
   ]);
 
   if (clientsRes.error) {
@@ -62,6 +62,28 @@ export default async function ClientsPage() {
   const campaigns = (campaignsRes.data ?? []) as CampaignRow[];
   const ads = (adsRes.data ?? []) as AdRow[];
 
+  // Build O(1) lookup maps — avoids filtering arrays per client (O(n*m))
+  const campaignsByClient = new Map<string, number>();
+  let unassignedCampaignCount = 0;
+  for (const c of campaigns) {
+    if (c.client_id === null || c.client_id === undefined) {
+      unassignedCampaignCount++;
+    } else {
+      const key = String(c.client_id);
+      campaignsByClient.set(key, (campaignsByClient.get(key) ?? 0) + 1);
+    }
+  }
+
+  const adsByClient = new Map<string, { count: number; spend: number }>();
+  for (const a of ads) {
+    if (a.client_id === null || a.client_id === undefined) continue;
+    const key = String(a.client_id);
+    const curr = adsByClient.get(key) ?? { count: 0, spend: 0 };
+    curr.count++;
+    curr.spend += Number(a.spend ?? 0);
+    adsByClient.set(key, curr);
+  }
+
   if (clients.length === 0) {
     return (
       <EmptyState
@@ -78,9 +100,7 @@ export default async function ClientsPage() {
 
   const totalSpend = ads.reduce((sum, ad) => sum + Number(ad.spend ?? 0), 0);
 
-  const unassignedCampaigns = campaigns.filter(
-    (campaign) => campaign.client_id === null || campaign.client_id === undefined
-  ).length;
+  const unassignedCampaigns = unassignedCampaignCount;
 
   const stats = [
     {
@@ -208,18 +228,11 @@ export default async function ClientsPage() {
       <SectionCard title={`All clients (${clients.length})`}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {clients.map((client) => {
-            const clientCampaigns = campaigns.filter(
-              (campaign) => String(campaign.client_id) === String(client.id)
-            );
-
-            const clientAds = ads.filter(
-              (ad) => String(ad.client_id) === String(client.id)
-            );
-
-            const clientSpend = clientAds.reduce(
-              (sum, ad) => sum + Number(ad.spend ?? 0),
-              0
-            );
+            const key = String(client.id);
+            const clientCampaignCount = campaignsByClient.get(key) ?? 0;
+            const adStats = adsByClient.get(key) ?? { count: 0, spend: 0 };
+            const clientAdCount = adStats.count;
+            const clientSpend = adStats.spend;
 
             return (
               <div
@@ -376,7 +389,7 @@ export default async function ClientsPage() {
                         color: "#18181b",
                       }}
                     >
-                      {clientCampaigns.length}
+                      {clientCampaignCount}
                     </div>
                   </div>
 
@@ -397,7 +410,7 @@ export default async function ClientsPage() {
                         color: "#18181b",
                       }}
                     >
-                      {clientAds.length}
+                      {clientAdCount}
                     </div>
                   </div>
 
