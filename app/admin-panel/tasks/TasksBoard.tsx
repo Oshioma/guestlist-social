@@ -242,6 +242,23 @@ export default function TasksBoard({
     }
   }, [selectedDate]);
 
+  // Expand/collapse state — tasks default to collapsed; clicking expands.
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  function toggleExpanded(id: string) {
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -524,109 +541,152 @@ export default function TasksBoard({
       );
     }
 
+    const isExpanded = expandedTaskIds.has(task.id);
+
     return (
       <div
         key={task.id}
         style={{
           border: "1px solid #e4e4e7",
           borderRadius: 12,
-          padding: 12,
           background: "#fff",
           display: "flex",
           flexDirection: "column",
-          gap: 8,
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => toggleExpanded(task.id)}
+          aria-expanded={isExpanded}
           style={{
+            appearance: "none",
+            WebkitAppearance: "none",
+            background: "transparent",
+            border: "none",
+            padding: 12,
+            textAlign: "left",
+            cursor: "pointer",
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             gap: 10,
-            justifyContent: "space-between",
+            width: "100%",
+            font: "inherit",
+            color: "inherit",
           }}
         >
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
+          <span
+            aria-hidden
+            style={{
+              display: "inline-block",
+              width: 12,
+              fontSize: 11,
+              color: "#a1a1aa",
+              transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 0.15s ease",
+              flexShrink: 0,
+            }}
+          >
+            ▶
+          </span>
+          <span
+            style={{
+              display: "inline-block",
+              width: 8,
+              height: 8,
+              borderRadius: 999,
+              background: meta.color,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#18181b",
+              textDecoration:
+                task.status === "completed" ? "line-through" : "none",
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {task.title}
+          </span>
+          <span
+            style={{
+              display: "inline-block",
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: pill.bg,
+              color: pill.color,
+              border: `1px solid ${pill.border}`,
+              fontSize: 11,
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ??
+              task.status}
+          </span>
+          {overdue && (
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                flexWrap: "wrap",
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "#fee2e2",
+                color: "#991b1b",
+                border: "1px solid #fecaca",
+                fontSize: 11,
+                fontWeight: 600,
+                flexShrink: 0,
               }}
             >
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: meta.color,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#18181b",
-                  textDecoration:
-                    task.status === "completed" ? "line-through" : "none",
-                }}
-              >
-                {task.title}
-              </span>
-              <span
-                style={{
-                  display: "inline-block",
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  background: pill.bg,
-                  color: pill.color,
-                  border: `1px solid ${pill.border}`,
-                  fontSize: 11,
-                  fontWeight: 600,
-                }}
-              >
-                {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ??
-                  task.status}
-              </span>
-              {overdue && (
-                <span
-                  style={{
-                    display: "inline-block",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    background: "#fee2e2",
-                    color: "#991b1b",
-                    border: "1px solid #fecaca",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  Overdue
-                </span>
-              )}
-              {task.recurrence && task.recurrence !== "none" && (
-                <span
-                  style={{
-                    display: "inline-block",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    background: "#ede9fe",
-                    color: "#5b21b6",
-                    border: "1px solid #ddd6fe",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                  title={recurrenceSummary(task.recurrence, task.dueDate)}
-                >
-                  {recurrenceSummary(task.recurrence, task.dueDate)}
-                </span>
-              )}
-            </div>
+              Overdue
+            </span>
+          )}
+          {task.recurrence && task.recurrence !== "none" && (
+            <span
+              style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "#ede9fe",
+                color: "#5b21b6",
+                border: "1px solid #ddd6fe",
+                fontSize: 11,
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+              title={recurrenceSummary(task.recurrence, task.dueDate)}
+            >
+              {recurrenceSummary(task.recurrence, task.dueDate)}
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: 12,
+              color: "#71717a",
+              flexShrink: 0,
+            }}
+          >
+            {formatDate(task.dueDate)}
+          </span>
+        </button>
+        {isExpanded && (
+          <div
+            style={{
+              padding: "0 12px 12px 34px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
             {task.description && (
               <div
                 style={{
-                  marginTop: 6,
                   fontSize: 13,
                   color: "#52525b",
                   whiteSpace: "pre-wrap",
@@ -637,7 +697,6 @@ export default function TasksBoard({
             )}
             <div
               style={{
-                marginTop: 6,
                 fontSize: 12,
                 color: "#71717a",
                 display: "flex",
@@ -655,46 +714,53 @@ export default function TasksBoard({
                 </>
               )}
             </div>
-          </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <select
-              value={task.status}
-              onChange={(e) =>
-                handleStatusChange(task, e.target.value as TaskStatus)
-              }
-              disabled={isPending}
-              style={{ ...inputStyle, padding: "6px 8px", fontSize: 12 }}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-            {allowReassign && (
-              <button
-                type="button"
-                onClick={() => startEdit(task)}
-                disabled={isPending}
-                style={secondaryButton}
-              >
-                Edit
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => handleDelete(task)}
-              disabled={isPending}
+            <div
               style={{
-                ...secondaryButton,
-                color: "#b91c1c",
-                borderColor: "#fecaca",
+                display: "flex",
+                gap: 6,
+                flexWrap: "wrap",
+                marginTop: 4,
               }}
             >
-              Delete
-            </button>
+              <select
+                value={task.status}
+                onChange={(e) =>
+                  handleStatusChange(task, e.target.value as TaskStatus)
+                }
+                disabled={isPending}
+                style={{ ...inputStyle, padding: "6px 8px", fontSize: 12 }}
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              {allowReassign && (
+                <button
+                  type="button"
+                  onClick={() => startEdit(task)}
+                  disabled={isPending}
+                  style={secondaryButton}
+                >
+                  Edit
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleDelete(task)}
+                disabled={isPending}
+                style={{
+                  ...secondaryButton,
+                  color: "#b91c1c",
+                  borderColor: "#fecaca",
+                }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
