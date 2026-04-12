@@ -146,15 +146,15 @@ export default async function MetaQueuePage() {
     <div style={{ padding: 24, maxWidth: 1100 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Meta queue</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Action queue</h1>
         <span style={{ color: "#71717a", fontSize: 13 }}>
-          {pending.length} pending · {approved.length} approved · {recent.length} recent
+          {pending.length} waiting on you · {approved.length} ready to send · {recent.length} done
         </span>
       </div>
       <p style={{ color: "#71717a", fontSize: 13, marginTop: 6, maxWidth: 720 }}>
-        Every change the engine wants to push to Meta lands here first.
-        Approve a row to mark it ready, click Preview to re-fetch live Meta
-        state without writing, and Execute to actually push the change.
+        Every change the engine wants to make to your Meta ads waits here for
+        you. Approve to mark it ready, Preview to peek at the live state in
+        Meta without changing anything, and Execute to actually make the change.
       </p>
 
       {/* Mode banner — make the dry-run state impossible to miss */}
@@ -173,12 +173,12 @@ export default async function MetaQueuePage() {
         }}
       >
         <div style={{ fontWeight: 700 }}>
-          {dryRunOn ? "DRY RUN MODE" : "LIVE MODE — writes will hit Meta"}
+          {dryRunOn ? "Test mode — nothing will reach Meta" : "Live mode — changes will go to Meta"}
         </div>
         <div style={{ fontSize: 12, opacity: 0.85 }}>
           {dryRunOn
-            ? "META_EXECUTE_DRY_RUN is on (default). Execute returns the simulated payload without making any Meta API write. Set META_EXECUTE_DRY_RUN=false in env to enable live writes."
-            : "META_EXECUTE_DRY_RUN=false. The Execute button on each row will make a signed POST to Meta."}
+            ? "Hitting Execute right now just shows what would happen. To actually push changes to Meta, set META_EXECUTE_DRY_RUN=false in env."
+            : "Hitting Execute on a row will make the change in your Meta ad account for real."}
         </div>
         {!appSecretConfigured && (
           <div style={{ fontSize: 12, marginTop: 4, color: "#991b1b", fontWeight: 600 }}>
@@ -228,9 +228,9 @@ export default async function MetaQueuePage() {
       <CrossPollinateButton />
 
       {/* Pending */}
-      <Section title="Pending approval" count={pending.length}>
+      <Section title="Waiting on you" count={pending.length}>
         {pending.length === 0 ? (
-          <Empty>Nothing waiting on you. The engine hasn&rsquo;t queued any changes since the last drain.</Empty>
+          <Empty>Nothing waiting on you. The engine hasn&rsquo;t suggested any changes since you last cleared this out.</Empty>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {pending.map((row) => (
@@ -241,9 +241,9 @@ export default async function MetaQueuePage() {
       </Section>
 
       {/* Approved */}
-      <Section title="Approved · ready to execute" count={approved.length}>
+      <Section title="Ready to send" count={approved.length}>
         {approved.length === 0 ? (
-          <Empty>No approved rows queued for execution.</Empty>
+          <Empty>Nothing ready to send. Approve a row above to move it here.</Empty>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {approved.map((row) => (
@@ -254,9 +254,9 @@ export default async function MetaQueuePage() {
       </Section>
 
       {/* Recent */}
-      <Section title="Recent" count={recent.length}>
+      <Section title="Done" count={recent.length}>
         {recent.length === 0 ? (
-          <Empty>No history yet.</Empty>
+          <Empty>Nothing here yet.</Empty>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {recent.map((row) => (

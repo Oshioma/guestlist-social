@@ -104,13 +104,13 @@ export default function CrossPollinateButton() {
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
-          Cross-pollinate from winning patterns
+          Copy winning ads to clients missing them
         </div>
         <div style={{ fontSize: 12, color: "#71717a", marginTop: 4, maxWidth: 720 }}>
-          Walks every client and finds creative patterns they&rsquo;re missing
-          (validated by ≥2 other clients at &gt;1.5% avg CTR). Seeds
-          duplicate_ad queue rows pointing at the strongest donor ad. Preview
-          first, then seed.
+          Looks across every client for ad styles that are working well
+          somewhere but missing here. Queues a copy of the best version for
+          each client that doesn&rsquo;t have it yet. Preview first to see the
+          list, then queue them up when you&rsquo;re happy.
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button
@@ -145,7 +145,7 @@ export default function CrossPollinateButton() {
               cursor: busy ? "wait" : "pointer",
             }}
           >
-            {busy === "seed" ? "Seeding…" : "Seed queue rows"}
+            {busy === "seed" ? "Queuing…" : "Queue them up"}
           </button>
         </div>
 
@@ -159,23 +159,25 @@ export default function CrossPollinateButton() {
               <>
                 <div style={{ fontWeight: 600 }}>
                   {result.mode === "seed"
-                    ? `Seeded ${result.seeded ?? 0} (deduped ${result.deduped ?? 0})`
-                    : `Preview: ${result.suggestions?.length ?? 0} suggestion${
-                        result.suggestions?.length === 1 ? "" : "s"
-                      }`}
+                    ? `Queued ${result.seeded ?? 0} new cop${result.seeded === 1 ? "y" : "ies"}${
+                        result.deduped ? ` (skipped ${result.deduped} already queued)` : ""
+                      }`
+                    : `${result.suggestions?.length ?? 0} cop${
+                        result.suggestions?.length === 1 ? "y" : "ies"
+                      } would be queued`}
                 </div>
                 {result.stats && (
                   <div style={{ color: "#71717a", marginTop: 2 }}>
-                    Scanned {result.stats.adsScanned} ads across{" "}
-                    {result.stats.clientsScanned} clients ·{" "}
-                    {result.stats.qualifyingCombos} qualifying patterns ·{" "}
-                    {result.stats.suggestionsAfterCap} suggestions after cap
+                    Looked at {result.stats.adsScanned} ads across{" "}
+                    {result.stats.clientsScanned} clients · found{" "}
+                    {result.stats.qualifyingCombos} winning style
+                    {result.stats.qualifyingCombos === 1 ? "" : "s"}
                   </div>
                 )}
                 {result.stats?.funnel && (
                   <details style={{ marginTop: 6 }}>
                     <summary style={{ cursor: "pointer", color: "#3f3f46" }}>
-                      Funnel breakdown
+                      Why we picked these
                     </summary>
                     <div
                       style={{

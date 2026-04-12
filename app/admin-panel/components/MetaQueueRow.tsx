@@ -41,6 +41,14 @@ const decisionLabels: Record<string, string> = {
   duplicate_ad: "Duplicate ad",
 };
 
+const statusLabels: Record<string, string> = {
+  pending: "Waiting",
+  approved: "Ready",
+  executed: "Sent",
+  failed: "Failed",
+  cancelled: "Skipped",
+};
+
 const decisionColors: Record<string, { bg: string; text: string }> = {
   pause_ad: { bg: "#fee2e2", text: "#991b1b" },
   increase_adset_budget: { bg: "#dcfce7", text: "#166534" },
@@ -192,7 +200,7 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
             textTransform: "uppercase",
           }}
         >
-          {row.status}
+          {statusLabels[row.status] ?? row.status}
         </span>
         <span
           style={{
@@ -283,7 +291,7 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
             justifyContent: "space-between",
           }}
         >
-          <span>Last checked Meta state</span>
+          <span>Last peek at Meta</span>
           <span style={{ color: "#a1a1aa", fontWeight: 500 }}>
             {previewAt ? formatTimestamp(previewAt) : "never"}
           </span>
@@ -304,7 +312,7 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
           </pre>
         ) : (
           <div style={{ fontSize: 12, color: "#a1a1aa", fontStyle: "italic" }}>
-            Click Preview to fetch the live state from Meta without writing.
+            Click Preview to peek at the current state in Meta without changing anything.
           </div>
         )}
       </div>

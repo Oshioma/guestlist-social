@@ -62,9 +62,9 @@ export default async function DecisionAccuracy() {
       <Card>
         <Header />
         <Body>
-          No measured decisions in the last {WINDOW_DAYS} days yet. Once an
-          executed queue row&rsquo;s 7-day follow-up window elapses and the
-          measurement sweep runs, verdicts will appear here.
+          Nothing to score yet. Once a change has been live for a week, we
+          come back, check whether it actually helped, and report the result
+          here.
         </Body>
       </Card>
     );
@@ -101,9 +101,9 @@ export default async function DecisionAccuracy() {
         }}
       >
         <Stat
-          label={`Positive verdicts (last ${WINDOW_DAYS}d)`}
+          label={`How often the engine was right (last ${WINDOW_DAYS}d)`}
           value={accuracyPct != null ? `${accuracyPct}%` : "—"}
-          sublabel={`${positive} of ${decisive} decisive`}
+          sublabel={`${positive} of ${decisive} had a clear answer`}
           tone={
             accuracyPct == null
               ? "neutral"
@@ -133,9 +133,9 @@ export default async function DecisionAccuracy() {
           }
         />
         <Stat
-          label="Sample"
+          label="Decisions measured"
           value={String(decisive)}
-          sublabel={`+${inconclusive} inconclusive`}
+          sublabel={`+${inconclusive} too soon to tell`}
           tone="neutral"
         />
       </div>
@@ -151,16 +151,16 @@ export default async function DecisionAccuracy() {
         }}
       >
         <span>
-          <Dot color="#4ade80" /> {positive} positive
+          <Dot color="#4ade80" /> {positive} helped
         </span>
         <span>
-          <Dot color="#fbbf24" /> {neutral} neutral
+          <Dot color="#fbbf24" /> {neutral} did nothing
         </span>
         <span>
-          <Dot color="#f87171" /> {negative} negative
+          <Dot color="#f87171" /> {negative} hurt
         </span>
         <span>
-          <Dot color="#64748b" /> {inconclusive} inconclusive
+          <Dot color="#64748b" /> {inconclusive} too soon to tell
         </span>
       </div>
 
@@ -172,11 +172,9 @@ export default async function DecisionAccuracy() {
           lineHeight: 1.5,
         }}
       >
-        Verdicts are computed 7 days after a queue row executes by comparing
-        the ad&rsquo;s post-window CTR to the snapshot we captured at execute
-        time. Inconclusive rows are excluded from the accuracy ratio but
-        shown separately so the operator can see how much of the sample we
-        had to drop.{" "}
+        We wait a week after each change goes live, then compare the ad&rsquo;s
+        new click-through rate to where it started. &ldquo;Too soon to tell&rdquo;
+        means the ad didn&rsquo;t get enough traffic to call it either way.{" "}
         <Link
           href="/app/meta-queue"
           style={{ color: "#93c5fd", textDecoration: "none" }}
@@ -230,7 +228,7 @@ function Header() {
           letterSpacing: "0.06em",
         }}
       >
-        Closed loop
+        Engine track record
       </div>
       <h2
         style={{
@@ -240,7 +238,7 @@ function Header() {
           letterSpacing: "-0.01em",
         }}
       >
-        Decision accuracy
+        Was the engine right?
       </h2>
       <span style={{ fontSize: 12, color: "#64748b" }}>
         last {WINDOW_DAYS} days

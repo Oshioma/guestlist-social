@@ -44,6 +44,12 @@ const outcomeColors: Record<string, { bg: string; text: string }> = {
   negative: { bg: "#fee2e2", text: "#991b1b" },
 };
 
+const outcomeLabels: Record<string, string> = {
+  positive: "Helped",
+  neutral: "No change",
+  negative: "Hurt",
+};
+
 function MetricDiff({
   label,
   before,
@@ -202,7 +208,7 @@ export default function AdActionRow({ action }: { action: AdAction }) {
               textTransform: "uppercase",
             }}
           >
-            {action.outcome}
+            {outcomeLabels[action.outcome] ?? action.outcome}
           </span>
         )}
         <span
@@ -461,9 +467,9 @@ export default function AdActionRow({ action }: { action: AdAction }) {
                 }}
               >
                 <option value="">Auto-detect outcome</option>
-                <option value="positive">Positive</option>
-                <option value="neutral">Neutral</option>
-                <option value="negative">Negative</option>
+                <option value="positive">It helped</option>
+                <option value="neutral">No change</option>
+                <option value="negative">It hurt</option>
               </select>
             </div>
             <input
