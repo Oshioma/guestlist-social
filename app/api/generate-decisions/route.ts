@@ -4,6 +4,10 @@ import {
   seedPauseAd,
   seedIncreaseAdsetBudget,
 } from "@/lib/meta-queue-seed";
+import {
+  getAppPerformanceStatus,
+  getPerformanceScore,
+} from "@/app/admin-panel/lib/performance-truth";
 
 export const dynamic = "force-dynamic";
 
@@ -480,15 +484,29 @@ export async function POST(req: Request) {
       );
     }
 
-    // Compute CTR/CPC for each ad if not stored
+    // Compute CTR/CPC for each ad if not stored, and fall back to live-
+    // computed performance_status/score when the persisted columns are
+    // empty. The Score Ads button populates those columns, but operators
+    // shouldn't have to remember to click it before generating decisions —
+    // when the column is stale we judge from the current numbers ourselves
+    // so the engine matches what the row badges on the ads page show.
+    let liveStatusFallbacks = 0;
     const enrichedAds = ads.map((ad) => {
       const impressions = Number(ad.impressions ?? 0);
       const clicks = Number(ad.clicks ?? 0);
       const spend = Number(ad.spend ?? 0);
+      const ctr =
+        ad.ctr ?? (impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0);
+      const cpc =
+        ad.cpc ?? (clicks > 0 ? Number((spend / clicks).toFixed(4)) : 0);
+      const withRates = { ...ad, ctr, cpc };
+      const usedFallback =
+        ad.performance_status == null || ad.performance_score == null;
+      if (usedFallback) liveStatusFallbacks++;
       return {
-        ...ad,
-        ctr: ad.ctr ?? (impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0),
-        cpc: ad.cpc ?? (clicks > 0 ? Number((spend / clicks).toFixed(4)) : 0),
+        ...withRates,
+        performance_status: ad.performance_status ?? getAppPerformanceStatus(withRates),
+        performance_score: ad.performance_score ?? getPerformanceScore(withRates),
       };
     });
 
@@ -668,6 +686,7 @@ export async function POST(req: Request) {
       generated,
       total: ads.length,
       pattern_backed: patternBacked,
+      live_status_fallbacks: liveStatusFallbacks,
       industry,
       patterns_loaded: patternIndex.size,
       feedback: {
