@@ -24,24 +24,30 @@ type Preview = {
 type PreviewResponse = {
   ok: boolean;
   error?: string;
-  dry_run?: boolean;
   generated?: number;
   total?: number;
-  pattern_backed?: number;
-  patterns_loaded?: number;
-  feedback?: {
-    slices_loaded: number;
-    blocked_by_feedback: number;
-    boosted_by_feedback: number;
-  };
   queue?: {
     would_queue_pause?: number;
     would_queue_budget?: number;
   };
+  feedback?: {
+    blocked_by_feedback: number;
+    boosted_by_feedback: number;
+  };
   previews?: Preview[];
 };
 
-const confidenceColor: Record<string, { bg: string; text: string }> = {
+// Plain-English headline for each decision type. The decision.action field is
+// already a sentence, so we just need a short noun for the chip on the right.
+const TYPE_LABEL: Record<string, string> = {
+  scale_budget: "Increase budget",
+  pause_or_replace: "Pause this ad",
+  kill_test: "Stop this test",
+  apply_known_fix: "Try a proven fix",
+  apply_winning_pattern: "Try a winning pattern",
+};
+
+const CONFIDENCE_COLOR: Record<string, { bg: string; text: string }> = {
   high: { bg: "#dcfce7", text: "#166534" },
   medium: { bg: "#fef9c3", text: "#854d0e" },
   low: { bg: "#f3f4f6", text: "#374151" },
@@ -79,29 +85,39 @@ export default function PreviewDecisionsButton({
     }
   }
 
+  const total = result?.total ?? 0;
+  const generated = result?.generated ?? 0;
+  const wouldPause = result?.queue?.would_queue_pause ?? 0;
+  const wouldBudget = result?.queue?.would_queue_budget ?? 0;
+  const wouldReview = Math.max(generated - wouldPause - wouldBudget, 0);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button
-          onClick={handleClick}
-          disabled={loading}
-          style={{
-            padding: "6px 16px",
-            borderRadius: 8,
-            border: "1px solid #18181b",
-            background: loading ? "#f4f4f5" : "#fff",
-            color: loading ? "#71717a" : "#18181b",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-          title="Show what the engine would do without writing anything to ad_decisions or the queue."
-        >
-          {loading ? "Previewing..." : "Preview Decisions (dry run)"}
-        </button>
-        {error && (
-          <span style={{ fontSize: 12, color: "#991b1b" }}>{error}</span>
-        )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={handleClick}
+            disabled={loading}
+            style={{
+              padding: "10px 20px",
+              borderRadius: 10,
+              border: "1px solid #18181b",
+              background: loading ? "#f4f4f5" : "#fff",
+              color: loading ? "#71717a" : "#18181b",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
+            {loading ? "Thinking…" : "Show me what the engine would do"}
+          </button>
+          {error && (
+            <span style={{ fontSize: 12, color: "#991b1b" }}>{error}</span>
+          )}
+        </div>
+        <p style={{ fontSize: 12, color: "#71717a", margin: 0 }}>
+          Same engine, but throws away the result. Nothing gets saved or queued — it's just a peek.
+        </p>
       </div>
 
       {result && (
@@ -113,109 +129,91 @@ export default function PreviewDecisionsButton({
             background: "#fafafa",
           }}
         >
-          <div
+          {/* Plain-English summary line. */}
+          <p
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginBottom: 14,
-              alignItems: "center",
+              margin: "0 0 6px",
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#18181b",
             }}
           >
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                color: "#3f3f46",
-                padding: "3px 10px",
-                borderRadius: 999,
-                background: "#fff",
-                border: "1px solid #e4e4e7",
-              }}
-            >
-              Dry run · nothing written
-            </span>
-            <Stat
-              label="would generate"
-              value={`${result.generated ?? 0} / ${result.total ?? 0}`}
-            />
-            <Stat label="pattern-backed" value={result.pattern_backed ?? 0} />
-            <Stat
-              label="would pause"
-              value={result.queue?.would_queue_pause ?? 0}
-            />
-            <Stat
-              label="would scale budget"
-              value={result.queue?.would_queue_budget ?? 0}
-            />
-            {result.feedback && result.feedback.blocked_by_feedback > 0 && (
-              <Stat
-                label="blocked by feedback"
-                value={result.feedback.blocked_by_feedback}
-                tone="warn"
-              />
-            )}
-            {result.feedback && result.feedback.boosted_by_feedback > 0 && (
-              <Stat
-                label="boosted by feedback"
-                value={result.feedback.boosted_by_feedback}
-                tone="good"
-              />
-            )}
-          </div>
+            {generated === 0
+              ? `Looked at ${total} ad${total === 1 ? "" : "s"}. Nothing to do right now.`
+              : `Looked at ${total} ad${total === 1 ? "" : "s"}. Wants to take action on ${generated}.`}
+          </p>
+          {generated > 0 && (
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#52525b" }}>
+              {[
+                wouldPause > 0 &&
+                  `${wouldPause} ad${wouldPause === 1 ? "" : "s"} would be paused`,
+                wouldBudget > 0 &&
+                  `${wouldBudget} would get a budget bump`,
+                wouldReview > 0 &&
+                  `${wouldReview} ${wouldReview === 1 ? "is" : "are"} just for your review`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              .
+            </p>
+          )}
 
-          {result.previews && result.previews.length > 0 ? (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: 8 }}
-            >
+          {result.previews && result.previews.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {result.previews.map((p) => {
-                const cc = confidenceColor[p.decision.confidence] ?? confidenceColor.low;
+                const cc =
+                  CONFIDENCE_COLOR[p.decision.confidence] ?? CONFIDENCE_COLOR.low;
+                const typeLabel =
+                  TYPE_LABEL[p.decision.type] ?? p.decision.type;
                 return (
                   <div
                     key={p.ad_id}
                     style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "flex-start",
                       border: "1px solid #e4e4e7",
                       borderRadius: 12,
                       padding: 12,
                       background: "#fff",
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 6,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
                         style={{
                           fontSize: 13,
                           fontWeight: 600,
                           color: "#18181b",
+                          marginBottom: 2,
                         }}
                       >
                         {p.ad_name}
-                      </span>
-                      <span
+                      </div>
+                      <div
                         style={{
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          background: "#f4f4f5",
-                          color: "#52525b",
-                          textTransform: "uppercase",
+                          fontSize: 13,
+                          color: "#18181b",
+                          marginBottom: 4,
                         }}
                       >
-                        {p.decision.type}
-                      </span>
+                        {p.decision.action}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#71717a" }}>
+                        Why: {p.decision.reason}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        gap: 4,
+                        flexShrink: 0,
+                      }}
+                    >
                       <span
                         style={{
-                          padding: "2px 8px",
+                          padding: "3px 10px",
                           borderRadius: 999,
                           fontSize: 11,
                           fontWeight: 600,
@@ -226,119 +224,48 @@ export default function PreviewDecisionsButton({
                       >
                         {p.decision.confidence}
                       </span>
-                      {p.pattern_backed && (
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background: "#dbeafe",
-                            color: "#1e40af",
-                          }}
-                          title={
-                            p.decision.source_pattern_key ?? undefined
-                          }
-                        >
-                          pattern · {p.decision.source_pattern_key}
-                          {p.decision.source_pattern_industry
-                            ? ` · ${p.decision.source_pattern_industry}`
-                            : ""}
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#52525b",
+                          textAlign: "right",
+                        }}
+                      >
+                        {typeLabel}
+                      </span>
+                      {(p.would_queue_pause || p.would_queue_budget) && (
+                        <span style={{ fontSize: 11, color: "#71717a" }}>
+                          Auto-queued
                         </span>
                       )}
-                      {p.would_queue_pause && (
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background: "#fef3c7",
-                            color: "#92400e",
-                          }}
-                        >
-                          would queue: pause
-                        </span>
-                      )}
-                      {p.would_queue_budget && (
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background: "#dcfce7",
-                            color: "#166534",
-                          }}
-                        >
-                          would queue: scale budget
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#18181b",
-                        marginBottom: 4,
-                      }}
-                    >
-                      {p.decision.action}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#71717a" }}>
-                      {p.decision.reason}
                     </div>
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <div
-              style={{
-                fontSize: 13,
-                color: "#71717a",
-                fontStyle: "italic",
-              }}
-            >
-              No decisions would fire for this client right now.
-            </div>
           )}
+
+          {/* Power-user footer: only shows when the feedback loop did something. */}
+          {result.feedback &&
+            (result.feedback.blocked_by_feedback > 0 ||
+              result.feedback.boosted_by_feedback > 0) && (
+              <p
+                style={{
+                  margin: "12px 0 0",
+                  fontSize: 11,
+                  color: "#71717a",
+                  fontStyle: "italic",
+                }}
+              >
+                Engine track record: blocked {result.feedback.blocked_by_feedback} suggestion
+                {result.feedback.blocked_by_feedback === 1 ? "" : "s"} that have
+                failed in the past · boosted {result.feedback.boosted_by_feedback} that
+                {result.feedback.boosted_by_feedback === 1 ? " has" : " have"} a strong
+                track record.
+              </p>
+            )}
         </div>
       )}
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  tone?: "good" | "warn";
-}) {
-  const colors =
-    tone === "good"
-      ? { bg: "#dcfce7", text: "#166534" }
-      : tone === "warn"
-        ? { bg: "#fef3c7", text: "#92400e" }
-        : { bg: "#fff", text: "#3f3f46" };
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "3px 10px",
-        borderRadius: 999,
-        background: colors.bg,
-        color: colors.text,
-        border: "1px solid #e4e4e7",
-        fontSize: 12,
-      }}
-    >
-      <strong>{value}</strong>
-      <span style={{ fontWeight: 400 }}>{label}</span>
-    </span>
   );
 }

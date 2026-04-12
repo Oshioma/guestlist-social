@@ -856,16 +856,21 @@ export default async function ClientAdsPage({
 
       {/* ── DECISIONS ── */}
       <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
+        <p style={{ fontSize: 13, color: "#52525b", margin: "0 0 12px" }}>
+          Ask the engine what to do about this client&apos;s ads. Preview first
+          to see what it would suggest, then run it for real when you&apos;re
+          happy.
+        </p>
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 12,
-            marginBottom: 12,
+            gap: 16,
+            marginBottom: 16,
           }}
         >
-          <GenerateDecisionsButton clientId={clientId} />
           <PreviewDecisionsButton clientId={clientId} />
+          <GenerateDecisionsButton clientId={clientId} />
         </div>
         {pendingDecisions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -877,7 +882,7 @@ export default async function ClientAdsPage({
           </div>
         ) : (
           <p style={{ fontSize: 13, color: "#a1a1aa" }}>
-            No pending decisions. Hit Generate Decisions to scan all ads.
+            No saved decisions yet. Run the engine above to fill this section.
           </p>
         )}
         {pastDecisions.length > 0 && (
