@@ -1,5 +1,9 @@
 "use client";
 
+// Mirror of ScaleAdButton for budget pullbacks. Lives on losing/problem
+// rows where the operator wants a softer alternative to pausing — throttle
+// the spend, see if quality recovers, decide later.
+
 import { useState } from "react";
 import Link from "next/link";
 
@@ -9,13 +13,13 @@ type State =
   | { kind: "success"; queueId: number; deduped: boolean; percent: number }
   | { kind: "error"; message: string };
 
-// 15% is the default the engine uses; the others let the operator pick a
-// softer or more aggressive bump without typing. 20% is the executor's
-// hard cap so we don't offer anything above it.
-const PERCENT_CHOICES = [5, 10, 15, 20] as const;
-const DEFAULT_PERCENT = 15;
+// Pullback caps are looser than bumps (executor allows up to −50%) since
+// cutting spend is the conservative side of the trade. Default −25% aligns
+// with the seeder's DEFAULT_BUDGET_PULLBACK_PCT.
+const PERCENT_CHOICES = [10, 25, 40, 50] as const;
+const DEFAULT_PERCENT = 25;
 
-export default function ScaleAdButton({
+export default function PullBackAdButton({
   adId,
   hasAdsetMetaId,
 }: {
@@ -28,7 +32,7 @@ export default function ScaleAdButton({
   async function handleClick() {
     setState({ kind: "loading" });
     try {
-      const res = await fetch("/api/queue-budget-bump", {
+      const res = await fetch("/api/queue-budget-pullback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ adId, percentChange: percent }),
@@ -65,14 +69,14 @@ export default function ScaleAdButton({
             borderRadius: 999,
             fontSize: 11,
             fontWeight: 700,
-            background: "#166534",
+            background: "#854d0e",
             color: "#fff",
             textDecoration: "none",
             textTransform: "uppercase",
             letterSpacing: "0.04em",
           }}
         >
-          {state.deduped ? `Already queued +${state.percent}% ↗` : `Queued +${state.percent}% ↗`}
+          {state.deduped ? `Already queued −${state.percent}% ↗` : `Queued −${state.percent}% ↗`}
         </Link>
         <span
           style={{ fontSize: 11, color: "#71717a", fontFamily: "monospace" }}
@@ -87,7 +91,7 @@ export default function ScaleAdButton({
   const disabled = state.kind === "loading" || !hasAdsetMetaId;
   const title = !hasAdsetMetaId
     ? "Missing ad set Meta id — run a Meta sync first"
-    : `Queue a +${percent}% budget bump on this ad set. Needs approval before it hits Meta.`;
+    : `Queue a −${percent}% budget pullback on this ad set. Needs approval before it hits Meta.`;
 
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -101,7 +105,7 @@ export default function ScaleAdButton({
           borderRadius: 999,
           fontSize: 11,
           fontWeight: 700,
-          background: disabled ? "#a7f3d0" : "#166534",
+          background: disabled ? "#fde68a" : "#854d0e",
           color: "#fff",
           border: "none",
           cursor: disabled ? "not-allowed" : "pointer",
@@ -109,27 +113,27 @@ export default function ScaleAdButton({
           letterSpacing: "0.04em",
         }}
       >
-        {state.kind === "loading" ? "Queuing…" : `Scale +${percent}%`}
+        {state.kind === "loading" ? "Queuing…" : `Pull back −${percent}%`}
       </button>
       <select
         value={percent}
         onChange={(e) => setPercent(Number(e.target.value))}
         disabled={disabled}
-        title="How much to bump the daily budget (capped at +20%)"
+        title="How much to cut the daily budget (capped at −50%)"
         style={{
           padding: "3px 4px",
           borderRadius: 6,
           fontSize: 11,
           fontWeight: 600,
-          color: "#166534",
+          color: "#854d0e",
           background: "#fff",
-          border: "1px solid #bbf7d0",
+          border: "1px solid #fde68a",
           cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
         {PERCENT_CHOICES.map((p) => (
           <option key={p} value={p}>
-            +{p}%
+            −{p}%
           </option>
         ))}
       </select>

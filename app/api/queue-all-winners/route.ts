@@ -23,12 +23,23 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const { clientId } = await req.json();
+    const { clientId, percentChange } = await req.json();
     if (!clientId) {
       return NextResponse.json(
         { ok: false, error: "clientId required" },
         { status: 400 }
       );
+    }
+    let bumpPct: number | undefined;
+    if (percentChange !== undefined) {
+      const n = Number(percentChange);
+      if (!Number.isFinite(n) || n <= 0 || n > 20) {
+        return NextResponse.json(
+          { ok: false, error: "percentChange must be a number in (0, 20]" },
+          { status: 400 }
+        );
+      }
+      bumpPct = n;
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -84,7 +95,8 @@ export async function POST(req: Request) {
         campaignId: ad.campaign_id != null ? Number(ad.campaign_id) : null,
         adId: Number(ad.id),
         adsetMetaId: String(ad.adset_meta_id),
-        reason: `Bulk scale: "${ad.name ?? `ad ${ad.id}`}" flagged as a winner`,
+        percentChange: bumpPct,
+        reason: `Bulk scale +${bumpPct ?? 15}%: "${ad.name ?? `ad ${ad.id}`}" flagged as a winner`,
         riskLevel: "low",
       });
 

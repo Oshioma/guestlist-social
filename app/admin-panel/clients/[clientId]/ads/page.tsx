@@ -31,6 +31,7 @@ import DecisionRow from "@/app/admin-panel/components/DecisionRow";
 import GenerateDecisionsButton from "@/app/admin-panel/components/GenerateDecisionsButton";
 import PreviewDecisionsButton from "@/app/admin-panel/components/PreviewDecisionsButton";
 import ScaleAdButton from "@/app/admin-panel/components/ScaleAdButton";
+import PullBackAdButton from "@/app/admin-panel/components/PullBackAdButton";
 
 export const dynamic = "force-dynamic";
 
@@ -776,21 +777,29 @@ export default async function ClientAdsPage({
                                 hasAdsetMetaId={Boolean(ad.adset_meta_id)}
                               />
                             ) : queued ? (
-                              <span
-                                style={{
-                                  padding: "2px 9px",
-                                  borderRadius: 999,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  background:
-                                    priorityColors[source.priority]?.text ?? "#71717a",
-                                  color: "#fff",
-                                  textTransform: "uppercase",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {actionBadge}
-                              </span>
+                              <>
+                                <span
+                                  style={{
+                                    padding: "2px 9px",
+                                    borderRadius: 999,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    background:
+                                      priorityColors[source.priority]?.text ?? "#71717a",
+                                    color: "#fff",
+                                    textTransform: "uppercase",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {actionBadge}
+                                </span>
+                                {ad.adset_meta_id ? (
+                                  <PullBackAdButton
+                                    adId={ad.id}
+                                    hasAdsetMetaId={true}
+                                  />
+                                ) : null}
+                              </>
                             ) : null}
                             <span
                               style={{

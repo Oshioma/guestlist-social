@@ -16,7 +16,12 @@ import { useRouter } from "next/navigation";
 
 export type MetaQueueRowData = {
   id: number;
-  decisionType: "pause_ad" | "increase_adset_budget" | "duplicate_ad" | string;
+  decisionType:
+    | "pause_ad"
+    | "increase_adset_budget"
+    | "decrease_adset_budget"
+    | "duplicate_ad"
+    | string;
   status: "pending" | "approved" | "executed" | "failed" | "cancelled" | string;
   riskLevel: "low" | "medium" | "high" | string;
   reason: string | null;
@@ -41,6 +46,7 @@ export type MetaQueueRowData = {
 const decisionLabels: Record<string, string> = {
   pause_ad: "Pause ad",
   increase_adset_budget: "Increase ad set budget",
+  decrease_adset_budget: "Pull back ad set budget",
   duplicate_ad: "Duplicate ad",
 };
 
@@ -55,6 +61,7 @@ const statusLabels: Record<string, string> = {
 const decisionColors: Record<string, { bg: string; text: string }> = {
   pause_ad: { bg: "#fee2e2", text: "#991b1b" },
   increase_adset_budget: { bg: "#dcfce7", text: "#166534" },
+  decrease_adset_budget: { bg: "#fef3c7", text: "#854d0e" },
   duplicate_ad: { bg: "#dbeafe", text: "#1e40af" },
 };
 
@@ -100,6 +107,15 @@ function formatPayloadSummary(
       return `$${(oldB / 100).toFixed(2)} → $${(newB / 100).toFixed(2)}/day (+${pct}%)`;
     }
     return `+${pct}% daily budget`;
+  }
+  if (decisionType === "decrease_adset_budget") {
+    const oldB = Number(payload.daily_budget_old ?? 0);
+    const newB = Number(payload.daily_budget_new ?? 0);
+    const pct = Number(payload.percent_change ?? 0);
+    if (oldB && newB) {
+      return `$${(oldB / 100).toFixed(2)} → $${(newB / 100).toFixed(2)}/day (−${pct}%)`;
+    }
+    return `−${pct}% daily budget`;
   }
   if (decisionType === "duplicate_ad") {
     const suffix = payload.new_name_suffix ? ` (suffix "${payload.new_name_suffix}")` : "";

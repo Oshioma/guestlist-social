@@ -1,20 +1,17 @@
 /**
- * /api/queue-budget-bump — operator-driven, single-ad budget bump.
+ * /api/queue-budget-pullback — operator-driven, single-ad budget pullback.
  *
- * The decision engine seeds budget bumps automatically when it agrees with
- * a "this is a winner" call. This route is the manual escape hatch: an
- * operator clicks Scale on an ad row and we drop one increase_adset_budget
- * row into meta_execution_queue, dedupe-safe and flagged for approval like
- * any other queue entry.
+ * The mirror of /api/queue-budget-bump for losing or fading ads. Drops one
+ * decrease_adset_budget row into meta_execution_queue, dedupe-safe and
+ * approval-gated. Useful when an operator wants to throttle a struggling
+ * ad set without pausing it outright.
  *
- * We deliberately resolve the ad's adset_meta_id and campaign_id server-side
- * rather than trusting the client — clients can't be trusted to send a Meta
- * id that lines up with the ad row they think they're scaling, and the seed
- * helper has no idea about that mismatch.
+ * Like the bump route, we resolve the ad's adset_meta_id and campaign_id
+ * server-side rather than trusting the client.
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { seedIncreaseAdsetBudget } from "@/lib/meta-queue-seed";
+import { seedDecreaseAdsetBudget } from "@/lib/meta-queue-seed";
 
 export const dynamic = "force-dynamic";
 
@@ -27,18 +24,16 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    // The seeder enforces (0, 20] but we surface a clearer error here than
-    // the generic one when the client sends garbage.
-    let bumpPct: number | undefined;
+    let pullbackPct: number | undefined;
     if (percentChange !== undefined) {
       const n = Number(percentChange);
-      if (!Number.isFinite(n) || n <= 0 || n > 20) {
+      if (!Number.isFinite(n) || n <= 0 || n > 50) {
         return NextResponse.json(
-          { ok: false, error: "percentChange must be a number in (0, 20]" },
+          { ok: false, error: "percentChange must be a number in (0, 50]" },
           { status: 400 }
         );
       }
-      bumpPct = n;
+      pullbackPct = n;
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -72,19 +67,19 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            "This ad has no ad set Meta id. Run a Meta sync first so we know which ad set to scale.",
+            "This ad has no ad set Meta id. Run a Meta sync first so we know which ad set to pull back.",
         },
         { status: 422 }
       );
     }
 
-    const seeded = await seedIncreaseAdsetBudget(supabase, {
+    const seeded = await seedDecreaseAdsetBudget(supabase, {
       clientId: ad.client_id != null ? Number(ad.client_id) : null,
       campaignId: ad.campaign_id != null ? Number(ad.campaign_id) : null,
       adId: Number(ad.id),
       adsetMetaId: String(ad.adset_meta_id),
-      percentChange: bumpPct,
-      reason: `Operator scaled "${ad.name ?? `ad ${ad.id}`}" by +${bumpPct ?? 15}% from the ad row`,
+      percentChange: pullbackPct,
+      reason: `Operator pulled back "${ad.name ?? `ad ${ad.id}`}" by −${pullbackPct ?? 25}% from the ad row`,
       riskLevel: "low",
     });
 

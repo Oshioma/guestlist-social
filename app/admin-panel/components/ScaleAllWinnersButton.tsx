@@ -11,8 +11,12 @@ type State =
       queued: number;
       deduped: number;
       skipped: number;
+      percent: number;
     }
   | { kind: "error"; message: string };
+
+const PERCENT_CHOICES = [5, 10, 15, 20] as const;
+const DEFAULT_PERCENT = 15;
 
 export default function ScaleAllWinnersButton({
   clientId,
@@ -20,6 +24,7 @@ export default function ScaleAllWinnersButton({
   clientId: string;
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
+  const [percent, setPercent] = useState<number>(DEFAULT_PERCENT);
 
   async function handleClick() {
     setState({ kind: "loading" });
@@ -27,7 +32,7 @@ export default function ScaleAllWinnersButton({
       const res = await fetch("/api/queue-all-winners", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId }),
+        body: JSON.stringify({ clientId, percentChange: percent }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -39,6 +44,7 @@ export default function ScaleAllWinnersButton({
         queued: Number(data.queued ?? 0),
         deduped: Number(data.deduped ?? 0),
         skipped: Number(data.skippedNoMetaId ?? 0),
+        percent,
       });
     } catch (err) {
       setState({
@@ -83,7 +89,7 @@ export default function ScaleAllWinnersButton({
             textDecoration: "none",
           }}
         >
-          {total} queued — review in the action queue ↗
+          {total} queued at +{state.percent}% — review in the action queue ↗
         </Link>
         <span style={{ fontSize: 12, color: "#166534" }}>
           {state.queued > 0 && `${state.queued} new`}
@@ -95,26 +101,49 @@ export default function ScaleAllWinnersButton({
     );
   }
 
+  const loading = state.kind === "loading";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <button
         type="button"
         onClick={handleClick}
-        disabled={state.kind === "loading"}
-        title="Queues a +15% budget bump on every winning ad. Still has to be approved in the action queue."
+        disabled={loading}
+        title={`Queues a +${percent}% budget bump on every winning ad. Still has to be approved in the action queue.`}
         style={{
           padding: "8px 16px",
           borderRadius: 10,
           fontSize: 14,
           fontWeight: 700,
-          background: state.kind === "loading" ? "#a7f3d0" : "#166534",
+          background: loading ? "#a7f3d0" : "#166534",
           color: "#fff",
           border: "none",
-          cursor: state.kind === "loading" ? "not-allowed" : "pointer",
+          cursor: loading ? "not-allowed" : "pointer",
         }}
       >
-        {state.kind === "loading" ? "Queuing…" : "Scale all winners"}
+        {loading ? "Queuing…" : `Scale all winners +${percent}%`}
       </button>
+      <select
+        value={percent}
+        onChange={(e) => setPercent(Number(e.target.value))}
+        disabled={loading}
+        title="How much to bump each winning ad set's daily budget (capped at +20%)"
+        style={{
+          padding: "6px 8px",
+          borderRadius: 8,
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#166534",
+          background: "#fff",
+          border: "1px solid #bbf7d0",
+          cursor: loading ? "not-allowed" : "pointer",
+        }}
+      >
+        {PERCENT_CHOICES.map((p) => (
+          <option key={p} value={p}>
+            +{p}%
+          </option>
+        ))}
+      </select>
       {state.kind === "error" && (
         <span style={{ fontSize: 12, color: "#991b1b" }}>{state.message}</span>
       )}

@@ -35,6 +35,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // site, never by changing these constants — they're the "what does the
 // engine want by default" baseline.
 export const DEFAULT_BUDGET_BUMP_PCT = 15;
+export const DEFAULT_BUDGET_PULLBACK_PCT = 25;
+// Mirror executor caps so the seed layer rejects out-of-bounds inputs early.
+const MAX_INCREASE_PCT = 20;
+const MAX_DECREASE_PCT = 50;
 
 export type SeedResult =
   | { ok: true; queueId: number; deduped: false }
@@ -172,12 +176,12 @@ export async function seedIncreaseAdsetBudget(
   }
 
   const percentChange = input.percentChange ?? DEFAULT_BUDGET_BUMP_PCT;
-  if (percentChange <= 0 || percentChange > 20) {
+  if (percentChange <= 0 || percentChange > MAX_INCREASE_PCT) {
     // Mirror the executor's hard cap at the seed layer too — refuse to
     // even create a queue row that would be guaranteed to fail validation.
     return {
       ok: false,
-      error: `percentChange must be in (0, 20] — got ${percentChange}`,
+      error: `percentChange must be in (0, ${MAX_INCREASE_PCT}] — got ${percentChange}`,
     };
   }
 
@@ -199,6 +203,75 @@ export async function seedIncreaseAdsetBudget(
       ad_id: input.adId,
       adset_meta_id: input.adsetMetaId,
       decision_type: "increase_adset_budget",
+      proposed_payload: { percent_change: percentChange },
+      reason: input.reason,
+      risk_level: input.riskLevel ?? "low",
+      status: "pending",
+      source_pattern_key: input.sourcePatternKey ?? null,
+      source_pattern_industry: input.sourcePatternIndustry ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "insert returned no row" };
+  }
+  return { ok: true, queueId: Number(data.id), deduped: false };
+}
+
+// ---------------------------------------------------------------------------
+// decrease_adset_budget
+//
+// Mirror of seedIncreaseAdsetBudget for pullbacks. Default −25%, hard cap
+// at −50% (executor enforces the same). Used when an operator wants to
+// throttle a fading ad set rather than pause it outright.
+// ---------------------------------------------------------------------------
+
+export type SeedDecreaseAdsetBudgetInput = PatternSource & {
+  clientId: number | null;
+  campaignId: number | null;
+  adId: number | null;
+  adsetMetaId: string;
+  /** Percent change as a positive number, e.g. 25 means −25%. Defaults to −25%. */
+  percentChange?: number;
+  reason: string;
+  riskLevel?: "low" | "medium" | "high";
+};
+
+export async function seedDecreaseAdsetBudget(
+  supabase: SupabaseClient,
+  input: SeedDecreaseAdsetBudgetInput
+): Promise<SeedResult> {
+  if (!input.adsetMetaId) {
+    return { ok: false, error: "seedDecreaseAdsetBudget: adsetMetaId is required" };
+  }
+
+  const percentChange = input.percentChange ?? DEFAULT_BUDGET_PULLBACK_PCT;
+  if (percentChange <= 0 || percentChange > MAX_DECREASE_PCT) {
+    return {
+      ok: false,
+      error: `percentChange must be in (0, ${MAX_DECREASE_PCT}] — got ${percentChange}`,
+    };
+  }
+
+  const existing = await findOpenRow(
+    supabase,
+    "decrease_adset_budget",
+    "adset_meta_id",
+    input.adsetMetaId
+  );
+  if (existing) {
+    return { ok: true, queueId: existing, deduped: true };
+  }
+
+  const { data, error } = await supabase
+    .from("meta_execution_queue")
+    .insert({
+      client_id: input.clientId,
+      campaign_id: input.campaignId,
+      ad_id: input.adId,
+      adset_meta_id: input.adsetMetaId,
+      decision_type: "decrease_adset_budget",
       proposed_payload: { percent_change: percentChange },
       reason: input.reason,
       risk_level: input.riskLevel ?? "low",

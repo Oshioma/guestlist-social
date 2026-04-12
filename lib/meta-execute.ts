@@ -20,6 +20,7 @@
  * The three executors here are intentionally the SAFEST possible writes:
  *   - executePauseAd               — reversible, always safer than the current state
  *   - executeIncreaseAdsetBudget   — capped at +20%, always upward only
+ *   - executeDecreaseAdsetBudget   — capped at −50%, always downward only
  *   - executeDuplicateAd           — copies to PAUSED, never auto-launches
  *
  * Higher-risk actions (creative edits, audience swaps, automatic launches)
@@ -39,6 +40,14 @@ const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
 /** Max one-shot budget bump. ±20%, no exceptions. */
 export const MAX_BUDGET_INCREASE_PCT = 20;
+
+/**
+ * Max one-shot budget pullback. −50%, no exceptions. We're more permissive
+ * with downward moves than upward ones because pulling back spend is the
+ * conservative side of the trade — the worst case is a winner gets
+ * starved, which the operator notices in a day. Asymmetric on purpose.
+ */
+export const MAX_BUDGET_DECREASE_PCT = 50;
 
 /** Queue items older than this are stale — re-queue, don't execute. */
 export const QUEUE_ITEM_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -242,6 +251,42 @@ export function assertBudgetDelta(
 }
 
 /**
+ * Mirror of assertBudgetDelta for downward moves. Allows pullbacks within
+ * MAX_BUDGET_DECREASE_PCT of the current live budget. Refuses to land on a
+ * budget below Meta's minimum — Meta enforces a $1/day floor for most
+ * objectives, and trying to set sub-$1 returns a confusing API error rather
+ * than the obvious "too low" we want operators to see.
+ */
+export const MIN_DAILY_BUDGET_CENTS = 100;
+export function assertBudgetDecreaseDelta(
+  currentBudgetCents: number,
+  proposedBudgetCents: number
+): void {
+  if (currentBudgetCents <= 0) {
+    throw new Error(
+      "Adset has no daily_budget set (likely campaign-level CBO) — refusing to change."
+    );
+  }
+  if (proposedBudgetCents >= currentBudgetCents) {
+    throw new Error(
+      `Proposed budget ${proposedBudgetCents} is not a decrease from current ${currentBudgetCents}.`
+    );
+  }
+  if (proposedBudgetCents < MIN_DAILY_BUDGET_CENTS) {
+    throw new Error(
+      `Proposed budget ${proposedBudgetCents} cents is below Meta's $${(MIN_DAILY_BUDGET_CENTS / 100).toFixed(2)}/day floor.`
+    );
+  }
+  const pctChange =
+    ((currentBudgetCents - proposedBudgetCents) / currentBudgetCents) * 100;
+  if (pctChange > MAX_BUDGET_DECREASE_PCT) {
+    throw new Error(
+      `Proposed −${pctChange.toFixed(1)}% exceeds hard cap of −${MAX_BUDGET_DECREASE_PCT}%.`
+    );
+  }
+}
+
+/**
  * Adset must be live for a budget bump to mean anything; we never want to
  * "wake up" a paused adset accidentally by editing its budget.
  */
@@ -407,6 +452,112 @@ export async function executeIncreaseAdsetBudget(
   }
 
   // 7. Live POST.
+  const response = await metaPost<{ success?: boolean }>(path, body);
+
+  return {
+    ok: true,
+    dryRun: false,
+    before,
+    oldBudgetCents: currentBudgetCents,
+    newBudgetCents,
+    appliedPercent: percentChange,
+    request: { path, body },
+    response,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Action 2b — Decrease an ad set's daily budget.
+//
+// Mirror of executeIncreaseAdsetBudget with a downward delta cap. Same
+// re-fetch + drift check semantics so the operator's approved percent
+// is applied to the CURRENT budget, not whatever the queue row was
+// created against.
+// ---------------------------------------------------------------------------
+
+export type DecreaseAdsetBudgetInput = {
+  adsetMetaId: string;
+  /** Percent change agreed at approval time, e.g. 20 for −20%. Always positive. */
+  percentChange: number;
+  /**
+   * Optional drift check — if the live budget no longer matches what the
+   * queue row expected (within 5%), we abort so a human can re-approve.
+   */
+  expectedCurrentBudgetCents?: number;
+};
+
+export type DecreaseAdsetBudgetResult = {
+  ok: true;
+  dryRun: boolean;
+  before: AdsetState;
+  oldBudgetCents: number;
+  newBudgetCents: number;
+  appliedPercent: number;
+  request: { path: string; body: Record<string, string> };
+  response: unknown;
+};
+
+export async function executeDecreaseAdsetBudget(
+  input: DecreaseAdsetBudgetInput
+): Promise<DecreaseAdsetBudgetResult> {
+  const { adsetMetaId, percentChange, expectedCurrentBudgetCents } = input;
+
+  if (percentChange <= 0) {
+    throw new Error(`percentChange must be positive (got ${percentChange}).`);
+  }
+  if (percentChange > MAX_BUDGET_DECREASE_PCT) {
+    throw new Error(
+      `Requested −${percentChange}% exceeds hard cap of −${MAX_BUDGET_DECREASE_PCT}%.`
+    );
+  }
+
+  const before = await fetchAdsetState(adsetMetaId);
+  assertAdsetLive(before);
+
+  const currentBudgetCents = Number(before.daily_budget ?? 0);
+
+  if (
+    typeof expectedCurrentBudgetCents === "number" &&
+    expectedCurrentBudgetCents > 0
+  ) {
+    const driftPct =
+      Math.abs(currentBudgetCents - expectedCurrentBudgetCents) /
+      expectedCurrentBudgetCents *
+      100;
+    if (driftPct > 5) {
+      throw new Error(
+        `Live budget ${currentBudgetCents} drifted ${driftPct.toFixed(
+          1
+        )}% from expected ${expectedCurrentBudgetCents} — re-approve.`
+      );
+    }
+  }
+
+  const newBudgetCents = Math.round(
+    currentBudgetCents * (1 - percentChange / 100)
+  );
+
+  assertBudgetDecreaseDelta(currentBudgetCents, newBudgetCents);
+
+  const path = `/${adsetMetaId}`;
+  const body = { daily_budget: String(newBudgetCents) };
+
+  if (isDryRun()) {
+    return {
+      ok: true,
+      dryRun: true,
+      before,
+      oldBudgetCents: currentBudgetCents,
+      newBudgetCents,
+      appliedPercent: percentChange,
+      request: { path, body },
+      response: {
+        simulated: true,
+        would_set_daily_budget_cents: newBudgetCents,
+      },
+    };
+  }
+
   const response = await metaPost<{ success?: boolean }>(path, body);
 
   return {

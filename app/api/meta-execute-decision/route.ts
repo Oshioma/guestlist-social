@@ -27,6 +27,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   executePauseAd,
   executeIncreaseAdsetBudget,
+  executeDecreaseAdsetBudget,
   executeDuplicateAd,
   fetchAdState,
   fetchAdsetState,
@@ -41,6 +42,7 @@ export const dynamic = "force-dynamic";
 type DecisionType =
   | "pause_ad"
   | "increase_adset_budget"
+  | "decrease_adset_budget"
   | "duplicate_ad";
 
 type QueueRow = {
@@ -87,7 +89,10 @@ async function refreshState(row: QueueRow) {
     if (!row.ad_meta_id) throw new Error("Queue row missing ad_meta_id.");
     return await fetchAdState(row.ad_meta_id);
   }
-  if (row.decision_type === "increase_adset_budget") {
+  if (
+    row.decision_type === "increase_adset_budget" ||
+    row.decision_type === "decrease_adset_budget"
+  ) {
     if (!row.adset_meta_id) throw new Error("Queue row missing adset_meta_id.");
     return await fetchAdsetState(row.adset_meta_id);
   }
@@ -100,7 +105,10 @@ async function runExecutor(row: QueueRow) {
     return await executePauseAd(row.ad_meta_id);
   }
 
-  if (row.decision_type === "increase_adset_budget") {
+  if (
+    row.decision_type === "increase_adset_budget" ||
+    row.decision_type === "decrease_adset_budget"
+  ) {
     if (!row.adset_meta_id) throw new Error("Queue row missing adset_meta_id.");
     const payload = row.proposed_payload ?? {};
     const percentChange = Number(payload.percent_change);
@@ -113,7 +121,14 @@ async function runExecutor(row: QueueRow) {
         `Queue row proposed_payload.percent_change is invalid: ${String(payload.percent_change)}`
       );
     }
-    return await executeIncreaseAdsetBudget({
+    if (row.decision_type === "increase_adset_budget") {
+      return await executeIncreaseAdsetBudget({
+        adsetMetaId: row.adset_meta_id,
+        percentChange,
+        expectedCurrentBudgetCents,
+      });
+    }
+    return await executeDecreaseAdsetBudget({
       adsetMetaId: row.adset_meta_id,
       percentChange,
       expectedCurrentBudgetCents,

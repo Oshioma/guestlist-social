@@ -615,6 +615,43 @@ function classifyVerdict(input: ClassifyInput): ClassifiedVerdict {
     };
   }
 
+  if (decisionType === "decrease_adset_budget") {
+    // Pullback verdict mirrors the bump verdict by design: if cutting spend
+    // didn't tank CTR, the cut was a clean save. If CTR collapsed, the cut
+    // killed the ad set. Symmetric with the increase path so the engine
+    // feedback ledger reads them the same way.
+    if (ctrLiftPct == null) {
+      return {
+        label: "inconclusive",
+        reason: "Missing CTR on baseline or follow-up snapshot.",
+        ctrLiftPct,
+        cpmChangePct,
+      };
+    }
+    if (ctrLiftPct > LIFT_NEUTRAL_BAND_PCT) {
+      return {
+        label: "positive",
+        reason: `CTR +${ctrLiftPct.toFixed(1)}% after pullback — cutting spend trimmed the worst traffic.`,
+        ctrLiftPct,
+        cpmChangePct,
+      };
+    }
+    if (ctrLiftPct < -LIFT_NEUTRAL_BAND_PCT) {
+      return {
+        label: "negative",
+        reason: `CTR ${ctrLiftPct.toFixed(1)}% after pullback — the cut starved the ad set.`,
+        ctrLiftPct,
+        cpmChangePct,
+      };
+    }
+    return {
+      label: "neutral",
+      reason: `CTR ${ctrLiftPct.toFixed(1)}% — within ±${LIFT_NEUTRAL_BAND_PCT}% band.`,
+      ctrLiftPct,
+      cpmChangePct,
+    };
+  }
+
   return {
     label: "inconclusive",
     reason: `Unknown decision_type ${decisionType}.`,
