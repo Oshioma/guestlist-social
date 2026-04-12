@@ -53,6 +53,13 @@ const STATUS_BUTTONS: {
     border: "#86efac",
     color: "#166534",
   },
+  {
+    value: "approved",
+    label: "Approved",
+    bg: "#e0f2fe",
+    border: "#38bdf8",
+    color: "#075985",
+  },
 ];
 
 function daysInMonth(month: string): Date[] {
@@ -163,7 +170,9 @@ export default function ProoferBoard({
   type Draft = { caption: string; imageUrl: string };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
+    {}
+  );
 
   const postsByDate = useMemo(() => {
     const map = new Map<string, ProoferPost>();
@@ -377,8 +386,8 @@ export default function ProoferBoard({
           }}
         >
           Draft captions and upload images for every day of the month, then
-          flag each post as Improve, Check or Proofed as it moves through
-          review.
+          flag each post as Improve, Check, Proofed or Approved as it moves
+          through review.
         </p>
       </div>
 
@@ -489,6 +498,8 @@ export default function ProoferBoard({
                 ? "check"
                 : "none";
 
+            const isLocked = effectiveStatus === "approved";
+
             return (
               <div
                 key={key}
@@ -530,7 +541,7 @@ export default function ProoferBoard({
                     </div>
                   )}
 
-                  {hasDraft && (
+                  {hasDraft && !isLocked && (
                     <div
                       style={{
                         marginTop: 6,
@@ -540,6 +551,19 @@ export default function ProoferBoard({
                       }}
                     >
                       Unsaved changes
+                    </div>
+                  )}
+
+                  {isLocked && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 11,
+                        color: "#075985",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Approved and locked
                     </div>
                   )}
                 </div>
@@ -557,11 +581,14 @@ export default function ProoferBoard({
                       updateDraft(key, { caption: e.target.value })
                     }
                     placeholder="Write a caption..."
+                    disabled={isLocked}
                     style={{
                       ...inputStyle,
                       minHeight: 70,
                       resize: "vertical",
                       fontFamily: "inherit",
+                      opacity: isLocked ? 0.7 : 1,
+                      cursor: isLocked ? "not-allowed" : "text",
                     }}
                   />
 
@@ -586,6 +613,7 @@ export default function ProoferBoard({
                           fontSize: 12,
                           color: "#3f3f46",
                           maxWidth: "100%",
+                          opacity: isLocked ? 0.7 : 1,
                         }}
                       >
                         <span
@@ -599,22 +627,24 @@ export default function ProoferBoard({
                         >
                           {prettyFileName(draft.imageUrl)}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => updateDraft(key, { imageUrl: "" })}
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            color: "#71717a",
-                            cursor: "pointer",
-                            fontSize: 14,
-                            lineHeight: 1,
-                            padding: 0,
-                          }}
-                          aria-label="Remove media"
-                        >
-                          ×
-                        </button>
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            onClick={() => updateDraft(key, { imageUrl: "" })}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "#71717a",
+                              cursor: "pointer",
+                              fontSize: 14,
+                              lineHeight: 1,
+                              padding: 0,
+                            }}
+                            aria-label="Remove media"
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <input
@@ -624,17 +654,26 @@ export default function ProoferBoard({
                           updateDraft(key, { imageUrl: e.target.value })
                         }
                         placeholder="Paste media URL or upload"
-                        style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                        disabled={isLocked}
+                        style={{
+                          ...inputStyle,
+                          flex: 1,
+                          minWidth: 200,
+                          opacity: isLocked ? 0.7 : 1,
+                          cursor: isLocked ? "not-allowed" : "text",
+                        }}
                       />
                     )}
 
-                    <ImageUpload
-                      bucket="postimages"
-                      folder={`proofer/${clientId}/${month}`}
-                      onUploaded={(url) => updateDraft(key, { imageUrl: url })}
-                      label="Upload media"
-                      accept="image/*,video/*"
-                    />
+                    {!isLocked && (
+                      <ImageUpload
+                        bucket="postimages"
+                        folder={`proofer/${clientId}/${month}`}
+                        onUploaded={(url) => updateDraft(key, { imageUrl: url })}
+                        label="Upload media"
+                        accept="image/*,video/*"
+                      />
+                    )}
                   </div>
 
                   {draft.imageUrl && (
@@ -766,12 +805,16 @@ export default function ProoferBoard({
                   >
                     {STATUS_BUTTONS.map((btn) => {
                       const active = effectiveStatus === btn.value;
+                      const disableThisButton =
+                        isPending ||
+                        (isLocked && btn.value !== "approved");
+
                       return (
                         <button
                           key={btn.value}
                           type="button"
                           onClick={() => handleStatus(key, btn.value)}
-                          disabled={isPending}
+                          disabled={disableThisButton}
                           style={{
                             padding: "6px 14px",
                             borderRadius: 999,
@@ -782,8 +825,11 @@ export default function ProoferBoard({
                             color: active ? btn.color : "#71717a",
                             fontSize: 12,
                             fontWeight: 700,
-                            cursor: "pointer",
+                            cursor: disableThisButton
+                              ? "not-allowed"
+                              : "pointer",
                             boxShadow: active ? `0 0 0 2px ${btn.bg}` : "none",
+                            opacity: disableThisButton ? 0.6 : 1,
                           }}
                         >
                           {btn.label}
@@ -795,16 +841,18 @@ export default function ProoferBoard({
                       <button
                         type="button"
                         onClick={() => handleSave(key)}
-                        disabled={isPending || !hasDraft}
+                        disabled={isPending || !hasDraft || isLocked}
                         style={{
                           padding: "8px 14px",
                           borderRadius: 8,
-                          background: hasDraft ? "#18181b" : "#e4e4e7",
-                          color: hasDraft ? "#fff" : "#a1a1aa",
+                          background:
+                            hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
+                          color: hasDraft && !isLocked ? "#fff" : "#a1a1aa",
                           border: "none",
                           fontSize: 12,
                           fontWeight: 700,
-                          cursor: hasDraft ? "pointer" : "default",
+                          cursor:
+                            hasDraft && !isLocked ? "pointer" : "not-allowed",
                         }}
                       >
                         Save
@@ -814,10 +862,13 @@ export default function ProoferBoard({
                         <button
                           type="button"
                           onClick={() => handleDelete(key)}
-                          disabled={isPending}
+                          disabled={isPending || isLocked}
                           style={{
                             ...secondaryButtonStyle,
                             color: "#991b1b",
+                            opacity: isLocked ? 0.6 : 1,
+                            cursor:
+                              isPending || isLocked ? "not-allowed" : "pointer",
                           }}
                         >
                           Clear
