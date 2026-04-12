@@ -4,11 +4,13 @@ import SectionCard from "../../../../components/SectionCard";
 import EmptyState from "../../../../components/EmptyState";
 import ReviewApprovalRow from "../../../../components/ReviewApprovalRow";
 import ReviewLifecycleControls from "../../../../components/ReviewLifecycleControls";
+import RewriteWithAIButton from "../../../../components/RewriteWithAIButton";
 import {
   approveProposal,
   markReviewApproved,
   sendReviewForApproval,
 } from "../../../../lib/review-actions";
+import { rewriteReviewWithClaude } from "../../../../lib/review-rewrite";
 
 export const dynamic = "force-dynamic";
 
@@ -205,19 +207,42 @@ export default async function ReviewDetailPage({
       </div>
 
       {/* Lifecycle controls */}
-      <ReviewLifecycleControls
-        reviewId={review.id}
-        status={review.status}
-        shareToken={review.share_token}
-        onSend={async (id: number) => {
-          "use server";
-          return sendReviewForApproval(id);
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
         }}
-        onMarkApproved={async (id: number) => {
-          "use server";
-          await markReviewApproved(id);
-        }}
-      />
+      >
+        <ReviewLifecycleControls
+          reviewId={review.id}
+          status={review.status}
+          shareToken={review.share_token}
+          onSend={async (id: number) => {
+            "use server";
+            return sendReviewForApproval(id);
+          }}
+          onMarkApproved={async (id: number) => {
+            "use server";
+            await markReviewApproved(id);
+          }}
+        />
+        {review.status === "draft" && (
+          <RewriteWithAIButton
+            reviewId={review.id}
+            onRewrite={async (id: number) => {
+              "use server";
+              const res = await rewriteReviewWithClaude(id);
+              return {
+                ok: res.ok,
+                error: res.error,
+                confidence: res.result?.confidence,
+              };
+            }}
+          />
+        )}
+      </div>
 
       {/* Cover block */}
       <div
