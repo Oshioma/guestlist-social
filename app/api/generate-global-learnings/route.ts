@@ -39,6 +39,8 @@ type PatternType =
   | "budget"
   | "failure"
   | "fast_win"
+  | "creative_format"
+  | "creative_hook"
   | "other";
 
 function classifyType(row: LearningRow): PatternType {
@@ -315,6 +317,176 @@ export async function POST() {
         last_updated: new Date().toISOString(),
       };
     });
+
+    // -----------------------------------------------------------------------
+    // Cross-client creative aggregation.
+    //
+    // The action_learnings groups above describe what operators *did*. The
+    // block below describes what's actually working in the live ad data,
+    // bucketed by creative attributes (hook_type, format_style) — these
+    // are the columns the meta-creative-trust-layer added on the ads
+    // table. We compare each bucket's average CTR against the global mean
+    // and emit a global_learnings row when:
+    //
+    //   - the bucket has impressions from at least 2 distinct clients
+    //   - the bucket has at least 5 ads in it
+    //   - the lift vs the global mean is >= 15% in either direction
+    //
+    // The thresholds are deliberately conservative — we want this to be
+    // the agency-level edge, not noise about a 2% CTR gap on n=3.
+    // -----------------------------------------------------------------------
+    const MIN_IMPRESSIONS = 200;
+    const MIN_ADS_PER_BUCKET = 5;
+    const MIN_UNIQUE_CLIENTS = 2;
+    const MIN_LIFT_PCT = 15;
+
+    type CreativeAdRow = {
+      id: number;
+      client_id: number | null;
+      hook_type: string | null;
+      format_style: string | null;
+      impressions: number | null;
+      clicks: number | null;
+    };
+
+    const { data: rawAds } = await supabase
+      .from("ads")
+      .select("id, client_id, hook_type, format_style, impressions, clicks");
+    const adRows = (rawAds ?? []) as CreativeAdRow[];
+
+    function ctrOf(ad: CreativeAdRow): number | null {
+      const imp = Number(ad.impressions ?? 0);
+      const clk = Number(ad.clicks ?? 0);
+      if (imp < MIN_IMPRESSIONS) return null;
+      return (clk / imp) * 100;
+    }
+
+    // Global mean CTR over every ad with enough impressions — the
+    // baseline every bucket gets compared against.
+    const allCtrs = adRows
+      .map((a) => ctrOf(a))
+      .filter((v): v is number => v !== null);
+    const globalMeanCtr =
+      allCtrs.length > 0
+        ? allCtrs.reduce((s, v) => s + v, 0) / allCtrs.length
+        : 0;
+
+    type CreativeBucket = {
+      pattern_type: "creative_format" | "creative_hook";
+      pattern_key: string;
+      pattern_label: string;
+      ctrs: number[];
+      client_ids: Set<number>;
+      ad_count: number;
+    };
+
+    const creativeBuckets = new Map<string, CreativeBucket>();
+
+    function addToBucket(
+      bucketKey: string,
+      type: "creative_format" | "creative_hook",
+      label: string,
+      ad: CreativeAdRow,
+      ctr: number
+    ) {
+      let b = creativeBuckets.get(bucketKey);
+      if (!b) {
+        b = {
+          pattern_type: type,
+          pattern_key: bucketKey,
+          pattern_label: label,
+          ctrs: [],
+          client_ids: new Set(),
+          ad_count: 0,
+        };
+        creativeBuckets.set(bucketKey, b);
+      }
+      b.ctrs.push(ctr);
+      if (ad.client_id != null) b.client_ids.add(ad.client_id);
+      b.ad_count++;
+    }
+
+    const formatLabels: Record<string, string> = {
+      talking_head: "Talking-head video",
+      product_shot: "Product shot",
+      ugc: "UGC-style",
+      graphic: "Graphic / designed image",
+      text_heavy: "Text-heavy image",
+    };
+
+    const hookLabels: Record<string, string> = {
+      direct_offer: "Direct offer hook",
+      curiosity: "Curiosity hook",
+      problem_solution: "Problem-solution hook",
+      testimonial: "Testimonial hook",
+      how_to: "How-to hook",
+      emotional: "Emotional hook",
+    };
+
+    for (const ad of adRows) {
+      const ctr = ctrOf(ad);
+      if (ctr == null) continue;
+
+      if (ad.format_style) {
+        const key = `creative_format:${ad.format_style}`;
+        const label = formatLabels[ad.format_style] ?? ad.format_style;
+        addToBucket(key, "creative_format", label, ad, ctr);
+      }
+      if (ad.hook_type) {
+        const key = `creative_hook:${ad.hook_type}`;
+        const label = hookLabels[ad.hook_type] ?? ad.hook_type;
+        addToBucket(key, "creative_hook", label, ad, ctr);
+      }
+    }
+
+    const creativeRows: typeof rows = [];
+    for (const b of creativeBuckets.values()) {
+      if (b.ad_count < MIN_ADS_PER_BUCKET) continue;
+      if (b.client_ids.size < MIN_UNIQUE_CLIENTS) continue;
+
+      const meanCtr =
+        b.ctrs.reduce((s, v) => s + v, 0) / b.ctrs.length;
+      const liftPct =
+        globalMeanCtr > 0 ? ((meanCtr - globalMeanCtr) / globalMeanCtr) * 100 : 0;
+
+      // Skip the unremarkable middle — only emit a finding when the
+      // creative attribute moves the needle either way.
+      if (Math.abs(liftPct) < MIN_LIFT_PCT) continue;
+
+      const positive = liftPct > 0;
+      // Bucket consistency = share of ads in the bucket that are above
+      // the global mean. Different from "lift" — captures whether the
+      // win is broad or driven by a couple of standouts.
+      const aboveMeanCount = b.ctrs.filter((v) => v > globalMeanCtr).length;
+      const consistency = Number(
+        ((aboveMeanCount / b.ctrs.length) * 100).toFixed(1)
+      );
+
+      const summary = positive
+        ? `${b.pattern_label} outperforms the average by ${liftPct.toFixed(0)}% across ${b.client_ids.size} clients`
+        : `${b.pattern_label} underperforms the average by ${Math.abs(liftPct).toFixed(0)}% across ${b.client_ids.size} clients`;
+
+      creativeRows.push({
+        pattern_type: b.pattern_type,
+        pattern_key: b.pattern_key,
+        pattern_label: b.pattern_label,
+        action_summary: summary,
+        times_seen: b.ad_count,
+        unique_clients: b.client_ids.size,
+        positive_count: positive ? aboveMeanCount : 0,
+        neutral_count: 0,
+        negative_count: positive ? 0 : b.ctrs.length - aboveMeanCount,
+        avg_ctr_lift: Number(liftPct.toFixed(2)),
+        avg_cpc_change: null,
+        avg_reliability: null,
+        consistency_score: consistency,
+        sample_learnings: [],
+        top_tags: [],
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    rows.push(...creativeRows);
 
     // Clear and re-insert — simpler than per-row upsert and ensures
     // stale patterns get cleaned out when learnings are deleted.
