@@ -12,6 +12,7 @@ type AdAction = {
   priority: string;
   status: string;
   hypothesis?: string | null;
+  validated_by?: string | null;
   outcome?: string | null;
   result_summary?: string | null;
   metric_snapshot_before?: Record<string, unknown> | null;
@@ -202,6 +203,27 @@ export default function AdActionRow({ action }: { action: AdAction }) {
           </div>
         );
       })()}
+
+      {/* Validation proof from global learnings */}
+      {action.validated_by && (
+        <div
+          style={{
+            marginTop: 8,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "3px 10px",
+            borderRadius: 999,
+            background: "#ecfdf5",
+            border: "1px solid #a7f3d0",
+            color: "#065f46",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          ✓ {action.validated_by}
+        </div>
+      )}
 
       {/* Hypothesis */}
       {action.hypothesis && (
