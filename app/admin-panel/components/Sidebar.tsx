@@ -13,6 +13,7 @@ const navItems = [
   { label: "Story Ideas", href: "/app/story-ideas" },
   { label: "Tasks", href: "/app/tasks" },
   { label: "Launch", href: "/app/launch" },
+  { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Reports", href: "/app/reports" },
   { label: "Memory", href: "/app/memory" },
   { label: "Settings", href: "/app/settings" },
