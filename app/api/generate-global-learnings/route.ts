@@ -160,6 +160,17 @@ function getPatternLabel(type: PatternType, key: string): string {
 
 // ---------------------------------------------------------------------------
 
+// Recency window. Patterns are computed from data inside this window only —
+// keeps the playbook from being dragged around by 6-month-old learnings or
+// archived ad inventory. Action learnings are filtered by their created_at;
+// ads are filtered by meta_effective_status (we drop ARCHIVED/DELETED so the
+// creative buckets reflect currently-live or recently-paused inventory).
+//
+// This is the *single* knob that controls "how current is the playbook".
+// Bumping it means slower to react but more statistical power; lowering it
+// means more responsive but more volatile.
+const GENERATOR_WINDOW_DAYS = 90;
+
 export async function POST() {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -172,11 +183,16 @@ export async function POST() {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    const windowStartIso = new Date(
+      Date.now() - GENERATOR_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
+
     const { data: rawLearnings, error: fetchError } = await supabase
       .from("action_learnings")
       .select(
         "id, client_id, problem, action_taken, outcome, learning, tags, times_seen, avg_ctr_lift, avg_cpc_change, reliability_score"
-      );
+      )
+      .gte("created_at", windowStartIso);
 
     if (fetchError) {
       return NextResponse.json(
@@ -347,11 +363,20 @@ export async function POST() {
       format_style: string | null;
       impressions: number | null;
       clicks: number | null;
+      meta_effective_status: string | null;
     };
 
+    // Skip dead inventory — ARCHIVED and DELETED ads represent stuff that's
+    // no longer running, so their CTR shouldn't influence "what's working
+    // right now". `meta_effective_status` is null on rows that were never
+    // synced from Meta, so we filter via .not().in() rather than a positive
+    // include list (keeps locally-created or partially-synced ads).
     const { data: rawAds } = await supabase
       .from("ads")
-      .select("id, client_id, hook_type, format_style, impressions, clicks");
+      .select(
+        "id, client_id, hook_type, format_style, impressions, clicks, meta_effective_status"
+      )
+      .not("meta_effective_status", "in", "(ARCHIVED,DELETED)");
     const adRows = (rawAds ?? []) as CreativeAdRow[];
 
     function ctrOf(ad: CreativeAdRow): number | null {
@@ -516,6 +541,8 @@ export async function POST() {
       ok: true,
       generated: rows.length,
       source_learnings: learnings.length,
+      window_days: GENERATOR_WINDOW_DAYS,
+      window_start: windowStartIso,
       breakdown: rows.reduce(
         (acc, r) => {
           acc[r.pattern_type] = (acc[r.pattern_type] ?? 0) + 1;

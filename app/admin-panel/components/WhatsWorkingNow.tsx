@@ -33,7 +33,21 @@ type GlobalLearning = {
   times_seen: number;
   consistency_score: number;
   avg_ctr_lift: number | null;
+  last_updated: string | null;
 };
+
+// Mirror of GENERATOR_WINDOW_DAYS in app/api/generate-global-learnings.
+// Kept as a literal here so the hero card can render an honest "data window"
+// label without having to fetch from the route. If you change it in the
+// generator, change it here too — the constants are tied by intent, not by
+// import (the route is server-only, this component is also server-only but
+// importing the route module would pull route handler code into the page).
+const GENERATOR_WINDOW_DAYS = 90;
+
+// How stale the playbook is allowed to get before the hero card prompts the
+// operator to re-run the generator. Below this, we still show the patterns;
+// above this, the panel turns into a "playbook is stale, refresh me" nudge.
+const STALE_AFTER_DAYS = 14;
 
 const PATTERN_ICON: Record<string, string> = {
   creative_format: "▣",
@@ -55,7 +69,7 @@ export default async function WhatsWorkingNow() {
   const { data, error } = await supabase
     .from("global_learnings")
     .select(
-      "id, pattern_type, pattern_label, action_summary, unique_clients, times_seen, consistency_score, avg_ctr_lift"
+      "id, pattern_type, pattern_label, action_summary, unique_clients, times_seen, consistency_score, avg_ctr_lift, last_updated"
     )
     .gte("unique_clients", 2)
     .order("consistency_score", { ascending: false })
@@ -92,13 +106,29 @@ export default async function WhatsWorkingNow() {
   // Rank: consistency × unique_clients. We deliberately don't include
   // ad_count / times_seen here — a high-volume noisy pattern shouldn't
   // beat a tight, broad one.
-  const ranked = (data as GlobalLearning[])
+  const rows = data as GlobalLearning[];
+  const ranked = rows
     .map((r) => ({
       ...r,
       _score: Number(r.consistency_score ?? 0) * Number(r.unique_clients ?? 0),
     }))
     .sort((a, b) => b._score - a._score)
     .slice(0, 5);
+
+  // Most recent generator run timestamp across all rows. Every row gets the
+  // same `last_updated` from a single generator pass, so this is effectively
+  // "when was the playbook last refreshed".
+  const lastRunIso = rows
+    .map((r) => r.last_updated)
+    .filter((v): v is string => Boolean(v))
+    .sort()
+    .reverse()[0];
+
+  const lastRunDate = lastRunIso ? new Date(lastRunIso) : null;
+  const ageDays = lastRunDate
+    ? Math.floor((Date.now() - lastRunDate.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+  const isStale = ageDays !== null && ageDays >= STALE_AFTER_DAYS;
 
   return (
     <section
@@ -207,8 +237,9 @@ export default async function WhatsWorkingNow() {
       </div>
 
       <div style={{ marginTop: 14, fontSize: 11, color: "#64748b" }}>
-        Ranked by consistency × client breadth · only patterns seen across at
-        least 2 clients are eligible ·{" "}
+        Last {GENERATOR_WINDOW_DAYS} days of data · ranked by consistency ×
+        client breadth · only patterns seen across at least 2 clients are
+        eligible ·{" "}
         <Link
           href="/app/whats-working"
           style={{ color: "#93c5fd", textDecoration: "none" }}
@@ -216,6 +247,30 @@ export default async function WhatsWorkingNow() {
           See full playbook →
         </Link>
       </div>
+
+      {ageDays !== null && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 11,
+            color: isStale ? "#fbbf24" : "#475569",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          {isStale && <span>⚠</span>}
+          <span>
+            Playbook refreshed{" "}
+            {ageDays === 0
+              ? "today"
+              : ageDays === 1
+              ? "yesterday"
+              : `${ageDays} days ago`}
+            {isStale && " — re-run from the Memory page to pick up new signals"}
+          </span>
+        </div>
+      )}
     </section>
   );
 }

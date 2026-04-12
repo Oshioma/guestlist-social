@@ -222,6 +222,10 @@ export default async function WhatsWorkingPage() {
           Everything we&rsquo;ve tried, across every client, turned into one
           shared playbook. The more we run, the sharper this gets.
         </p>
+        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
+          Computed from the last 90 days of action outcomes and ad performance.
+          Re-run from the Memory page after fresh data lands.
+        </p>
       </div>
 
       <div
