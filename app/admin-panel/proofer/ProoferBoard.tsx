@@ -1037,61 +1037,80 @@ export default function ProoferBoard({
                       marginTop: 12,
                       display: "flex",
                       flexDirection: "column",
-                      gap: 4,
+                      gap: 8,
                     }}
                   >
-                    <span style={labelStyle}>Platform</span>
                     <div
                       style={{
                         display: "flex",
-                        flexWrap: "wrap",
+                        flexDirection: "column",
                         gap: 4,
                       }}
                     >
-                      {PROOFER_PLATFORMS.map((p) => {
-                        const isActive = p === activePlatform;
-                        const hasVariant = variants.has(p);
-                        return (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => setActivePlatform(dateKey, p)}
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 6,
-                              border: isActive
-                                ? "1px solid #18181b"
-                                : "1px solid #e4e4e7",
-                              background: isActive ? "#18181b" : "#fff",
-                              color: isActive
-                                ? "#fff"
-                                : hasVariant
-                                ? "#27272a"
-                                : "#a1a1aa",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              position: "relative",
-                            }}
-                          >
-                            {PROOFER_PLATFORM_LABELS[p]}
-                            {hasVariant && !isActive && (
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  width: 5,
-                                  height: 5,
-                                  borderRadius: "50%",
-                                  background: "#22c55e",
-                                  marginLeft: 5,
-                                  verticalAlign: "middle",
-                                }}
-                              />
-                            )}
-                          </button>
-                        );
-                      })}
+                      <span style={labelStyle}>Platform</span>
+                      <select
+                        value={activePlatform}
+                        onChange={(e) =>
+                          setActivePlatform(
+                            dateKey,
+                            e.target.value as ProoferPlatform
+                          )
+                        }
+                        style={{
+                          ...inputStyle,
+                          padding: "6px 8px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {PROOFER_PLATFORMS.map((p) => {
+                          const hasVariant = variants.has(p);
+                          return (
+                            <option key={p} value={p}>
+                              {PROOFER_PLATFORM_LABELS[p]}
+                              {hasVariant ? " •" : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
                     </div>
+
+                    {initialPillars.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                        }}
+                      >
+                        <span style={labelStyle}>Pillar</span>
+                        <select
+                          value={draft.pillarId ?? ""}
+                          onChange={(e) =>
+                            updateDraft(dateKey, activePlatform, {
+                              pillarId: e.target.value || null,
+                            })
+                          }
+                          disabled={isLocked}
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 8px",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: isLocked ? "not-allowed" : "pointer",
+                            opacity: isLocked ? 0.7 : 1,
+                          }}
+                        >
+                          <option value="">None</option>
+                          {initialPillars.map((pillar) => (
+                            <option key={pillar.id} value={pillar.id}>
+                              {pillar.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1102,99 +1121,6 @@ export default function ProoferBoard({
                     gap: 10,
                   }}
                 >
-                  {initialPillars.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span style={labelStyle}>Pillar</span>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 6,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateDraft(dateKey, activePlatform, {
-                              pillarId: null,
-                            })
-                          }
-                          disabled={isLocked}
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: 999,
-                            border:
-                              draft.pillarId === null
-                                ? "1px solid #18181b"
-                                : "1px solid #e4e4e7",
-                            background:
-                              draft.pillarId === null ? "#18181b" : "#fff",
-                            color:
-                              draft.pillarId === null ? "#fff" : "#71717a",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: isLocked ? "not-allowed" : "pointer",
-                            opacity: isLocked ? 0.6 : 1,
-                          }}
-                        >
-                          None
-                        </button>
-                        {initialPillars.map((pillar) => {
-                          const isActive = draft.pillarId === pillar.id;
-                          return (
-                            <button
-                              key={pillar.id}
-                              type="button"
-                              onClick={() =>
-                                updateDraft(dateKey, activePlatform, {
-                                  pillarId: pillar.id,
-                                })
-                              }
-                              disabled={isLocked}
-                              title={pillar.description || pillar.name}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                                padding: "4px 10px",
-                                borderRadius: 999,
-                                border: isActive
-                                  ? `1px solid ${pillar.color}`
-                                  : "1px solid #e4e4e7",
-                                background: isActive
-                                  ? `${pillar.color}15`
-                                  : "#fff",
-                                color: isActive ? pillar.color : "#52525b",
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: isLocked ? "not-allowed" : "pointer",
-                                opacity: isLocked ? 0.6 : 1,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: "50%",
-                                  background: pillar.color,
-                                  display: "inline-block",
-                                }}
-                              />
-                              {pillar.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                   <textarea
                     value={draft.caption}
                     onChange={(e) =>
