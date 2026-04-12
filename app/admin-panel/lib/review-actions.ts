@@ -246,6 +246,63 @@ export async function approveProposalByShareToken(
 }
 
 // ---------------------------------------------------------------------------
+// updateReviewNarrative: edit one of the plain-string narrative fields on a
+// draft review (headline / subhead / what_happened). The structured JSON
+// fields (what_improved, what_we_tested, etc.) stay locked — those are the
+// engine's source of truth and editing them by hand would silently corrupt
+// the action minting that runs off the JSON.
+//
+// Draft-only: once a review is sent or approved it's immutable, mirroring
+// the rewrite button's gating. Closes the trust loop on the cover narrative
+// — Claude proposes, human curates.
+// ---------------------------------------------------------------------------
+type EditableField = "headline" | "subhead" | "what_happened";
+const EDITABLE_FIELDS: ReadonlySet<EditableField> = new Set([
+  "headline",
+  "subhead",
+  "what_happened",
+]);
+
+export async function updateReviewNarrative(
+  reviewId: number,
+  field: EditableField,
+  value: string
+) {
+  if (!EDITABLE_FIELDS.has(field)) {
+    throw new Error(`Field "${field}" is not editable`);
+  }
+
+  const supabase = admin();
+
+  // Refuse to write if the review has moved past draft. Cheap guard against
+  // a stale browser tab posting after the operator hit "Send".
+  const { data: existing, error: readErr } = await supabase
+    .from("reviews")
+    .select("id, client_id, status")
+    .eq("id", reviewId)
+    .single();
+  if (readErr || !existing) {
+    throw new Error(readErr?.message ?? "Review not found");
+  }
+  if ((existing as { status: string }).status !== "draft") {
+    throw new Error("Only draft reviews can be edited");
+  }
+
+  // Trim trailing whitespace but keep internal newlines — `what_happened` is
+  // a paragraph and the operator may have laid it out deliberately.
+  const cleaned = value.replace(/\s+$/g, "");
+
+  const { error: updErr } = await supabase
+    .from("reviews")
+    .update({ [field]: cleaned.length > 0 ? cleaned : null })
+    .eq("id", reviewId);
+  if (updErr) throw new Error(updErr.message);
+
+  const clientId = (existing as { client_id: number }).client_id;
+  revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
+}
+
+// ---------------------------------------------------------------------------
 // markReviewApproved: client (or operator on their behalf) signs the whole
 // review off. Doesn't auto-approve individual proposals — those still need
 // per-row approval.
