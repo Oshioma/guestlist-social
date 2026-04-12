@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import SectionCard from "../components/SectionCard";
 import type { Task, TaskCategory, TaskStatus, TaskRecurrence } from "../lib/types";
 import {
@@ -233,6 +233,14 @@ export default function TasksBoard({
   const [assignee, setAssignee] = useState(currentUserEmail || "");
   const [dueDate, setDueDate] = useState("");
   const [recurrence, setRecurrence] = useState<TaskRecurrence>("none");
+
+  // When a day is selected in the week browser, pre-fill the new-task form's
+  // due date so adding a task for that day is one click away.
+  useEffect(() => {
+    if (selectedDate) {
+      setDueDate(selectedDate);
+    }
+  }, [selectedDate]);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
