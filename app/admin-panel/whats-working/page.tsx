@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
@@ -26,6 +27,7 @@ type GlobalLearning = {
     client_id: number | null;
   }[] | null;
   top_tags: string[] | null;
+  industry: string | null;
   last_updated: string | null;
 };
 
@@ -160,8 +162,14 @@ function Section({
   );
 }
 
-export default async function WhatsWorkingPage() {
+type PageProps = {
+  searchParams: Promise<{ industry?: string }>;
+};
+
+export default async function WhatsWorkingPage({ searchParams }: PageProps) {
   const supabase = await createClient();
+  const { industry: industryFilterRaw } = await searchParams;
+  const industryFilter = industryFilterRaw?.trim() || null;
 
   const { data: rawPatterns, error } = await supabase
     .from("global_learnings")
@@ -169,7 +177,30 @@ export default async function WhatsWorkingPage() {
     .order("consistency_score", { ascending: false })
     .order("times_seen", { ascending: false });
 
-  const patterns = (rawPatterns ?? []) as GlobalLearning[];
+  const allPatterns = (rawPatterns ?? []) as GlobalLearning[];
+
+  // Discover every industry that has at least one row, before filtering, so
+  // the pill row stays consistent regardless of which view is selected.
+  // Sort alphabetically for stable rendering.
+  const availableIndustries = Array.from(
+    new Set(
+      allPatterns
+        .map((p) => p.industry)
+        .filter((v): v is string => Boolean(v))
+    )
+  ).sort();
+
+  // The filter splits the playbook into three modes:
+  //   - null  → "all clients" view, show only industry=null rows (the
+  //             cross-industry aggregates and all action-pattern rows)
+  //   - <ind> → show only rows tagged with that industry
+  //
+  // We deliberately don't blend the two: mixing per-industry creative
+  // findings with cross-industry ones would double-count the underlying
+  // ads and make the panels look duplicative.
+  const patterns = industryFilter
+    ? allPatterns.filter((p) => p.industry === industryFilter)
+    : allPatterns.filter((p) => p.industry === null);
 
   // Group by pattern_type
   const byType: Record<string, GlobalLearning[]> = {};
@@ -191,6 +222,18 @@ export default async function WhatsWorkingPage() {
     return bLift - aLift;
   });
 
+  // Cross-client creative aggregation rows from generate-global-learnings.
+  // Sort positives first, then by absolute lift size — operators want
+  // "biggest winners" before "biggest losers" within the same panel.
+  const sortByLift = (a: GlobalLearning, b: GlobalLearning) => {
+    const aPos = (a.avg_ctr_lift ?? 0) >= 0 ? 1 : 0;
+    const bPos = (b.avg_ctr_lift ?? 0) >= 0 ? 1 : 0;
+    if (aPos !== bPos) return bPos - aPos;
+    return Math.abs(b.avg_ctr_lift ?? 0) - Math.abs(a.avg_ctr_lift ?? 0);
+  };
+  const creativeFormats = (byType.creative_format ?? []).sort(sortByLift);
+  const creativeHooks = (byType.creative_hook ?? []).sort(sortByLift);
+
   const lastUpdated =
     patterns.length > 0
       ? patterns
@@ -209,6 +252,10 @@ export default async function WhatsWorkingPage() {
         <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
           Everything we&rsquo;ve tried, across every client, turned into one
           shared playbook. The more we run, the sharper this gets.
+        </p>
+        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
+          Computed from the last 90 days of action outcomes and ad performance.
+          Re-run from the Memory page after fresh data lands.
         </p>
       </div>
 
@@ -237,6 +284,45 @@ export default async function WhatsWorkingPage() {
         </div>
         <RefreshEverythingButton />
       </div>
+
+      {availableIndustries.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: "10px 14px",
+            background: "#fff",
+            border: "1px solid #e4e4e7",
+            borderRadius: 12,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              color: "#71717a",
+              fontWeight: 500,
+              marginRight: 4,
+            }}
+          >
+            Filter by industry:
+          </span>
+          <FilterPill
+            href="/app/whats-working"
+            label="All clients"
+            active={industryFilter === null}
+          />
+          {availableIndustries.map((ind) => (
+            <FilterPill
+              key={ind}
+              href={`/app/whats-working?industry=${encodeURIComponent(ind)}`}
+              label={ind.charAt(0).toUpperCase() + ind.slice(1)}
+              active={industryFilter === ind}
+            />
+          ))}
+        </div>
+      )}
 
       {error && (
         <div
@@ -268,6 +354,24 @@ export default async function WhatsWorkingPage() {
           &ldquo;Refresh everything&rdquo; above to build the playbook.
         </div>
       )}
+
+      {/* Cross-client creative aggregation — these are derived from the
+          ads table, not from action_learnings. They answer "what creative
+          attributes are working across the whole agency" rather than
+          "what did operators do that worked". */}
+      <Section
+        title="Creative formats across the agency"
+        subtitle="How ad formats compare against the average CTR across every client. Only formats seen on at least 2 clients."
+        patterns={creativeFormats}
+        emptyText="Not enough creative coverage yet — sync more ads, then re-run the playbook."
+      />
+
+      <Section
+        title="Hook styles across the agency"
+        subtitle="How hook types compare against the average CTR across every client."
+        patterns={creativeHooks}
+        emptyText="No cross-client hook patterns yet."
+      />
 
       <Section
         title="Hooks that work"
@@ -313,5 +417,35 @@ export default async function WhatsWorkingPage() {
         emptyText="No recurring mistakes yet."
       />
     </div>
+  );
+}
+
+function FilterPill({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 12px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 600,
+        textDecoration: "none",
+        background: active ? "#18181b" : "#fafafa",
+        color: active ? "#fff" : "#52525b",
+        border: active ? "1px solid #18181b" : "1px solid #e4e4e7",
+      }}
+    >
+      {label}
+    </Link>
   );
 }

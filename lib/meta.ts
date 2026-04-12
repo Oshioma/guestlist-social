@@ -293,6 +293,62 @@ export async function resolveVideoSource(videoId: string): Promise<string | null
   }
 }
 
+/**
+ * Resolve a Meta video_id into its auto-generated poster image URL.
+ *
+ * Used as the last-ditch fallback for `creative_image_url` when the
+ * extractor's normal field chain (image_url → thumbnail_url → spec.*)
+ * comes back empty — which is the common case for video ads built
+ * without an explicit image override. Meta always exposes a `picture`
+ * field on the video object itself, even when nothing else surfaces a
+ * thumbnail, so this gives every video creative *something* to render
+ * instead of "No preview".
+ *
+ * Returns null on any failure — same contract as resolveVideoSource;
+ * a single bad video must never break the whole sync.
+ */
+export async function resolveVideoPoster(videoId: string): Promise<string | null> {
+  try {
+    const data = await metaFetch<{ picture?: string; id?: string }>(
+      `/${videoId}`,
+      { fields: "picture" }
+    );
+    return data.picture ?? null;
+  } catch (err) {
+    console.warn(`[meta] resolveVideoPoster(${videoId}) failed:`, err);
+    return null;
+  }
+}
+
+/**
+ * Resolve an `effective_object_story_id` (the underlying FB/IG post id)
+ * into its full-size image. Many Instagram-only ads carry no creative
+ * image URL on the ad creative itself — the image lives on the source
+ * post — so we have to walk to the post to render anything at all.
+ *
+ * Object story ids look like `{page_id}_{post_id}`. The `full_picture`
+ * field is the canonical first-frame thumbnail Meta serves for the post.
+ *
+ * Returns null on any failure.
+ */
+export async function resolveObjectStoryImage(
+  objectStoryId: string
+): Promise<string | null> {
+  try {
+    const data = await metaFetch<{ full_picture?: string; picture?: string }>(
+      `/${objectStoryId}`,
+      { fields: "full_picture,picture" }
+    );
+    return data.full_picture ?? data.picture ?? null;
+  } catch (err) {
+    console.warn(
+      `[meta] resolveObjectStoryImage(${objectStoryId}) failed:`,
+      err
+    );
+    return null;
+  }
+}
+
 // Shared field set for ad-level insights. Kept in one place so it's easy
 // to tweak without drifting between aggregate and breakdown calls.
 const AD_INSIGHT_FIELDS = [
@@ -839,8 +895,25 @@ export function creativeToAdRow(metaAd: MetaAd): {
   // "headline") are the canonical fields for link ads, with the top-level
   // body/title as legacy fallbacks for older creatives.
   const spec = (c.object_story_spec ?? {}) as {
-    link_data?: { message?: string; name?: string; picture?: string; call_to_action?: { type?: string } };
+    link_data?: {
+      message?: string;
+      name?: string;
+      picture?: string;
+      call_to_action?: { type?: string };
+      // Carousel ads — child_attachments[0].picture is the canonical
+      // first-card thumbnail. We pull the first one as the preview.
+      child_attachments?: Array<{ picture?: string; image_url?: string }>;
+    };
     video_data?: { message?: string; title?: string; image_url?: string; call_to_action?: { type?: string } };
+  };
+
+  // Dynamic creative ads ship images via asset_feed_spec.images[].url —
+  // separate from object_story_spec because the asset feed is what Meta
+  // uses to mix and match creative variants. We grab the first image as
+  // the representative preview.
+  const assetFeed = (c.asset_feed_spec ?? {}) as {
+    images?: Array<{ url?: string; hash?: string }>;
+    videos?: Array<{ thumbnail_url?: string; video_id?: string }>;
   };
 
   const body =
@@ -855,11 +928,21 @@ export function creativeToAdRow(metaAd: MetaAd): {
     c.title ??
     null;
 
+  // Image URL fallback chain — order matters. We try the canonical
+  // top-level fields first, then dig into the spec/asset_feed paths
+  // that carry thumbnails for carousel and dynamic creatives. Without
+  // this, those two creative types come back as null and the library
+  // shows "No preview" even though Meta has the image.
   const imageUrl =
     c.image_url ??
     c.thumbnail_url ??
     spec.link_data?.picture ??
     spec.video_data?.image_url ??
+    spec.link_data?.child_attachments?.find((ch) => ch.picture || ch.image_url)
+      ?.picture ??
+    spec.link_data?.child_attachments?.find((ch) => ch.image_url)?.image_url ??
+    assetFeed.images?.find((img) => img.url)?.url ??
+    assetFeed.videos?.find((v) => v.thumbnail_url)?.thumbnail_url ??
     null;
 
   const cta =

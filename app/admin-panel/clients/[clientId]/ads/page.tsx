@@ -583,7 +583,60 @@ export default async function ClientAdsPage({
                       flexWrap: "wrap",
                     }}
                   >
-                    <div>
+                    <div style={{ display: "flex", gap: 14, flex: 1, minWidth: 0 }}>
+                      {/* Creative thumbnail — gives the operator instant
+                          visual recall of which ad they're looking at
+                          before reading the name. Image first, video poster
+                          fallback, neutral placeholder if neither is
+                          available. */}
+                      <Link
+                        href={`/app/clients/${clientId}/ads/${ad.id}`}
+                        style={{
+                          flexShrink: 0,
+                          width: 72,
+                          height: 72,
+                          borderRadius: 10,
+                          overflow: "hidden",
+                          background: "#f4f4f5",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#a1a1aa",
+                          fontSize: 10,
+                          textDecoration: "none",
+                          border: "1px solid #e4e4e7",
+                        }}
+                        title="Open audit trail"
+                      >
+                        {ad.creative_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={ad.creative_image_url}
+                            alt=""
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : ad.creative_video_url ? (
+                          <video
+                            src={ad.creative_video_url}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              background: "#000",
+                            }}
+                          />
+                        ) : (
+                          <span>No preview</span>
+                        )}
+                      </Link>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
                           display: "flex",
@@ -735,6 +788,7 @@ export default async function ClientAdsPage({
                           </div>
                         );
                       })()}
+                    </div>
                     </div>
                   </div>
 

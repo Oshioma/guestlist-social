@@ -34,6 +34,7 @@ import {
   isDryRun,
   DUPLICATE_COOLDOWN_MS,
 } from "@/lib/meta-execute";
+import { captureBaseline } from "@/lib/decision-outcomes";
 
 export const dynamic = "force-dynamic";
 
@@ -398,6 +399,27 @@ export async function POST(req: Request) {
             executorResult,
           },
           { status: 500 }
+        );
+      }
+
+      // 7a. Capture a baseline metrics snapshot for the prediction-loop
+      // closure. This pairs the executed queue row with a decision_outcomes
+      // row that the /api/measure-decision-outcomes sweep will later resolve
+      // into a verdict. We swallow errors so a measurement-side failure
+      // never masquerades as an execute failure — the write to Meta has
+      // already happened by this point.
+      try {
+        await captureBaseline(supabase, {
+          queueId: row.id,
+          adId: row.ad_id,
+          clientId: row.client_id,
+          decisionType: row.decision_type,
+        });
+      } catch (err) {
+        console.error(
+          "captureBaseline failed for queue row",
+          row.id,
+          err
         );
       }
 
