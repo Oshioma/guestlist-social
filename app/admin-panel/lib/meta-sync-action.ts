@@ -14,6 +14,7 @@ import {
   mapMetaObjective,
   insightToAdRow,
   creativeToAdRow,
+  resolveVideoSource,
   targetingToAudience,
 } from "@/lib/meta";
 import { getAdAccount } from "@/lib/meta";
@@ -227,7 +228,14 @@ export async function syncMetaData(clientId: string) {
             .join(" — ") || null
         : null;
 
-      const creativeData = creativeToAdRow(metaAd);
+      const { creative_video_id, ...creativeData } = creativeToAdRow(metaAd);
+
+      // Resolve the playable video URL via a separate Graph call. We do
+      // this once per ad with a video — never on the hot path of an
+      // insight loop. Failures return null and don't break the sync.
+      const creative_video_url = creative_video_id
+        ? await resolveVideoSource(creative_video_id)
+        : null;
 
       // Everything we want to write on every sync (update OR insert).
       // Spread adData (which contains all the new delivery/funnel/video
@@ -241,6 +249,7 @@ export async function syncMetaData(clientId: string) {
         meta_effective_status: metaAd.effective_status ?? null,
         meta_configured_status: metaAd.configured_status ?? null,
         ...creativeData,
+        creative_video_url,
       };
 
       const { data: existingAd } = await supabase

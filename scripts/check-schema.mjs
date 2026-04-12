@@ -39,6 +39,20 @@ const supabase = createClient(url, key, {
 // the migration files, just the contract the runtime depends on.
 // ---------------------------------------------------------------------------
 const SCHEMA = {
+  // Only the trust-layer creative columns are listed here — the full ads
+  // table has dozens of columns and isn't worth mirroring. This entry exists
+  // to catch the specific drift the meta_creative_fields migration adds.
+  ads: [
+    "id",
+    "creative_image_url",
+    "creative_video_url",
+    "creative_body",
+    "creative_headline",
+    "creative_cta",
+    "creative_type",
+    "hook_type",
+    "format_style",
+  ],
   global_learnings: [
     "id",
     "pattern_type",
