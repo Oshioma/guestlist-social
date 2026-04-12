@@ -148,6 +148,7 @@ export default async function ClientDetailPage({
     { label: "Ads", href: `/app/clients/${clientId}/ads` },
     { label: "Creatives", href: `/app/clients/${clientId}/creatives` },
     { label: "Reports", href: `/app/clients/${clientId}/reports` },
+    { label: "Reviews", href: `/app/clients/${clientId}/reviews` },
   ];
 
   return (
