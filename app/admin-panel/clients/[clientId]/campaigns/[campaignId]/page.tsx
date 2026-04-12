@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  mapDbAdToUiAd,
-  mapDbActionToUiAction,
-} from "@/app/admin-panel/lib/mappers";
+import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
-import ActionList from "@/app/admin-panel/components/ActionList";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
@@ -25,11 +21,13 @@ export default async function CampaignDetailPage({ params }: Props) {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
 
+  // The legacy `actions` table used to power a "Generated actions" section
+  // here, but that surface has been replaced by the per-ad audit trail
+  // (/app/clients/[clientId]/ads/[adId]) which reads ad_actions directly.
   const [
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
     { data: adsRows, error: adsError },
-    { data: actionRows, error: actionsError },
     { data: learningRows, error: learningsError },
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
@@ -46,11 +44,6 @@ export default async function CampaignDetailPage({ params }: Props) {
       .eq("campaign_id", campaignId)
       .order("created_at", { ascending: false }),
     supabase
-      .from("actions")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-    supabase
       .from("learnings")
       .select("*")
       .eq("client_id", clientId)
@@ -64,7 +57,6 @@ export default async function CampaignDetailPage({ params }: Props) {
     campaignError ||
     !campaign ||
     adsError ||
-    actionsError ||
     learningsError
   ) {
     notFound();
@@ -104,21 +96,6 @@ export default async function CampaignDetailPage({ params }: Props) {
           : campaignStatus === "draft"
             ? { background: "#f4f4f5", color: "#52525b" }
             : { background: "#fef3c7", color: "#92400e" };
-
-  const campaignAdIds = new Set(ads.map((ad) => ad.id));
-
-  const generatedActions = (actionRows ?? [])
-    .filter((row) => {
-      const title = String(row.title ?? "");
-      if (!title.includes("[AUTO:") && !title.includes("[SUGGESTION:")) return false;
-
-      return [...campaignAdIds].some((adId) => title.includes(`:${adId}]`)) ||
-        title.includes(`[SUGGESTION:${campaignId}:`);
-    })
-    .map((row) => mapDbActionToUiAction(row, client.name));
-
-  const openGeneratedActions = generatedActions.filter((action) => !action.done);
-  const completedGeneratedActions = generatedActions.filter((action) => action.done);
 
   const learningSuggestions = await generateSuggestionsFromLearnings(
     clientId,
@@ -513,41 +490,6 @@ export default async function CampaignDetailPage({ params }: Props) {
           )}
         </SectionCard>
       </div>
-
-      <SectionCard title={`Generated actions (${generatedActions.length})`}>
-        {generatedActions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div>
-              <h3 style={subheadStyle}>Open</h3>
-              {openGeneratedActions.length > 0 ? (
-                <ActionList actions={openGeneratedActions} />
-              ) : (
-                <EmptyState
-                  title="No open generated actions"
-                  description="Either nothing has triggered yet, or they have all been completed."
-                />
-              )}
-            </div>
-
-            <div>
-              <h3 style={subheadStyle}>Completed</h3>
-              {completedGeneratedActions.length > 0 ? (
-                <ActionList actions={completedGeneratedActions} />
-              ) : (
-                <EmptyState
-                  title="No completed generated actions"
-                  description="Completed auto-actions will appear here."
-                />
-              )}
-            </div>
-          </div>
-        ) : (
-          <EmptyState
-            title="No generated actions yet"
-            description="Click Generate actions to evaluate the ads in this campaign."
-          />
-        )}
-      </SectionCard>
 
       <SectionCard
         title={`Ads in this campaign (${ads.length})`}

@@ -2,34 +2,35 @@ import { createClient } from "../../../lib/supabase/server";
 import {
   mapDbAdToUiAd,
   mapDbClientToUiClient,
-  mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme } from "./types";
+import type { Ad, Client, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme } from "./types";
 
+// The legacy `actions` table used to power the dashboard's "Today's Actions"
+// list. That surface has been replaced by <TopPriorities />, which reads from
+// the modern ad_actions / ad_decisions tables, so the dashboard no longer
+// needs to fetch from `actions` here. The campaign detail page still reads
+// the legacy table directly — that cleanup is a separate task.
 export async function getDashboardData(): Promise<{
   clients: Client[];
   ads: Ad[];
-  actions: Action[];
   suggestions: Suggestion[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, adsRes, actionsRes, suggestionsRes] = await Promise.all([
+  const [clientsRes, adsRes, suggestionsRes] = await Promise.all([
     supabase.from("clients").select("*").eq("archived", false).order("created_at", { ascending: false }),
     supabase.from("ads").select("*").order("created_at", { ascending: false }),
-    supabase.from("actions").select("*").order("created_at", { ascending: false }),
     supabase.from("suggestions").select("*").order("created_at", { ascending: false }),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
   if (adsRes.error) throw new Error(`ads: ${adsRes.error.message}`);
-  if (actionsRes.error) throw new Error(`actions: ${actionsRes.error.message}`);
   if (suggestionsRes.error) throw new Error(`suggestions: ${suggestionsRes.error.message}`);
 
   const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
 
-  // Build O(1) lookup maps to avoid quadratic client/ad/action matching
+  // Build O(1) lookup map to avoid quadratic client/ad matching
   const adCountByClient = new Map<string, number>();
   for (const a of ads) {
     const key = String(a.clientId);
@@ -41,19 +42,9 @@ export async function getDashboardData(): Promise<{
     return mapDbClientToUiClient(row, adCount);
   });
 
-  const clientNameById = new Map<string, string>();
-  for (const c of clients) {
-    clientNameById.set(String(c.id), c.name);
-  }
-
-  const actions = (actionsRes.data ?? []).map((row) => {
-    const name = clientNameById.get(String(row.client_id)) ?? "Unknown client";
-    return mapDbActionToUiAction(row, name);
-  });
-
   const suggestions = (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
 
-  return { clients, ads, actions, suggestions };
+  return { clients, ads, suggestions };
 }
 
 export async function getContentDashboardData(): Promise<{
