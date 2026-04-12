@@ -80,6 +80,140 @@ function revalidateProoferPaths() {
   revalidatePath("/app/proofer/publish");
 }
 
+// ---------------- PILLARS ----------------
+
+function sanitizeColor(value: string | undefined | null): string {
+  const trimmed = (value ?? "").trim();
+  return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed : "#18181b";
+}
+
+export async function createContentPillarAction(
+  clientId: string,
+  name: string,
+  color: string,
+  description: string
+) {
+  if (!clientId) {
+    throw new Error("Client is required.");
+  }
+  const cleanName = name.trim();
+  if (!cleanName) {
+    throw new Error("Pillar name is required.");
+  }
+
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { data: existing } = await supabase
+    .from("content_pillars")
+    .select("sort_order")
+    .eq("client_id", clientId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextSortOrder = (existing?.sort_order ?? 0) + 1;
+
+  const { error } = await supabase.from("content_pillars").insert({
+    client_id: clientId,
+    name: cleanName,
+    color: sanitizeColor(color),
+    description: description.trim(),
+    sort_order: nextSortOrder,
+    created_by: authorEmail,
+  });
+
+  if (error) {
+    console.error("createContentPillarAction error:", error);
+    throw new Error("Could not create pillar.");
+  }
+
+  revalidateProoferPaths();
+}
+
+export async function updateContentPillarAction(
+  pillarId: string,
+  name: string,
+  color: string,
+  description: string
+) {
+  if (!pillarId) {
+    throw new Error("Pillar is required.");
+  }
+  const cleanName = name.trim();
+  if (!cleanName) {
+    throw new Error("Pillar name is required.");
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("content_pillars")
+    .update({
+      name: cleanName,
+      color: sanitizeColor(color),
+      description: description.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", pillarId);
+
+  if (error) {
+    console.error("updateContentPillarAction error:", error);
+    throw new Error("Could not update pillar.");
+  }
+
+  revalidateProoferPaths();
+}
+
+export async function archiveContentPillarAction(pillarId: string) {
+  if (!pillarId) {
+    throw new Error("Pillar is required.");
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("content_pillars")
+    .update({
+      archived: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", pillarId);
+
+  if (error) {
+    console.error("archiveContentPillarAction error:", error);
+    throw new Error("Could not archive pillar.");
+  }
+
+  revalidateProoferPaths();
+}
+
+export async function setProoferPostPillarAction(
+  postId: string,
+  pillarId: string | null
+) {
+  if (!postId) {
+    throw new Error("Post is required.");
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("proofer_posts")
+    .update({
+      pillar_id: pillarId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", postId);
+
+  if (error) {
+    console.error("setProoferPostPillarAction error:", error);
+    throw new Error("Could not update post pillar.");
+  }
+
+  revalidateProoferPaths();
+}
+
 // ---------------- POSTS ----------------
 
 export async function saveProoferPostAction(
@@ -87,7 +221,8 @@ export async function saveProoferPostAction(
   postDate: string,
   platform: string,
   caption: string,
-  mediaUrls: string[]
+  mediaUrls: string[],
+  pillarId: string | null
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
@@ -98,6 +233,7 @@ export async function saveProoferPostAction(
   // Keep image_url in sync with media_urls[0] for back-compat with consumers
   // (e.g. PublishQueueBoard) that still read the single-column value.
   const primaryImageUrl = normalizedMedia[0] ?? "";
+  const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
 
   const supabase = await createClient();
   const authorEmail = await getCurrentUserEmail();
@@ -126,6 +262,7 @@ export async function saveProoferPostAction(
         caption,
         image_url: primaryImageUrl,
         media_urls: normalizedMedia,
+        pillar_id: normalizedPillarId,
         status: nextStatus,
         updated_at: new Date().toISOString(),
       })
@@ -147,6 +284,7 @@ export async function saveProoferPostAction(
       caption,
       image_url: primaryImageUrl,
       media_urls: normalizedMedia,
+      pillar_id: normalizedPillarId,
       status: "check",
       created_by: authorEmail,
     });

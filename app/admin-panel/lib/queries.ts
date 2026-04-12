@@ -25,6 +25,7 @@ import type {
   ProoferPublishQueueItem,
   PublishQueueStatus,
   PublishQueuePlatform,
+  ContentPillar,
 } from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
@@ -371,6 +372,7 @@ export async function getProoferData(
 ): Promise<{
   clients: { id: string; name: string }[];
   posts: ProoferPost[];
+  pillars: ContentPillar[];
 }> {
   const supabase = await createClient();
 
@@ -390,7 +392,7 @@ export async function getProoferData(
     }));
 
   if (!clientId || !month) {
-    return { clients, posts: [] };
+    return { clients, posts: [], pillars: [] };
   }
 
   const [yearStr, monthStr] = month.split("-");
@@ -398,8 +400,33 @@ export async function getProoferData(
   const m = Number(monthStr);
 
   if (!year || !m) {
-    return { clients, posts: [] };
+    return { clients, posts: [], pillars: [] };
   }
+
+  const pillarsRes = await supabase
+    .from("content_pillars")
+    .select("*")
+    .eq("client_id", clientId)
+    .eq("archived", false)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (pillarsRes.error) {
+    throw new Error(`content_pillars: ${pillarsRes.error.message}`);
+  }
+
+  const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    name: row.name ?? "",
+    color: row.color ?? "#18181b",
+    description: row.description ?? "",
+    sortOrder: row.sort_order ?? 0,
+    archived: Boolean(row.archived),
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
 
   const start = `${yearStr}-${monthStr}-01`;
   const nextMonthDate = new Date(year, m, 1);
@@ -431,6 +458,7 @@ export async function getProoferData(
       clientId: String(row.client_id),
       postDate: row.post_date ?? "",
       platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+      pillarId: row.pillar_id ? String(row.pillar_id) : null,
       caption: row.caption ?? "",
       imageUrl: row.image_url ?? "",
       mediaUrls,
@@ -512,7 +540,7 @@ export async function getProoferData(
     publishQueue: publishQueueMap.get(post.id) ?? [],
   }));
 
-  return { clients, posts: postsWithRelations };
+  return { clients, posts: postsWithRelations, pillars };
 }
 
 export async function getProoferPublishQueueData(): Promise<{
@@ -572,6 +600,7 @@ export async function getProoferPublishQueueData(): Promise<{
       clientId: String(row.client_id),
       postDate: row.post_date ?? "",
       platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+      pillarId: row.pillar_id ? String(row.pillar_id) : null,
       caption: row.caption ?? "",
       imageUrl: row.image_url ?? "",
       mediaUrls,

@@ -8,6 +8,7 @@ import type {
   ProoferPost,
   ProoferStatus,
   ProoferPlatform,
+  ContentPillar,
 } from "../lib/types";
 import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
 import {
@@ -16,6 +17,9 @@ import {
   deleteProoferPostAction,
   addProoferCommentAction,
   toggleProoferCommentResolvedAction,
+  createContentPillarAction,
+  updateContentPillarAction,
+  archiveContentPillarAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -163,12 +167,14 @@ export default function ProoferBoard({
   initialClientId,
   initialMonth,
   initialPosts,
+  initialPillars,
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
   initialClientId: string;
   initialMonth: string;
   initialPosts: ProoferPost[];
+  initialPillars: ContentPillar[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -178,7 +184,11 @@ export default function ProoferBoard({
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
 
-  type Draft = { caption: string; mediaUrls: string[] };
+  type Draft = {
+    caption: string;
+    mediaUrls: string[];
+    pillarId: string | null;
+  };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
@@ -187,6 +197,22 @@ export default function ProoferBoard({
   const [activePlatformByDate, setActivePlatformByDate] = useState<
     Record<string, ProoferPlatform>
   >({});
+  const [pillarManagerOpen, setPillarManagerOpen] = useState(false);
+  const [newPillarName, setNewPillarName] = useState("");
+  const [newPillarColor, setNewPillarColor] = useState("#6366f1");
+  const [newPillarDescription, setNewPillarDescription] = useState("");
+  const [editingPillarId, setEditingPillarId] = useState<string | null>(null);
+  const [pillarEditDraft, setPillarEditDraft] = useState<{
+    name: string;
+    color: string;
+    description: string;
+  }>({ name: "", color: "#6366f1", description: "" });
+
+  const pillarsById = useMemo(() => {
+    const map = new Map<string, ContentPillar>();
+    initialPillars.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [initialPillars]);
 
   const postsByKey = useMemo(() => {
     const map = new Map<string, ProoferPost>();
@@ -232,6 +258,7 @@ export default function ProoferBoard({
     return {
       caption: existing?.caption ?? "",
       mediaUrls: existing?.mediaUrls ?? [],
+      pillarId: existing?.pillarId ?? null,
     };
   }
 
@@ -314,7 +341,8 @@ export default function ProoferBoard({
           dateKey,
           platform,
           draft.caption,
-          draft.mediaUrls
+          draft.mediaUrls,
+          draft.pillarId
         );
         setDrafts((prev) => {
           const next = { ...prev };
@@ -343,7 +371,8 @@ export default function ProoferBoard({
             dateKey,
             platform,
             draft.caption,
-            draft.mediaUrls
+            draft.mediaUrls,
+            draft.pillarId
           );
           setDrafts((prev) => {
             const next = { ...prev };
@@ -414,6 +443,76 @@ export default function ProoferBoard({
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not add comment");
+      }
+    });
+  }
+
+  function handleCreatePillar() {
+    const name = newPillarName.trim();
+    if (!name) {
+      alert("Pillar name is required.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await createContentPillarAction(
+          clientId,
+          name,
+          newPillarColor,
+          newPillarDescription
+        );
+        setNewPillarName("");
+        setNewPillarDescription("");
+        setNewPillarColor("#6366f1");
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not create pillar");
+      }
+    });
+  }
+
+  function handleStartEditPillar(pillar: ContentPillar) {
+    setEditingPillarId(pillar.id);
+    setPillarEditDraft({
+      name: pillar.name,
+      color: pillar.color,
+      description: pillar.description,
+    });
+  }
+
+  function handleSavePillar(pillarId: string) {
+    const name = pillarEditDraft.name.trim();
+    if (!name) {
+      alert("Pillar name is required.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateContentPillarAction(
+          pillarId,
+          name,
+          pillarEditDraft.color,
+          pillarEditDraft.description
+        );
+        setEditingPillarId(null);
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not update pillar");
+      }
+    });
+  }
+
+  function handleArchivePillar(pillarId: string) {
+    if (!confirm("Archive this pillar? Posts tagged with it will become untagged.")) {
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await archiveContentPillarAction(pillarId);
+        if (editingPillarId === pillarId) setEditingPillarId(null);
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not archive pillar");
       }
     });
   }
@@ -556,6 +655,240 @@ export default function ProoferBoard({
           </div>
         </div>
       </SectionCard>
+
+      {clients.length > 0 && (
+        <SectionCard title="Content pillars">
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#71717a" }}>
+              Define the evergreen buckets every post for this client rolls
+              into (e.g. Education, Behind-the-scenes, Promo).
+            </div>
+
+            {initialPillars.length === 0 ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#a1a1aa",
+                  fontStyle: "italic",
+                }}
+              >
+                No pillars yet — add one below.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                {initialPillars.map((pillar) =>
+                  editingPillarId === pillar.id ? (
+                    <div
+                      key={pillar.id}
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        alignItems: "center",
+                        padding: "6px 8px",
+                        borderRadius: 10,
+                        border: "1px solid #e4e4e7",
+                        background: "#fafafa",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={pillarEditDraft.color}
+                        onChange={(e) =>
+                          setPillarEditDraft((prev) => ({
+                            ...prev,
+                            color: e.target.value,
+                          }))
+                        }
+                        style={{
+                          width: 28,
+                          height: 28,
+                          border: "none",
+                          padding: 0,
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={pillarEditDraft.name}
+                        onChange={(e) =>
+                          setPillarEditDraft((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
+                        style={{ ...inputStyle, width: 140 }}
+                      />
+                      <input
+                        type="text"
+                        value={pillarEditDraft.description}
+                        onChange={(e) =>
+                          setPillarEditDraft((prev) => ({
+                            ...prev,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="Short description"
+                        style={{ ...inputStyle, width: 200 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSavePillar(pillar.id)}
+                        disabled={isPending}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          background: "#18181b",
+                          color: "#fff",
+                          border: "none",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPillarId(null)}
+                        style={secondaryButtonStyle}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleArchivePillar(pillar.id)}
+                        disabled={isPending}
+                        style={{
+                          ...secondaryButtonStyle,
+                          color: "#991b1b",
+                        }}
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      key={pillar.id}
+                      type="button"
+                      onClick={() => handleStartEditPillar(pillar)}
+                      title={pillar.description || "Edit pillar"}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#27272a",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          background: pillar.color,
+                          display: "inline-block",
+                        }}
+                      />
+                      {pillar.name}
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setPillarManagerOpen((v) => !v)}
+              style={{
+                alignSelf: "flex-start",
+                ...secondaryButtonStyle,
+              }}
+            >
+              {pillarManagerOpen ? "Cancel" : "Add pillar"}
+            </button>
+
+            {pillarManagerOpen && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #e4e4e7",
+                  background: "#fafafa",
+                }}
+              >
+                <input
+                  type="color"
+                  value={newPillarColor}
+                  onChange={(e) => setNewPillarColor(e.target.value)}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    border: "none",
+                    padding: 0,
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                />
+                <input
+                  type="text"
+                  value={newPillarName}
+                  onChange={(e) => setNewPillarName(e.target.value)}
+                  placeholder="Pillar name"
+                  style={{ ...inputStyle, width: 160 }}
+                />
+                <input
+                  type="text"
+                  value={newPillarDescription}
+                  onChange={(e) => setNewPillarDescription(e.target.value)}
+                  placeholder="Short description (optional)"
+                  style={{ ...inputStyle, width: 240 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreatePillar}
+                  disabled={isPending || !newPillarName.trim()}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: newPillarName.trim() ? "#18181b" : "#e4e4e7",
+                    color: newPillarName.trim() ? "#fff" : "#a1a1aa",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: newPillarName.trim() ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Create
+                </button>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
 
       {clients.length === 0 ? (
         <SectionCard title="No clients">
@@ -742,6 +1075,99 @@ export default function ProoferBoard({
                     gap: 10,
                   }}
                 >
+                  {initialPillars.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={labelStyle}>Pillar</span>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDraft(dateKey, activePlatform, {
+                              pillarId: null,
+                            })
+                          }
+                          disabled={isLocked}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            border:
+                              draft.pillarId === null
+                                ? "1px solid #18181b"
+                                : "1px solid #e4e4e7",
+                            background:
+                              draft.pillarId === null ? "#18181b" : "#fff",
+                            color:
+                              draft.pillarId === null ? "#fff" : "#71717a",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: isLocked ? "not-allowed" : "pointer",
+                            opacity: isLocked ? 0.6 : 1,
+                          }}
+                        >
+                          None
+                        </button>
+                        {initialPillars.map((pillar) => {
+                          const isActive = draft.pillarId === pillar.id;
+                          return (
+                            <button
+                              key={pillar.id}
+                              type="button"
+                              onClick={() =>
+                                updateDraft(dateKey, activePlatform, {
+                                  pillarId: pillar.id,
+                                })
+                              }
+                              disabled={isLocked}
+                              title={pillar.description || pillar.name}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                border: isActive
+                                  ? `1px solid ${pillar.color}`
+                                  : "1px solid #e4e4e7",
+                                background: isActive
+                                  ? `${pillar.color}15`
+                                  : "#fff",
+                                color: isActive ? pillar.color : "#52525b",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                cursor: isLocked ? "not-allowed" : "pointer",
+                                opacity: isLocked ? 0.6 : 1,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  background: pillar.color,
+                                  display: "inline-block",
+                                }}
+                              />
+                              {pillar.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <textarea
                     value={draft.caption}
                     onChange={(e) =>
@@ -1027,6 +1453,41 @@ export default function ProoferBoard({
                             {formatDayLong(d)}
                           </span>
                         </div>
+
+                        {draft.pillarId &&
+                          pillarsById.get(draft.pillarId) && (
+                            <span
+                              style={{
+                                marginLeft: "auto",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                background: `${
+                                  pillarsById.get(draft.pillarId)!.color
+                                }15`,
+                                border: `1px solid ${
+                                  pillarsById.get(draft.pillarId)!.color
+                                }`,
+                                color: pillarsById.get(draft.pillarId)!.color,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: "50%",
+                                  background: pillarsById.get(draft.pillarId)!
+                                    .color,
+                                  display: "inline-block",
+                                }}
+                              />
+                              {pillarsById.get(draft.pillarId)!.name}
+                            </span>
+                          )}
                       </div>
 
                       <div

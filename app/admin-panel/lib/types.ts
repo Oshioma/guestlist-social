@@ -258,11 +258,25 @@ export type ProoferPublishQueueItem = {
   updatedAt: string;
 };
 
+export type ContentPillar = {
+  id: string;
+  clientId: string;
+  name: string;
+  color: string;
+  description: string;
+  sortOrder: number;
+  archived: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProoferPost = {
   id: string;
   clientId: string;
   postDate: string; // "YYYY-MM-DD"
   platform: ProoferPlatform;
+  pillarId: string | null;
   caption: string;
   imageUrl: string;
   mediaUrls: string[];
