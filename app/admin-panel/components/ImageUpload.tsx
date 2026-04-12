@@ -7,9 +7,10 @@ type Props = {
   onUploaded: (url: string) => void;
   label?: string;
   compact?: boolean;
+  bucket?: string;
 };
 
-export default function ImageUpload({ folder, onUploaded, label, compact }: Props) {
+export default function ImageUpload({ folder, onUploaded, label, compact, bucket }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -23,6 +24,7 @@ export default function ImageUpload({ folder, onUploaded, label, compact }: Prop
     const formData = new FormData();
     formData.append("file", file);
     formData.append("folder", folder);
+    if (bucket) formData.append("bucket", bucket);
 
     try {
       const res = await fetch("/api/upload", { method: "POST", body: formData });

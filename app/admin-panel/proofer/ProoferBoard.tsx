@@ -471,6 +471,7 @@ export default function ProoferBoard({
                       style={{ ...inputStyle, flex: 1, minWidth: 200 }}
                     />
                     <ImageUpload
+                      bucket="postimages"
                       folder={`proofer/${clientId}/${month}`}
                       onUploaded={(url) => updateDraft(key, { imageUrl: url })}
                       label="Upload image"
