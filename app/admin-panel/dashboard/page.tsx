@@ -7,6 +7,7 @@ import SuggestionCard from "../components/SuggestionCard";
 import AdRow from "../components/AdRow";
 import EmptyState from "../components/EmptyState";
 import TopPriorities from "../components/TopPriorities";
+import WhatsWorkingNow from "../components/WhatsWorkingNow";
 
 export const dynamic = "force-dynamic";
 
@@ -159,6 +160,12 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Cross-client intelligence: what's actually working across the
+            whole agency, not just inside one account. Sits above
+            TopPriorities because it's the strategic frame; the priorities
+            below are the day-to-day execution view. */}
+        <WhatsWorkingNow />
 
         {/* Top-3 priorities — the calmest and most decisive surface in the
             product. Everything below is supporting context. */}

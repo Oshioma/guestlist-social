@@ -191,6 +191,18 @@ export default async function WhatsWorkingPage() {
     return bLift - aLift;
   });
 
+  // Cross-client creative aggregation rows from generate-global-learnings.
+  // Sort positives first, then by absolute lift size — operators want
+  // "biggest winners" before "biggest losers" within the same panel.
+  const sortByLift = (a: GlobalLearning, b: GlobalLearning) => {
+    const aPos = (a.avg_ctr_lift ?? 0) >= 0 ? 1 : 0;
+    const bPos = (b.avg_ctr_lift ?? 0) >= 0 ? 1 : 0;
+    if (aPos !== bPos) return bPos - aPos;
+    return Math.abs(b.avg_ctr_lift ?? 0) - Math.abs(a.avg_ctr_lift ?? 0);
+  };
+  const creativeFormats = (byType.creative_format ?? []).sort(sortByLift);
+  const creativeHooks = (byType.creative_hook ?? []).sort(sortByLift);
+
   const lastUpdated =
     patterns.length > 0
       ? patterns
@@ -268,6 +280,24 @@ export default async function WhatsWorkingPage() {
           &ldquo;Refresh everything&rdquo; above to build the playbook.
         </div>
       )}
+
+      {/* Cross-client creative aggregation — these are derived from the
+          ads table, not from action_learnings. They answer "what creative
+          attributes are working across the whole agency" rather than
+          "what did operators do that worked". */}
+      <Section
+        title="Creative formats across the agency"
+        subtitle="How ad formats compare against the average CTR across every client. Only formats seen on at least 2 clients."
+        patterns={creativeFormats}
+        emptyText="Not enough creative coverage yet — sync more ads, then re-run the playbook."
+      />
+
+      <Section
+        title="Hook styles across the agency"
+        subtitle="How hook types compare against the average CTR across every client."
+        patterns={creativeHooks}
+        emptyText="No cross-client hook patterns yet."
+      />
 
       <Section
         title="Hooks that work"
