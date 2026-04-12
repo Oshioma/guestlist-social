@@ -19,6 +19,17 @@ import { getViewer } from "../admin-panel/lib/viewer";
 
 export const dynamic = "force-dynamic";
 
+function getSafeNext(next?: string) {
+  if (!next) return "/app/dashboard";
+
+  // Allow only internal absolute paths, but block protocol-relative and odd cases
+  if (!next.startsWith("/")) return "/app/dashboard";
+  if (next.startsWith("//")) return "/app/dashboard";
+  if (next.startsWith("/\\")) return "/app/dashboard";
+
+  return next;
+}
+
 export default async function PostLoginPage({
   searchParams,
 }: {
@@ -32,12 +43,13 @@ export default async function PostLoginPage({
   }
 
   if (viewer.role === "client") {
-    // Clients always land in their own portal — even if a stale `next` would
-    // have sent them somewhere else. The middleware would bounce them anyway.
+    // Defensive fallback if role is client but no linked clientId is available
+    if (!viewer.clientId) {
+      redirect("/login?error=missing_client");
+    }
     redirect(`/portal/${viewer.clientId}`);
   }
 
-  // Admin: honor the `next` if it's a same-origin path, otherwise default.
-  const safeNext = next && next.startsWith("/") ? next : "/app/dashboard";
-  redirect(safeNext);
+  // Admin: honor validated `next`, otherwise default.
+  redirect(getSafeNext(next));
 }
