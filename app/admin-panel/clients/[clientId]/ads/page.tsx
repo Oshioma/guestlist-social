@@ -450,7 +450,9 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {highPriorityActions.map((a: any) => (
-                  <AdActionRow key={a.id} action={actionCardProps(a, "high")} />
+                  <div key={a.id} id={`action-${a.id}`} style={{ scrollMarginTop: 80 }}>
+                    <AdActionRow action={actionCardProps(a, "high")} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -489,7 +491,9 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {mediumPriorityActions.map((a: any) => (
-                  <AdActionRow key={a.id} action={actionCardProps(a, "medium")} />
+                  <div key={a.id} id={`action-${a.id}`} style={{ scrollMarginTop: 80 }}>
+                    <AdActionRow action={actionCardProps(a, "medium")} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -528,7 +532,9 @@ export default async function ClientAdsPage({
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {lowPriorityActions.map((a: any) => (
-                  <AdActionRow key={a.id} action={actionCardProps(a, "low")} />
+                  <div key={a.id} id={`action-${a.id}`} style={{ scrollMarginTop: 80 }}>
+                    <AdActionRow action={actionCardProps(a, "low")} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -541,7 +547,9 @@ export default async function ClientAdsPage({
               </summary>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
                 {completedActions.map((a: any) => (
-                  <AdActionRow key={a.id} action={actionCardProps(a, "medium")} />
+                  <div key={a.id} id={`action-${a.id}`} style={{ scrollMarginTop: 80 }}>
+                    <AdActionRow action={actionCardProps(a, "medium")} />
+                  </div>
                 ))}
               </div>
             </details>
@@ -786,7 +794,9 @@ export default async function ClientAdsPage({
         {pendingDecisions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pendingDecisions.map((d: any) => (
-              <DecisionRow key={d.id} decision={decisionCardProps(d)} />
+              <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
+                <DecisionRow decision={decisionCardProps(d)} />
+              </div>
             ))}
           </div>
         ) : (
@@ -801,7 +811,9 @@ export default async function ClientAdsPage({
             </summary>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {pastDecisions.map((d: any) => (
-                <DecisionRow key={d.id} decision={decisionCardProps(d)} />
+                <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
+                  <DecisionRow decision={decisionCardProps(d)} />
+                </div>
               ))}
             </div>
           </details>
@@ -891,8 +903,8 @@ export default async function ClientAdsPage({
         {rawExperiments.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
             {rawExperiments.map((exp: any) => (
+              <div key={exp.id} id={`experiment-${exp.id}`} style={{ scrollMarginTop: 80 }}>
               <ExperimentCard
-                key={exp.id}
                 experiment={{
                   id: exp.id,
                   title: exp.title,
@@ -918,6 +930,7 @@ export default async function ClientAdsPage({
                   })),
                 }}
               />
+              </div>
             ))}
           </div>
         )}

@@ -70,6 +70,12 @@ type TimelineEvent = {
   after?: MetricSnapshot;
   outcome?: "positive" | "neutral" | "negative" | null;
   confidence?: "high" | "medium" | "low" | "unknown" | null;
+  // Optional jump-to-source link. Action / decision / experiment events all
+  // know how to find their row on the per-client ads page via a hash anchor;
+  // events without a UI representation (ad_created, learning_recorded) leave
+  // this null.
+  sourceHref?: string | null;
+  sourceLabel?: string | null;
 };
 
 // Calm color palette per event kind. The whole page should feel like a
@@ -335,6 +341,16 @@ export default async function AdAuditTrailPage({
     });
   }
 
+  // Every action / decision / experiment row gets the same anchor target on
+  // the per-client ads page (`#action-<id>` etc.). The audit trail uses these
+  // to jump straight to the source row in its native context — the queue or
+  // experiment list — without losing the trail position.
+  const actionHref = (id: string) => `/app/clients/${clientId}/ads#action-${id}`;
+  const decisionHref = (id: number) =>
+    `/app/clients/${clientId}/ads#decision-${id}`;
+  const experimentHref = (id: number) =>
+    `/app/clients/${clientId}/ads#experiment-${id}`;
+
   for (const a of actions) {
     // Every action contributes a "proposed" event…
     events.push({
@@ -345,6 +361,8 @@ export default async function AdAuditTrailPage({
       why: a.problem ?? null,
       detail: a.action ?? null,
       confidence: null, // proposals don't carry a stored confidence yet
+      sourceHref: actionHref(a.id),
+      sourceLabel: "Open in action queue",
     });
 
     // …and, if it ran to completion, a separate "completed" event with the
@@ -361,11 +379,15 @@ export default async function AdAuditTrailPage({
         before: snap(a.metric_snapshot_before),
         after: snap(a.metric_snapshot_after),
         outcome: (a.outcome as any) ?? null,
+        sourceHref: actionHref(a.id),
+        sourceLabel: "Open in action queue",
       });
     }
   }
 
   for (const d of decisions) {
+    const dHref = decisionHref(d.id);
+    const dLabel = "Open in decision queue";
     events.push({
       id: `decision-${d.id}-proposed`,
       at: d.created_at,
@@ -374,6 +396,8 @@ export default async function AdAuditTrailPage({
       why: d.reason ?? null,
       detail: d.action ?? null,
       confidence: decisionConfidence(d.confidence),
+      sourceHref: dHref,
+      sourceLabel: dLabel,
     });
 
     if (d.status === "rejected") {
@@ -385,6 +409,8 @@ export default async function AdAuditTrailPage({
         kind: "decision_rejected",
         title: KIND_LABEL.decision_rejected,
         detail: d.action ?? null,
+        sourceHref: dHref,
+        sourceLabel: dLabel,
       });
     }
     if (d.approved_at && d.status !== "rejected") {
@@ -394,6 +420,8 @@ export default async function AdAuditTrailPage({
         kind: "decision_approved",
         title: KIND_LABEL.decision_approved,
         detail: d.action ?? null,
+        sourceHref: dHref,
+        sourceLabel: dLabel,
       });
     }
     if (d.executed_at) {
@@ -404,6 +432,8 @@ export default async function AdAuditTrailPage({
         title: KIND_LABEL.decision_executed,
         why: d.reason ?? null,
         detail: d.execution_result ?? d.action ?? null,
+        sourceHref: dHref,
+        sourceLabel: dLabel,
       });
     }
   }
@@ -434,6 +464,8 @@ export default async function AdAuditTrailPage({
       before: snap(v.snapshot_before),
       after: snap(v.snapshot_after),
       outcome: (exp?.outcome as any) ?? null,
+      sourceHref: exp?.id ? experimentHref(exp.id) : null,
+      sourceLabel: exp?.id ? "Open experiment" : null,
     });
   }
 
@@ -728,6 +760,21 @@ export default async function AdAuditTrailPage({
                       </div>
                     )}
                     <MetricDelta before={e.before ?? null} after={e.after ?? null} />
+                    {e.sourceHref && (
+                      <div style={{ marginTop: 6 }}>
+                        <Link
+                          href={e.sourceHref}
+                          style={{
+                            fontSize: 11,
+                            color: "#1e40af",
+                            textDecoration: "none",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {e.sourceLabel ?? "Open source"} →
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

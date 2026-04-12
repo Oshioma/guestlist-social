@@ -8,6 +8,7 @@ import AdRow from "../components/AdRow";
 import EmptyState from "../components/EmptyState";
 import ActionList from "../components/ActionList";
 import NewActionForm from "../components/NewActionForm";
+import TopPriorities from "../components/TopPriorities";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,10 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Top-3 priorities — the calmest and most decisive surface in the
+            product. Everything below is supporting context. */}
+        <TopPriorities />
 
         <div
           style={{
