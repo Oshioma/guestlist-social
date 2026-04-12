@@ -620,85 +620,88 @@ export default function ProoferBoard({
       <SectionCard title="Settings">
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 12,
-            alignItems: "flex-end",
-          }}
-        >
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={labelStyle}>Client</span>
-            <select
-              value={clientId}
-              onChange={(e) => handleSelectClient(e.target.value)}
-              disabled={isPending || clients.length === 0}
-              style={inputStyle}
-            >
-              {clients.length === 0 && <option value="">No clients</option>}
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={labelStyle}>Month</span>
-            <select
-              value={month}
-              onChange={(e) => handleSelectMonth(e.target.value)}
-              disabled={isPending}
-              style={inputStyle}
-            >
-              {months.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 13,
-              color: "#52525b",
-              paddingBottom: 8,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={hideEmpty}
-              onChange={(e) => setHideEmpty(e.target.checked)}
-            />
-            Hide empty days
-          </label>
-
-          <div style={{ fontSize: 12, color: "#71717a", paddingBottom: 10 }}>
-            {totalWithContent} of {days.length} days have content
-          </div>
-        </div>
-      </SectionCard>
-
-      {clients.length > 0 && (
-        <div
-          style={{
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 12,
           }}
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 6,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 12,
+              alignItems: "flex-end",
             }}
           >
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={labelStyle}>Client</span>
+              <select
+                value={clientId}
+                onChange={(e) => handleSelectClient(e.target.value)}
+                disabled={isPending || clients.length === 0}
+                style={inputStyle}
+              >
+                {clients.length === 0 && <option value="">No clients</option>}
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={labelStyle}>Month</span>
+              <select
+                value={month}
+                onChange={(e) => handleSelectMonth(e.target.value)}
+                disabled={isPending}
+                style={inputStyle}
+              >
+                {months.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                color: "#52525b",
+                paddingBottom: 8,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={hideEmpty}
+                onChange={(e) => setHideEmpty(e.target.checked)}
+              />
+              Hide empty days
+            </label>
+
+            <div style={{ fontSize: 12, color: "#71717a", paddingBottom: 10 }}>
+              {totalWithContent} of {days.length} days have content
+            </div>
+          </div>
+
+          {clients.length > 0 && (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: 8 }}
+            >
+              <span style={labelStyle}>Content pillars</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 6,
+                }}
+              >
             {initialPillars.map((pillar) =>
               editingPillarId === pillar.id ? (
                 <div
@@ -914,8 +917,10 @@ export default function ProoferBoard({
               </button>
             </div>
           )}
+            </div>
+          )}
         </div>
-      )}
+      </SectionCard>
 
       {clients.length === 0 ? (
         <SectionCard title="No clients">
@@ -1104,8 +1109,12 @@ export default function ProoferBoard({
                         >
                           <option value="">None</option>
                           {initialPillars.map((pillar) => (
-                            <option key={pillar.id} value={pillar.id}>
-                              {pillar.name}
+                            <option
+                              key={pillar.id}
+                              value={pillar.id}
+                              style={{ color: pillar.color }}
+                            >
+                              {`● ${pillar.name}`}
                             </option>
                           ))}
                         </select>
@@ -1332,13 +1341,13 @@ export default function ProoferBoard({
                           }
                           accept="image/*,video/*"
                         />
-                        <span style={{ fontSize: 11, color: "#a1a1aa" }}>
-                          {draft.mediaUrls.length > 0
-                            ? `${draft.mediaUrls.length} item${
-                                draft.mediaUrls.length === 1 ? "" : "s"
-                              } · drag order with ◀ ▶`
-                            : "Images or video (up to 30 MB)"}
-                        </span>
+                        {draft.mediaUrls.length > 0 && (
+                          <span style={{ fontSize: 11, color: "#a1a1aa" }}>
+                            {`${draft.mediaUrls.length} item${
+                              draft.mediaUrls.length === 1 ? "" : "s"
+                            } · drag order with ◀ ▶`}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
