@@ -11,6 +11,7 @@
 // executors directly from here.
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export type MetaQueueRowData = {
@@ -32,6 +33,8 @@ export type MetaQueueRowData = {
   executionError: string | null;
   lastCheckedAt: string | null;
   lastCheckedState: unknown;
+  sourcePatternKey: string | null;
+  sourcePatternIndustry: string | null;
   createdAt: string;
 };
 
@@ -257,6 +260,37 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
       {row.reason && (
         <div style={{ marginTop: 8, fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
           <span style={{ color: "#71717a", fontWeight: 600 }}>Why:</span> {row.reason}
+        </div>
+      )}
+
+      {/* Pattern provenance — only present when the engine seeded this row
+          from a global_learnings pattern. Links back to the matching card
+          on the playbook page so the operator can see the full track record. */}
+      {row.sourcePatternKey && (
+        <div style={{ marginTop: 6 }}>
+          <Link
+            href={`/app/whats-working${
+              row.sourcePatternIndustry
+                ? `?industry=${encodeURIComponent(row.sourcePatternIndustry)}`
+                : ""
+            }#pattern-${row.sourcePatternKey}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "3px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 600,
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              border: "1px solid #bfdbfe",
+              textDecoration: "none",
+            }}
+          >
+            From the playbook: {row.sourcePatternKey}
+            {row.sourcePatternIndustry ? ` (${row.sourcePatternIndustry})` : ""}
+          </Link>
         </div>
       )}
 

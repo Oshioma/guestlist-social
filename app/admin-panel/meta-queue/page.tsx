@@ -35,6 +35,8 @@ type RawQueueRow = {
   execution_error: string | null;
   last_checked_at: string | null;
   last_checked_state: unknown;
+  source_pattern_key: string | null;
+  source_pattern_industry: string | null;
   created_at: string;
 };
 
@@ -125,6 +127,8 @@ export default async function MetaQueuePage() {
     executionError: r.execution_error,
     lastCheckedAt: r.last_checked_at,
     lastCheckedState: r.last_checked_state,
+    sourcePatternKey: r.source_pattern_key,
+    sourcePatternIndustry: r.source_pattern_industry,
     createdAt: r.created_at,
   }));
 

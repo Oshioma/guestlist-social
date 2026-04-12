@@ -142,11 +142,13 @@ function PatternCard({
 
   return (
     <div
+      id={`pattern-${pattern.pattern_key}`}
       style={{
         border: "1px solid #e4e4e7",
         borderRadius: 10,
         padding: 14,
         background: "#fff",
+        scrollMarginTop: 80,
       }}
     >
       <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
