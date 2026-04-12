@@ -274,7 +274,7 @@ async function measureOne(
 }> {
   // No local ad binding → can't measure. Mark inconclusive immediately.
   if (row.ad_id == null) {
-    await markVerdict(supabase, row.id, {
+    await markVerdict(supabase, row.id, row.queue_id, {
       followup: emptyMetrics(),
       ctr_lift_pct: null,
       cpm_change_pct: null,
@@ -291,7 +291,7 @@ async function measureOne(
 
   const followup = await readAdMetrics(supabase, row.ad_id);
   if (!followup) {
-    await markVerdict(supabase, row.id, {
+    await markVerdict(supabase, row.id, row.queue_id, {
       followup: emptyMetrics(),
       ctr_lift_pct: null,
       cpm_change_pct: null,
@@ -314,7 +314,7 @@ async function measureOne(
     followup,
   });
 
-  await markVerdict(supabase, row.id, {
+  await markVerdict(supabase, row.id, row.queue_id, {
     followup,
     ctr_lift_pct: verdict.ctrLiftPct,
     cpm_change_pct: verdict.cpmChangePct,
@@ -343,6 +343,7 @@ function emptyMetrics(): AdMetricsSnapshot {
 async function markVerdict(
   supabase: SupabaseClient,
   outcomeId: number,
+  queueId: number,
   patch: {
     followup: AdMetricsSnapshot;
     ctr_lift_pct: number | null;
@@ -372,6 +373,109 @@ async function markVerdict(
 
   if (error) {
     throw new Error(`markVerdict update failed: ${error.message}`);
+  }
+
+  // Feedback loop: if the originating queue row was a pattern-backed
+  // decision, nudge pattern_feedback. Failures here are best-effort and
+  // do NOT throw — the verdict has already been written and we don't want
+  // a feedback ledger blip to mark the outcome row failed.
+  try {
+    await applyVerdictToPattern(supabase, queueId, patch.verdict);
+  } catch (err) {
+    console.error("applyVerdictToPattern failed:", err);
+  }
+}
+
+/**
+ * Read the originating queue row's source_pattern_key/industry. If both are
+ * present, increment the matching pattern_feedback row's verdict counter.
+ * No-op for rule-engine decisions (source_pattern_key=null).
+ *
+ * This is the durable side of the feedback loop. The next time
+ * /api/generate-global-learnings rebuilds global_learnings, it reads
+ * pattern_feedback and folds these counts into the new consistency_score.
+ */
+async function applyVerdictToPattern(
+  supabase: SupabaseClient,
+  queueId: number,
+  verdict: string
+): Promise<void> {
+  const { data: queueRow, error: queueErr } = await supabase
+    .from("meta_execution_queue")
+    .select("source_pattern_key, source_pattern_industry")
+    .eq("id", queueId)
+    .single<{
+      source_pattern_key: string | null;
+      source_pattern_industry: string | null;
+    }>();
+
+  if (queueErr || !queueRow) return;
+  if (!queueRow.source_pattern_key) return;
+
+  // Empty string is the agency-wide sentinel — keeps the (pattern_key,
+  // industry) primary key clean without COALESCE expression indexes.
+  const industry = queueRow.source_pattern_industry ?? "";
+  const patternKey = queueRow.source_pattern_key;
+
+  // Read-modify-write rather than a SQL increment because the supabase-js
+  // client doesn't expose raw SQL increments without an RPC. Race-condition
+  // wise: this runs once per outcome row from the cron sweep, so the
+  // contention window is effectively zero.
+  const { data: existing } = await supabase
+    .from("pattern_feedback")
+    .select(
+      "engine_uses, positive_verdicts, negative_verdicts, neutral_verdicts, inconclusive_verdicts"
+    )
+    .eq("pattern_key", patternKey)
+    .eq("industry", industry)
+    .maybeSingle<{
+      engine_uses: number;
+      positive_verdicts: number;
+      negative_verdicts: number;
+      neutral_verdicts: number;
+      inconclusive_verdicts: number;
+    }>();
+
+  // Bump the matching counter. Anything we don't recognise lands in
+  // inconclusive_verdicts so we don't silently lose the signal.
+  let positive = existing?.positive_verdicts ?? 0;
+  let negative = existing?.negative_verdicts ?? 0;
+  let neutral = existing?.neutral_verdicts ?? 0;
+  let inconclusive = existing?.inconclusive_verdicts ?? 0;
+  switch (verdict) {
+    case "positive":
+      positive += 1;
+      break;
+    case "negative":
+      negative += 1;
+      break;
+    case "neutral":
+      neutral += 1;
+      break;
+    default:
+      inconclusive += 1;
+      break;
+  }
+
+  const { error: upsertErr } = await supabase
+    .from("pattern_feedback")
+    .upsert(
+      {
+        pattern_key: patternKey,
+        industry,
+        engine_uses: (existing?.engine_uses ?? 0) + 1,
+        positive_verdicts: positive,
+        negative_verdicts: negative,
+        neutral_verdicts: neutral,
+        inconclusive_verdicts: inconclusive,
+        last_verdict_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "pattern_key,industry" }
+    );
+
+  if (upsertErr) {
+    throw new Error(`pattern_feedback upsert failed: ${upsertErr.message}`);
   }
 }
 

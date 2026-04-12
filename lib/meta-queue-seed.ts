@@ -77,7 +77,18 @@ async function findOpenRow(
 // pause_ad
 // ---------------------------------------------------------------------------
 
-export type SeedPauseAdInput = {
+/**
+ * Provenance fields written onto the queue row when the decision came from
+ * a pattern in global_learnings. Both null for rule-engine decisions. The
+ * verdict feedback loop reads these from the queue row to attribute outcomes
+ * back to the originating pattern.
+ */
+export type PatternSource = {
+  sourcePatternKey?: string | null;
+  sourcePatternIndustry?: string | null;
+};
+
+export type SeedPauseAdInput = PatternSource & {
   clientId: number | null;
   campaignId: number | null;
   adId: number | null;
@@ -117,6 +128,8 @@ export async function seedPauseAd(
       reason: input.reason,
       risk_level: input.riskLevel ?? "low",
       status: "pending",
+      source_pattern_key: input.sourcePatternKey ?? null,
+      source_pattern_industry: input.sourcePatternIndustry ?? null,
     })
     .select("id")
     .single();
@@ -139,7 +152,7 @@ export async function seedPauseAd(
 // here on purpose so the executor only knows the percent change.
 // ---------------------------------------------------------------------------
 
-export type SeedIncreaseAdsetBudgetInput = {
+export type SeedIncreaseAdsetBudgetInput = PatternSource & {
   clientId: number | null;
   campaignId: number | null;
   adId: number | null;
@@ -190,6 +203,8 @@ export async function seedIncreaseAdsetBudget(
       reason: input.reason,
       risk_level: input.riskLevel ?? "low",
       status: "pending",
+      source_pattern_key: input.sourcePatternKey ?? null,
+      source_pattern_industry: input.sourcePatternIndustry ?? null,
     })
     .select("id")
     .single();
