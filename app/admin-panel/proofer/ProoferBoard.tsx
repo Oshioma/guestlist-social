@@ -9,10 +9,21 @@ import {
   saveProoferPostAction,
   updateProoferStatusAction,
   deleteProoferPostAction,
+  addProoferCommentAction,
+  toggleProoferCommentResolvedAction,
 } from "../lib/proofer-actions";
 
 type ClientLite = { id: string; name: string };
 type MonthOpt = { value: string; label: string };
+
+type ProoferCommentLite = {
+  id: string;
+  postId: string;
+  comment: string;
+  createdBy: string;
+  resolved: boolean;
+  createdAt: string;
+};
 
 const STATUS_BUTTONS: {
   value: ProoferStatus;
@@ -44,7 +55,6 @@ const STATUS_BUTTONS: {
   },
 ];
 
-// Build an array of every day in a "YYYY-MM" month.
 function daysInMonth(month: string): Date[] {
   const [y, m] = month.split("-").map(Number);
   if (!y || !m) return [];
@@ -72,15 +82,24 @@ function formatDayLong(d: Date): string {
   });
 }
 
-// Pull a friendly filename out of a URL (or return the URL if we can't).
-// Strips the `timestamp_` prefix that /api/upload and ImageUpload inject.
+function formatCommentTime(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function prettyFileName(url: string): string {
   if (!url) return "";
   try {
     const u = new URL(url);
     const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
     const decoded = decodeURIComponent(last);
-    // Strip leading "<digits>_" that our uploader adds for uniqueness.
     return decoded.replace(/^\d{10,}_/, "") || url;
   } catch {
     return url.split("/").pop() || url;
@@ -109,6 +128,17 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: "0.04em",
 };
 
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 8,
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  color: "#3f3f46",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
 export default function ProoferBoard({
   clients,
   months,
@@ -130,12 +160,11 @@ export default function ProoferBoard({
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
 
-  // Draft state — keeps pending edits in local state until the user hits
-  // Save. Keyed by "YYYY-MM-DD" so we can diff against the server copy.
   type Draft = { caption: string; imageUrl: string };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
-  // Look up the server-side post for a given date (may be undefined).
   const postsByDate = useMemo(() => {
     const map = new Map<string, ProoferPost>();
     initialPosts.forEach((p) => map.set(p.postDate.slice(0, 10), p));
@@ -164,9 +193,9 @@ export default function ProoferBoard({
     const params = new URLSearchParams(searchParams.toString());
     params.set("client", nextClientId);
     params.set("month", nextMonth);
-    // Clear any in-flight drafts to avoid showing stale data for the
-    // previously-selected context.
     setDrafts({});
+    setOpenComments({});
+    setCommentDrafts({});
     router.push(`/app/proofer?${params.toString()}`);
   }
 
@@ -205,8 +234,6 @@ export default function ProoferBoard({
   function handleStatus(dateKey: string, status: ProoferStatus) {
     startTransition(async () => {
       try {
-        // If the user has unsaved caption/image edits, save them first so
-        // the status doesn't get attached to stale content.
         const draft = drafts[dateKey];
         if (draft) {
           await saveProoferPostAction(
@@ -239,9 +266,63 @@ export default function ProoferBoard({
           delete next[dateKey];
           return next;
         });
+        setCommentDrafts((prev) => {
+          const next = { ...prev };
+          delete next[dateKey];
+          return next;
+        });
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not delete");
+      }
+    });
+  }
+
+  function toggleComments(dateKey: string) {
+    setOpenComments((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  }
+
+  function handleAddComment(dateKey: string, postId?: string) {
+    const value = (commentDrafts[dateKey] ?? "").trim();
+    if (!postId) {
+      alert("Save the post first before adding comments.");
+      return;
+    }
+    if (!value) {
+      alert("Write a comment first.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await addProoferCommentAction(postId, value);
+        setCommentDrafts((prev) => ({
+          ...prev,
+          [dateKey]: "",
+        }));
+        setOpenComments((prev) => ({
+          ...prev,
+          [dateKey]: true,
+        }));
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not add comment");
+      }
+    });
+  }
+
+  function handleToggleResolved(commentId: string, resolved: boolean) {
+    startTransition(async () => {
+      try {
+        await toggleProoferCommentResolvedAction(commentId, resolved);
+        router.refresh();
+      } catch (err) {
+        alert(
+          err instanceof Error ? err.message : "Could not update comment status"
+        );
       }
     });
   }
@@ -326,6 +407,7 @@ export default function ProoferBoard({
               ))}
             </select>
           </label>
+
           <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={labelStyle}>Month</span>
             <select
@@ -341,6 +423,7 @@ export default function ProoferBoard({
               ))}
             </select>
           </label>
+
           <label
             style={{
               display: "flex",
@@ -358,6 +441,7 @@ export default function ProoferBoard({
             />
             Hide empty days
           </label>
+
           <div style={{ fontSize: 12, color: "#71717a", paddingBottom: 10 }}>
             {totalWithContent} of {days.length} days have content
           </div>
@@ -375,11 +459,12 @@ export default function ProoferBoard({
           {visibleDays.length === 0 && (
             <SectionCard title="Nothing to show">
               <div style={{ fontSize: 13, color: "#71717a" }}>
-                All days are empty. Uncheck <strong>Hide empty days</strong>{" "}
-                to start drafting.
+                All days are empty. Uncheck <strong>Hide empty days</strong> to
+                start drafting.
               </div>
             </SectionCard>
           )}
+
           {visibleDays.map((d) => {
             const key = toDateKey(d);
             const post = postsByDate.get(key);
@@ -389,8 +474,14 @@ export default function ProoferBoard({
               draft.caption.trim() || draft.imageUrl.trim()
             );
 
-            // Default status to "check" (yellow) if there's content but the
-            // server copy is still "none", matching the requested behavior.
+            const comments = ((post as ProoferPost & {
+              comments?: ProoferCommentLite[];
+            })?.comments ?? []) as ProoferCommentLite[];
+
+            const commentCount = comments.length;
+            const unresolvedCount = comments.filter((c) => !c.resolved).length;
+            const commentsOpen = Boolean(openComments[key]);
+
             const effectiveStatus: ProoferStatus =
               post?.status && post.status !== "none"
                 ? post.status
@@ -423,6 +514,7 @@ export default function ProoferBoard({
                   >
                     {formatDayLong(d)}
                   </div>
+
                   {post?.createdBy && (
                     <div
                       style={{
@@ -437,6 +529,7 @@ export default function ProoferBoard({
                       </strong>
                     </div>
                   )}
+
                   {hasDraft && (
                     <div
                       style={{
@@ -534,6 +627,7 @@ export default function ProoferBoard({
                         style={{ ...inputStyle, flex: 1, minWidth: 200 }}
                       />
                     )}
+
                     <ImageUpload
                       bucket="postimages"
                       folder={`proofer/${clientId}/${month}`}
@@ -583,6 +677,7 @@ export default function ProoferBoard({
                             .charAt(0)
                             .toUpperCase()}
                         </div>
+
                         <div style={{ display: "flex", flexDirection: "column" }}>
                           <span
                             style={{
@@ -606,6 +701,7 @@ export default function ProoferBoard({
                           </span>
                         </div>
                       </div>
+
                       <div
                         style={{
                           width: "100%",
@@ -626,7 +722,6 @@ export default function ProoferBoard({
                             }}
                           />
                         ) : (
-                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={draft.imageUrl}
                             alt="Preview"
@@ -637,12 +732,14 @@ export default function ProoferBoard({
                               objectFit: "cover",
                             }}
                             onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display =
-                                "none";
+                              (
+                                e.currentTarget as HTMLImageElement
+                              ).style.display = "none";
                             }}
                           />
                         )}
                       </div>
+
                       {draft.caption.trim() && (
                         <div
                           style={{
@@ -686,9 +783,7 @@ export default function ProoferBoard({
                             fontSize: 12,
                             fontWeight: 700,
                             cursor: "pointer",
-                            boxShadow: active
-                              ? `0 0 0 2px ${btn.bg}`
-                              : "none",
+                            boxShadow: active ? `0 0 0 2px ${btn.bg}` : "none",
                           }}
                         >
                           {btn.label}
@@ -714,26 +809,269 @@ export default function ProoferBoard({
                       >
                         Save
                       </button>
+
                       {(post || hasDraft) && (
                         <button
                           type="button"
                           onClick={() => handleDelete(key)}
                           disabled={isPending}
                           style={{
-                            padding: "8px 14px",
-                            borderRadius: 8,
-                            background: "#fff",
-                            color: "#b91c1c",
-                            border: "1px solid #fecaca",
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: "pointer",
+                            ...secondaryButtonStyle,
+                            color: "#991b1b",
                           }}
                         >
                           Clear
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 2,
+                      borderTop: "1px solid #f4f4f5",
+                      paddingTop: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleComments(key)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        border: "1px solid #e4e4e7",
+                        borderRadius: 10,
+                        background: "#fafafa",
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        color: "#27272a",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span>
+                        Comments {commentCount > 0 ? `(${commentCount})` : ""}
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          color: "#71717a",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {unresolvedCount > 0 && (
+                          <span
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: 999,
+                              background: "#fff7ed",
+                              border: "1px solid #fdba74",
+                              color: "#9a3412",
+                            }}
+                          >
+                            {unresolvedCount} open
+                          </span>
+                        )}
+                        <span>{commentsOpen ? "Hide" : "Show"}</span>
+                      </span>
+                    </button>
+
+                    {commentsOpen && (
+                      <div
+                        style={{
+                          border: "1px solid #e4e4e7",
+                          borderRadius: 12,
+                          padding: 12,
+                          background: "#fff",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                        }}
+                      >
+                        {comments.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "#71717a" }}>
+                            No comments yet.
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 8,
+                            }}
+                          >
+                            {comments.map((comment) => (
+                              <div
+                                key={comment.id}
+                                style={{
+                                  border: "1px solid #e4e4e7",
+                                  borderRadius: 10,
+                                  padding: 10,
+                                  background: comment.resolved
+                                    ? "#fafafa"
+                                    : "#fff",
+                                  opacity: comment.resolved ? 0.75 : 1,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    marginBottom: 6,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      flexWrap: "wrap",
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    <strong style={{ color: "#27272a" }}>
+                                      {comment.createdBy || "Unknown"}
+                                    </strong>
+                                    <span style={{ color: "#71717a" }}>
+                                      {formatCommentTime(comment.createdAt)}
+                                    </span>
+                                    <span
+                                      style={{
+                                        padding: "2px 8px",
+                                        borderRadius: 999,
+                                        background: "#eff6ff",
+                                        border: "1px solid #bfdbfe",
+                                        color: "#1d4ed8",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      Client-visible
+                                    </span>
+                                    {comment.resolved && (
+                                      <span
+                                        style={{
+                                          padding: "2px 8px",
+                                          borderRadius: 999,
+                                          background: "#ecfdf5",
+                                          border: "1px solid #86efac",
+                                          color: "#166534",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        Resolved
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleToggleResolved(
+                                        comment.id,
+                                        !comment.resolved
+                                      )
+                                    }
+                                    disabled={isPending}
+                                    style={{
+                                      ...secondaryButtonStyle,
+                                      padding: "6px 10px",
+                                    }}
+                                  >
+                                    {comment.resolved ? "Reopen" : "Resolve"}
+                                  </button>
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize: 13,
+                                    color: "#18181b",
+                                    lineHeight: 1.45,
+                                    whiteSpace: "pre-wrap",
+                                  }}
+                                >
+                                  {comment.comment}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                            paddingTop: 4,
+                          }}
+                        >
+                          <textarea
+                            value={commentDrafts[key] ?? ""}
+                            onChange={(e) =>
+                              setCommentDrafts((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }))
+                            }
+                            placeholder={
+                              post
+                                ? "Add a comment for the client..."
+                                : "Save the post first before adding comments..."
+                            }
+                            disabled={!post}
+                            style={{
+                              ...inputStyle,
+                              minHeight: 80,
+                              resize: "vertical",
+                              fontFamily: "inherit",
+                              opacity: post ? 1 : 0.7,
+                            }}
+                          />
+
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 10,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ fontSize: 12, color: "#71717a" }}>
+                              Comments here are shown as client-visible feedback.
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAddComment(key, post?.id)}
+                              disabled={isPending || !post}
+                              style={{
+                                padding: "8px 14px",
+                                borderRadius: 8,
+                                background: post ? "#18181b" : "#e4e4e7",
+                                color: post ? "#fff" : "#a1a1aa",
+                                border: "none",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: post ? "pointer" : "default",
+                              }}
+                            >
+                              Add comment
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
