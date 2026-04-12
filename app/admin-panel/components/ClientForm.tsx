@@ -9,6 +9,7 @@ type ClientFormValues = {
   status: "active" | "paused" | "onboarding";
   websiteUrl?: string;
   notes?: string;
+  industry?: string;
 };
 
 type Props = {
@@ -94,14 +95,40 @@ export default function ClientForm({
           </div>
         </div>
 
-        <div>
-          <label style={labelStyle}>Website URL</label>
-          <input
-            name="websiteUrl"
-            defaultValue={initialValues?.websiteUrl ?? ""}
-            style={inputStyle}
-            placeholder="https://example.com"
-          />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Website URL</label>
+            <input
+              name="websiteUrl"
+              defaultValue={initialValues?.websiteUrl ?? ""}
+              style={inputStyle}
+              placeholder="https://example.com"
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Industry</label>
+            <input
+              name="industry"
+              defaultValue={initialValues?.industry ?? ""}
+              style={inputStyle}
+              placeholder="Hospitality"
+              list="industry-suggestions"
+            />
+            {/* Suggestions, not an enum — operators can type anything. */}
+            <datalist id="industry-suggestions">
+              <option value="Hospitality" />
+              <option value="Restaurants" />
+              <option value="Fitness" />
+              <option value="Beauty" />
+              <option value="Retail" />
+              <option value="E-commerce" />
+              <option value="Real estate" />
+              <option value="Professional services" />
+              <option value="Health" />
+              <option value="Education" />
+            </datalist>
+          </div>
         </div>
 
         <div>

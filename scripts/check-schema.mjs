@@ -142,6 +142,11 @@ const SCHEMA = {
     "role",
     "created_at",
   ],
+  clients: [
+    "id",
+    "name",
+    "industry",
+  ],
   meta_execution_queue: [
     "id",
     "client_id",
