@@ -30,6 +30,7 @@ import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlayboo
 import DecisionRow from "@/app/admin-panel/components/DecisionRow";
 import GenerateDecisionsButton from "@/app/admin-panel/components/GenerateDecisionsButton";
 import PreviewDecisionsButton from "@/app/admin-panel/components/PreviewDecisionsButton";
+import ScaleAdButton from "@/app/admin-panel/components/ScaleAdButton";
 
 export const dynamic = "force-dynamic";
 
@@ -769,16 +770,20 @@ export default async function ClientAdsPage({
                               lineHeight: 1.4,
                             }}
                           >
-                            {queued && (
+                            {queued && isOpportunity ? (
+                              <ScaleAdButton
+                                adId={ad.id}
+                                hasAdsetMetaId={Boolean(ad.adset_meta_id)}
+                              />
+                            ) : queued ? (
                               <span
                                 style={{
                                   padding: "2px 9px",
                                   borderRadius: 999,
                                   fontSize: 11,
                                   fontWeight: 700,
-                                  background: isOpportunity
-                                    ? "#166534"
-                                    : priorityColors[source.priority]?.text ?? "#71717a",
+                                  background:
+                                    priorityColors[source.priority]?.text ?? "#71717a",
                                   color: "#fff",
                                   textTransform: "uppercase",
                                   flexShrink: 0,
@@ -786,7 +791,7 @@ export default async function ClientAdsPage({
                               >
                                 {actionBadge}
                               </span>
-                            )}
+                            ) : null}
                             <span
                               style={{
                                 color: isOpportunity ? "#166534" : "#991b1b",
