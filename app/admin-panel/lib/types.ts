@@ -206,4 +206,12 @@ export type ProoferPost = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  export type ProoferComment = {
+  id: string;
+  postId: string;
+  comment: string;
+  createdBy: string;
+  resolved: boolean;
+  createdAt: string;
+};
 };
