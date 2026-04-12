@@ -383,7 +383,7 @@ function getDecision(
 
 export async function POST(req: Request) {
   try {
-    const { clientId } = await req.json();
+    const { clientId, dryRun = false } = await req.json();
 
     if (!clientId) {
       return NextResponse.json({ ok: false, error: "clientId required" }, { status: 400 });
@@ -492,12 +492,17 @@ export async function POST(req: Request) {
       };
     });
 
-    // Clear old pending decisions for this client (regenerate fresh)
-    await supabase
-      .from("ad_decisions")
-      .delete()
-      .eq("client_id", clientId)
-      .eq("status", "pending");
+    // Clear old pending decisions for this client (regenerate fresh).
+    // In dry-run mode we leave the existing queue alone — the operator is
+    // just previewing, not committing. Same goes for ad_decisions inserts
+    // and queue seeding further down.
+    if (!dryRun) {
+      await supabase
+        .from("ad_decisions")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("status", "pending");
+    }
 
     let generated = 0;
     let patternBacked = 0;
@@ -513,6 +518,19 @@ export async function POST(req: Request) {
     // response so the operator can see the loop is doing something.
     const feedbackStats = { blocked: 0, boosted: 0 };
 
+    // Per-decision preview rows. Only populated in dry-run mode and only
+    // returned in dry-run responses, so the regular path keeps the same
+    // payload shape callers already rely on.
+    type DecisionPreview = {
+      ad_id: number;
+      ad_name: string;
+      decision: DecisionResult;
+      pattern_backed: boolean;
+      would_queue_pause: boolean;
+      would_queue_budget: boolean;
+    };
+    const previews: DecisionPreview[] = [];
+
     for (const ad of enrichedAds) {
       // Pattern lookup first — when a cross-client pattern matches the
       // ad's signature with high enough consistency, prefer it over the
@@ -527,6 +545,29 @@ export async function POST(req: Request) {
       const decision = patternDecision ?? getDecision(ad, learnings, playbook);
       if (!decision) continue;
       if (patternDecision) patternBacked++;
+
+      const adMetaId = ad.meta_id ? String(ad.meta_id) : null;
+      const adsetMetaId = ad.adset_meta_id ? String(ad.adset_meta_id) : null;
+      const isPauseLike =
+        decision.type === "pause_or_replace" || decision.type === "kill_test";
+      const wouldQueuePause = isPauseLike && !!adMetaId;
+      const wouldQueueBudget = decision.type === "scale_budget" && !!adsetMetaId;
+
+      // Dry-run path: capture the preview row, count it as "would generate",
+      // and skip every write below. The operator sees exactly what would
+      // happen without us touching ad_decisions or meta_execution_queue.
+      if (dryRun) {
+        previews.push({
+          ad_id: Number(ad.id),
+          ad_name: String(ad.name ?? `Ad ${ad.id}`),
+          decision,
+          pattern_backed: patternDecision !== null,
+          would_queue_pause: wouldQueuePause,
+          would_queue_budget: wouldQueueBudget,
+        });
+        generated++;
+        continue;
+      }
 
       const { error: insertError } = await supabase.from("ad_decisions").insert({
         client_id: clientId,
@@ -560,21 +601,16 @@ export async function POST(req: Request) {
       // ad_decisions row still exists for the operator to see, but the
       // queue can't act on it without a real Meta target.
       // ---------------------------------------------------------------
-      const adMetaId = ad.meta_id ? String(ad.meta_id) : null;
-      const adsetMetaId = ad.adset_meta_id ? String(ad.adset_meta_id) : null;
       const localCampaignId =
         ad.campaign_id != null ? Number(ad.campaign_id) : null;
       const localAdId = ad.id != null ? Number(ad.id) : null;
 
-      const isPauseLike =
-        decision.type === "pause_or_replace" || decision.type === "kill_test";
-
-      if (isPauseLike && adMetaId) {
+      if (wouldQueuePause) {
         const seeded = await seedPauseAd(supabase, {
           clientId: Number(clientId),
           campaignId: localCampaignId,
           adId: localAdId,
-          adMetaId,
+          adMetaId: adMetaId!,
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
           // Pattern provenance — null when this came from getDecision().
@@ -591,12 +627,12 @@ export async function POST(req: Request) {
         }
       }
 
-      if (decision.type === "scale_budget" && adsetMetaId) {
+      if (wouldQueueBudget) {
         const seeded = await seedIncreaseAdsetBudget(supabase, {
           clientId: Number(clientId),
           campaignId: localCampaignId,
           adId: localAdId,
-          adsetMetaId,
+          adsetMetaId: adsetMetaId!,
           // Default +15% — under the executor's +20% hard cap.
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
@@ -612,8 +648,23 @@ export async function POST(req: Request) {
       }
     }
 
+    // In dry-run mode the queue counters are zero (we never seeded anything),
+    // so report the would-have counts derived from the preview rows instead.
+    // Keeps the regular response shape stable for non-dry-run callers.
+    const queueSummary = dryRun
+      ? {
+          would_queue_pause: previews.filter((p) => p.would_queue_pause).length,
+          would_queue_budget: previews.filter((p) => p.would_queue_budget).length,
+        }
+      : {
+          pause_ad: queuedPause,
+          increase_adset_budget: queuedBudget,
+          deduped: queueDeduped,
+        };
+
     return NextResponse.json({
       ok: true,
+      dry_run: dryRun,
       generated,
       total: ads.length,
       pattern_backed: patternBacked,
@@ -629,11 +680,8 @@ export async function POST(req: Request) {
         // alone (operator data hadn't crossed the high-confidence bar).
         boosted_by_feedback: feedbackStats.boosted,
       },
-      queue: {
-        pause_ad: queuedPause,
-        increase_adset_budget: queuedBudget,
-        deduped: queueDeduped,
-      },
+      queue: queueSummary,
+      previews: dryRun ? previews : undefined,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

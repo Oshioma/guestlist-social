@@ -29,6 +29,7 @@ import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentF
 import GeneratePlaybookButton from "@/app/admin-panel/components/GeneratePlaybookButton";
 import DecisionRow from "@/app/admin-panel/components/DecisionRow";
 import GenerateDecisionsButton from "@/app/admin-panel/components/GenerateDecisionsButton";
+import PreviewDecisionsButton from "@/app/admin-panel/components/PreviewDecisionsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -855,8 +856,16 @@ export default async function ClientAdsPage({
 
       {/* ── DECISIONS ── */}
       <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
           <GenerateDecisionsButton clientId={clientId} />
+          <PreviewDecisionsButton clientId={clientId} />
         </div>
         {pendingDecisions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
