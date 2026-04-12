@@ -289,6 +289,26 @@ export default function TasksBoard({
     return groups;
   }, [allTasksFiltered]);
 
+  // Open tasks assigned to anyone other than the current user, grouped by
+  // assignee (so the operator can see what teammates have on their plate).
+  const teamTasksByAssignee = useMemo(() => {
+    const open = allTasksFiltered.filter(
+      (t) =>
+        t.status !== "completed" &&
+        t.assignee &&
+        t.assignee !== currentUserEmail
+    );
+    const groups = new Map<string, Task[]>();
+    open.forEach((t) => {
+      const list = groups.get(t.assignee) ?? [];
+      list.push(t);
+      groups.set(t.assignee, list);
+    });
+    return Array.from(groups.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    );
+  }, [allTasksFiltered, currentUserEmail]);
+
   function handleAdd() {
     if (!title.trim()) return;
     const snapshot = {
@@ -935,6 +955,68 @@ export default function TasksBoard({
                 </div>
               );
             })}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title={`Team tasks (${teamTasksByAssignee.reduce(
+          (sum, [, list]) => sum + list.length,
+          0
+        )})`}
+      >
+        {teamTasksByAssignee.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#71717a" }}>
+            No open tasks assigned to anyone else.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {teamTasksByAssignee.map(([assigneeEmail, list]) => (
+              <div key={assigneeEmail}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#52525b",
+                    marginBottom: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 22,
+                      height: 22,
+                      borderRadius: 999,
+                      background: "#18181b",
+                      color: "#fff",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {assigneeEmail.slice(0, 2)}
+                  </span>
+                  <span>{assigneeEmail}</span>
+                  <span style={{ color: "#a1a1aa", fontWeight: 500 }}>
+                    · {list.length} open
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {list.map((t) => renderTaskRow(t))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </SectionCard>
