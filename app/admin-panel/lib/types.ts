@@ -196,6 +196,15 @@ export type Task = {
 
 export type ProoferStatus = "none" | "improve" | "check" | "proofed";
 
+export type ProoferComment = {
+  id: string;
+  postId: string;
+  comment: string;
+  createdBy: string;
+  resolved: boolean;
+  createdAt: string;
+};
+
 export type ProoferPost = {
   id: string;
   clientId: string;
@@ -206,12 +215,5 @@ export type ProoferPost = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  export type ProoferComment = {
-  id: string;
-  postId: string;
-  comment: string;
-  createdBy: string;
-  resolved: boolean;
-  createdAt: string;
-};
+  comments?: ProoferComment[];
 };
