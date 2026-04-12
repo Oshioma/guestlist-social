@@ -5,7 +5,7 @@ import {
   mapDbActionToUiAction,
   mapDbSuggestionToUiSuggestion,
 } from "./mappers";
-import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme } from "./types";
+import type { Ad, Client, Action, Suggestion, ContentProgress, VideoIdea, ContentTheme, CarouselIdea, CarouselTheme, StoryIdea, StoryTheme, Task, TaskCategory, TaskStatus, TaskRecurrence } from "./types";
 
 export async function getDashboardData(): Promise<{
   clients: Client[];
@@ -137,6 +137,66 @@ export async function getVideoIdeasData(): Promise<{
   }));
 
   return { clients, themes, ideas };
+}
+
+export async function getTasksData(): Promise<{
+  tasks: Task[];
+  currentUserEmail: string;
+  knownUsers: string[];
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const currentUserEmail = user?.email ?? "";
+
+  const { data: tasksData, error: tasksError } = await supabase
+    .from("tasks")
+    .select("*")
+    .order("due_date", { ascending: true, nullsFirst: false });
+
+  if (tasksError) throw new Error(`tasks: ${tasksError.message}`);
+
+  const tasks: Task[] = (tasksData ?? []).map((row) => ({
+    id: String(row.id),
+    title: row.title ?? "",
+    description: row.description ?? "",
+    category: ((row.category ?? "general") as TaskCategory),
+    assignee: row.assignee ?? "",
+    createdBy: row.created_by ?? "",
+    dueDate: row.due_date ?? "",
+    status: ((row.status ?? "open") as TaskStatus),
+    recurrence: ((row.recurrence ?? "none") as TaskRecurrence),
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  // Build a distinct list of known users from existing task rows + current user
+  const userSet = new Set<string>();
+  if (currentUserEmail) userSet.add(currentUserEmail);
+  tasks.forEach((t) => {
+    if (t.assignee) userSet.add(t.assignee);
+    if (t.createdBy) userSet.add(t.createdBy);
+  });
+
+  // Also include any users who have created content ideas (so you can assign to teammates)
+  const [videoRes, carouselRes, storyRes] = await Promise.all([
+    supabase.from("video_ideas").select("created_by"),
+    supabase.from("carousel_ideas").select("created_by"),
+    supabase.from("story_ideas").select("created_by"),
+  ]);
+  [videoRes.data, carouselRes.data, storyRes.data].forEach((rows) => {
+    (rows ?? []).forEach((r: { created_by?: string | null }) => {
+      if (r.created_by) userSet.add(r.created_by);
+    });
+  });
+
+  const knownUsers = Array.from(userSet)
+    .filter((u) => u && u !== "unknown")
+    .sort((a, b) => a.localeCompare(b));
+
+  return { tasks, currentUserEmail, knownUsers };
 }
 
 export async function getCarouselIdeasData(): Promise<{
