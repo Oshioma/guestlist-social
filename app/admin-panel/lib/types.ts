@@ -210,6 +210,28 @@ export type ProoferComment = {
   createdAt: string;
 };
 
+export type PublishQueuePlatform = "instagram" | "facebook";
+
+export type PublishQueueStatus =
+  | "queued"
+  | "scheduled"
+  | "published"
+  | "failed";
+
+export type ProoferPublishQueueItem = {
+  id: string;
+  postId: string;
+  platform: PublishQueuePlatform;
+  status: PublishQueueStatus;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  publishUrl: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProoferPost = {
   id: string;
   clientId: string;
@@ -221,4 +243,5 @@ export type ProoferPost = {
   createdAt: string;
   updatedAt: string;
   comments?: ProoferComment[];
+  publishQueue?: ProoferPublishQueueItem[];
 };
