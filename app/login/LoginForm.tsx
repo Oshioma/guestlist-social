@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
 export default function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  // We always send the user through the server-side dispatcher at /post-login,
-  // which resolves their role (admin vs client portal user) and picks the
-  // right destination. Forwarding the optional `next` lets admins land where
-  // they were trying to go before being bounced to /login.
+
+  // Always route through server-side dispatcher
   const rawNext = searchParams.get("next");
   const next = rawNext
     ? `/post-login?next=${encodeURIComponent(rawNext)}`
@@ -27,6 +26,7 @@ export default function LoginForm() {
 
     try {
       const supabase = createClient();
+
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -38,9 +38,17 @@ export default function LoginForm() {
         return;
       }
 
-      window.location.href = next;
+      // Helps ensure session state is available before server-side route checks
+      await supabase.auth.getSession();
+
+      router.replace(next);
+      router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
       setLoading(false);
     }
   }
