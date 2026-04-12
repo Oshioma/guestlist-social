@@ -22,6 +22,27 @@ const PATTERN_MIN_CLIENTS = 2;
 const PATTERN_HIGH_CONFIDENCE_CONSISTENCY = 75;
 const PATTERN_HIGH_CONFIDENCE_CLIENTS = 3;
 
+// Engine-verdict weighting. pattern_feedback records the engine's own
+// track record on each pattern: how often a pattern-backed decision led
+// to a positive vs negative measured outcome. We let it override the
+// operator-derived consistency_score in two ways:
+//
+//   1. Block — if the engine has tried a pattern at least
+//      ENGINE_VERDICT_MIN_DECISIVE times and >=60% came back negative,
+//      treat the pattern as unproven even if operator data says
+//      otherwise. The engine's own evidence beats stale operator data.
+//
+//   2. Boost — if the engine has tried a pattern at least
+//      ENGINE_VERDICT_MIN_DECISIVE times and >=70% came back positive,
+//      promote the decision to "high" confidence even if operator
+//      consistency hasn't crossed the high-confidence threshold yet.
+//
+// "Decisive" excludes neutral and inconclusive verdicts, which carry
+// no signal in either direction.
+const ENGINE_VERDICT_MIN_DECISIVE = 3;
+const ENGINE_VERDICT_BLOCK_NEG_RATIO = 0.6;
+const ENGINE_VERDICT_BOOST_POS_RATIO = 0.7;
+
 type DecisionResult = {
   type: string;
   reason: string;
@@ -45,6 +66,45 @@ type GlobalPattern = {
   times_seen: number | null;
   industry: string | null;
 };
+
+type FeedbackRow = {
+  positive_verdicts: number;
+  negative_verdicts: number;
+  neutral_verdicts: number;
+};
+
+// Composite key matching pattern_feedback's PK shape: empty string for the
+// agency-wide row so we can use a plain Map without coalesce dance.
+function feedbackKey(patternKey: string, industry: string | null): string {
+  return `${patternKey}|${industry ?? ""}`;
+}
+
+// Categorise the engine's feedback for a pattern into block / boost / no-op.
+// Returns null when there isn't enough evidence to act on.
+type FeedbackVerdict = "block" | "boost" | "neutral";
+function classifyFeedback(fb: FeedbackRow | undefined): {
+  verdict: FeedbackVerdict;
+  positive: number;
+  negative: number;
+  decisive: number;
+} | null {
+  if (!fb) return null;
+  const positive = fb.positive_verdicts;
+  const negative = fb.negative_verdicts;
+  const decisive = positive + negative;
+  if (decisive < ENGINE_VERDICT_MIN_DECISIVE) {
+    return { verdict: "neutral", positive, negative, decisive };
+  }
+  const negRatio = negative / decisive;
+  const posRatio = positive / decisive;
+  if (negRatio >= ENGINE_VERDICT_BLOCK_NEG_RATIO) {
+    return { verdict: "block", positive, negative, decisive };
+  }
+  if (posRatio >= ENGINE_VERDICT_BOOST_POS_RATIO) {
+    return { verdict: "boost", positive, negative, decisive };
+  }
+  return { verdict: "neutral", positive, negative, decisive };
+}
 
 // Build a key → best-pattern map. When both an industry-scoped row and the
 // agency-wide row exist for the same pattern_key, prefer the industry one
@@ -71,26 +131,52 @@ function buildPatternIndex(
 
 function provenPattern(
   byKey: Map<string, GlobalPattern>,
-  key: string
+  feedbackByKey: Map<string, FeedbackRow>,
+  key: string,
+  stats: { blocked: number }
 ): GlobalPattern | null {
   const p = byKey.get(key);
   if (!p) return null;
   if ((p.consistency_score ?? 0) < PATTERN_MIN_CONSISTENCY) return null;
   if ((p.unique_clients ?? 0) < PATTERN_MIN_CLIENTS) return null;
+  // Engine veto: if our own track record on this pattern slice is decisively
+  // negative, treat it as unproven regardless of operator data. The operator
+  // numbers are folded into consistency_score by generate-global-learnings,
+  // but only at rebuild time — pattern_feedback is the live signal.
+  const fb = classifyFeedback(
+    feedbackByKey.get(feedbackKey(p.pattern_key, p.industry))
+  );
+  if (fb?.verdict === "block") {
+    stats.blocked++;
+    return null;
+  }
   return p;
 }
 
-function patternConfidence(p: GlobalPattern): "high" | "medium" {
-  return (p.consistency_score ?? 0) >= PATTERN_HIGH_CONFIDENCE_CONSISTENCY &&
-    (p.unique_clients ?? 0) >= PATTERN_HIGH_CONFIDENCE_CLIENTS
-    ? "high"
-    : "medium";
+function patternConfidence(
+  p: GlobalPattern,
+  feedbackByKey: Map<string, FeedbackRow>
+): { confidence: "high" | "medium"; boosted: boolean } {
+  const operatorHigh =
+    (p.consistency_score ?? 0) >= PATTERN_HIGH_CONFIDENCE_CONSISTENCY &&
+    (p.unique_clients ?? 0) >= PATTERN_HIGH_CONFIDENCE_CLIENTS;
+  const fb = classifyFeedback(
+    feedbackByKey.get(feedbackKey(p.pattern_key, p.industry))
+  );
+  // Engine boost: enough positive verdicts promote the decision to high
+  // confidence even if operator data hadn't crossed the bar yet.
+  if (fb?.verdict === "boost") {
+    return { confidence: "high", boosted: !operatorHigh };
+  }
+  return { confidence: operatorHigh ? "high" : "medium", boosted: false };
 }
 
 function makePatternDecision(
   type: string,
   metaAction: string | null,
-  p: GlobalPattern
+  p: GlobalPattern,
+  feedbackByKey: Map<string, FeedbackRow>,
+  stats: { boosted: number }
 ): DecisionResult {
   const consistency = Math.round(p.consistency_score ?? 0);
   const clients = p.unique_clients ?? 0;
@@ -98,12 +184,23 @@ function makePatternDecision(
     p.industry === null
       ? `${clients} client${clients === 1 ? "" : "s"}`
       : `${clients} client${clients === 1 ? "" : "s"} in ${p.industry}`;
-  const reason = `Pattern (${p.pattern_label}): ${consistency}% positive across ${scope}, ${p.times_seen ?? 0} actions`;
+  const fb = classifyFeedback(
+    feedbackByKey.get(feedbackKey(p.pattern_key, p.industry))
+  );
+  // When the engine has its own evidence, append it so operators can see
+  // both the operator-data baseline AND the engine's track record at a glance.
+  const engineNote =
+    fb && fb.decisive > 0
+      ? `; engine: ${fb.positive}/${fb.decisive} positive verdicts`
+      : "";
+  const reason = `Pattern (${p.pattern_label}): ${consistency}% positive across ${scope}, ${p.times_seen ?? 0} actions${engineNote}`;
+  const { confidence, boosted } = patternConfidence(p, feedbackByKey);
+  if (boosted) stats.boosted++;
   return {
     type,
     reason,
     action: p.action_summary || p.pattern_label,
-    confidence: patternConfidence(p),
+    confidence,
     meta_action: metaAction,
     // Capture provenance so the queue row can record which pattern row
     // (and industry slice) drove this decision. The verdict feedback loop
@@ -118,7 +215,9 @@ function makePatternDecision(
 // case the caller falls through to getDecision().
 function getPatternBackedDecision(
   ad: Record<string, unknown>,
-  byKey: Map<string, GlobalPattern>
+  byKey: Map<string, GlobalPattern>,
+  feedbackByKey: Map<string, FeedbackRow>,
+  stats: { blocked: number; boosted: number }
 ): DecisionResult | null {
   const status = ad.performance_status as string | null;
   const spend = Number(ad.spend ?? 0);
@@ -129,8 +228,8 @@ function getPatternBackedDecision(
 
   // Winner → look for a proven scale-up pattern.
   if (status === "winner" && score >= STRONG_WINNER_SCORE && conversions > 0) {
-    const p = provenPattern(byKey, "budget:scale_up");
-    if (p) return makePatternDecision("scale_budget", "update_budget", p);
+    const p = provenPattern(byKey, feedbackByKey, "budget:scale_up", stats);
+    if (p) return makePatternDecision("scale_budget", "update_budget", p, feedbackByKey, stats);
   }
 
   // Losing → match the failure signature to a proven action pattern.
@@ -139,8 +238,8 @@ function getPatternBackedDecision(
     // No conversions despite spend → creative replacement is the proven move.
     if (conversions === 0 && spend > 20) {
       for (const key of ["creative:pause_replace", "creative:test_new"]) {
-        const p = provenPattern(byKey, key);
-        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+        const p = provenPattern(byKey, feedbackByKey, key, stats);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p, feedbackByKey, stats);
       }
     }
 
@@ -152,16 +251,16 @@ function getPatternBackedDecision(
         "hook:test_new",
         "creative:test_new",
       ]) {
-        const p = provenPattern(byKey, key);
-        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+        const p = provenPattern(byKey, feedbackByKey, key, stats);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p, feedbackByKey, stats);
       }
     }
 
     // High CPC → audience refinement is the proven move.
     if (cpc > 3.0) {
       for (const key of ["audience:narrow", "audience:exclude"]) {
-        const p = provenPattern(byKey, key);
-        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+        const p = provenPattern(byKey, feedbackByKey, key, stats);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p, feedbackByKey, stats);
       }
     }
   }
@@ -300,12 +399,13 @@ export async function POST(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Fetch ads, learnings, playbook, the client's industry, and the
-    // cross-client global_learnings index in parallel. The global learnings
-    // table is the missing intelligence layer the engine used to ignore —
-    // pulling it here lets getPatternBackedDecision() prefer patterns
-    // validated across multiple clients over per-ad rules of thumb.
-    const [adsRes, learningsRes, playbookRes, clientRes, globalRes] = await Promise.all([
+    // Fetch ads, learnings, playbook, the client's industry, the cross-
+    // client global_learnings index, and the engine's own pattern_feedback
+    // ledger in parallel. global_learnings is the operator-derived
+    // baseline; pattern_feedback is the live record of how the engine's
+    // own pattern-backed decisions have actually played out — combined
+    // they're the inputs to the confidence-weighted scoring below.
+    const [adsRes, learningsRes, playbookRes, clientRes, globalRes, feedbackRes] = await Promise.all([
       supabase
         .from("ads")
         .select("id, name, status, meta_status, meta_id, campaign_id, adset_meta_id, spend, impressions, clicks, conversions, cost_per_result, performance_status, performance_score, ctr, cpc")
@@ -327,6 +427,11 @@ export async function POST(req: Request) {
         .from("global_learnings")
         .select(
           "pattern_type, pattern_key, pattern_label, action_summary, consistency_score, unique_clients, times_seen, industry"
+        ),
+      supabase
+        .from("pattern_feedback")
+        .select(
+          "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts"
         ),
     ]);
 
@@ -357,6 +462,24 @@ export async function POST(req: Request) {
     }));
     const patternIndex = buildPatternIndex(globalRows, industry);
 
+    // Build the pattern_feedback lookup map. Composite key matches the
+    // table's PK shape (empty string for the agency-wide row), so the
+    // engine reads the same slice the verdict writer wrote to.
+    const feedbackByKey = new Map<string, FeedbackRow>();
+    for (const f of feedbackRes.data ?? []) {
+      feedbackByKey.set(
+        feedbackKey(
+          String(f.pattern_key ?? ""),
+          (f.industry as string | null) ?? null
+        ),
+        {
+          positive_verdicts: Number(f.positive_verdicts ?? 0),
+          negative_verdicts: Number(f.negative_verdicts ?? 0),
+          neutral_verdicts: Number(f.neutral_verdicts ?? 0),
+        }
+      );
+    }
+
     // Compute CTR/CPC for each ad if not stored
     const enrichedAds = ads.map((ad) => {
       const impressions = Number(ad.impressions ?? 0);
@@ -383,13 +506,24 @@ export async function POST(req: Request) {
     let queuedPause = 0;
     let queuedBudget = 0;
     let queueDeduped = 0;
+    // Stats for the engine-verdict weighting layer. `blocked` counts
+    // pattern matches that were vetoed by negative engine feedback;
+    // `boosted` counts decisions that got upgraded to high confidence
+    // because of positive engine feedback alone. Both surface in the
+    // response so the operator can see the loop is doing something.
+    const feedbackStats = { blocked: 0, boosted: 0 };
 
     for (const ad of enrichedAds) {
       // Pattern lookup first — when a cross-client pattern matches the
       // ad's signature with high enough consistency, prefer it over the
       // single-ad rule branches. Falls through to getDecision() when no
-      // proven pattern applies.
-      const patternDecision = getPatternBackedDecision(ad, patternIndex);
+      // proven pattern applies (or when engine feedback has vetoed it).
+      const patternDecision = getPatternBackedDecision(
+        ad,
+        patternIndex,
+        feedbackByKey,
+        feedbackStats
+      );
       const decision = patternDecision ?? getDecision(ad, learnings, playbook);
       if (!decision) continue;
       if (patternDecision) patternBacked++;
@@ -485,6 +619,16 @@ export async function POST(req: Request) {
       pattern_backed: patternBacked,
       industry,
       patterns_loaded: patternIndex.size,
+      feedback: {
+        // Distinct pattern slices the engine has any verdict ledger for.
+        slices_loaded: feedbackByKey.size,
+        // Pattern matches the engine vetoed because the ledger said the
+        // pattern's been failing in practice.
+        blocked_by_feedback: feedbackStats.blocked,
+        // Pattern decisions promoted to high confidence by ledger evidence
+        // alone (operator data hadn't crossed the high-confidence bar).
+        boosted_by_feedback: feedbackStats.boosted,
+      },
       queue: {
         pause_ad: queuedPause,
         increase_adset_budget: queuedBudget,
