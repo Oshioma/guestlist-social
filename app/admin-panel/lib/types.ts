@@ -168,3 +168,28 @@ export type StoryTheme = {
   notes: string;
   sortOrder: number;
 };
+
+export type TaskCategory =
+  | "video"
+  | "story"
+  | "carousel"
+  | "design"
+  | "general";
+
+export type TaskStatus = "open" | "in_progress" | "completed";
+
+export type TaskRecurrence = "none" | "weekly" | "monthly";
+
+export type Task = {
+  id: string;
+  title: string;
+  description: string;
+  category: TaskCategory;
+  assignee: string;
+  createdBy: string;
+  dueDate: string;
+  status: TaskStatus;
+  recurrence: TaskRecurrence;
+  createdAt: string;
+  updatedAt: string;
+};

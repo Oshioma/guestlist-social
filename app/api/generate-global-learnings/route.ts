@@ -39,6 +39,8 @@ type PatternType =
   | "budget"
   | "failure"
   | "fast_win"
+  | "creative_format"
+  | "creative_hook"
   | "other";
 
 function classifyType(row: LearningRow): PatternType {
@@ -158,6 +160,17 @@ function getPatternLabel(type: PatternType, key: string): string {
 
 // ---------------------------------------------------------------------------
 
+// Recency window. Patterns are computed from data inside this window only —
+// keeps the playbook from being dragged around by 6-month-old learnings or
+// archived ad inventory. Action learnings are filtered by their created_at;
+// ads are filtered by meta_effective_status (we drop ARCHIVED/DELETED so the
+// creative buckets reflect currently-live or recently-paused inventory).
+//
+// This is the *single* knob that controls "how current is the playbook".
+// Bumping it means slower to react but more statistical power; lowering it
+// means more responsive but more volatile.
+const GENERATOR_WINDOW_DAYS = 90;
+
 export async function POST() {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -170,11 +183,16 @@ export async function POST() {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    const windowStartIso = new Date(
+      Date.now() - GENERATOR_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    ).toISOString();
+
     const { data: rawLearnings, error: fetchError } = await supabase
       .from("action_learnings")
       .select(
         "id, client_id, problem, action_taken, outcome, learning, tags, times_seen, avg_ctr_lift, avg_cpc_change, reliability_score"
-      );
+      )
+      .gte("created_at", windowStartIso);
 
     if (fetchError) {
       return NextResponse.json(
@@ -312,7 +330,333 @@ export async function POST() {
         consistency_score: consistency,
         sample_learnings: g.samples,
         top_tags: topTags,
+        // Action-pattern rows are always cross-industry — they describe
+        // operator playbook moves, not creative inventory. Industry-specific
+        // action patterns would need a different aggregation pass keyed on
+        // client_id → industry, which is a future enhancement.
+        industry: null as string | null,
         last_updated: new Date().toISOString(),
+      };
+    });
+
+    // -----------------------------------------------------------------------
+    // Cross-client creative aggregation.
+    //
+    // The action_learnings groups above describe what operators *did*. The
+    // block below describes what's actually working in the live ad data,
+    // bucketed by creative attributes (hook_type, format_style) — these
+    // are the columns the meta-creative-trust-layer added on the ads
+    // table.
+    //
+    // Two passes:
+    //   1. Cross-industry — every bucket compared against the global mean
+    //      CTR. Emits rows with industry=null. These power the agency-wide
+    //      hero card.
+    //   2. Per-industry — every bucket also segmented by the client's
+    //      industry, compared against that industry's own mean CTR. Emits
+    //      rows with industry=<industry>. These power the industry filter
+    //      on the playbook page and avoid the bias of comparing
+    //      hospitality CTR against e-commerce CTR.
+    //
+    // A bucket emits a row when:
+    //   - the bucket has impressions from at least 2 distinct clients
+    //   - the bucket has at least 5 ads in it
+    //   - the lift vs the relevant baseline is >= 15% in either direction
+    //
+    // The thresholds are deliberately conservative — we want this to be
+    // the agency-level edge, not noise about a 2% CTR gap on n=3.
+    // -----------------------------------------------------------------------
+    const MIN_IMPRESSIONS = 200;
+    const MIN_ADS_PER_BUCKET = 5;
+    const MIN_UNIQUE_CLIENTS = 2;
+    const MIN_LIFT_PCT = 15;
+
+    // Industry lookup. We do one read of clients(id, industry) and build a
+    // Map keyed by client_id. Ads with no client_id, or whose client has
+    // no industry set, contribute only to the cross-industry pass.
+    const { data: clientsRaw } = await supabase
+      .from("clients")
+      .select("id, industry");
+    const industryByClient = new Map<number, string | null>();
+    for (const c of (clientsRaw ?? []) as { id: number; industry: string | null }[]) {
+      industryByClient.set(c.id, c.industry ?? null);
+    }
+
+    function formatIndustry(ind: string): string {
+      // Operators can type freeform — capitalize first letter, leave the
+      // rest alone so multi-word entries like "real estate" don't lose
+      // their spacing.
+      return ind.charAt(0).toUpperCase() + ind.slice(1);
+    }
+
+    type CreativeAdRow = {
+      id: number;
+      client_id: number | null;
+      hook_type: string | null;
+      format_style: string | null;
+      impressions: number | null;
+      clicks: number | null;
+      meta_effective_status: string | null;
+    };
+
+    // Skip dead inventory — ARCHIVED and DELETED ads represent stuff that's
+    // no longer running, so their CTR shouldn't influence "what's working
+    // right now". `meta_effective_status` is null on rows that were never
+    // synced from Meta, so we filter via .not().in() rather than a positive
+    // include list (keeps locally-created or partially-synced ads).
+    const { data: rawAds } = await supabase
+      .from("ads")
+      .select(
+        "id, client_id, hook_type, format_style, impressions, clicks, meta_effective_status"
+      )
+      .not("meta_effective_status", "in", "(ARCHIVED,DELETED)");
+    const adRows = (rawAds ?? []) as CreativeAdRow[];
+
+    function ctrOf(ad: CreativeAdRow): number | null {
+      const imp = Number(ad.impressions ?? 0);
+      const clk = Number(ad.clicks ?? 0);
+      if (imp < MIN_IMPRESSIONS) return null;
+      return (clk / imp) * 100;
+    }
+
+    // Global mean CTR over every ad with enough impressions — the
+    // baseline cross-industry buckets are compared against.
+    const allCtrs = adRows
+      .map((a) => ctrOf(a))
+      .filter((v): v is number => v !== null);
+    const globalMeanCtr =
+      allCtrs.length > 0
+        ? allCtrs.reduce((s, v) => s + v, 0) / allCtrs.length
+        : 0;
+
+    // Per-industry baselines. Each industry gets its own mean CTR so that
+    // an industry-specific bucket is judged against its own peers, not
+    // against the agency average. Industries with no qualifying ads fall
+    // through to the global baseline.
+    const industryCtrs = new Map<string, number[]>();
+    for (const ad of adRows) {
+      const ctr = ctrOf(ad);
+      if (ctr == null) continue;
+      if (ad.client_id == null) continue;
+      const ind = industryByClient.get(ad.client_id);
+      if (!ind) continue;
+      if (!industryCtrs.has(ind)) industryCtrs.set(ind, []);
+      industryCtrs.get(ind)!.push(ctr);
+    }
+    const industryMeanCtr = new Map<string, number>();
+    for (const [ind, ctrs] of industryCtrs) {
+      industryMeanCtr.set(
+        ind,
+        ctrs.reduce((s, v) => s + v, 0) / ctrs.length
+      );
+    }
+
+    type CreativeBucket = {
+      pattern_type: "creative_format" | "creative_hook";
+      pattern_key: string;
+      pattern_label: string;
+      ctrs: number[];
+      client_ids: Set<number>;
+      ad_count: number;
+      industry: string | null;
+    };
+
+    const creativeBuckets = new Map<string, CreativeBucket>();
+
+    function addToBucket(
+      bucketKey: string,
+      type: "creative_format" | "creative_hook",
+      label: string,
+      ad: CreativeAdRow,
+      ctr: number,
+      industry: string | null
+    ) {
+      let b = creativeBuckets.get(bucketKey);
+      if (!b) {
+        b = {
+          pattern_type: type,
+          pattern_key: bucketKey,
+          pattern_label: label,
+          ctrs: [],
+          client_ids: new Set(),
+          ad_count: 0,
+          industry,
+        };
+        creativeBuckets.set(bucketKey, b);
+      }
+      b.ctrs.push(ctr);
+      if (ad.client_id != null) b.client_ids.add(ad.client_id);
+      b.ad_count++;
+    }
+
+    const formatLabels: Record<string, string> = {
+      talking_head: "Talking-head video",
+      product_shot: "Product shot",
+      ugc: "UGC-style",
+      graphic: "Graphic / designed image",
+      text_heavy: "Text-heavy image",
+    };
+
+    const hookLabels: Record<string, string> = {
+      direct_offer: "Direct offer hook",
+      curiosity: "Curiosity hook",
+      problem_solution: "Problem-solution hook",
+      testimonial: "Testimonial hook",
+      how_to: "How-to hook",
+      emotional: "Emotional hook",
+    };
+
+    for (const ad of adRows) {
+      const ctr = ctrOf(ad);
+      if (ctr == null) continue;
+
+      // Look up the ad's industry once — used to add the ad to per-industry
+      // buckets in addition to the cross-industry one. An ad with no client
+      // industry contributes to cross-industry only.
+      const adIndustry =
+        ad.client_id != null ? industryByClient.get(ad.client_id) ?? null : null;
+
+      if (ad.format_style) {
+        const baseKey = `creative_format:${ad.format_style}`;
+        const label = formatLabels[ad.format_style] ?? ad.format_style;
+        addToBucket(baseKey, "creative_format", label, ad, ctr, null);
+        if (adIndustry) {
+          addToBucket(
+            `${baseKey}:industry:${adIndustry}`,
+            "creative_format",
+            label,
+            ad,
+            ctr,
+            adIndustry
+          );
+        }
+      }
+      if (ad.hook_type) {
+        const baseKey = `creative_hook:${ad.hook_type}`;
+        const label = hookLabels[ad.hook_type] ?? ad.hook_type;
+        addToBucket(baseKey, "creative_hook", label, ad, ctr, null);
+        if (adIndustry) {
+          addToBucket(
+            `${baseKey}:industry:${adIndustry}`,
+            "creative_hook",
+            label,
+            ad,
+            ctr,
+            adIndustry
+          );
+        }
+      }
+    }
+
+    const creativeRows: typeof rows = [];
+    for (const b of creativeBuckets.values()) {
+      if (b.ad_count < MIN_ADS_PER_BUCKET) continue;
+      if (b.client_ids.size < MIN_UNIQUE_CLIENTS) continue;
+
+      // Per-industry buckets compare against the industry's own mean —
+      // hospitality CTR shouldn't be judged against e-commerce CTR. If for
+      // any reason the industry baseline is missing (every ad in that
+      // industry was filtered out by impression threshold), fall back to
+      // the global baseline so we never silently divide by zero.
+      const baseline =
+        b.industry && industryMeanCtr.has(b.industry)
+          ? industryMeanCtr.get(b.industry)!
+          : globalMeanCtr;
+
+      const meanCtr = b.ctrs.reduce((s, v) => s + v, 0) / b.ctrs.length;
+      const liftPct =
+        baseline > 0 ? ((meanCtr - baseline) / baseline) * 100 : 0;
+
+      // Skip the unremarkable middle — only emit a finding when the
+      // creative attribute moves the needle either way.
+      if (Math.abs(liftPct) < MIN_LIFT_PCT) continue;
+
+      const positive = liftPct > 0;
+      // Bucket consistency = share of ads in the bucket that beat the
+      // baseline they're being judged against (global or industry).
+      // Different from "lift" — captures whether the win is broad or
+      // driven by a couple of standouts.
+      const aboveBaselineCount = b.ctrs.filter((v) => v > baseline).length;
+      const consistency = Number(
+        ((aboveBaselineCount / b.ctrs.length) * 100).toFixed(1)
+      );
+
+      const scope = b.industry
+        ? `in ${formatIndustry(b.industry)}`
+        : `across ${b.client_ids.size} clients`;
+      const summary = positive
+        ? `${b.pattern_label} outperforms the average by ${liftPct.toFixed(0)}% ${scope}`
+        : `${b.pattern_label} underperforms the average by ${Math.abs(liftPct).toFixed(0)}% ${scope}`;
+
+      // Per-industry rows get the industry name appended to the label so
+      // the playbook page can render them without needing to look up the
+      // industry separately for each card.
+      const labelWithScope = b.industry
+        ? `${b.pattern_label} · ${formatIndustry(b.industry)}`
+        : b.pattern_label;
+
+      creativeRows.push({
+        pattern_type: b.pattern_type,
+        pattern_key: b.pattern_key,
+        pattern_label: labelWithScope,
+        action_summary: summary,
+        times_seen: b.ad_count,
+        unique_clients: b.client_ids.size,
+        positive_count: positive ? aboveBaselineCount : 0,
+        neutral_count: 0,
+        negative_count: positive ? 0 : b.ctrs.length - aboveBaselineCount,
+        avg_ctr_lift: Number(liftPct.toFixed(2)),
+        avg_cpc_change: null,
+        avg_reliability: null,
+        consistency_score: consistency,
+        sample_learnings: [],
+        top_tags: [],
+        industry: b.industry,
+        last_updated: new Date().toISOString(),
+      });
+    }
+
+    rows.push(...creativeRows);
+
+    // -----------------------------------------------------------------------
+    // Backward validation. Before we wipe the table, snapshot the previous
+    // run's consistency_score and unique_clients keyed by pattern_key, then
+    // attach those as prev_* on the new rows. The UI uses the delta between
+    // current and prev to flag "↓ slipping" patterns and the absence of a
+    // prev row to flag "✨ new" patterns. Net effect: every refresh becomes
+    // a check of yesterday's predictions against today's data, instead of
+    // overwriting silently.
+    // -----------------------------------------------------------------------
+    const { data: priorRows } = await supabase
+      .from("global_learnings")
+      .select("pattern_key, consistency_score, unique_clients");
+
+    const priorByKey = new Map<
+      string,
+      { consistency_score: number | null; unique_clients: number | null }
+    >();
+    for (const r of (priorRows ?? []) as {
+      pattern_key: string;
+      consistency_score: number | null;
+      unique_clients: number | null;
+    }[]) {
+      priorByKey.set(r.pattern_key, {
+        consistency_score: r.consistency_score,
+        unique_clients: r.unique_clients,
+      });
+    }
+
+    type EnrichedRow = (typeof rows)[number] & {
+      prev_consistency_score: number | null;
+      prev_unique_clients: number | null;
+    };
+
+    const enrichedRows: EnrichedRow[] = rows.map((r) => {
+      const prior = priorByKey.get(r.pattern_key);
+      return {
+        ...r,
+        prev_consistency_score: prior?.consistency_score ?? null,
+        prev_unique_clients: prior?.unique_clients ?? null,
       };
     });
 
@@ -330,8 +674,10 @@ export async function POST() {
       );
     }
 
-    if (rows.length > 0) {
-      const { error: insertError } = await supabase.from("global_learnings").insert(rows);
+    if (enrichedRows.length > 0) {
+      const { error: insertError } = await supabase
+        .from("global_learnings")
+        .insert(enrichedRows);
       if (insertError) {
         return NextResponse.json(
           { ok: false, error: `Insert failed: ${insertError.message}` },
@@ -340,11 +686,34 @@ export async function POST() {
       }
     }
 
+    // Cheap validation summary in the response: how many patterns slipped,
+    // held, or first appeared this run. Useful as both a smoke test and as
+    // an answer to "did anything important change since last run".
+    const SLIP_THRESHOLD = 10; // consistency points
+    let slipping = 0;
+    let firstSeen = 0;
+    let holding = 0;
+    for (const r of enrichedRows) {
+      if (r.prev_consistency_score == null) {
+        firstSeen++;
+      } else if (
+        Number(r.consistency_score) <
+        Number(r.prev_consistency_score) - SLIP_THRESHOLD
+      ) {
+        slipping++;
+      } else {
+        holding++;
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      generated: rows.length,
+      generated: enrichedRows.length,
       source_learnings: learnings.length,
-      breakdown: rows.reduce(
+      window_days: GENERATOR_WINDOW_DAYS,
+      window_start: windowStartIso,
+      validation: { slipping, first_seen: firstSeen, holding },
+      breakdown: enrichedRows.reduce(
         (acc, r) => {
           acc[r.pattern_type] = (acc[r.pattern_type] ?? 0) + 1;
           return acc;

@@ -14,6 +14,9 @@ import {
   mapMetaObjective,
   insightToAdRow,
   creativeToAdRow,
+  resolveVideoSource,
+  resolveVideoPoster,
+  resolveObjectStoryImage,
   targetingToAudience,
 } from "@/lib/meta";
 import { getAdAccount } from "@/lib/meta";
@@ -227,7 +230,35 @@ export async function syncMetaData(clientId: string) {
             .join(" — ") || null
         : null;
 
-      const creativeData = creativeToAdRow(metaAd);
+      const { creative_video_id, ...creativeData } = creativeToAdRow(metaAd);
+
+      // Resolve the playable video URL via a separate Graph call. We do
+      // this once per ad with a video — never on the hot path of an
+      // insight loop. Failures return null and don't break the sync.
+      const creative_video_url = creative_video_id
+        ? await resolveVideoSource(creative_video_id)
+        : null;
+
+      // Thumbnail fallback chain. The extractor's normal fields cover
+      // most ads, but a meaningful slice of the library — video creatives
+      // built without an explicit image override, plus Instagram-only ads
+      // where everything lives on the source post — comes back with
+      // `creative_image_url = null` and renders as "No preview". Walk
+      // two more Graph endpoints (video poster, then object_story image)
+      // until we have *something* to show.
+      //
+      // Order matters: the video poster is the cheapest fallback (one
+      // call we're often making anyway for the source URL), so we try it
+      // before the object_story walk.
+      let creative_image_url = creativeData.creative_image_url;
+      if (!creative_image_url && creative_video_id) {
+        creative_image_url = await resolveVideoPoster(creative_video_id);
+      }
+      if (!creative_image_url && creativeData.object_story_id) {
+        creative_image_url = await resolveObjectStoryImage(
+          creativeData.object_story_id
+        );
+      }
 
       // Everything we want to write on every sync (update OR insert).
       // Spread adData (which contains all the new delivery/funnel/video
@@ -240,7 +271,12 @@ export async function syncMetaData(clientId: string) {
         creative_hook: creativeHook,
         meta_effective_status: metaAd.effective_status ?? null,
         meta_configured_status: metaAd.configured_status ?? null,
+        // Cached so the meta_execution_queue seeder can attach the
+        // ad set Meta id without having to re-walk the adsets list.
+        adset_meta_id: metaAd.adset_id ?? null,
         ...creativeData,
+        creative_image_url,
+        creative_video_url,
       };
 
       const { data: existingAd } = await supabase

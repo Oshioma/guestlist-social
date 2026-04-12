@@ -7,6 +7,8 @@ import SuggestionCard from "../components/SuggestionCard";
 import AdRow from "../components/AdRow";
 import EmptyState from "../components/EmptyState";
 import TopPriorities from "../components/TopPriorities";
+import WhatsWorkingNow from "../components/WhatsWorkingNow";
+import DecisionAccuracy from "../components/DecisionAccuracy";
 
 export const dynamic = "force-dynamic";
 
@@ -159,6 +161,18 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Cross-client intelligence: what's actually working across the
+            whole agency, not just inside one account. Sits above
+            TopPriorities because it's the strategic frame; the priorities
+            below are the day-to-day execution view. */}
+        <WhatsWorkingNow />
+
+        {/* Closed prediction loop: how often was the engine actually right
+            about the decisions it queued? Pairs with WhatsWorkingNow — one
+            tells you the playbook, the other tells you whether the playbook
+            is paying off when we act on it. */}
+        <DecisionAccuracy />
 
         {/* Top-3 priorities — the calmest and most decisive surface in the
             product. Everything below is supporting context. */}

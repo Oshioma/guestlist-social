@@ -16,22 +16,32 @@ export async function requireAdminPanelAccess(
     redirect("/login");
   }
 
+  // Resolve the caller's role. We use maybeSingle() here so that a freshly
+  // provisioned Supabase user (created in the Auth dashboard but not yet
+  // listed in user_roles) does not 500 on .single() and bounce back to
+  // /login — that historical behavior produced an invisible redirect loop.
+  //
+  // Missing row → default to "viewer" (read-only). Admins who want to
+  // promote someone can insert a row into user_roles after the first login.
   const { data: roleRow, error } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (error || !roleRow) {
+  if (error) {
+    console.error("requireAdminPanelAccess: user_roles lookup failed", error);
     redirect("/login");
   }
 
-  if (!allowedRoles.includes(roleRow.role as AppRole)) {
+  const role = ((roleRow?.role as AppRole | undefined) ?? "viewer") as AppRole;
+
+  if (!allowedRoles.includes(role)) {
     redirect("/login");
   }
 
   return {
     user,
-    role: roleRow.role as AppRole,
+    role,
   };
 }

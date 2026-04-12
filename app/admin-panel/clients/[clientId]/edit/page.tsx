@@ -109,6 +109,7 @@ export default async function EditClientPage({ params }: Props) {
           status: mapClientStatus(client.status ?? "testing"),
           websiteUrl: client.website_url ?? "",
           notes: client.notes ?? "",
+          industry: client.industry ?? "",
         }}
       />
     </div>

@@ -20,6 +20,7 @@ export async function createClientAction(formData: FormData) {
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const industry = String(formData.get("industry") ?? "").trim();
 
   if (!name) {
     throw new Error("Client name is required.");
@@ -39,6 +40,7 @@ export async function createClientAction(formData: FormData) {
     status: dbStatus,
     website_url: websiteUrl || null,
     notes: notes || null,
+    industry: industry || null,
   });
 
   if (error) {
@@ -60,6 +62,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
+  const industry = String(formData.get("industry") ?? "").trim();
 
   if (!clientId) {
     throw new Error("Missing client id.");
@@ -85,6 +88,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
       status: dbStatus,
       website_url: websiteUrl || null,
       notes: notes || null,
+      industry: industry || null,
     })
     .eq("id", clientId);
 
