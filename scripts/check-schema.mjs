@@ -68,6 +68,7 @@ const SCHEMA = {
     "validated_pattern_key",
     "outcome",
     "result_summary",
+    "operator_note",
     "metric_snapshot_before",
     "metric_snapshot_after",
     "completed_at",

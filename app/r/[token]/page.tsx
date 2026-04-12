@@ -24,6 +24,7 @@ type TestItem = {
   ad_name: string;
   hypothesis: string;
   result: string;
+  operator_note?: string | null;
   outcome: "positive" | "neutral" | "negative";
   symbol: "✓" | "•" | "✗";
 };
@@ -390,6 +391,25 @@ export default async function PublicReviewPage({
                           }}
                         >
                           {t.result}
+                        </div>
+                      )}
+                      {t.operator_note && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: "6px 10px",
+                            background: "#fef9c3",
+                            border: "1px solid #fde68a",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: "#713f12",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <strong style={{ fontWeight: 600 }}>
+                            Note from your team:
+                          </strong>{" "}
+                          {t.operator_note}
                         </div>
                       )}
                     </div>

@@ -48,6 +48,9 @@ type TimelineEvent = {
   title: string;
   why?: string | null;
   detail?: string | null;
+  // Operator's typed gloss when completing the action — surfaces calmly
+  // in the trail so clients see human context next to the metric delta.
+  operatorNote?: string | null;
   before?: MetricSnapshot;
   after?: MetricSnapshot;
   outcome?: "positive" | "neutral" | "negative" | null;
@@ -283,6 +286,7 @@ export default async function PortalAdAuditTrailPage({
         title: KIND_LABEL.action_completed,
         why: a.action ?? null,
         detail: a.result_summary ?? null,
+        operatorNote: (a as any).operator_note ?? null,
         before: snap(a.metric_snapshot_before),
         after: snap(a.metric_snapshot_after),
         outcome: (a.outcome as any) ?? null,
@@ -582,6 +586,23 @@ export default async function PortalAdAuditTrailPage({
                         }}
                       >
                         {e.detail}
+                      </div>
+                    )}
+                    {e.operatorNote && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: "8px 10px",
+                          background: "#f0f9ff",
+                          border: "1px solid #bae6fd",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          color: "#0c4a6e",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>Note from your team:</span>{" "}
+                        {e.operatorNote}
                       </div>
                     )}
                     <MetricDelta before={e.before ?? null} after={e.after ?? null} />

@@ -66,6 +66,10 @@ type TimelineEvent = {
   title: string;
   why?: string | null;
   detail?: string | null;
+  // Free-form one-liner the operator typed when completing the action.
+  // Renders distinctly so the operator's voice doesn't blend into the
+  // auto-generated reasons string in `detail`.
+  operatorNote?: string | null;
   before?: MetricSnapshot;
   after?: MetricSnapshot;
   outcome?: "positive" | "neutral" | "negative" | null;
@@ -376,6 +380,7 @@ export default async function AdAuditTrailPage({
         title: KIND_LABEL.action_completed,
         why: a.action ?? null,
         detail: a.result_summary ?? null,
+        operatorNote: (a as any).operator_note ?? null,
         before: snap(a.metric_snapshot_before),
         after: snap(a.metric_snapshot_after),
         outcome: (a.outcome as any) ?? null,
@@ -757,6 +762,23 @@ export default async function AdAuditTrailPage({
                         }}
                       >
                         {e.detail}
+                      </div>
+                    )}
+                    {e.operatorNote && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: "8px 10px",
+                          background: "#fef9c3",
+                          border: "1px solid #fde68a",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          color: "#713f12",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>Operator note:</span>{" "}
+                        {e.operatorNote}
                       </div>
                     )}
                     <MetricDelta before={e.before ?? null} after={e.after ?? null} />

@@ -205,7 +205,7 @@ export async function POST(req: Request) {
       supabase
         .from("ad_actions")
         .select(
-          "id, ad_id, problem, action, priority, status, outcome, result_summary, hypothesis, validated_by, validated_pattern_key, completed_at, created_at, ads!inner(name, client_id)"
+          "id, ad_id, problem, action, priority, status, outcome, result_summary, operator_note, hypothesis, validated_by, validated_pattern_key, completed_at, created_at, ads!inner(name, client_id)"
         )
         .eq("ads.client_id", clientId)
         .order("created_at", { ascending: false }),
@@ -404,6 +404,9 @@ export async function POST(req: Request) {
       ad_name: string;
       hypothesis: string;
       result: string;
+      // Operator's verbatim one-liner — quoted in the review so the client
+      // gets the human context behind the metric delta.
+      operator_note: string | null;
       outcome: "positive" | "neutral" | "negative";
       symbol: "✓" | "•" | "✗";
     };
@@ -424,6 +427,8 @@ export async function POST(req: Request) {
         ad_name: relName(a.ads) ?? `Ad #${a.ad_id}`,
         hypothesis: a.hypothesis ?? a.action ?? "",
         result: a.result_summary ?? "Logged",
+        operator_note:
+          (a as { operator_note?: string | null }).operator_note ?? null,
         outcome,
         symbol: outcome === "positive" ? "✓" : outcome === "negative" ? "✗" : "•",
       });
