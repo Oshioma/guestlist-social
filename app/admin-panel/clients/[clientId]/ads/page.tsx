@@ -53,12 +53,22 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
+  // Window the ads list to the last 6 months. Old ads were dragging the
+  // page down with rows whose Meta CDN creative URLs had long since
+  // expired (rendering as "No preview"), and they pollute the totals
+  // strip with stale £/impressions numbers that have nothing to do with
+  // anything the operator can act on now. The cutoff is computed from
+  // the request time so it always means "the last 6 months from today".
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+  const adsCutoffIso = new Date(Date.now() - SIX_MONTHS_MS).toISOString();
+
   const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes, decisionsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
       .select("*, campaigns(id, name)")
       .eq("client_id", clientId)
+      .gte("created_at", adsCutoffIso)
       .order("created_at", { ascending: false }),
     supabase
       .from("ad_actions")
@@ -366,6 +376,9 @@ export default async function ClientAdsPage({
         <p style={{ fontSize: 14, color: "#71717a", margin: "6px 0 0" }}>
           Performance scored automatically. Each ad is rated by CTR, CPC, conversions, and spend.
         </p>
+        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "4px 0 0" }}>
+          Showing ads created in the last 6 months. Older ads are hidden because their Meta creative URLs typically expire and the totals stop reflecting anything actionable.
+        </p>
         <div style={{ marginTop: 12 }}>
           <ScoreAndGenerateButton clientId={clientId} />
         </div>
@@ -558,7 +571,7 @@ export default async function ClientAdsPage({
       )}
 
       {/* ── ALL ADS ── */}
-      <SectionCard title={`All ads (${ads.length})`}>
+      <SectionCard title={`All ads · last 6 months (${ads.length})`}>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {ads.map((ad) => {

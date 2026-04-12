@@ -12,6 +12,16 @@ const ENOUGH_SPEND = 10;
 const STUCK_TEST_SPEND = 25;
 const STRONG_WINNER_SCORE = 5;
 
+// Cross-client pattern thresholds. A pattern only overrides the rule engine
+// when at least this many independent clients have validated it AND the
+// majority of outcomes were positive. Set conservatively — a wrong pattern
+// is worse than no pattern, because the operator trusts pattern-backed
+// reasons more than rule-of-thumb reasons.
+const PATTERN_MIN_CONSISTENCY = 60;
+const PATTERN_MIN_CLIENTS = 2;
+const PATTERN_HIGH_CONFIDENCE_CONSISTENCY = 75;
+const PATTERN_HIGH_CONFIDENCE_CLIENTS = 3;
+
 type DecisionResult = {
   type: string;
   reason: string;
@@ -19,6 +29,135 @@ type DecisionResult = {
   confidence: string;
   meta_action: string | null;
 };
+
+type GlobalPattern = {
+  pattern_type: string;
+  pattern_key: string;
+  pattern_label: string;
+  action_summary: string | null;
+  consistency_score: number | null;
+  unique_clients: number | null;
+  times_seen: number | null;
+  industry: string | null;
+};
+
+// Build a key → best-pattern map. When both an industry-scoped row and the
+// agency-wide row exist for the same pattern_key, prefer the industry one
+// (more specific = more relevant signal for this client).
+function buildPatternIndex(
+  rows: GlobalPattern[],
+  industry: string | null
+): Map<string, GlobalPattern> {
+  const byKey = new Map<string, GlobalPattern>();
+  for (const r of rows) {
+    if (r.industry !== null && r.industry !== industry) continue;
+    const existing = byKey.get(r.pattern_key);
+    if (!existing) {
+      byKey.set(r.pattern_key, r);
+      continue;
+    }
+    // Prefer industry-scoped over agency-wide.
+    if (existing.industry === null && r.industry === industry) {
+      byKey.set(r.pattern_key, r);
+    }
+  }
+  return byKey;
+}
+
+function provenPattern(
+  byKey: Map<string, GlobalPattern>,
+  key: string
+): GlobalPattern | null {
+  const p = byKey.get(key);
+  if (!p) return null;
+  if ((p.consistency_score ?? 0) < PATTERN_MIN_CONSISTENCY) return null;
+  if ((p.unique_clients ?? 0) < PATTERN_MIN_CLIENTS) return null;
+  return p;
+}
+
+function patternConfidence(p: GlobalPattern): "high" | "medium" {
+  return (p.consistency_score ?? 0) >= PATTERN_HIGH_CONFIDENCE_CONSISTENCY &&
+    (p.unique_clients ?? 0) >= PATTERN_HIGH_CONFIDENCE_CLIENTS
+    ? "high"
+    : "medium";
+}
+
+function makePatternDecision(
+  type: string,
+  metaAction: string | null,
+  p: GlobalPattern
+): DecisionResult {
+  const consistency = Math.round(p.consistency_score ?? 0);
+  const clients = p.unique_clients ?? 0;
+  const scope =
+    p.industry === null
+      ? `${clients} client${clients === 1 ? "" : "s"}`
+      : `${clients} client${clients === 1 ? "" : "s"} in ${p.industry}`;
+  const reason = `Pattern (${p.pattern_label}): ${consistency}% positive across ${scope}, ${p.times_seen ?? 0} actions`;
+  return {
+    type,
+    reason,
+    action: p.action_summary || p.pattern_label,
+    confidence: patternConfidence(p),
+    meta_action: metaAction,
+  };
+}
+
+// Pattern-backed decision: consult global_learnings before the rule engine.
+// Returns null when no proven pattern matches the ad's signature, in which
+// case the caller falls through to getDecision().
+function getPatternBackedDecision(
+  ad: Record<string, unknown>,
+  byKey: Map<string, GlobalPattern>
+): DecisionResult | null {
+  const status = ad.performance_status as string | null;
+  const spend = Number(ad.spend ?? 0);
+  const score = Number(ad.performance_score ?? 0);
+  const ctr = Number(ad.ctr ?? 0);
+  const cpc = Number(ad.cpc ?? 0);
+  const conversions = Number(ad.conversions ?? 0);
+
+  // Winner → look for a proven scale-up pattern.
+  if (status === "winner" && score >= STRONG_WINNER_SCORE && conversions > 0) {
+    const p = provenPattern(byKey, "budget:scale_up");
+    if (p) return makePatternDecision("scale_budget", "update_budget", p);
+  }
+
+  // Losing → match the failure signature to a proven action pattern.
+  // Order matters: most specific signal first.
+  if (status === "losing" && spend > ENOUGH_SPEND) {
+    // No conversions despite spend → creative replacement is the proven move.
+    if (conversions === 0 && spend > 20) {
+      for (const key of ["creative:pause_replace", "creative:test_new"]) {
+        const p = provenPattern(byKey, key);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+      }
+    }
+
+    // Low CTR → hook or creative refresh, whichever has the stronger signal.
+    if (ctr < 1.0) {
+      for (const key of [
+        "creative:pause_replace",
+        "hook:rewrite",
+        "hook:test_new",
+        "creative:test_new",
+      ]) {
+        const p = provenPattern(byKey, key);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+      }
+    }
+
+    // High CPC → audience refinement is the proven move.
+    if (cpc > 3.0) {
+      for (const key of ["audience:narrow", "audience:exclude"]) {
+        const p = provenPattern(byKey, key);
+        if (p) return makePatternDecision("pause_or_replace", "pause", p);
+      }
+    }
+  }
+
+  return null;
+}
 
 function getDecision(
   ad: Record<string, unknown>,
@@ -151,8 +290,12 @@ export async function POST(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Fetch ads, learnings, and playbook in parallel
-    const [adsRes, learningsRes, playbookRes] = await Promise.all([
+    // Fetch ads, learnings, playbook, the client's industry, and the
+    // cross-client global_learnings index in parallel. The global learnings
+    // table is the missing intelligence layer the engine used to ignore —
+    // pulling it here lets getPatternBackedDecision() prefer patterns
+    // validated across multiple clients over per-ad rules of thumb.
+    const [adsRes, learningsRes, playbookRes, clientRes, globalRes] = await Promise.all([
       supabase
         .from("ads")
         .select("id, name, status, meta_status, meta_id, campaign_id, adset_meta_id, spend, impressions, clicks, conversions, cost_per_result, performance_status, performance_score, ctr, cpc")
@@ -165,6 +308,16 @@ export async function POST(req: Request) {
         .from("client_playbooks")
         .select("category, insight, avg_reliability")
         .eq("client_id", clientId),
+      supabase
+        .from("clients")
+        .select("industry")
+        .eq("id", clientId)
+        .maybeSingle(),
+      supabase
+        .from("global_learnings")
+        .select(
+          "pattern_type, pattern_key, pattern_label, action_summary, consistency_score, unique_clients, times_seen, industry"
+        ),
     ]);
 
     const ads = adsRes.data ?? [];
@@ -180,6 +333,19 @@ export async function POST(req: Request) {
       insight: p.insight ?? "",
       avg_reliability: Number(p.avg_reliability ?? 0),
     }));
+
+    const industry = (clientRes.data?.industry as string | null) ?? null;
+    const globalRows = (globalRes.data ?? []).map((r) => ({
+      pattern_type: String(r.pattern_type ?? ""),
+      pattern_key: String(r.pattern_key ?? ""),
+      pattern_label: String(r.pattern_label ?? ""),
+      action_summary: r.action_summary as string | null,
+      consistency_score: r.consistency_score === null ? null : Number(r.consistency_score),
+      unique_clients: r.unique_clients === null ? null : Number(r.unique_clients),
+      times_seen: r.times_seen === null ? null : Number(r.times_seen),
+      industry: (r.industry as string | null) ?? null,
+    }));
+    const patternIndex = buildPatternIndex(globalRows, industry);
 
     // Compute CTR/CPC for each ad if not stored
     const enrichedAds = ads.map((ad) => {
@@ -201,6 +367,7 @@ export async function POST(req: Request) {
       .eq("status", "pending");
 
     let generated = 0;
+    let patternBacked = 0;
     const errors: string[] = [];
     // Stats for the queue seeder so the response shows what landed where.
     let queuedPause = 0;
@@ -208,8 +375,14 @@ export async function POST(req: Request) {
     let queueDeduped = 0;
 
     for (const ad of enrichedAds) {
-      const decision = getDecision(ad, learnings, playbook);
+      // Pattern lookup first — when a cross-client pattern matches the
+      // ad's signature with high enough consistency, prefer it over the
+      // single-ad rule branches. Falls through to getDecision() when no
+      // proven pattern applies.
+      const patternDecision = getPatternBackedDecision(ad, patternIndex);
+      const decision = patternDecision ?? getDecision(ad, learnings, playbook);
       if (!decision) continue;
+      if (patternDecision) patternBacked++;
 
       const { error: insertError } = await supabase.from("ad_decisions").insert({
         client_id: clientId,
@@ -292,6 +465,9 @@ export async function POST(req: Request) {
       ok: true,
       generated,
       total: ads.length,
+      pattern_backed: patternBacked,
+      industry,
+      patterns_loaded: patternIndex.size,
       queue: {
         pause_ad: queuedPause,
         increase_adset_budget: queuedBudget,

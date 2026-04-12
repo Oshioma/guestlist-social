@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import MetaQueueRow, {
   type MetaQueueRowData,
 } from "@/app/admin-panel/components/MetaQueueRow";
+import CrossPollinateButton from "@/app/admin-panel/components/CrossPollinateButton";
 
 export const dynamic = "force-dynamic";
 
@@ -220,6 +221,11 @@ export default async function MetaQueuePage() {
           </a>
         </div>
       </div>
+
+      {/* Cross-pollinate trigger — closes the loop between
+          global_learnings (passive intelligence) and the queue
+          (executable actions). */}
+      <CrossPollinateButton />
 
       {/* Pending */}
       <Section title="Pending approval" count={pending.length}>
