@@ -370,32 +370,44 @@ export async function discoverPatternMatches(
   });
 
   // For each qualifying combo, walk clients and propose duplicates for
-  // every client NOT already running it. Industry preference applies:
-  // when the target client has an industry, only suggest donors that
-  // include that industry in the combo. (When the combo has no industry
-  // metadata at all — because none of the donors had an industry tag —
-  // it falls through as agency-wide and applies to anyone.)
+  // every client NOT already running it. Industry preference applies as a
+  // BONUS, not a gate: we only skip on an explicit mismatch (target has
+  // industry X, combo's donors are all from industry Y/Z without X).
+  // Untagged targets are allowed to see any combo — until clients are
+  // mostly industry-tagged, treating "no tag" as a hard skip would lock
+  // out the strongest patterns. industryScoped flags that the match was
+  // industry-validated so the operator can see provenance in the reason.
   const rawSuggestions: CrossClientSuggestion[] = [];
   for (const combo of qualifying) {
     const comboHasIndustry = combo.industries.size > 0;
+    // Donor rotation cursor — round-robins through eligible donor ads so
+    // 11 different targets don't all get the same source ad. Without this
+    // every target client gets the highest-CTR donor and we concentrate
+    // risk on a single creative.
+    let donorCursor = 0;
     for (const client of clients) {
       const targetId = Number(client.id);
       const alreadyRun = clientPatternsRun.get(targetId);
       if (alreadyRun?.has(combo.patternKey)) continue;
-      // Industry gate
+      // Industry gate — soft. Only skip on explicit mismatch.
       let industryScoped = false;
       if (client.industry && comboHasIndustry) {
         if (!combo.industries.has(client.industry)) continue;
         industryScoped = true;
-      } else if (!client.industry && comboHasIndustry) {
-        // Target has no industry — only suggest agency-wide combos. Skip
-        // industry-only combos to avoid noise.
-        continue;
       }
 
-      // Pick the best donor ad from a DIFFERENT client. The combo's ads
-      // are ctr-sorted, so the first one matching is the strongest.
-      const donor = combo.ads.find((a) => Number(a.client_id) !== targetId);
+      // Pick a donor ad from a DIFFERENT client, rotating through the
+      // combo's ads (which are pre-sorted ctr DESC) so multiple targets
+      // get different donors. Walks at most combo.ads.length entries.
+      let donor: AdRow | null = null;
+      for (let i = 0; i < combo.ads.length; i++) {
+        const candidate = combo.ads[(donorCursor + i) % combo.ads.length];
+        if (Number(candidate.client_id) !== targetId && candidate.meta_id) {
+          donor = candidate;
+          donorCursor = (donorCursor + i + 1) % combo.ads.length;
+          break;
+        }
+      }
       if (!donor || !donor.meta_id) continue;
       const donorClient = clientById.get(Number(donor.client_id));
       if (!donorClient) continue;
