@@ -9,6 +9,10 @@ import {
   mapMetaStatus,
   mapMetaObjective,
   insightToAdRow,
+  creativeToAdRow,
+  resolveVideoSource,
+  resolveVideoPoster,
+  resolveObjectStoryImage,
   targetingToAudience,
 } from "@/lib/meta";
 
@@ -274,6 +278,31 @@ export async function GET(request: Request) {
             .join(" — ") || null
         : null;
 
+      // Pull structured creative fields + classifier output. Mirrors what
+      // meta-sync-action.ts already does — without this, the global sync
+      // path leaves creative_type / hook_type / format_style unpopulated
+      // and the cross-pollinate engine has no patterns to discover.
+      const { creative_video_id, ...creativeData } = creativeToAdRow(metaAd);
+
+      // Resolve playable video URL via a separate Graph call. One call per
+      // video ad — failures return null and don't break the sync.
+      const creative_video_url = creative_video_id
+        ? await resolveVideoSource(creative_video_id)
+        : null;
+
+      // Thumbnail fallback chain — same as meta-sync-action.ts. Without
+      // these fallbacks a meaningful slice of the library renders as
+      // "No preview" on the per-client Ads page.
+      let creative_image_url = creativeData.creative_image_url;
+      if (!creative_image_url && creative_video_id) {
+        creative_image_url = await resolveVideoPoster(creative_video_id);
+      }
+      if (!creative_image_url && creativeData.object_story_id) {
+        creative_image_url = await resolveObjectStoryImage(
+          creativeData.object_story_id
+        );
+      }
+
       const existingAd = existingAdsByMetaId.get(String(metaAd.id));
 
       if (existingAd) {
@@ -291,6 +320,12 @@ export async function GET(request: Request) {
             engagement: adData.engagement,
             audience,
             creative_hook: creativeHook,
+            // Cached so meta_execution_queue seeders can attach the ad set
+            // Meta id without re-walking the adsets list.
+            adset_meta_id: metaAd.adset_id ?? null,
+            ...creativeData,
+            creative_image_url,
+            creative_video_url,
             meta_ad_account_id: metaAdAccountId,
             meta_ad_account_name: metaAdAccountName,
             client_id: existingAd.client_id ?? inheritedClientId ?? null,
@@ -322,6 +357,10 @@ export async function GET(request: Request) {
           followers_gained: adData.followers_gained ?? 0,
           audience,
           creative_hook: creativeHook,
+          adset_meta_id: metaAd.adset_id ?? null,
+          ...creativeData,
+          creative_image_url,
+          creative_video_url,
           meta_ad_account_id: metaAdAccountId,
           meta_ad_account_name: metaAdAccountName,
         });
