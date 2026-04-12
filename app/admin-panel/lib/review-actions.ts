@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
+import { sendReviewDigest } from "./review-email";
 
 // ---------------------------------------------------------------------------
 // Server actions for the client review layer.
@@ -56,7 +57,8 @@ type NextItem = {
 export async function approveProposal(
   approvalId: number,
   decision: "approved" | "declined",
-  note?: string
+  note?: string,
+  decidedBy?: string
 ) {
   const supabase = admin();
 
@@ -87,10 +89,17 @@ export async function approveProposal(
       (n) => n.idx === approval.proposal_index
     ) ?? null;
 
+  // `decided_by` captures the human who pressed the button — name typed
+  // into the public share view, or operator email when signed inside the
+  // admin app. Trim to keep the trail clean; collapse empty strings to
+  // null so the column remains a useful "is signed?" indicator.
+  const cleanedSigner = decidedBy?.trim() || null;
+
   const update: Record<string, unknown> = {
     status: decision,
     client_note: note ?? null,
     decided_at: new Date().toISOString(),
+    decided_by: cleanedSigner,
   };
 
   // Only mint a backing row when approving and we don't already have one.
@@ -194,7 +203,17 @@ export async function sendReviewForApproval(reviewId: number) {
   revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
   revalidatePath(`/app/clients/${clientId}/reviews`);
 
-  return { token };
+  // Best-effort digest. Failures here must not roll back the status flip —
+  // the operator can resend manually if Resend is down or the env vars are
+  // missing. We log but never throw.
+  let email: Awaited<ReturnType<typeof sendReviewDigest>> | null = null;
+  try {
+    email = await sendReviewDigest(reviewId);
+  } catch (e) {
+    console.error("[review-actions] sendReviewDigest threw", e);
+  }
+
+  return { token, email };
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +225,8 @@ export async function approveProposalByShareToken(
   token: string,
   approvalId: number,
   decision: "approved" | "declined",
-  note?: string
+  note?: string,
+  signerName?: string
 ) {
   const supabase = admin();
 
@@ -240,8 +260,9 @@ export async function approveProposalByShareToken(
   }
 
   // Delegate to the main approval action — it already does the action /
-  // decision minting and revalidation.
-  await approveProposal(approvalId, decision, note);
+  // decision minting and revalidation. Forward the typed signer name so
+  // it lands in `decided_by`.
+  await approveProposal(approvalId, decision, note, signerName);
   revalidatePath(`/r/${token}`);
 }
 

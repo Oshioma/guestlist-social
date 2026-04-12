@@ -1,44 +1,26 @@
 // ---------------------------------------------------------------------------
-// Per-ad audit trail.
+// /portal/[clientId]/ads/[adId] — read-only audit trail.
 //
-// One page, one promise: every meaningful thing the system has ever done to
-// this ad, in chronological order, with the *why* on every line. This is the
-// trust anchor — the place a client (or an operator on their behalf) can go
-// to ask "what happened, who decided, and was it right?" and walk away with
-// a clear answer.
+// Fork of the admin per-ad audit trail (app/admin-panel/clients/[clientId]/
+// ads/[adId]/page.tsx). Same fold-five-tables-into-one-timeline logic, same
+// chronological "what happened, why, was it right" framing — but with two
+// differences appropriate for the client surface:
 //
-// We pull from five sources and fold them into a single timeline:
-//   1. ads.created_at                  → "Ad created"
-//   2. ad_actions                      → proposed / completed (with before→after)
-//   3. ad_decisions                    → proposed / approved / rejected / executed
-//   4. action_learnings                → "Learning recorded"
-//   5. experiment_variants/experiments → "Joined experiment"
-//
-// The timeline is rendered newest-first. Every event leads with a calm
-// timestamp + colored dot, then the human-readable headline, then the why,
-// then any supporting facts (before/after, outcome badge).
+//   1. No source links. The admin version links each event back to the
+//      action/decision queue rows. The portal has no queue, so we drop the
+//      "Open in queue" affordance entirely.
+//   2. Calmer palette. We swap the categorical colour ramp for a softer
+//      slate/blue/sage one and skip confidence pills (clients shouldn't have
+//      to read "high/medium/low" tags to trust the work).
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import EmptyState from "@/app/admin-panel/components/EmptyState";
-import SectionCard from "@/app/admin-panel/components/SectionCard";
-import { formatCurrency } from "@/app/admin-panel/lib/utils";
-import {
-  getAppPerformanceStatus,
-  getPerformanceScore,
-  explainPerformanceStatus,
-} from "@/app/admin-panel/lib/performance-truth";
-import {
-  confidencePalette,
-  decisionConfidence,
-} from "@/app/admin-panel/lib/action-confidence";
+import { canViewClient, getViewer } from "../../../../admin-panel/lib/viewer";
 
 export const dynamic = "force-dynamic";
 
-// ── Event model ────────────────────────────────────────────────────────────
-// Every row in the timeline is one of these. Keeping it flat makes the merge
-// trivial (concat + sort by `at`) and the renderer dumb (one switch on `kind`).
 type EventKind =
   | "ad_created"
   | "action_proposed"
@@ -61,36 +43,26 @@ type MetricSnapshot = {
 
 type TimelineEvent = {
   id: string;
-  at: string; // ISO timestamp
+  at: string;
   kind: EventKind;
   title: string;
   why?: string | null;
   detail?: string | null;
-  // Free-form one-liner the operator typed when completing the action.
-  // Renders distinctly so the operator's voice doesn't blend into the
-  // auto-generated reasons string in `detail`.
+  // Operator's typed gloss when completing the action — surfaces calmly
+  // in the trail so clients see human context next to the metric delta.
   operatorNote?: string | null;
   before?: MetricSnapshot;
   after?: MetricSnapshot;
   outcome?: "positive" | "neutral" | "negative" | null;
-  confidence?: "high" | "medium" | "low" | "unknown" | null;
-  // Optional jump-to-source link. Action / decision / experiment events all
-  // know how to find their row on the per-client ads page via a hash anchor;
-  // events without a UI representation (ad_created, learning_recorded) leave
-  // this null.
-  sourceHref?: string | null;
-  sourceLabel?: string | null;
 };
 
-// Calm color palette per event kind. The whole page should feel like a
-// control-room log — no shouting, no emoji, just steady categorical color.
 const KIND_DOT: Record<EventKind, string> = {
-  ad_created: "#a1a1aa",
-  action_proposed: "#d97706",
-  action_completed: "#166534",
+  ad_created: "#94a3b8",
+  action_proposed: "#0284c7",
+  action_completed: "#15803d",
   decision_proposed: "#1e40af",
   decision_approved: "#1e40af",
-  decision_rejected: "#71717a",
+  decision_rejected: "#64748b",
   decision_executed: "#0f766e",
   learning_recorded: "#7c3aed",
   experiment_joined: "#be185d",
@@ -102,7 +74,7 @@ const KIND_LABEL: Record<EventKind, string> = {
   action_completed: "Action completed",
   decision_proposed: "Decision proposed",
   decision_approved: "Decision approved",
-  decision_rejected: "Decision rejected",
+  decision_rejected: "Decision declined",
   decision_executed: "Decision executed",
   learning_recorded: "Learning recorded",
   experiment_joined: "Joined experiment",
@@ -110,19 +82,17 @@ const KIND_LABEL: Record<EventKind, string> = {
 
 const OUTCOME_PALETTE: Record<
   "positive" | "neutral" | "negative",
-  { bg: string; fg: string; border: string }
+  { bg: string; fg: string }
 > = {
-  positive: { bg: "#ecfdf5", fg: "#065f46", border: "#a7f3d0" },
-  neutral: { bg: "#f4f4f5", fg: "#52525b", border: "#e4e4e7" },
-  negative: { bg: "#fef2f2", fg: "#991b1b", border: "#fecaca" },
+  positive: { bg: "#dcfce7", fg: "#166534" },
+  neutral: { bg: "#f1f5f9", fg: "#475569" },
+  negative: { bg: "#fee2e2", fg: "#991b1b" },
 };
 
-// "today" / "yesterday" / "Mar 12" / "Mar 12, 2025"
 function relativeDate(iso: string): string {
   const then = new Date(iso);
   const now = new Date();
-  const ms = now.getTime() - then.getTime();
-  const days = Math.floor(ms / 86_400_000);
+  const days = Math.floor((now.getTime() - then.getTime()) / 86_400_000);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
@@ -143,9 +113,6 @@ function exactTime(iso: string): string {
   });
 }
 
-// Pull a clean number out of the JSON snapshots Meta sync writes. We accept
-// either { ctr: 1.2 } or { CTR: "1.20" } and coerce to a finite number, or
-// return null if there's nothing trustworthy to render.
 function num(v: unknown): number | null {
   if (v == null) return null;
   const n = typeof v === "string" ? parseFloat(v) : (v as number);
@@ -164,7 +131,6 @@ function snap(raw: any): MetricSnapshot {
   };
 }
 
-// One row of "before → after" pills. Only renders metrics that moved.
 function MetricDelta({
   before,
   after,
@@ -173,16 +139,14 @@ function MetricDelta({
   after: MetricSnapshot;
 }) {
   if (!before && !after) return null;
-
-  const fields: { key: keyof NonNullable<MetricSnapshot>; label: string; pct: boolean }[] = [
-    { key: "ctr", label: "CTR", pct: true },
-    { key: "cpc", label: "CPC", pct: false },
-    { key: "spend", label: "Spend", pct: false },
-    { key: "conversions", label: "Conv", pct: false },
+  const fields: { key: keyof NonNullable<MetricSnapshot>; label: string }[] = [
+    { key: "ctr", label: "CTR" },
+    { key: "cpc", label: "CPC" },
+    { key: "spend", label: "Spend" },
+    { key: "conversions", label: "Conv" },
   ];
-
   const cells = fields
-    .map(({ key, label, pct }) => {
+    .map(({ key, label }) => {
       const b = before?.[key];
       const a = after?.[key];
       if (b == null && a == null) return null;
@@ -193,18 +157,9 @@ function MetricDelta({
       return { label, before: b, after: a, deltaPct };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
-
   if (cells.length === 0) return null;
-
   return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 6,
-        marginTop: 8,
-      }}
-    >
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
       {cells.map((c) => {
         const positive = c.deltaPct != null && c.deltaPct > 0;
         const negative = c.deltaPct != null && c.deltaPct < 0;
@@ -214,22 +169,22 @@ function MetricDelta({
             style={{
               padding: "4px 10px",
               borderRadius: 8,
-              background: "#fafafa",
-              border: "1px solid #f4f4f5",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
               fontSize: 11,
-              color: "#52525b",
+              color: "#475569",
               display: "inline-flex",
               gap: 6,
               alignItems: "center",
             }}
           >
-            <span style={{ fontWeight: 600, color: "#71717a" }}>{c.label}</span>
-            <span style={{ color: "#71717a" }}>
+            <span style={{ fontWeight: 600, color: "#64748b" }}>{c.label}</span>
+            <span style={{ color: "#94a3b8" }}>
               {c.before != null ? c.before.toFixed(c.label === "CTR" ? 2 : 0) : "—"}
               {c.label === "CTR" ? "%" : ""}
             </span>
-            <span style={{ color: "#a1a1aa" }}>→</span>
-            <span style={{ color: "#27272a", fontWeight: 600 }}>
+            <span style={{ color: "#cbd5e1" }}>→</span>
+            <span style={{ color: "#0f172a", fontWeight: 600 }}>
               {c.after != null ? c.after.toFixed(c.label === "CTR" ? 2 : 0) : "—"}
               {c.label === "CTR" ? "%" : ""}
             </span>
@@ -237,7 +192,7 @@ function MetricDelta({
               <span
                 style={{
                   fontWeight: 700,
-                  color: positive ? "#166534" : negative ? "#991b1b" : "#71717a",
+                  color: positive ? "#166534" : negative ? "#991b1b" : "#64748b",
                 }}
               >
                 {positive ? "+" : ""}
@@ -251,24 +206,20 @@ function MetricDelta({
   );
 }
 
-export default async function AdAuditTrailPage({
+export default async function PortalAdAuditTrailPage({
   params,
 }: {
   params: Promise<{ clientId: string; adId: string }>;
 }) {
-  const { clientId, adId } = await params;
+  const { clientId: rawClientId, adId } = await params;
+  const clientId = Number(rawClientId);
+
+  const viewer = await getViewer();
+  if (!canViewClient(viewer, clientId)) notFound();
+
   const supabase = await createClient();
 
-  // ── Fetch the ad and every related history row in parallel ──────────────
-  const [
-    clientRes,
-    adRes,
-    actionsRes,
-    decisionsRes,
-    learningsRes,
-    variantsRes,
-  ] = await Promise.all([
-    supabase.from("clients").select("id, name").eq("id", clientId).single(),
+  const [adRes, actionsRes, decisionsRes, learningsRes, variantsRes] = await Promise.all([
     supabase
       .from("ads")
       .select("*, campaigns(id, name)")
@@ -297,40 +248,13 @@ export default async function AdAuditTrailPage({
       .order("created_at", { ascending: false }),
   ]);
 
-  if (clientRes.error || !clientRes.data) {
-    return <EmptyState title="Client not found" />;
-  }
-  if (adRes.error || !adRes.data) {
-    return <EmptyState title="Ad not found" description="It may have been removed or belongs to another client." />;
-  }
+  if (adRes.error || !adRes.data) notFound();
 
-  const client = clientRes.data;
   const ad = adRes.data as any;
   const actions = (actionsRes.data ?? []) as any[];
   const decisions = (decisionsRes.data ?? []) as any[];
   const learnings = (learningsRes.data ?? []) as any[];
   const variants = (variantsRes.data ?? []) as any[];
-
-  // ── Derive current performance for the header ───────────────────────────
-  const impressions = Number(ad.impressions ?? 0);
-  const clicks = Number(ad.clicks ?? 0);
-  const spend = Number(ad.spend ?? 0);
-  const ctr = impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
-  const cpc = clicks > 0 ? Number((spend / clicks).toFixed(4)) : 0;
-  const forScoring = {
-    status: ad.status,
-    meta_status: ad.meta_status,
-    spend,
-    impressions,
-    clicks,
-    ctr,
-    cpc,
-    conversions: Number(ad.conversions ?? 0),
-    cost_per_result: Number(ad.cost_per_result ?? 0),
-  };
-  const perfStatus = getAppPerformanceStatus(forScoring);
-  const perfScore = getPerformanceScore(forScoring);
-  const perfReason = explainPerformanceStatus(forScoring);
 
   // ── Fold every source into a single chronological timeline ──────────────
   const events: TimelineEvent[] = [];
@@ -345,18 +269,7 @@ export default async function AdAuditTrailPage({
     });
   }
 
-  // Every action / decision / experiment row gets the same anchor target on
-  // the per-client ads page (`#action-<id>` etc.). The audit trail uses these
-  // to jump straight to the source row in its native context — the queue or
-  // experiment list — without losing the trail position.
-  const actionHref = (id: string) => `/app/clients/${clientId}/ads#action-${id}`;
-  const decisionHref = (id: number) =>
-    `/app/clients/${clientId}/ads#decision-${id}`;
-  const experimentHref = (id: number) =>
-    `/app/clients/${clientId}/ads#experiment-${id}`;
-
   for (const a of actions) {
-    // Every action contributes a "proposed" event…
     events.push({
       id: `action-${a.id}-proposed`,
       at: a.created_at,
@@ -364,14 +277,7 @@ export default async function AdAuditTrailPage({
       title: KIND_LABEL.action_proposed,
       why: a.problem ?? null,
       detail: a.action ?? null,
-      confidence: null, // proposals don't carry a stored confidence yet
-      sourceHref: actionHref(a.id),
-      sourceLabel: "Open in action queue",
     });
-
-    // …and, if it ran to completion, a separate "completed" event with the
-    // before→after snapshot. Splitting them keeps the timeline honest about
-    // when each thing actually happened.
     if (a.status === "completed" && a.completed_at) {
       events.push({
         id: `action-${a.id}-completed`,
@@ -384,15 +290,11 @@ export default async function AdAuditTrailPage({
         before: snap(a.metric_snapshot_before),
         after: snap(a.metric_snapshot_after),
         outcome: (a.outcome as any) ?? null,
-        sourceHref: actionHref(a.id),
-        sourceLabel: "Open in action queue",
       });
     }
   }
 
   for (const d of decisions) {
-    const dHref = decisionHref(d.id);
-    const dLabel = "Open in decision queue";
     events.push({
       id: `decision-${d.id}-proposed`,
       at: d.created_at,
@@ -400,22 +302,14 @@ export default async function AdAuditTrailPage({
       title: `${KIND_LABEL.decision_proposed} — ${d.type ?? "unknown"}`,
       why: d.reason ?? null,
       detail: d.action ?? null,
-      confidence: decisionConfidence(d.confidence),
-      sourceHref: dHref,
-      sourceLabel: dLabel,
     });
-
     if (d.status === "rejected") {
-      // We don't store a rejection timestamp, so anchor it to created_at + 1ms
-      // so it sorts immediately after the proposal. Cheap, deterministic.
       events.push({
         id: `decision-${d.id}-rejected`,
         at: d.approved_at ?? d.created_at,
         kind: "decision_rejected",
         title: KIND_LABEL.decision_rejected,
         detail: d.action ?? null,
-        sourceHref: dHref,
-        sourceLabel: dLabel,
       });
     }
     if (d.approved_at && d.status !== "rejected") {
@@ -425,8 +319,6 @@ export default async function AdAuditTrailPage({
         kind: "decision_approved",
         title: KIND_LABEL.decision_approved,
         detail: d.action ?? null,
-        sourceHref: dHref,
-        sourceLabel: dLabel,
       });
     }
     if (d.executed_at) {
@@ -437,8 +329,6 @@ export default async function AdAuditTrailPage({
         title: KIND_LABEL.decision_executed,
         why: d.reason ?? null,
         detail: d.execution_result ?? d.action ?? null,
-        sourceHref: dHref,
-        sourceLabel: dLabel,
       });
     }
   }
@@ -469,158 +359,128 @@ export default async function AdAuditTrailPage({
       before: snap(v.snapshot_before),
       after: snap(v.snapshot_after),
       outcome: (exp?.outcome as any) ?? null,
-      sourceHref: exp?.id ? experimentHref(exp.id) : null,
-      sourceLabel: exp?.id ? "Open experiment" : null,
     });
   }
 
-  // Newest first. Stable on ties to keep the rejected/approved pair tidy.
   events.sort((a, b) => {
     const cmp = new Date(b.at).getTime() - new Date(a.at).getTime();
     if (cmp !== 0) return cmp;
     return a.id.localeCompare(b.id);
   });
 
-  const perfBadge: Record<string, { bg: string; text: string }> = {
-    winner: { bg: "#dcfce7", text: "#166534" },
-    losing: { bg: "#fee2e2", text: "#991b1b" },
-    testing: { bg: "#fef3c7", text: "#92400e" },
-    paused: { bg: "#f4f4f5", text: "#71717a" },
-  };
-  const pb = perfBadge[perfStatus] ?? perfBadge.testing;
+  const impressions = Number(ad.impressions ?? 0);
+  const clicks = Number(ad.clicks ?? 0);
+  const spend = Number(ad.spend ?? 0);
+  const ctr = impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
+  const cpc = clicks > 0 ? Number((spend / clicks).toFixed(2)) : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* ── Breadcrumb + title ───────────────────────────────────────── */}
+      {/* Breadcrumb */}
       <div>
         <Link
-          href={`/app/clients/${clientId}/ads`}
+          href={`/portal/${clientId}/ads`}
           style={{
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
             fontSize: 13,
-            color: "#71717a",
+            color: "#64748b",
             textDecoration: "none",
             marginBottom: 14,
           }}
         >
-          &larr; Back to {client.name} ads
+          ← Back to ads
         </Link>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{ad.name}</h2>
-          <span
-            style={{
-              padding: "2px 12px",
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 600,
-              background: pb.bg,
-              color: pb.text,
-              textTransform: "capitalize",
-            }}
-          >
-            {perfStatus}
-          </span>
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color:
-                perfScore >= 3
-                  ? "#166534"
-                  : perfScore <= -2
-                  ? "#991b1b"
-                  : "#71717a",
-            }}
-          >
-            {perfScore > 0 ? `+${perfScore}` : perfScore}
-          </span>
-        </div>
-        <p style={{ fontSize: 13, color: "#71717a", margin: "6px 0 0" }}>
-          {perfReason}
-        </p>
-        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "2px 0 0" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: "#0f172a" }}>
+          {ad.name}
+        </h1>
+        <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
           Campaign: {(ad.campaigns as any)?.name ?? "—"}
           {ad.audience ? ` · Audience: ${ad.audience}` : ""}
         </p>
       </div>
 
-      {/* ── Current state at a glance ───────────────────────────────── */}
-      <SectionCard title="Current state">
+      {/* Current state */}
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          padding: 20,
+        }}
+      >
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 14px", color: "#0f172a" }}>
+          Where it stands
+        </h2>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
             gap: 12,
           }}
         >
           {[
-            { label: "Spend", value: formatCurrency(spend) },
+            { label: "Spend", value: `$${spend.toFixed(0)}` },
             { label: "Impressions", value: impressions.toLocaleString() },
             { label: "Clicks", value: clicks.toLocaleString() },
             { label: "CTR", value: ctr > 0 ? `${ctr}%` : "—" },
-            { label: "CPC", value: cpc > 0 ? formatCurrency(cpc) : "—" },
-            { label: "Conversions", value: String(forScoring.conversions) },
+            { label: "CPC", value: cpc > 0 ? `$${cpc}` : "—" },
+            { label: "Conversions", value: String(Number(ad.conversions ?? 0)) },
           ].map((stat) => (
             <div
               key={stat.label}
               style={{
-                border: "1px solid #f4f4f5",
-                borderRadius: 12,
                 padding: 12,
-                background: "#fafafa",
+                background: "#f8fafc",
+                borderRadius: 10,
               }}
             >
-              <div style={{ fontSize: 11, color: "#71717a" }}>{stat.label}</div>
-              <div style={{ marginTop: 4, fontSize: 16, fontWeight: 700 }}>
+              <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                {stat.label}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
                 {stat.value}
               </div>
             </div>
           ))}
         </div>
-      </SectionCard>
+      </section>
 
-      {/* ── Audit trail ─────────────────────────────────────────────── */}
-      <SectionCard title={`Audit trail (${events.length})`}>
-        <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 16px" }}>
-          Every action, decision, and learning the system has recorded for this
-          ad — newest first. Use this to answer: <em>what happened, why, and
-          was it right?</em>
+      {/* Audit trail */}
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          padding: 20,
+        }}
+      >
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#0f172a" }}>
+          Everything we&rsquo;ve done ({events.length})
+        </h2>
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: "#64748b" }}>
+          Newest first. Every action your operator took, every decision the
+          system proposed, every learning recorded — all in one place.
         </p>
 
         {events.length === 0 ? (
-          <EmptyState
-            title="No history yet"
-            description="Events will appear here as the system proposes actions, makes decisions, and records learnings for this ad."
-          />
-        ) : (
           <div
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0,
-              position: "relative",
+              padding: 24,
+              textAlign: "center",
+              color: "#94a3b8",
+              fontSize: 13,
             }}
           >
+            No history yet. Events will appear here as work is done.
+          </div>
+        ) : (
+          <div style={{ position: "relative" }}>
             {events.map((e, idx) => {
               const dot = KIND_DOT[e.kind];
               const isLast = idx === events.length - 1;
-              const outcomePalette = e.outcome
-                ? OUTCOME_PALETTE[e.outcome]
-                : null;
-              const confPalette =
-                e.confidence && e.confidence !== "unknown"
-                  ? confidencePalette(e.confidence)
-                  : null;
+              const outcomePalette = e.outcome ? OUTCOME_PALETTE[e.outcome] : null;
 
               return (
                 <div
@@ -633,23 +493,15 @@ export default async function AdAuditTrailPage({
                     position: "relative",
                   }}
                 >
-                  {/* Timestamp gutter */}
                   <div style={{ paddingTop: 2 }}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#27272a",
-                      }}
-                    >
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>
                       {relativeDate(e.at)}
                     </div>
-                    <div style={{ fontSize: 11, color: "#a1a1aa" }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
                       {exactTime(e.at)}
                     </div>
                   </div>
 
-                  {/* Spine: dot + connector line */}
                   <div
                     style={{
                       position: "relative",
@@ -676,13 +528,12 @@ export default async function AdAuditTrailPage({
                           top: 16,
                           bottom: -18,
                           width: 2,
-                          background: "#f4f4f5",
+                          background: "#e2e8f0",
                         }}
                       />
                     )}
                   </div>
 
-                  {/* Event body */}
                   <div>
                     <div
                       style={{
@@ -692,32 +543,9 @@ export default async function AdAuditTrailPage({
                         flexWrap: "wrap",
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: "#18181b",
-                        }}
-                      >
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
                         {e.title}
                       </span>
-                      {confPalette && (
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            background: confPalette.bg,
-                            color: confPalette.fg,
-                            border: `1px solid ${confPalette.border}`,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.04em",
-                          }}
-                        >
-                          {confPalette.label}
-                        </span>
-                      )}
                       {outcomePalette && (
                         <span
                           style={{
@@ -727,7 +555,6 @@ export default async function AdAuditTrailPage({
                             fontWeight: 700,
                             background: outcomePalette.bg,
                             color: outcomePalette.fg,
-                            border: `1px solid ${outcomePalette.border}`,
                             textTransform: "uppercase",
                             letterSpacing: "0.04em",
                           }}
@@ -736,19 +563,16 @@ export default async function AdAuditTrailPage({
                         </span>
                       )}
                     </div>
-
                     {e.why && (
                       <div
                         style={{
                           marginTop: 4,
                           fontSize: 13,
-                          color: "#52525b",
+                          color: "#475569",
                           lineHeight: 1.5,
                         }}
                       >
-                        <span style={{ color: "#71717a", fontWeight: 600 }}>
-                          Why:
-                        </span>{" "}
+                        <span style={{ color: "#94a3b8", fontWeight: 600 }}>Why:</span>{" "}
                         {e.why}
                       </div>
                     )}
@@ -757,7 +581,7 @@ export default async function AdAuditTrailPage({
                         style={{
                           marginTop: 2,
                           fontSize: 13,
-                          color: "#27272a",
+                          color: "#0f172a",
                           lineHeight: 1.5,
                         }}
                       >
@@ -769,41 +593,26 @@ export default async function AdAuditTrailPage({
                         style={{
                           marginTop: 6,
                           padding: "8px 10px",
-                          background: "#fef9c3",
-                          border: "1px solid #fde68a",
+                          background: "#f0f9ff",
+                          border: "1px solid #bae6fd",
                           borderRadius: 8,
                           fontSize: 13,
-                          color: "#713f12",
+                          color: "#0c4a6e",
                           lineHeight: 1.5,
                         }}
                       >
-                        <span style={{ fontWeight: 600 }}>Operator note:</span>{" "}
+                        <span style={{ fontWeight: 600 }}>Note from your team:</span>{" "}
                         {e.operatorNote}
                       </div>
                     )}
                     <MetricDelta before={e.before ?? null} after={e.after ?? null} />
-                    {e.sourceHref && (
-                      <div style={{ marginTop: 6 }}>
-                        <Link
-                          href={e.sourceHref}
-                          style={{
-                            fontSize: 11,
-                            color: "#1e40af",
-                            textDecoration: "none",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {e.sourceLabel ?? "Open source"} →
-                        </Link>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </SectionCard>
+      </section>
     </div>
   );
 }

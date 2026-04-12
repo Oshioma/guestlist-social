@@ -68,6 +68,7 @@ const SCHEMA = {
     "validated_pattern_key",
     "outcome",
     "result_summary",
+    "operator_note",
     "metric_snapshot_before",
     "metric_snapshot_after",
     "completed_at",
@@ -116,8 +117,16 @@ const SCHEMA = {
     "status",
     "client_note",
     "decided_at",
+    "decided_by",
     "resulting_action_id",
     "resulting_decision_id",
+  ],
+  client_user_links: [
+    "id",
+    "auth_user_id",
+    "client_id",
+    "role",
+    "created_at",
   ],
 };
 

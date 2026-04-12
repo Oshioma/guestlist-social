@@ -6,15 +6,13 @@ import ClientCard from "../components/ClientCard";
 import SuggestionCard from "../components/SuggestionCard";
 import AdRow from "../components/AdRow";
 import EmptyState from "../components/EmptyState";
-import ActionList from "../components/ActionList";
-import NewActionForm from "../components/NewActionForm";
 import TopPriorities from "../components/TopPriorities";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   try {
-    const { clients, ads, actions, suggestions } = await getDashboardData();
+    const { clients, ads, suggestions } = await getDashboardData();
 
     // Learnings — separate query so it doesn't break the page if table is missing
     let learningRows: any[] = [];
@@ -28,9 +26,6 @@ export default async function DashboardPage() {
     } catch {
       // table may not exist yet
     }
-
-    const openActions = actions.filter((a) => !a.done);
-    const completedActions = actions.filter((a) => a.done);
 
     const winningAds = ads.filter((ad) => ad.status === "active" && ad.ctr >= 2.5);
     const activeClients = clients.filter((c) => c.status === "active");
@@ -157,8 +152,8 @@ export default async function DashboardPage() {
                 </div>
 
                 <div style={heroBoxStyle}>
-                  <div style={heroLabelStyle}>Open actions</div>
-                  <div style={heroValueStyle}>{openActions.length}</div>
+                  <div style={heroLabelStyle}>Winning ads</div>
+                  <div style={heroValueStyle}>{winningAds.length}</div>
                 </div>
               </div>
             </div>
@@ -209,41 +204,6 @@ export default async function DashboardPage() {
             }}
           />
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.1fr) minmax(320px, 0.9fr)",
-            gap: 20,
-            alignItems: "start",
-          }}
-        >
-          <SectionCard title="Today's Actions">
-            {openActions.length > 0 ? (
-              <ActionList actions={openActions} />
-            ) : (
-              <EmptyState
-                title="No open actions"
-                description="You have cleared the current action list."
-              />
-            )}
-          </SectionCard>
-
-          <SectionCard title="Add Action">
-            <NewActionForm clients={clients} />
-          </SectionCard>
-        </div>
-
-        <SectionCard title="Completed Actions">
-          {completedActions.length > 0 ? (
-            <ActionList actions={completedActions} />
-          ) : (
-            <EmptyState
-              title="No completed actions yet"
-              description="Completed work will appear here."
-            />
-          )}
-        </SectionCard>
 
         {/* Learnings */}
         <SectionCard title={`Learnings (${learningRows.length})`}>

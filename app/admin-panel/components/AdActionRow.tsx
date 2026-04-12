@@ -19,6 +19,7 @@ type AdAction = {
   validated_by?: string | null;
   outcome?: string | null;
   result_summary?: string | null;
+  operator_note?: string | null;
   metric_snapshot_before?: Record<string, unknown> | null;
   metric_snapshot_after?: Record<string, unknown> | null;
   completed_at?: string | null;
@@ -74,6 +75,7 @@ export default function AdActionRow({ action }: { action: AdAction }) {
   const [showComplete, setShowComplete] = useState(false);
   const [hypothesis, setHypothesis] = useState("");
   const [resultSummary, setResultSummary] = useState("");
+  const [operatorNote, setOperatorNote] = useState("");
   const [manualOutcome, setManualOutcome] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -121,6 +123,7 @@ export default function AdActionRow({ action }: { action: AdAction }) {
           actionId: action.id,
           resultSummary: resultSummary || null,
           manualOutcome: manualOutcome || null,
+          operatorNote: operatorNote || null,
         }),
       });
       const data = await res.json();
@@ -321,6 +324,27 @@ export default function AdActionRow({ action }: { action: AdAction }) {
         </div>
       )}
 
+      {/* Operator note — kept distinct from the auto reasons so the
+          operator's voice is unmistakable in the trail. Surfaces in the
+          per-ad audit timeline and the next review verbatim. */}
+      {action.operator_note && (
+        <div
+          style={{
+            marginTop: 6,
+            padding: "8px 10px",
+            background: "#fef9c3",
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#713f12",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ fontWeight: 600 }}>Note:</strong>{" "}
+          {action.operator_note}
+        </div>
+      )}
+
       {/* Before / After metric diffs */}
       {before && after && (
         <div
@@ -397,66 +421,100 @@ export default function AdActionRow({ action }: { action: AdAction }) {
         )}
 
         {action.status === "in_progress" && showComplete && (
-          <>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="text"
+                placeholder="What happened? (result summary)"
+                value={resultSummary}
+                onChange={(e) => setResultSummary(e.target.value)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #e4e4e7",
+                  fontSize: 12,
+                  width: 260,
+                }}
+              />
+              <select
+                value={manualOutcome}
+                onChange={(e) => setManualOutcome(e.target.value)}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #e4e4e7",
+                  fontSize: 12,
+                }}
+              >
+                <option value="">Auto-detect outcome</option>
+                <option value="positive">Positive</option>
+                <option value="neutral">Neutral</option>
+                <option value="negative">Negative</option>
+              </select>
+            </div>
             <input
               type="text"
-              placeholder="What happened? (result summary)"
-              value={resultSummary}
-              onChange={(e) => setResultSummary(e.target.value)}
+              placeholder="Operator note (one line, surfaces in trail + next review)"
+              value={operatorNote}
+              onChange={(e) => setOperatorNote(e.target.value)}
+              maxLength={240}
               style={{
-                padding: "4px 10px",
+                padding: "6px 10px",
                 borderRadius: 6,
-                border: "1px solid #e4e4e7",
+                border: "1px solid #fde68a",
+                background: "#fefce8",
                 fontSize: 12,
-                width: 260,
+                width: "100%",
+                maxWidth: 540,
               }}
             />
-            <select
-              value={manualOutcome}
-              onChange={(e) => setManualOutcome(e.target.value)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 6,
-                border: "1px solid #e4e4e7",
-                fontSize: 12,
-              }}
-            >
-              <option value="">Auto-detect outcome</option>
-              <option value="positive">Positive</option>
-              <option value="neutral">Neutral</option>
-              <option value="negative">Negative</option>
-            </select>
-            <button
-              onClick={handleComplete}
-              disabled={loading}
-              style={{
-                padding: "4px 14px",
-                borderRadius: 6,
-                border: "1px solid #e4e4e7",
-                background: "#166534",
-                color: "#fff",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? "Saving..." : "Complete"}
-            </button>
-            <button
-              onClick={() => setShowComplete(false)}
-              style={{
-                padding: "4px 10px",
-                borderRadius: 6,
-                border: "1px solid #e4e4e7",
-                background: "#fff",
-                color: "#71717a",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={handleComplete}
+                disabled={loading}
+                style={{
+                  padding: "4px 14px",
+                  borderRadius: 6,
+                  border: "1px solid #e4e4e7",
+                  background: "#166534",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "Saving..." : "Complete"}
+              </button>
+              <button
+                onClick={() => setShowComplete(false)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #e4e4e7",
+                  background: "#fff",
+                  color: "#71717a",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
 
         {message && (

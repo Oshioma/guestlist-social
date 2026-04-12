@@ -143,7 +143,8 @@ function generateLearning(
 
 export async function POST(req: Request) {
   try {
-    const { actionId, resultSummary, manualOutcome } = await req.json();
+    const { actionId, resultSummary, manualOutcome, operatorNote } =
+      await req.json();
 
     if (!actionId) {
       return NextResponse.json(
@@ -214,7 +215,12 @@ export async function POST(req: Request) {
 
     const now = new Date().toISOString();
 
-    // Update the action
+    // Update the action. operator_note is the operator's voice — kept
+    // separate from result_summary so the auto reasons don't drown it out
+    // in the trail. Empty strings collapse to null so the column stays a
+    // useful "did the operator add context?" indicator.
+    const cleanedNote =
+      typeof operatorNote === "string" ? operatorNote.trim() : "";
     const { error: updateError } = await supabase
       .from("ad_actions")
       .update({
@@ -222,6 +228,7 @@ export async function POST(req: Request) {
         metric_snapshot_after: afterSnapshot,
         outcome,
         result_summary: resultSummary || reasons.join("; "),
+        operator_note: cleanedNote.length > 0 ? cleanedNote : null,
         completed_at: now,
       })
       .eq("id", actionId);
