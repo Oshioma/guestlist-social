@@ -21,6 +21,7 @@ import type {
   TaskRecurrence,
   ProoferPost,
   ProoferStatus,
+  ProoferPlatform,
   ProoferPublishQueueItem,
   PublishQueueStatus,
   PublishQueuePlatform,
@@ -418,17 +419,27 @@ export async function getProoferData(
     throw new Error(`proofer_posts: ${postsRes.error.message}`);
   }
 
-  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => ({
-    id: String(row.id),
-    clientId: String(row.client_id),
-    postDate: row.post_date ?? "",
-    caption: row.caption ?? "",
-    imageUrl: row.image_url ?? "",
-    status: (row.status ?? "none") as ProoferStatus,
-    createdBy: row.created_by ?? "",
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  }));
+  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => {
+    const mediaUrls: string[] = Array.isArray(row.media_urls)
+      ? row.media_urls.filter(
+          (url: unknown): url is string => typeof url === "string" && url !== ""
+        )
+      : [];
+
+    return {
+      id: String(row.id),
+      clientId: String(row.client_id),
+      postDate: row.post_date ?? "",
+      platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+      caption: row.caption ?? "",
+      imageUrl: row.image_url ?? "",
+      mediaUrls,
+      status: (row.status ?? "none") as ProoferStatus,
+      createdBy: row.created_by ?? "",
+      createdAt: row.created_at ?? "",
+      updatedAt: row.updated_at ?? "",
+    };
+  });
 
   const postIds = posts.map((p) => p.id);
 
@@ -549,17 +560,27 @@ export async function getProoferPublishQueueData(): Promise<{
     clientNameById.set(String(row.id), row.name ?? "Untitled client");
   });
 
-  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => ({
-    id: String(row.id),
-    clientId: String(row.client_id),
-    postDate: row.post_date ?? "",
-    caption: row.caption ?? "",
-    imageUrl: row.image_url ?? "",
-    status: (row.status ?? "none") as ProoferStatus,
-    createdBy: row.created_by ?? "",
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  }));
+  const posts: ProoferPost[] = (postsRes.data ?? []).map((row) => {
+    const mediaUrls: string[] = Array.isArray(row.media_urls)
+      ? row.media_urls.filter(
+          (url: unknown): url is string => typeof url === "string" && url !== ""
+        )
+      : [];
+
+    return {
+      id: String(row.id),
+      clientId: String(row.client_id),
+      postDate: row.post_date ?? "",
+      platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+      caption: row.caption ?? "",
+      imageUrl: row.image_url ?? "",
+      mediaUrls,
+      status: (row.status ?? "none") as ProoferStatus,
+      createdBy: row.created_by ?? "",
+      createdAt: row.created_at ?? "",
+      updatedAt: row.updated_at ?? "",
+    };
+  });
 
   const queueItems: ProoferPublishQueueItem[] = (queueRes.data ?? []).map(
     (row) => ({

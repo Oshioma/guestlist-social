@@ -13,6 +13,30 @@ const VALID_STATUSES = [
 
 type Status = (typeof VALID_STATUSES)[number];
 
+const VALID_PLATFORMS = [
+  "instagram_feed",
+  "instagram_story",
+  "instagram_reel",
+  "facebook",
+  "linkedin",
+  "tiktok",
+] as const;
+type Platform = (typeof VALID_PLATFORMS)[number];
+
+function normalizePlatform(value: string | undefined | null): Platform {
+  return value && (VALID_PLATFORMS as readonly string[]).includes(value)
+    ? (value as Platform)
+    : "instagram_feed";
+}
+
+function normalizeMediaUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
+
 const VALID_QUEUE_PLATFORMS = ["instagram", "facebook"] as const;
 type QueuePlatform = (typeof VALID_QUEUE_PLATFORMS)[number];
 
@@ -61,12 +85,19 @@ function revalidateProoferPaths() {
 export async function saveProoferPostAction(
   clientId: string,
   postDate: string,
+  platform: string,
   caption: string,
-  imageUrl: string
+  mediaUrls: string[]
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
   }
+
+  const normalizedPlatform = normalizePlatform(platform);
+  const normalizedMedia = normalizeMediaUrls(mediaUrls);
+  // Keep image_url in sync with media_urls[0] for back-compat with consumers
+  // (e.g. PublishQueueBoard) that still read the single-column value.
+  const primaryImageUrl = normalizedMedia[0] ?? "";
 
   const supabase = await createClient();
   const authorEmail = await getCurrentUserEmail();
@@ -76,9 +107,10 @@ export async function saveProoferPostAction(
     .select("id, created_by, status")
     .eq("client_id", clientId)
     .eq("post_date", postDate)
+    .eq("platform", normalizedPlatform)
     .maybeSingle();
 
-  const hasContent = Boolean(caption.trim() || imageUrl.trim());
+  const hasContent = Boolean(caption.trim() || normalizedMedia.length > 0);
 
   if (existing) {
     const nextStatus: Status =
@@ -92,7 +124,8 @@ export async function saveProoferPostAction(
       .from("proofer_posts")
       .update({
         caption,
-        image_url: imageUrl,
+        image_url: primaryImageUrl,
+        media_urls: normalizedMedia,
         status: nextStatus,
         updated_at: new Date().toISOString(),
       })
@@ -110,8 +143,10 @@ export async function saveProoferPostAction(
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
       post_date: postDate,
+      platform: normalizedPlatform,
       caption,
-      image_url: imageUrl,
+      image_url: primaryImageUrl,
+      media_urls: normalizedMedia,
       status: "check",
       created_by: authorEmail,
     });
@@ -128,6 +163,7 @@ export async function saveProoferPostAction(
 export async function updateProoferStatusAction(
   clientId: string,
   postDate: string,
+  platform: string,
   status: string
 ) {
   if (!clientId || !postDate) {
@@ -135,6 +171,7 @@ export async function updateProoferStatusAction(
   }
 
   const normalized = normalizeStatus(status);
+  const normalizedPlatform = normalizePlatform(platform);
   const supabase = await createClient();
   const authorEmail = await getCurrentUserEmail();
 
@@ -143,6 +180,7 @@ export async function updateProoferStatusAction(
     .select("id")
     .eq("client_id", clientId)
     .eq("post_date", postDate)
+    .eq("platform", normalizedPlatform)
     .maybeSingle();
 
   if (existing) {
@@ -162,8 +200,10 @@ export async function updateProoferStatusAction(
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,
       post_date: postDate,
+      platform: normalizedPlatform,
       caption: "",
       image_url: "",
+      media_urls: [],
       status: normalized,
       created_by: authorEmail,
     });
@@ -179,19 +219,22 @@ export async function updateProoferStatusAction(
 
 export async function deleteProoferPostAction(
   clientId: string,
-  postDate: string
+  postDate: string,
+  platform: string
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
   }
 
+  const normalizedPlatform = normalizePlatform(platform);
   const supabase = await createClient();
 
   const { error } = await supabase
     .from("proofer_posts")
     .delete()
     .eq("client_id", clientId)
-    .eq("post_date", postDate);
+    .eq("post_date", postDate)
+    .eq("platform", normalizedPlatform);
 
   if (error) {
     console.error("deleteProoferPostAction error:", error);

@@ -201,6 +201,32 @@ export type ProoferStatus =
   | "proofed"
   | "approved";
 
+export type ProoferPlatform =
+  | "instagram_feed"
+  | "instagram_story"
+  | "instagram_reel"
+  | "facebook"
+  | "linkedin"
+  | "tiktok";
+
+export const PROOFER_PLATFORMS: ProoferPlatform[] = [
+  "instagram_feed",
+  "instagram_story",
+  "instagram_reel",
+  "facebook",
+  "linkedin",
+  "tiktok",
+];
+
+export const PROOFER_PLATFORM_LABELS: Record<ProoferPlatform, string> = {
+  instagram_feed: "IG Feed",
+  instagram_story: "IG Story",
+  instagram_reel: "IG Reel",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+};
+
 export type ProoferComment = {
   id: string;
   postId: string;
@@ -236,8 +262,10 @@ export type ProoferPost = {
   id: string;
   clientId: string;
   postDate: string; // "YYYY-MM-DD"
+  platform: ProoferPlatform;
   caption: string;
   imageUrl: string;
+  mediaUrls: string[];
   status: ProoferStatus;
   createdBy: string;
   createdAt: string;

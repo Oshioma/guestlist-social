@@ -4,7 +4,12 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SectionCard from "../components/SectionCard";
 import ImageUpload from "../components/ImageUpload";
-import type { ProoferPost, ProoferStatus } from "../lib/types";
+import type {
+  ProoferPost,
+  ProoferStatus,
+  ProoferPlatform,
+} from "../lib/types";
+import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -12,6 +17,12 @@ import {
   addProoferCommentAction,
   toggleProoferCommentResolvedAction,
 } from "../lib/proofer-actions";
+
+const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
+
+function postKey(dateKey: string, platform: ProoferPlatform): string {
+  return `${dateKey}|${platform}`;
+}
 
 type ClientLite = { id: string; name: string };
 type MonthOpt = { value: string; label: string };
@@ -167,35 +178,109 @@ export default function ProoferBoard({
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
 
-  type Draft = { caption: string; imageUrl: string };
+  type Draft = { caption: string; mediaUrls: string[] };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
     {}
   );
+  const [activePlatformByDate, setActivePlatformByDate] = useState<
+    Record<string, ProoferPlatform>
+  >({});
 
-  const postsByDate = useMemo(() => {
+  const postsByKey = useMemo(() => {
     const map = new Map<string, ProoferPost>();
-    initialPosts.forEach((p) => map.set(p.postDate.slice(0, 10), p));
+    initialPosts.forEach((p) =>
+      map.set(postKey(p.postDate.slice(0, 10), p.platform), p)
+    );
+    return map;
+  }, [initialPosts]);
+
+  const platformsByDate = useMemo(() => {
+    const map = new Map<string, Set<ProoferPlatform>>();
+    initialPosts.forEach((p) => {
+      const d = p.postDate.slice(0, 10);
+      const set = map.get(d) ?? new Set<ProoferPlatform>();
+      set.add(p.platform);
+      map.set(d, set);
+    });
     return map;
   }, [initialPosts]);
 
   const days = useMemo(() => daysInMonth(month), [month]);
 
-  function getDraftFor(key: string): Draft {
+  function getActivePlatform(dateKey: string): ProoferPlatform {
+    const stored = activePlatformByDate[dateKey];
+    if (stored) return stored;
+    const variants = platformsByDate.get(dateKey);
+    if (variants && variants.size > 0) {
+      for (const p of PROOFER_PLATFORMS) {
+        if (variants.has(p)) return p;
+      }
+    }
+    return DEFAULT_PLATFORM;
+  }
+
+  function setActivePlatform(dateKey: string, platform: ProoferPlatform) {
+    setActivePlatformByDate((prev) => ({ ...prev, [dateKey]: platform }));
+  }
+
+  function getDraftFor(dateKey: string, platform: ProoferPlatform): Draft {
+    const key = postKey(dateKey, platform);
     if (drafts[key]) return drafts[key];
-    const existing = postsByDate.get(key);
+    const existing = postsByKey.get(key);
     return {
       caption: existing?.caption ?? "",
-      imageUrl: existing?.imageUrl ?? "",
+      mediaUrls: existing?.mediaUrls ?? [],
     };
   }
 
-  function updateDraft(key: string, patch: Partial<Draft>) {
+  function updateDraft(
+    dateKey: string,
+    platform: ProoferPlatform,
+    patch: Partial<Draft>
+  ) {
+    const key = postKey(dateKey, platform);
     setDrafts((prev) => ({
       ...prev,
-      [key]: { ...getDraftFor(key), ...patch },
+      [key]: { ...getDraftFor(dateKey, platform), ...patch },
     }));
+  }
+
+  function addMediaUrl(
+    dateKey: string,
+    platform: ProoferPlatform,
+    url: string
+  ) {
+    const current = getDraftFor(dateKey, platform);
+    updateDraft(dateKey, platform, {
+      mediaUrls: [...current.mediaUrls, url],
+    });
+  }
+
+  function removeMediaAt(
+    dateKey: string,
+    platform: ProoferPlatform,
+    index: number
+  ) {
+    const current = getDraftFor(dateKey, platform);
+    const next = current.mediaUrls.slice();
+    next.splice(index, 1);
+    updateDraft(dateKey, platform, { mediaUrls: next });
+  }
+
+  function moveMedia(
+    dateKey: string,
+    platform: ProoferPlatform,
+    index: number,
+    delta: number
+  ) {
+    const current = getDraftFor(dateKey, platform);
+    const next = current.mediaUrls.slice();
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    updateDraft(dateKey, platform, { mediaUrls: next });
   }
 
   function navigate(nextClientId: string, nextMonth: string) {
@@ -205,6 +290,7 @@ export default function ProoferBoard({
     setDrafts({});
     setOpenComments({});
     setCommentDrafts({});
+    setActivePlatformByDate({});
     router.push(`/app/proofer?${params.toString()}`);
   }
 
@@ -218,19 +304,21 @@ export default function ProoferBoard({
     navigate(clientId, value);
   }
 
-  function handleSave(dateKey: string) {
-    const draft = getDraftFor(dateKey);
+  function handleSave(dateKey: string, platform: ProoferPlatform) {
+    const draft = getDraftFor(dateKey, platform);
+    const key = postKey(dateKey, platform);
     startTransition(async () => {
       try {
         await saveProoferPostAction(
           clientId,
           dateKey,
+          platform,
           draft.caption,
-          draft.imageUrl
+          draft.mediaUrls
         );
         setDrafts((prev) => {
           const next = { ...prev };
-          delete next[dateKey];
+          delete next[key];
           return next;
         });
         router.refresh();
@@ -240,24 +328,30 @@ export default function ProoferBoard({
     });
   }
 
-  function handleStatus(dateKey: string, status: ProoferStatus) {
+  function handleStatus(
+    dateKey: string,
+    platform: ProoferPlatform,
+    status: ProoferStatus
+  ) {
+    const key = postKey(dateKey, platform);
     startTransition(async () => {
       try {
-        const draft = drafts[dateKey];
+        const draft = drafts[key];
         if (draft) {
           await saveProoferPostAction(
             clientId,
             dateKey,
+            platform,
             draft.caption,
-            draft.imageUrl
+            draft.mediaUrls
           );
           setDrafts((prev) => {
             const next = { ...prev };
-            delete next[dateKey];
+            delete next[key];
             return next;
           });
         }
-        await updateProoferStatusAction(clientId, dateKey, status);
+        await updateProoferStatusAction(clientId, dateKey, platform, status);
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not update status");
@@ -265,19 +359,20 @@ export default function ProoferBoard({
     });
   }
 
-  function handleDelete(dateKey: string) {
+  function handleDelete(dateKey: string, platform: ProoferPlatform) {
     if (!confirm("Clear this day?")) return;
+    const key = postKey(dateKey, platform);
     startTransition(async () => {
       try {
-        await deleteProoferPostAction(clientId, dateKey);
+        await deleteProoferPostAction(clientId, dateKey, platform);
         setDrafts((prev) => {
           const next = { ...prev };
-          delete next[dateKey];
+          delete next[key];
           return next;
         });
         setCommentDrafts((prev) => {
           const next = { ...prev };
-          delete next[dateKey];
+          delete next[key];
           return next;
         });
         router.refresh();
@@ -294,8 +389,8 @@ export default function ProoferBoard({
     }));
   }
 
-  function handleAddComment(dateKey: string, postId?: string) {
-    const value = (commentDrafts[dateKey] ?? "").trim();
+  function handleAddComment(key: string, postId?: string) {
+    const value = (commentDrafts[key] ?? "").trim();
     if (!postId) {
       alert("Save the post first before adding comments.");
       return;
@@ -310,11 +405,11 @@ export default function ProoferBoard({
         await addProoferCommentAction(postId, value);
         setCommentDrafts((prev) => ({
           ...prev,
-          [dateKey]: "",
+          [key]: "",
         }));
         setOpenComments((prev) => ({
           ...prev,
-          [dateKey]: true,
+          [key]: true,
         }));
         router.refresh();
       } catch (err) {
@@ -339,27 +434,32 @@ export default function ProoferBoard({
   const visibleDays = useMemo(() => {
     if (!hideEmpty) return days;
     return days.filter((d) => {
-      const key = toDateKey(d);
-      const draft = drafts[key];
-      const post = postsByDate.get(key);
-      const caption = draft?.caption ?? post?.caption ?? "";
-      const imageUrl = draft?.imageUrl ?? post?.imageUrl ?? "";
-      return (
-        caption.trim().length > 0 ||
-        imageUrl.trim().length > 0 ||
-        (post && post.status !== "none")
-      );
+      const dateKey = toDateKey(d);
+      return PROOFER_PLATFORMS.some((platform) => {
+        const key = postKey(dateKey, platform);
+        const draft = drafts[key];
+        const post = postsByKey.get(key);
+        const caption = draft?.caption ?? post?.caption ?? "";
+        const mediaUrls = draft?.mediaUrls ?? post?.mediaUrls ?? [];
+        return (
+          caption.trim().length > 0 ||
+          mediaUrls.length > 0 ||
+          (post && post.status !== "none")
+        );
+      });
     });
-  }, [days, drafts, postsByDate, hideEmpty]);
+  }, [days, drafts, postsByKey, hideEmpty]);
 
   const totalWithContent = useMemo(
     () =>
       days.filter((d) => {
-        const key = toDateKey(d);
-        const post = postsByDate.get(key);
-        return post && (post.caption || post.imageUrl);
+        const dateKey = toDateKey(d);
+        return PROOFER_PLATFORMS.some((platform) => {
+          const post = postsByKey.get(postKey(dateKey, platform));
+          return post && (post.caption || post.mediaUrls.length > 0);
+        });
       }).length,
-    [days, postsByDate]
+    [days, postsByKey]
   );
 
   return (
@@ -475,12 +575,14 @@ export default function ProoferBoard({
           )}
 
           {visibleDays.map((d) => {
-            const key = toDateKey(d);
-            const post = postsByDate.get(key);
-            const draft = getDraftFor(key);
+            const dateKey = toDateKey(d);
+            const activePlatform = getActivePlatform(dateKey);
+            const key = postKey(dateKey, activePlatform);
+            const post = postsByKey.get(key);
+            const draft = getDraftFor(dateKey, activePlatform);
             const hasDraft = Boolean(drafts[key]);
             const hasContent = Boolean(
-              draft.caption.trim() || draft.imageUrl.trim()
+              draft.caption.trim() || draft.mediaUrls.length > 0
             );
 
             const comments = ((post as ProoferPost & {
@@ -500,16 +602,19 @@ export default function ProoferBoard({
 
             const isLocked = effectiveStatus === "approved";
 
+            const variants = platformsByDate.get(dateKey) ?? new Set();
+            const previewUrl = draft.mediaUrls[0] ?? "";
+
             return (
               <div
-                key={key}
+                key={dateKey}
                 style={{
                   background: "#fff",
                   border: "1px solid #e4e4e7",
                   borderRadius: 12,
                   padding: 16,
                   display: "grid",
-                  gridTemplateColumns: "180px 1fr",
+                  gridTemplateColumns: "200px 1fr",
                   gap: 16,
                   alignItems: "flex-start",
                 }}
@@ -566,6 +671,68 @@ export default function ProoferBoard({
                       Approved and locked
                     </div>
                   )}
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}
+                  >
+                    <span style={labelStyle}>Platform</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 4,
+                      }}
+                    >
+                      {PROOFER_PLATFORMS.map((p) => {
+                        const isActive = p === activePlatform;
+                        const hasVariant = variants.has(p);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setActivePlatform(dateKey, p)}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: isActive
+                                ? "1px solid #18181b"
+                                : "1px solid #e4e4e7",
+                              background: isActive ? "#18181b" : "#fff",
+                              color: isActive
+                                ? "#fff"
+                                : hasVariant
+                                ? "#27272a"
+                                : "#a1a1aa",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              position: "relative",
+                            }}
+                          >
+                            {PROOFER_PLATFORM_LABELS[p]}
+                            {hasVariant && !isActive && (
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: 5,
+                                  height: 5,
+                                  borderRadius: "50%",
+                                  background: "#22c55e",
+                                  marginLeft: 5,
+                                  verticalAlign: "middle",
+                                }}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 <div
@@ -578,7 +745,9 @@ export default function ProoferBoard({
                   <textarea
                     value={draft.caption}
                     onChange={(e) =>
-                      updateDraft(key, { caption: e.target.value })
+                      updateDraft(dateKey, activePlatform, {
+                        caption: e.target.value,
+                      })
                     }
                     placeholder="Write a caption..."
                     disabled={isLocked}
@@ -595,88 +764,207 @@ export default function ProoferBoard({
                   <div
                     style={{
                       display: "flex",
+                      flexDirection: "column",
                       gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
                     }}
                   >
-                    {draft.imageUrl ? (
+                    {draft.mediaUrls.length > 0 && (
                       <div
                         style={{
-                          display: "inline-flex",
-                          alignItems: "center",
+                          display: "flex",
                           gap: 8,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          background: "#f4f4f5",
-                          border: "1px solid #e4e4e7",
-                          fontSize: 12,
-                          color: "#3f3f46",
-                          maxWidth: "100%",
-                          opacity: isLocked ? 0.7 : 1,
+                          flexWrap: "wrap",
+                          alignItems: "stretch",
                         }}
                       >
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            maxWidth: 260,
-                          }}
-                          title={draft.imageUrl}
-                        >
-                          {prettyFileName(draft.imageUrl)}
-                        </span>
-                        {!isLocked && (
-                          <button
-                            type="button"
-                            onClick={() => updateDraft(key, { imageUrl: "" })}
+                        {draft.mediaUrls.map((url, idx) => (
+                          <div
+                            key={`${url}-${idx}`}
                             style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "#71717a",
-                              cursor: "pointer",
-                              fontSize: 14,
-                              lineHeight: 1,
-                              padding: 0,
+                              width: 88,
+                              border: "1px solid #e4e4e7",
+                              borderRadius: 8,
+                              background: "#fafafa",
+                              overflow: "hidden",
+                              display: "flex",
+                              flexDirection: "column",
+                              opacity: isLocked ? 0.7 : 1,
                             }}
-                            aria-label="Remove media"
                           >
-                            ×
-                          </button>
-                        )}
+                            <div
+                              style={{
+                                width: "100%",
+                                aspectRatio: "1 / 1",
+                                background: "#f4f4f5",
+                                position: "relative",
+                              }}
+                            >
+                              {isVideoUrl(url) ? (
+                                <video
+                                  src={url}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : (
+                                <img
+                                  src={url}
+                                  alt={prettyFileName(url)}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              )}
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: 4,
+                                  left: 4,
+                                  background: "rgba(0,0,0,0.6)",
+                                  color: "#fff",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: "2px 5px",
+                                  borderRadius: 4,
+                                }}
+                              >
+                                {idx + 1}
+                              </div>
+                            </div>
+
+                            {!isLocked && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "4px 6px",
+                                  gap: 2,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    moveMedia(
+                                      dateKey,
+                                      activePlatform,
+                                      idx,
+                                      -1
+                                    )
+                                  }
+                                  disabled={idx === 0}
+                                  style={{
+                                    border: "none",
+                                    background: "transparent",
+                                    color: idx === 0 ? "#d4d4d8" : "#52525b",
+                                    cursor: idx === 0 ? "default" : "pointer",
+                                    padding: 2,
+                                    fontSize: 12,
+                                  }}
+                                  aria-label="Move left"
+                                >
+                                  ◀
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeMediaAt(
+                                      dateKey,
+                                      activePlatform,
+                                      idx
+                                    )
+                                  }
+                                  style={{
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#991b1b",
+                                    cursor: "pointer",
+                                    padding: 2,
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                  }}
+                                  aria-label="Remove"
+                                >
+                                  ×
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    moveMedia(
+                                      dateKey,
+                                      activePlatform,
+                                      idx,
+                                      1
+                                    )
+                                  }
+                                  disabled={
+                                    idx === draft.mediaUrls.length - 1
+                                  }
+                                  style={{
+                                    border: "none",
+                                    background: "transparent",
+                                    color:
+                                      idx === draft.mediaUrls.length - 1
+                                        ? "#d4d4d8"
+                                        : "#52525b",
+                                    cursor:
+                                      idx === draft.mediaUrls.length - 1
+                                        ? "default"
+                                        : "pointer",
+                                    padding: 2,
+                                    fontSize: 12,
+                                  }}
+                                  aria-label="Move right"
+                                >
+                                  ▶
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={draft.imageUrl}
-                        onChange={(e) =>
-                          updateDraft(key, { imageUrl: e.target.value })
-                        }
-                        placeholder="Paste media URL or upload"
-                        disabled={isLocked}
-                        style={{
-                          ...inputStyle,
-                          flex: 1,
-                          minWidth: 200,
-                          opacity: isLocked ? 0.7 : 1,
-                          cursor: isLocked ? "not-allowed" : "text",
-                        }}
-                      />
                     )}
 
                     {!isLocked && (
-                      <ImageUpload
-                        bucket="postimages"
-                        folder={`proofer/${clientId}/${month}`}
-                        onUploaded={(url) => updateDraft(key, { imageUrl: url })}
-                        label="Upload media"
-                        accept="image/*,video/*"
-                      />
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <ImageUpload
+                          bucket="postimages"
+                          folder={`proofer/${clientId}/${month}`}
+                          onUploaded={(url) =>
+                            addMediaUrl(dateKey, activePlatform, url)
+                          }
+                          label={
+                            draft.mediaUrls.length > 0
+                              ? "Add another"
+                              : "Upload media"
+                          }
+                          accept="image/*,video/*"
+                        />
+                        <span style={{ fontSize: 11, color: "#a1a1aa" }}>
+                          {draft.mediaUrls.length > 0
+                            ? `${draft.mediaUrls.length} item${
+                                draft.mediaUrls.length === 1 ? "" : "s"
+                              } · drag order with ◀ ▶`
+                            : "Images or video (up to 30 MB)"}
+                        </span>
+                      </div>
                     )}
                   </div>
 
-                  {draft.imageUrl && (
+                  {previewUrl && (
                     <div
                       style={{
                         width: "100%",
@@ -747,11 +1035,12 @@ export default function ProoferBoard({
                           aspectRatio: "1 / 1",
                           background: "#fafafa",
                           overflow: "hidden",
+                          position: "relative",
                         }}
                       >
-                        {isVideoUrl(draft.imageUrl) ? (
+                        {isVideoUrl(previewUrl) ? (
                           <video
-                            src={draft.imageUrl}
+                            src={previewUrl}
                             controls
                             style={{
                               display: "block",
@@ -762,7 +1051,7 @@ export default function ProoferBoard({
                           />
                         ) : (
                           <img
-                            src={draft.imageUrl}
+                            src={previewUrl}
                             alt="Preview"
                             style={{
                               display: "block",
@@ -776,6 +1065,23 @@ export default function ProoferBoard({
                               ).style.display = "none";
                             }}
                           />
+                        )}
+                        {draft.mediaUrls.length > 1 && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 10,
+                              right: 10,
+                              background: "rgba(0,0,0,0.65)",
+                              color: "#fff",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                            }}
+                          >
+                            1/{draft.mediaUrls.length}
+                          </div>
                         )}
                       </div>
 
@@ -813,7 +1119,9 @@ export default function ProoferBoard({
                         <button
                           key={btn.value}
                           type="button"
-                          onClick={() => handleStatus(key, btn.value)}
+                          onClick={() =>
+                            handleStatus(dateKey, activePlatform, btn.value)
+                          }
                           disabled={disableThisButton}
                           style={{
                             padding: "6px 14px",
@@ -840,7 +1148,7 @@ export default function ProoferBoard({
                     <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                       <button
                         type="button"
-                        onClick={() => handleSave(key)}
+                        onClick={() => handleSave(dateKey, activePlatform)}
                         disabled={isPending || !hasDraft || isLocked}
                         style={{
                           padding: "8px 14px",
@@ -861,7 +1169,7 @@ export default function ProoferBoard({
                       {(post || hasDraft) && (
                         <button
                           type="button"
-                          onClick={() => handleDelete(key)}
+                          onClick={() => handleDelete(dateKey, activePlatform)}
                           disabled={isPending || isLocked}
                           style={{
                             ...secondaryButtonStyle,
