@@ -132,6 +132,81 @@ export function formatExpectedOutcome(
 }
 
 // ---------------------------------------------------------------------------
+// Decision-side counterparts. Decisions don't have a pattern_key — they are
+// grouped by `type` (scale_budget, pause_or_replace, etc.). The evidence for
+// a pending decision is the history of past decisions of the same type.
+// ---------------------------------------------------------------------------
+
+export type DecisionTypeStats = {
+  type: string;
+  total: number;
+  executed: number;
+  approved: number;
+  rejected: number;
+};
+
+export type LastDecision = {
+  ad_name: string | null;
+  status: string;
+  executed_at: string | null;
+  execution_result: string | null;
+};
+
+// "Done 5 times before · 4 executed without rollback · 1 rejected"
+// "First time we're suggesting this move" when there's no history.
+export function formatDecisionEvidence(
+  stats: DecisionTypeStats | null
+): string | null {
+  if (!stats || stats.total === 0) {
+    return "First time we're suggesting this move — no prior history yet.";
+  }
+  const parts: string[] = [
+    `Done ${stats.total} ${stats.total === 1 ? "time" : "times"} before`,
+  ];
+  if (stats.executed > 0) {
+    parts.push(
+      `${stats.executed} executed${
+        stats.rejected === 0 ? " without rollback" : ""
+      }`
+    );
+  }
+  if (stats.rejected > 0) {
+    parts.push(`${stats.rejected} rejected`);
+  }
+  return parts.join(" · ");
+}
+
+// "Last similar: scale_budget on 'Brand X', executed Mar 12 — 'budget +20%'"
+export function formatDecisionLastSimilar(
+  last: LastDecision | null
+): string | null {
+  if (!last) return null;
+  const adLabel = last.ad_name ? `'${last.ad_name}'` : "another ad";
+  const dateStr = last.executed_at
+    ? new Date(last.executed_at).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+
+  const parts = [`Last similar move on ${adLabel}`];
+  if (dateStr) parts.push(dateStr);
+  parts.push(last.status);
+  let line = parts.join(" · ");
+  if (last.execution_result) {
+    line += ` — ${last.execution_result}`;
+  }
+  return line;
+}
+
+// Map the raw "low" | "medium" | "high" stored on a decision row to our
+// shared Confidence type. Anything unrecognised falls through to "unknown".
+export function decisionConfidence(raw: string | null | undefined): Confidence {
+  if (raw === "high" || raw === "medium" || raw === "low") return raw;
+  return "unknown";
+}
+
+// ---------------------------------------------------------------------------
 // formatLastSimilar: "Last similar move on 'Late checkout': CTR 0.8% → 1.3%
 // (+62%, positive)". Returns null if there's no completed similar action.
 // ---------------------------------------------------------------------------

@@ -17,8 +17,12 @@ import {
   formatEvidence,
   formatExpectedOutcome,
   formatLastSimilar,
+  formatDecisionEvidence,
+  formatDecisionLastSimilar,
   type PatternStats,
   type LastSimilar,
+  type DecisionTypeStats,
+  type LastDecision,
 } from "@/app/admin-panel/lib/action-confidence";
 import ExperimentCard from "@/app/admin-panel/components/ExperimentCard";
 import CreateExperimentForm from "@/app/admin-panel/components/CreateExperimentForm";
@@ -166,6 +170,87 @@ export default async function ClientAdsPage({
         completed_at: (row as any).completed_at ?? null,
       });
     }
+  }
+
+  // ── Decision enrichment ─────────────────────────────────────────────────
+  // Decisions are typed (scale_budget, pause_or_replace, ...). The trust
+  // story for a pending decision is the history of past decisions of the
+  // same type — both on this client and across all clients. We pull both
+  // batches once and aggregate in JS.
+  const pendingDecisionTypes = Array.from(
+    new Set(
+      pendingDecisions
+        .map((d: any) => d.type)
+        .filter((t: any): t is string => typeof t === "string" && t.length > 0)
+    )
+  );
+
+  const decisionStatsByType = new Map<string, DecisionTypeStats>();
+  const lastDecisionByType = new Map<string, LastDecision>();
+
+  if (pendingDecisionTypes.length > 0) {
+    const { data: historyRows } = await supabase
+      .from("ad_decisions")
+      .select(
+        "type, status, executed_at, execution_result, ads(name)"
+      )
+      .in("type", pendingDecisionTypes)
+      .neq("status", "pending")
+      .order("executed_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+
+    for (const row of historyRows ?? []) {
+      const type = (row as any).type as string;
+      const status = (row as any).status as string;
+
+      // Aggregate counts per type
+      const stats = decisionStatsByType.get(type) ?? {
+        type,
+        total: 0,
+        executed: 0,
+        approved: 0,
+        rejected: 0,
+      };
+      stats.total += 1;
+      if (status === "executed") stats.executed += 1;
+      else if (status === "approved") stats.approved += 1;
+      else if (status === "rejected") stats.rejected += 1;
+      decisionStatsByType.set(type, stats);
+
+      // First row wins (the query is already sorted recent-first)
+      if (!lastDecisionByType.has(type) && status !== "rejected") {
+        const adRel = (row as any).ads;
+        const adName = Array.isArray(adRel)
+          ? adRel[0]?.name ?? null
+          : adRel?.name ?? null;
+        lastDecisionByType.set(type, {
+          ad_name: adName,
+          status,
+          executed_at: (row as any).executed_at ?? null,
+          execution_result: (row as any).execution_result ?? null,
+        });
+      }
+    }
+  }
+
+  function decisionCardProps(d: any) {
+    const type = d.type as string | null;
+    const stats = type ? decisionStatsByType.get(type) ?? null : null;
+    const last = type ? lastDecisionByType.get(type) ?? null : null;
+    return {
+      id: d.id,
+      ad_id: d.ad_id,
+      ad_name: (d.ads as any)?.name ?? "Unknown ad",
+      type: d.type,
+      reason: d.reason,
+      action: d.action,
+      confidence: d.confidence,
+      meta_action: d.meta_action,
+      status: d.status,
+      execution_result: d.execution_result,
+      evidence: formatDecisionEvidence(stats),
+      last_similar: formatDecisionLastSimilar(last),
+    };
   }
 
   // Build the props bag once per row so the JSX below stays small.
@@ -698,21 +783,7 @@ export default async function ClientAdsPage({
         {pendingDecisions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {pendingDecisions.map((d: any) => (
-              <DecisionRow
-                key={d.id}
-                decision={{
-                  id: d.id,
-                  ad_id: d.ad_id,
-                  ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                  type: d.type,
-                  reason: d.reason,
-                  action: d.action,
-                  confidence: d.confidence,
-                  meta_action: d.meta_action,
-                  status: d.status,
-                  execution_result: d.execution_result,
-                }}
-              />
+              <DecisionRow key={d.id} decision={decisionCardProps(d)} />
             ))}
           </div>
         ) : (
@@ -727,21 +798,7 @@ export default async function ClientAdsPage({
             </summary>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
               {pastDecisions.map((d: any) => (
-                <DecisionRow
-                  key={d.id}
-                  decision={{
-                    id: d.id,
-                    ad_id: d.ad_id,
-                    ad_name: (d.ads as any)?.name ?? "Unknown ad",
-                    type: d.type,
-                    reason: d.reason,
-                    action: d.action,
-                    confidence: d.confidence,
-                    meta_action: d.meta_action,
-                    status: d.status,
-                    execution_result: d.execution_result,
-                  }}
-                />
+                <DecisionRow key={d.id} decision={decisionCardProps(d)} />
               ))}
             </div>
           </details>
