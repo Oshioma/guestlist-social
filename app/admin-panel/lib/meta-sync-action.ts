@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getCampaigns,
   getAds,
@@ -21,12 +21,29 @@ import {
 } from "@/lib/meta";
 import { getAdAccount } from "@/lib/meta";
 
+// Service-role client. Same reasoning as /api/meta-sync: this file's
+// sync routines INSERT new campaigns/ads when Meta returns objects we
+// haven't seen before, and the campaigns table has RLS that doesn't
+// grant INSERT to the publishable key. Backend sync code shouldn't
+// depend on a logged-in user's row policies — service role is the
+// right call.
+function adminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing Supabase env vars");
+  }
+  return createAdminClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 /**
  * Import from Meta: creates a client from the ad account name,
  * then syncs all campaigns, ads, and insights into it.
  */
 export async function importFromMeta() {
-  const supabase = await createClient();
+  const supabase = adminClient();
 
   try {
     const account = await getAdAccount();
@@ -86,7 +103,7 @@ export async function importFromMeta() {
  * Sync all clients: runs syncMetaData for every non-archived client.
  */
 export async function syncAllClients() {
-  const supabase = await createClient();
+  const supabase = adminClient();
 
   const { data: clients } = await supabase
     .from("clients")
@@ -121,7 +138,7 @@ export async function syncAllClients() {
 }
 
 export async function syncMetaData(clientId: string) {
-  const supabase = await createClient();
+  const supabase = adminClient();
 
   // Verify client exists
   const { data: client, error: clientError } = await supabase
