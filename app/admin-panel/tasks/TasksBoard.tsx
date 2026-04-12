@@ -40,6 +40,31 @@ const WEEKDAY_NAMES = [
   "Saturday",
 ];
 
+const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// Returns the Monday of the week containing the given date, as a Date at 00:00 local.
+function getMonday(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun..6 Sat
+  const diff = day === 0 ? -6 : 1 - day; // shift to Monday
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function normalizeDueDate(due: string): string {
+  if (!due) return "";
+  // Accepts "YYYY-MM-DD" or full ISO timestamp
+  return due.slice(0, 10);
+}
+
 function recurrenceSummary(recurrence: TaskRecurrence, dueDate: string) {
   if (recurrence === "none") return "";
   if (!dueDate) {
@@ -125,6 +150,18 @@ const secondaryButton: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const weekNavButton: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#52525b",
+  border: "1px solid #e4e4e7",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  minWidth: 32,
+};
+
 export default function TasksBoard({
   initialTasks,
   currentUserEmail,
@@ -136,6 +173,58 @@ export default function TasksBoard({
 }) {
   const [tasks] = useState<Task[]>(initialTasks);
   const [isPending, startTransition] = useTransition();
+
+  // Week browser state
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const weekDays = useMemo(() => {
+    const baseMonday = getMonday(new Date());
+    baseMonday.setDate(baseMonday.getDate() + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(baseMonday);
+      d.setDate(baseMonday.getDate() + i);
+      return {
+        key: toDateKey(d),
+        short: WEEKDAY_SHORT[i],
+        long: WEEKDAY_NAMES[d.getDay()],
+        dayNum: d.getDate(),
+        monthShort: d.toLocaleDateString(undefined, { month: "short" }),
+        date: d,
+      };
+    });
+  }, [weekOffset]);
+
+  const weekRangeLabel = useMemo(() => {
+    const first = weekDays[0].date;
+    const last = weekDays[6].date;
+    const sameMonth = first.getMonth() === last.getMonth();
+    const firstStr = first.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    const lastStr = last.toLocaleDateString(undefined, {
+      month: sameMonth ? undefined : "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    return `${firstStr} – ${lastStr}`;
+  }, [weekDays]);
+
+  const dueCountByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    tasks.forEach((t) => {
+      const key = normalizeDueDate(t.dueDate);
+      if (!key) return;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    });
+    return map;
+  }, [tasks]);
+
+  function filterBySelectedDate(list: Task[]): Task[] {
+    if (!selectedDate) return list;
+    return list.filter((t) => normalizeDueDate(t.dueDate) === selectedDate);
+  }
 
   // New task form state
   const [title, setTitle] = useState("");
@@ -164,21 +253,33 @@ export default function TasksBoard({
     [tasks, currentUserEmail]
   );
 
+  const myTasksFiltered = useMemo(
+    () => filterBySelectedDate(myTasks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [myTasks, selectedDate]
+  );
+
+  const allTasksFiltered = useMemo(
+    () => filterBySelectedDate(tasks),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, selectedDate]
+  );
+
   const myTasksByCategory = useMemo(() => {
     const groups: Record<string, Task[]> = {};
     CATEGORIES.forEach((c) => {
-      groups[c.value] = myTasks.filter((t) => t.category === c.value);
+      groups[c.value] = myTasksFiltered.filter((t) => t.category === c.value);
     });
     return groups;
-  }, [myTasks]);
+  }, [myTasksFiltered]);
 
   const allTasksByCategory = useMemo(() => {
     const groups: Record<string, Task[]> = {};
     CATEGORIES.forEach((c) => {
-      groups[c.value] = tasks.filter((t) => t.category === c.value);
+      groups[c.value] = allTasksFiltered.filter((t) => t.category === c.value);
     });
     return groups;
-  }, [tasks]);
+  }, [allTasksFiltered]);
 
   function handleAdd() {
     if (!title.trim()) return;
@@ -597,6 +698,186 @@ export default function TasksBoard({
           moving. Your own open tasks are shown first.
         </p>
       </div>
+
+      <SectionCard
+        title="Week"
+        action={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => setWeekOffset((w) => w - 1)}
+              style={weekNavButton}
+              aria-label="Previous week"
+            >
+              &larr;
+            </button>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#52525b",
+                minWidth: 140,
+                textAlign: "center",
+              }}
+            >
+              {weekRangeLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => setWeekOffset((w) => w + 1)}
+              style={weekNavButton}
+              aria-label="Next week"
+            >
+              &rarr;
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWeekOffset(0);
+                setSelectedDate(null);
+              }}
+              style={{
+                ...weekNavButton,
+                color: "#18181b",
+                borderColor: "#d4d4d8",
+              }}
+            >
+              Today
+            </button>
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(null)}
+                style={{
+                  ...weekNavButton,
+                  background: "#18181b",
+                  color: "#fff",
+                  borderColor: "#18181b",
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        }
+      >
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              fontSize: 14,
+            }}
+          >
+            <thead>
+              <tr>
+                {weekDays.map((d) => {
+                  const isSelected = selectedDate === d.key;
+                  const isToday = d.key === toDateKey(new Date());
+                  return (
+                    <th
+                      key={d.key}
+                      style={{
+                        textAlign: "left",
+                        padding: "12px 16px",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        color: isSelected ? "#18181b" : "#71717a",
+                        borderBottom: isSelected
+                          ? "2px solid #18181b"
+                          : "2px solid #e4e4e7",
+                        whiteSpace: "nowrap",
+                        minWidth: 120,
+                        background: isToday ? "#fafafa" : "#fff",
+                      }}
+                    >
+                      {d.short} {d.dayNum} {d.monthShort}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {weekDays.map((d) => {
+                  const count = dueCountByDate.get(d.key) ?? 0;
+                  const isSelected = selectedDate === d.key;
+                  const colors =
+                    count === 0
+                      ? { bg: "#f3f4f6", text: "#9ca3af" }
+                      : isSelected
+                      ? { bg: "#18181b", text: "#fff" }
+                      : { bg: "#dbeafe", text: "#1e40af" };
+                  return (
+                    <td
+                      key={d.key}
+                      style={{
+                        padding: "10px 16px",
+                        borderBottom: "1px solid #f4f4f5",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedDate(isSelected ? null : d.key)
+                        }
+                        style={{
+                          appearance: "none",
+                          WebkitAppearance: "none",
+                          width: "100%",
+                          padding: "10px 12px",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          border: isSelected
+                            ? "1px solid #18181b"
+                            : "1px solid #e4e4e7",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          backgroundColor: colors.bg,
+                          color: colors.text,
+                          textAlign: "left",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 8,
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <span>
+                          {count === 0
+                            ? "No tasks"
+                            : `${count} task${count === 1 ? "" : "s"}`}
+                        </span>
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {selectedDate && (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "#52525b",
+            }}
+          >
+            Showing tasks due on{" "}
+            <strong>
+              {new Date(selectedDate).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </strong>
+            . Click <strong>Clear</strong> to see all tasks again.
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard title="My open tasks">
         {myTasks.length === 0 ? (
