@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import ReviewApprovalRow from "../../admin-panel/components/ReviewApprovalRow";
+import PublicReviewApprovals from "./PublicReviewApprovals";
 import { approveProposalByShareToken } from "../../admin-panel/lib/review-actions";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,8 @@ type Approval = {
   proposal_type: string;
   status: "pending" | "approved" | "declined" | "changed";
   client_note: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
 };
 
 const NEXT_GROUPS: { type: NextItem["type"]; title: string; tone: string }[] = [
@@ -154,18 +156,12 @@ export default async function PublicReviewPage({
   const { data: approvalRows } = await supabase
     .from("review_approvals")
     .select(
-      "id, proposal_index, proposal_label, proposal_detail, proposal_type, status, client_note"
+      "id, proposal_index, proposal_label, proposal_detail, proposal_type, status, client_note, decided_by, decided_at"
     )
     .eq("review_id", review.id)
     .order("proposal_index", { ascending: true });
 
   const approvals = (approvalRows ?? []) as Approval[];
-  const approvalsByType = new Map<string, Approval[]>();
-  for (const a of approvals) {
-    const list = approvalsByType.get(a.proposal_type) ?? [];
-    list.push(a);
-    approvalsByType.set(a.proposal_type, list);
-  }
 
   const improvements = review.what_improved ?? [];
   const tested = review.what_we_tested ?? [];
@@ -455,63 +451,31 @@ export default async function PublicReviewPage({
               Approve what you&rsquo;re happy with — we&rsquo;ll get going on
               it straight away.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {NEXT_GROUPS.map((group) => {
-                const items = next.filter((n) => n.type === group.type);
-                if (items.length === 0) return null;
-                const groupApprovals = approvalsByType.get(group.type) ?? [];
-                return (
-                  <div key={group.type}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: group.tone,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        marginBottom: 8,
-                      }}
-                    >
-                      {group.title}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      {items.map((item) => {
-                        const approval = groupApprovals.find(
-                          (a) => a.proposal_index === item.idx
-                        );
-                        if (!approval) return null;
-                        return (
-                          <ReviewApprovalRow
-                            key={approval.id}
-                            approvalId={approval.id}
-                            label={item.label}
-                            detail={item.detail}
-                            status={approval.status}
-                            onDecide={async (
-                              id: number,
-                              decision: "approved" | "declined"
-                            ) => {
-                              "use server";
-                              await approveProposalByShareToken(
-                                token,
-                                id,
-                                decision
-                              );
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
+            <PublicReviewApprovals
+              token={token}
+              groups={NEXT_GROUPS}
+              next={next.map((n) => ({
+                idx: n.idx,
+                label: n.label,
+                detail: n.detail,
+                type: n.type,
+              }))}
+              approvals={approvals}
+              decide={async (
+                id: number,
+                decision: "approved" | "declined",
+                signerName: string
+              ) => {
+                "use server";
+                await approveProposalByShareToken(
+                  token,
+                  id,
+                  decision,
+                  undefined,
+                  signerName
                 );
-              })}
-            </div>
+              }}
+            />
           </Card>
         )}
 

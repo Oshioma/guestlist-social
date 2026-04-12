@@ -57,7 +57,8 @@ type NextItem = {
 export async function approveProposal(
   approvalId: number,
   decision: "approved" | "declined",
-  note?: string
+  note?: string,
+  decidedBy?: string
 ) {
   const supabase = admin();
 
@@ -88,10 +89,17 @@ export async function approveProposal(
       (n) => n.idx === approval.proposal_index
     ) ?? null;
 
+  // `decided_by` captures the human who pressed the button — name typed
+  // into the public share view, or operator email when signed inside the
+  // admin app. Trim to keep the trail clean; collapse empty strings to
+  // null so the column remains a useful "is signed?" indicator.
+  const cleanedSigner = decidedBy?.trim() || null;
+
   const update: Record<string, unknown> = {
     status: decision,
     client_note: note ?? null,
     decided_at: new Date().toISOString(),
+    decided_by: cleanedSigner,
   };
 
   // Only mint a backing row when approving and we don't already have one.
@@ -217,7 +225,8 @@ export async function approveProposalByShareToken(
   token: string,
   approvalId: number,
   decision: "approved" | "declined",
-  note?: string
+  note?: string,
+  signerName?: string
 ) {
   const supabase = admin();
 
@@ -251,8 +260,9 @@ export async function approveProposalByShareToken(
   }
 
   // Delegate to the main approval action — it already does the action /
-  // decision minting and revalidation.
-  await approveProposal(approvalId, decision, note);
+  // decision minting and revalidation. Forward the typed signer name so
+  // it lands in `decided_by`.
+  await approveProposal(approvalId, decision, note, signerName);
   revalidatePath(`/r/${token}`);
 }
 

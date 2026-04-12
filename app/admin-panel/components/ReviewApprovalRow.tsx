@@ -8,6 +8,13 @@ type Props = {
   label: string;
   detail: string | null;
   status: "pending" | "approved" | "declined" | "changed";
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  // Optional gate: when present, the row will not call onDecide and will
+  // instead surface a hint, asking the parent to capture a name first.
+  // Used by the public share view to enforce sign-off identity.
+  requireSigner?: boolean;
+  signerName?: string | null;
   onDecide: (
     approvalId: number,
     decision: "approved" | "declined",
@@ -20,19 +27,35 @@ export default function ReviewApprovalRow({
   label,
   detail,
   status: initialStatus,
+  decidedBy: initialDecidedBy = null,
+  decidedAt: initialDecidedAt = null,
+  requireSigner = false,
+  signerName = null,
   onDecide,
 }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState(initialStatus);
+  const [decidedBy, setDecidedBy] = useState<string | null>(initialDecidedBy);
+  const [decidedAt, setDecidedAt] = useState<string | null>(initialDecidedAt);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function decide(decision: "approved" | "declined") {
+    if (requireSigner && !(signerName && signerName.trim())) {
+      setError("Type your name above to sign off.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
         await onDecide(approvalId, decision);
         setStatus(decision);
+        // Optimistic local copy of the audit trail so the operator (or
+        // client) sees "Signed by …" without a hard refresh.
+        if (signerName && signerName.trim()) {
+          setDecidedBy(signerName.trim());
+        }
+        setDecidedAt(new Date().toISOString());
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed");
@@ -76,6 +99,25 @@ export default function ReviewApprovalRow({
             }}
           >
             {detail}
+          </div>
+        )}
+        {(decidedBy || decidedAt) && (isApproved || isDeclined) && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "#71717a",
+              marginTop: 6,
+              fontStyle: "italic",
+            }}
+          >
+            {isApproved ? "Approved" : "Declined"}
+            {decidedBy ? ` by ${decidedBy}` : ""}
+            {decidedAt
+              ? ` · ${new Date(decidedAt).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}`
+              : ""}
           </div>
         )}
         {error && (

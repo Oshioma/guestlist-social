@@ -116,6 +116,7 @@ const SCHEMA = {
     "status",
     "client_note",
     "decided_at",
+    "decided_by",
     "resulting_action_id",
     "resulting_decision_id",
   ],

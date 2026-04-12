@@ -13,6 +13,7 @@ import {
   updateReviewNarrative,
 } from "../../../../lib/review-actions";
 import { rewriteReviewWithClaude } from "../../../../lib/review-rewrite";
+import { getViewer } from "../../../../lib/viewer";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,8 @@ type Approval = {
   proposal_type: string;
   status: "pending" | "approved" | "declined" | "changed";
   client_note: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
 };
 
 const NEXT_GROUPS: { type: NextItem["type"]; title: string; tone: string }[] = [
@@ -137,6 +140,12 @@ export default async function ReviewDetailPage({
   const { clientId, reviewId } = await params;
   const supabase = await createClient();
 
+  // Capture the operator's email so per-row approvals on the admin side
+  // get attributed to a real person, mirroring the typed-name capture on
+  // the public share view.
+  const viewer = await getViewer();
+  const operatorLabel = viewer?.email ?? "Operator";
+
   const [clientRes, reviewRes, approvalsRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -148,7 +157,7 @@ export default async function ReviewDetailPage({
     supabase
       .from("review_approvals")
       .select(
-        "id, proposal_index, proposal_label, proposal_detail, proposal_type, status, client_note"
+        "id, proposal_index, proposal_label, proposal_detail, proposal_type, status, client_note, decided_by, decided_at"
       )
       .eq("review_id", reviewId)
       .order("proposal_index", { ascending: true }),
@@ -655,12 +664,22 @@ export default async function ReviewDetailPage({
                           label={item.label}
                           detail={item.detail}
                           status={approval.status}
+                          decidedBy={approval.decided_by}
+                          decidedAt={approval.decided_at}
                           onDecide={async (
                             id: number,
                             decision: "approved" | "declined"
                           ) => {
                             "use server";
-                            await approveProposal(id, decision);
+                            // Operator-side approvals are signed by the
+                            // logged-in operator. The portal share view
+                            // captures a typed name for client sign-off.
+                            await approveProposal(
+                              id,
+                              decision,
+                              undefined,
+                              operatorLabel
+                            );
                           }}
                         />
                       );
