@@ -46,25 +46,33 @@ export default function ScaleAdButton({
 
   if (state.kind === "success") {
     return (
-      <Link
-        href="/app/meta-queue"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "4px 12px",
-          borderRadius: 999,
-          fontSize: 11,
-          fontWeight: 700,
-          background: "#166534",
-          color: "#fff",
-          textDecoration: "none",
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        {state.deduped ? "Already queued ↗" : "Queued ↗"}
-      </Link>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Link
+          href="/app/meta-queue"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 12px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            background: "#166534",
+            color: "#fff",
+            textDecoration: "none",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          {state.deduped ? "Already queued ↗" : "Queued ↗"}
+        </Link>
+        <span
+          style={{ fontSize: 11, color: "#71717a", fontFamily: "monospace" }}
+          title="Action queue row id"
+        >
+          #{state.queueId}
+        </span>
+      </span>
     );
   }
 

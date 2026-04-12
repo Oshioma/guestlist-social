@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import ScaleAllWinnersButton from "./ScaleAllWinnersButton";
 
 type ScoreResult = {
   scored: number;
@@ -224,7 +225,7 @@ export default function ScoreAndGenerateButton({
                 <div
                   style={{
                     marginTop: 16,
-                    padding: 14,
+                    padding: 18,
                     borderRadius: 12,
                     background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
                     border: "1px solid #bbf7d0",
@@ -232,12 +233,12 @@ export default function ScoreAndGenerateButton({
                 >
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: 700,
                       color: "#166534",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
-                      marginBottom: 8,
+                      marginBottom: 12,
                       display: "flex",
                       alignItems: "center",
                       gap: 6,
@@ -245,7 +246,7 @@ export default function ScoreAndGenerateButton({
                   >
                     <span>{"\u{1F4C8}"}</span> Estimated Impact
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {scoreResult.impact.fixLosingCtrLift && (
                       <ImpactLine
                         icon="\u{1F527}"
@@ -253,10 +254,17 @@ export default function ScoreAndGenerateButton({
                       />
                     )}
                     {scoreResult.impact.scaleWinnersConversions && (
-                      <ImpactLine
-                        icon="\u{1F680}"
-                        text={scoreResult.impact.scaleWinnersConversions}
-                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <ImpactLine
+                          icon="\u{1F680}"
+                          text={scoreResult.impact.scaleWinnersConversions}
+                        />
+                        {clientId && scoreResult.breakdown.winner > 0 && (
+                          <div style={{ marginLeft: 28 }}>
+                            <ScaleAllWinnersButton clientId={clientId} />
+                          </div>
+                        )}
+                      </div>
                     )}
                     {scoreResult.impact.reallocateWaste && (
                       <ImpactLine
@@ -267,8 +275,8 @@ export default function ScoreAndGenerateButton({
                   </div>
                   <div
                     style={{
-                      marginTop: 8,
-                      fontSize: 10,
+                      marginTop: 12,
+                      fontSize: 11,
                       color: "#71717a",
                       fontStyle: "italic",
                     }}
@@ -406,14 +414,14 @@ function ImpactLine({ icon, text }: { icon: string; text: string }) {
       style={{
         display: "flex",
         alignItems: "flex-start",
-        gap: 8,
-        fontSize: 13,
+        gap: 10,
+        fontSize: 16,
         color: "#14532d",
-        fontWeight: 500,
-        lineHeight: 1.4,
+        fontWeight: 600,
+        lineHeight: 1.45,
       }}
     >
-      <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+      <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.45 }}>{icon}</span>
       <span>{text}</span>
     </div>
   );
