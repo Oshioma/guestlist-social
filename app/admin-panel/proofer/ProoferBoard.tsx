@@ -207,6 +207,9 @@ export default function ProoferBoard({
     color: string;
     description: string;
   }>({ name: "", color: "#6366f1", description: "" });
+  const [openPillarPickerKey, setOpenPillarPickerKey] = useState<string | null>(
+    null
+  );
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -1081,45 +1084,191 @@ export default function ProoferBoard({
                       </select>
                     </div>
 
-                    {initialPillars.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 4,
-                        }}
-                      >
-                        <span style={labelStyle}>Pillar</span>
-                        <select
-                          value={draft.pillarId ?? ""}
-                          onChange={(e) =>
-                            updateDraft(dateKey, activePlatform, {
-                              pillarId: e.target.value || null,
-                            })
-                          }
-                          disabled={isLocked}
+                    {initialPillars.length > 0 && (() => {
+                      const selectedPillar = draft.pillarId
+                        ? pillarsById.get(draft.pillarId) ?? null
+                        : null;
+                      const pickerKey = postKey(dateKey, activePlatform);
+                      const isOpen = openPillarPickerKey === pickerKey;
+                      return (
+                        <div
                           style={{
-                            ...inputStyle,
-                            padding: "6px 8px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: isLocked ? "not-allowed" : "pointer",
-                            opacity: isLocked ? 0.7 : 1,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            position: "relative",
                           }}
                         >
-                          <option value="">None</option>
-                          {initialPillars.map((pillar) => (
-                            <option
-                              key={pillar.id}
-                              value={pillar.id}
-                              style={{ color: pillar.color }}
+                          <span style={labelStyle}>Pillar</span>
+                          <button
+                            type="button"
+                            disabled={isLocked}
+                            onClick={() =>
+                              setOpenPillarPickerKey(isOpen ? null : pickerKey)
+                            }
+                            style={{
+                              ...inputStyle,
+                              padding: "6px 8px",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              textAlign: "left",
+                              cursor: isLocked ? "not-allowed" : "pointer",
+                              opacity: isLocked ? 0.7 : 1,
+                              background: "#fff",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                background: selectedPillar
+                                  ? selectedPillar.color
+                                  : "#e4e4e7",
+                                display: "inline-block",
+                                flexShrink: 0,
+                              }}
+                            />
+                            <span
+                              style={{
+                                flex: 1,
+                                color: selectedPillar ? "#18181b" : "#a1a1aa",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
                             >
-                              {`● ${pillar.name}`}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                              {selectedPillar ? selectedPillar.name : "None"}
+                            </span>
+                            <span
+                              style={{ color: "#a1a1aa", fontSize: 10 }}
+                              aria-hidden
+                            >
+                              ▾
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <>
+                              <div
+                                onClick={() => setOpenPillarPickerKey(null)}
+                                style={{
+                                  position: "fixed",
+                                  inset: 0,
+                                  zIndex: 20,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "100%",
+                                  left: 0,
+                                  right: 0,
+                                  marginTop: 4,
+                                  background: "#fff",
+                                  border: "1px solid #e4e4e7",
+                                  borderRadius: 8,
+                                  boxShadow:
+                                    "0 6px 16px rgba(0,0,0,0.08)",
+                                  zIndex: 21,
+                                  maxHeight: 220,
+                                  overflowY: "auto",
+                                  padding: 4,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateDraft(dateKey, activePlatform, {
+                                      pillarId: null,
+                                    });
+                                    setOpenPillarPickerKey(null);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    padding: "6px 8px",
+                                    border: "none",
+                                    background:
+                                      draft.pillarId === null
+                                        ? "#f4f4f5"
+                                        : "transparent",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: "#71717a",
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: "50%",
+                                      background: "#e4e4e7",
+                                      display: "inline-block",
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                  None
+                                </button>
+                                {initialPillars.map((pillar) => {
+                                  const isSelected =
+                                    draft.pillarId === pillar.id;
+                                  return (
+                                    <button
+                                      key={pillar.id}
+                                      type="button"
+                                      onClick={() => {
+                                        updateDraft(dateKey, activePlatform, {
+                                          pillarId: pillar.id,
+                                        });
+                                        setOpenPillarPickerKey(null);
+                                      }}
+                                      title={pillar.description || pillar.name}
+                                      style={{
+                                        width: "100%",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        padding: "6px 8px",
+                                        border: "none",
+                                        background: isSelected
+                                          ? "#f4f4f5"
+                                          : "transparent",
+                                        borderRadius: 6,
+                                        cursor: "pointer",
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "#18181b",
+                                        textAlign: "left",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          width: 10,
+                                          height: 10,
+                                          borderRadius: "50%",
+                                          background: pillar.color,
+                                          display: "inline-block",
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                      {pillar.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
