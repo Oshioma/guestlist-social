@@ -7,6 +7,11 @@ type ScoreResult = {
   scored: number;
   total: number;
   breakdown: { winner: number; losing: number; testing: number; paused: number };
+  impact: {
+    fixLosingCtrLift?: string;
+    scaleWinnersConversions?: string;
+    reallocateWaste?: string;
+  };
 };
 
 type ActionsResult = {
@@ -66,6 +71,7 @@ export default function ScoreAndGenerateButton({
         scored: scoreData.scored,
         total: scoreData.total,
         breakdown: scoreData.breakdown ?? { winner: 0, losing: 0, testing: 0, paused: 0 },
+        impact: scoreData.impact ?? {},
       });
 
       // Step 2: Generate actions
@@ -210,6 +216,67 @@ export default function ScoreAndGenerateButton({
                   />
                 )}
               </div>
+
+              {/* Estimated Impact */}
+              {(scoreResult.impact.fixLosingCtrLift ||
+                scoreResult.impact.scaleWinnersConversions ||
+                scoreResult.impact.reallocateWaste) && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+                    border: "1px solid #bbf7d0",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#166534",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      marginBottom: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span>{"\u{1F4C8}"}</span> Estimated Impact
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {scoreResult.impact.fixLosingCtrLift && (
+                      <ImpactLine
+                        icon="\u{1F527}"
+                        text={scoreResult.impact.fixLosingCtrLift}
+                      />
+                    )}
+                    {scoreResult.impact.scaleWinnersConversions && (
+                      <ImpactLine
+                        icon="\u{1F680}"
+                        text={scoreResult.impact.scaleWinnersConversions}
+                      />
+                    )}
+                    {scoreResult.impact.reallocateWaste && (
+                      <ImpactLine
+                        icon="\u{1F4B0}"
+                        text={scoreResult.impact.reallocateWaste}
+                      />
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 10,
+                      color: "#71717a",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Rough estimates based on current performance data.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -329,6 +396,25 @@ export default function ScoreAndGenerateButton({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ImpactLine({ icon, text }: { icon: string; text: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        fontSize: 13,
+        color: "#14532d",
+        fontWeight: 500,
+        lineHeight: 1.4,
+      }}
+    >
+      <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+      <span>{text}</span>
     </div>
   );
 }

@@ -135,6 +135,15 @@ export async function POST(req: Request) {
     const breakdown = { winner: 0, losing: 0, testing: 0, paused: 0 };
     const errors: string[] = [];
 
+    // Accumulators for impact estimates
+    const winnerCtrs: number[] = [];
+    const loserCtrs: number[] = [];
+    let winnerTotalConversions = 0;
+    let winnerTotalSpend = 0;
+    let loserTotalSpend = 0;
+    let stuckTestSpend = 0;
+    let stuckTestCount = 0;
+
     for (const row of ads) {
       const impressions = Number(row.impressions ?? 0);
       const clicks = Number(row.clicks ?? 0);
@@ -174,11 +183,72 @@ export async function POST(req: Request) {
         errors.push(`Ad ${row.id}: ${updateError.message}`);
       } else {
         scored++;
-        if (perfStatus === "winner") breakdown.winner++;
-        else if (perfStatus === "losing") breakdown.losing++;
-        else if (perfStatus === "paused") breakdown.paused++;
-        else breakdown.testing++;
+        if (perfStatus === "winner") {
+          breakdown.winner++;
+          if (ctr > 0) winnerCtrs.push(ctr);
+          winnerTotalConversions += conversions;
+          winnerTotalSpend += spend;
+        } else if (perfStatus === "losing") {
+          breakdown.losing++;
+          if (ctr > 0) loserCtrs.push(ctr);
+          loserTotalSpend += spend;
+        } else if (perfStatus === "paused") {
+          breakdown.paused++;
+        } else {
+          breakdown.testing++;
+          // Stuck tests = testing ads with meaningful spend but no signal
+          if (spend > 25) {
+            stuckTestSpend += spend;
+            stuckTestCount++;
+          }
+        }
       }
+    }
+
+    // Compute impact estimates
+    const avgWinnerCtr = winnerCtrs.length > 0
+      ? winnerCtrs.reduce((s, v) => s + v, 0) / winnerCtrs.length
+      : 0;
+    const avgLoserCtr = loserCtrs.length > 0
+      ? loserCtrs.reduce((s, v) => s + v, 0) / loserCtrs.length
+      : 0;
+
+    const impact: {
+      fixLosingCtrLift?: string;
+      scaleWinnersConversions?: string;
+      reallocateWaste?: string;
+    } = {};
+
+    // "Fixing N losing ads could improve CTR by ~X-Y%"
+    if (breakdown.losing > 0 && avgLoserCtr > 0 && avgWinnerCtr > avgLoserCtr) {
+      const liftPct = ((avgWinnerCtr - avgLoserCtr) / avgLoserCtr) * 100;
+      const lo = Math.round(liftPct * 0.5);
+      const hi = Math.round(liftPct);
+      if (lo > 5) {
+        impact.fixLosingCtrLift =
+          `Fixing ${breakdown.losing} losing ad${breakdown.losing > 1 ? "s" : ""} could improve CTR by ~${lo}–${hi}%`;
+      }
+    }
+
+    // "Scaling N winners could drive +X more conversions"
+    if (breakdown.winner > 0 && winnerTotalConversions > 0) {
+      const estExtra = Math.max(1, Math.round(winnerTotalConversions * 0.25));
+      impact.scaleWinnersConversions =
+        `Scaling ${breakdown.winner} winner${breakdown.winner > 1 ? "s" : ""} could drive +${estExtra} more conversion${estExtra > 1 ? "s" : ""}`;
+    } else if (breakdown.winner > 0 && winnerTotalSpend > 0) {
+      const budgetGain = winnerTotalSpend * 0.25;
+      impact.scaleWinnersConversions =
+        `Scaling ${breakdown.winner} winner${breakdown.winner > 1 ? "s" : ""} adds ~$${budgetGain.toFixed(0)} to your best-performing ads`;
+    }
+
+    // "Reallocate $X from N stuck tests to winning ads"
+    const wastedSpend = loserTotalSpend + stuckTestSpend;
+    if (wastedSpend > 5) {
+      const sources: string[] = [];
+      if (breakdown.losing > 0) sources.push(`${breakdown.losing} losing ad${breakdown.losing > 1 ? "s" : ""}`);
+      if (stuckTestCount > 0) sources.push(`${stuckTestCount} stuck test${stuckTestCount > 1 ? "s" : ""}`);
+      impact.reallocateWaste =
+        `$${wastedSpend.toFixed(0)} spent on ${sources.join(" and ")} could be reallocated to winners`;
     }
 
     return NextResponse.json({
@@ -186,6 +256,7 @@ export async function POST(req: Request) {
       scored,
       total: ads.length,
       breakdown,
+      impact,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
