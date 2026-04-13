@@ -80,6 +80,12 @@ type EngineFeedback = {
   negative_verdicts: number;
   neutral_verdicts: number;
   inconclusive_verdicts: number;
+  // Set by /api/cron/retire-stale-patterns once a slice's track record
+  // crosses the disqualification threshold. When non-null, the engine
+  // refuses to consult the pattern; the dashboard renders it greyed out
+  // with a "Retired" pill so the operator can see why.
+  retired_at: string | null;
+  retired_reason: string | null;
 };
 
 // One row in the "Recent engine verdicts" panel. This is a single
@@ -139,20 +145,59 @@ function PatternCard({
 }) {
   const total = pattern.positive_count + pattern.neutral_count + pattern.negative_count;
   const trackLine = feedback ? engineTrackRecordLine(feedback) : null;
+  const isRetired = Boolean(feedback?.retired_at);
 
   return (
     <div
       id={`pattern-${pattern.pattern_key}`}
       style={{
-        border: "1px solid #e4e4e7",
+        border: isRetired ? "1px solid #fecaca" : "1px solid #e4e4e7",
         borderRadius: 10,
         padding: 14,
-        background: "#fff",
+        background: isRetired ? "#fef2f2" : "#fff",
         scrollMarginTop: 80,
+        opacity: isRetired ? 0.85 : 1,
       }}
     >
-      <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b" }}>
-        {pattern.pattern_label}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: "#18181b",
+            textDecoration: isRetired ? "line-through" : "none",
+          }}
+        >
+          {pattern.pattern_label}
+        </div>
+        {isRetired && (
+          <span
+            title={
+              feedback?.retired_reason
+                ? `Retired by the reaper · ${feedback.retired_reason}`
+                : "Retired by the reaper"
+            }
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 10,
+              fontWeight: 700,
+              background: "#991b1b",
+              color: "#fff",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Retired
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 13, color: "#52525b", marginTop: 4 }}>
         {pattern.action_summary}
@@ -293,7 +338,7 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
     supabase
       .from("pattern_feedback")
       .select(
-        "pattern_key, industry, engine_uses, positive_verdicts, negative_verdicts, neutral_verdicts, inconclusive_verdicts"
+        "pattern_key, industry, engine_uses, positive_verdicts, negative_verdicts, neutral_verdicts, inconclusive_verdicts, retired_at, retired_reason"
       ),
     supabase
       .from("decision_outcomes")
@@ -317,6 +362,8 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
     negative_verdicts: number;
     neutral_verdicts: number;
     inconclusive_verdicts: number;
+    retired_at: string | null;
+    retired_reason: string | null;
   }[]) {
     feedbackByKey.set(`${f.pattern_key}|${f.industry ?? ""}`, {
       engine_uses: Number(f.engine_uses ?? 0),
@@ -324,6 +371,8 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
       negative_verdicts: Number(f.negative_verdicts ?? 0),
       neutral_verdicts: Number(f.neutral_verdicts ?? 0),
       inconclusive_verdicts: Number(f.inconclusive_verdicts ?? 0),
+      retired_at: f.retired_at,
+      retired_reason: f.retired_reason,
     });
   }
 

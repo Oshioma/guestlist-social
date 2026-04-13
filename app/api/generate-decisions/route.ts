@@ -75,6 +75,11 @@ type FeedbackRow = {
   positive_verdicts: number;
   negative_verdicts: number;
   neutral_verdicts: number;
+  // Retired-by-the-reaper marker. Set by /api/cron/retire-stale-patterns
+  // when a pattern's track record has gone decisively negative. The
+  // engine treats a retired row as "do not consult" — strictly stronger
+  // than the in-memory block verdict, which only vetoes for one request.
+  retired: boolean;
 };
 
 // Composite key matching pattern_feedback's PK shape: empty string for the
@@ -137,19 +142,25 @@ function provenPattern(
   byKey: Map<string, GlobalPattern>,
   feedbackByKey: Map<string, FeedbackRow>,
   key: string,
-  stats: { blocked: number }
+  stats: { blocked: number; retired: number }
 ): GlobalPattern | null {
   const p = byKey.get(key);
   if (!p) return null;
   if ((p.consistency_score ?? 0) < PATTERN_MIN_CONSISTENCY) return null;
   if ((p.unique_clients ?? 0) < PATTERN_MIN_CLIENTS) return null;
+  const fbRow = feedbackByKey.get(feedbackKey(p.pattern_key, p.industry));
+  // Hard retirement: the reaper has stamped this pattern as disqualified.
+  // Stronger than the in-memory block verdict — survives the rebuild and
+  // is the durable signal that we no longer want to reach for it.
+  if (fbRow?.retired) {
+    stats.retired++;
+    return null;
+  }
   // Engine veto: if our own track record on this pattern slice is decisively
   // negative, treat it as unproven regardless of operator data. The operator
   // numbers are folded into consistency_score by generate-global-learnings,
   // but only at rebuild time — pattern_feedback is the live signal.
-  const fb = classifyFeedback(
-    feedbackByKey.get(feedbackKey(p.pattern_key, p.industry))
-  );
+  const fb = classifyFeedback(fbRow);
   if (fb?.verdict === "block") {
     stats.blocked++;
     return null;
@@ -221,7 +232,7 @@ function getPatternBackedDecision(
   ad: Record<string, unknown>,
   byKey: Map<string, GlobalPattern>,
   feedbackByKey: Map<string, FeedbackRow>,
-  stats: { blocked: number; boosted: number }
+  stats: { blocked: number; boosted: number; retired: number }
 ): DecisionResult | null {
   const status = ad.performance_status as string | null;
   const spend = Number(ad.spend ?? 0);
@@ -435,7 +446,7 @@ export async function POST(req: Request) {
       supabase
         .from("pattern_feedback")
         .select(
-          "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts"
+          "pattern_key, industry, positive_verdicts, negative_verdicts, neutral_verdicts, retired_at"
         ),
     ]);
 
@@ -480,6 +491,7 @@ export async function POST(req: Request) {
           positive_verdicts: Number(f.positive_verdicts ?? 0),
           negative_verdicts: Number(f.negative_verdicts ?? 0),
           neutral_verdicts: Number(f.neutral_verdicts ?? 0),
+          retired: f.retired_at != null,
         }
       );
     }
@@ -534,7 +546,7 @@ export async function POST(req: Request) {
     // `boosted` counts decisions that got upgraded to high confidence
     // because of positive engine feedback alone. Both surface in the
     // response so the operator can see the loop is doing something.
-    const feedbackStats = { blocked: 0, boosted: 0 };
+    const feedbackStats = { blocked: 0, boosted: 0, retired: 0 };
 
     // Per-decision preview rows. Only populated in dry-run mode and only
     // returned in dry-run responses, so the regular path keeps the same
@@ -698,6 +710,11 @@ export async function POST(req: Request) {
         // Pattern decisions promoted to high confidence by ledger evidence
         // alone (operator data hadn't crossed the high-confidence bar).
         boosted_by_feedback: feedbackStats.boosted,
+        // Pattern matches refused outright because the reaper retired the
+        // slice. Distinct from blocked_by_feedback: a retired pattern stays
+        // disqualified across runs, while a blocked one is recomputed each
+        // time and could come back if verdicts swing positive.
+        skipped_retired: feedbackStats.retired,
       },
       queue: queueSummary,
       previews: dryRun ? previews : undefined,
