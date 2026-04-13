@@ -27,7 +27,7 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // ✅ FIXED: Call cookies() and headers()!
+  // THIS IS CORRECT FOR SUPABASE SSR:
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
