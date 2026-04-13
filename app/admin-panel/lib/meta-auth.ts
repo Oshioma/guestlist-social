@@ -9,9 +9,14 @@ import { createClient } from "@supabase/supabase-js";
 
 const GRAPH_VERSION = "v19.0";
 
+// pages_read_engagement is bundled into Meta's "Pages API" Use Case and
+// cannot be removed from the app's declared permissions via the dashboard,
+// so we request it explicitly here to match what Meta expects. It's a
+// read-only permission (read Page content + metadata) and is harmless.
 export const META_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
+  "pages_read_engagement",
   "instagram_basic",
   "instagram_content_publish",
   "business_management",
