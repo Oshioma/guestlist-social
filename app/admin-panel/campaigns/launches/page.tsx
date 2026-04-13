@@ -50,7 +50,12 @@ export default async function Page({
   function queryStr(opts: Record<string, any>) {
     const obj = { filter, page, search, ...opts };
     const qs = Object.entries(obj)
-      .filter(([_, v]) => v && ((typeof v === "string" && v.trim() !== "") || typeof v === "number"))
+      .filter(
+        ([_, v]) =>
+          v &&
+          ((typeof v === "string" && v.trim() !== "") ||
+            typeof v === "number")
+      )
       .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
       .join("&");
     return qs ? `?${qs}` : "";
@@ -105,8 +110,9 @@ export default async function Page({
       )}
 
       <div className="mb-3 text-sm text-gray-500">
-        {`Showing ${fromIdx}–${toIdx} of ${count || 0} launches`}
+        {`Showing ${fromIdx}-${toIdx} of ${count || 0} launches`}
       </div>
+
       <ul className="space-y-3">
         {launches && launches.length > 0 ? (
           launches.map((launch: Launch) => (
@@ -149,6 +155,7 @@ export default async function Page({
           >
             Prev
           </Link>
+
           {Array.from({ length: totalPages }).map((_, i) => (
             <Link
               key={i}
@@ -157,5 +164,25 @@ export default async function Page({
                 page === i + 1
                   ? "bg-black text-white"
                   : "bg-gray-200 text-black hover:bg-gray-300"
-             
-
+              }`}
+            >
+              {i + 1}
+            </Link>
+          ))}
+
+          <Link
+            href={queryStr({ page: Math.min(totalPages, page + 1) })}
+            aria-disabled={page === totalPages}
+            className={`px-3 py-2 rounded ${
+              page === totalPages
+                ? "bg-gray-100 text-gray-400 pointer-events-none"
+                : "bg-gray-200 text-black hover:bg-gray-300"
+            }`}
+          >
+            Next
+          </Link>
+        </nav>
+      )}
+    </main>
+  );
+}
