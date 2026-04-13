@@ -11,5 +11,28 @@ export async function GET(
   context: { params: { templateId: string } }
 ) {
   const { templateId } = context.params;
-  // Rest of your logic (fetch from supabase, etc.)
+
+  // Fetch template and its template_variables
+  const { data: template, error } = await supabase
+    .from("campaign_templates")
+    .select(
+      `
+        *,
+        template_variables (
+          id, key, label, type, required, default_value, validation_rule, source
+        )
+      `
+    )
+    .eq("id", templateId)
+    .single();
+
+  if (error || !template) {
+    return NextResponse.json({ error: error?.message || "Not found" }, { status: 404 });
+  }
+
+  // Optional: Flatten variables for the frontend
+  template.variables = template.template_variables ?? [];
+  delete template.template_variables;
+
+  return NextResponse.json(template);
 }
