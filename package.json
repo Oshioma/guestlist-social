@@ -9,7 +9,7 @@
     "migrations:check": "node --env-file=.env.local scripts/check-schema.mjs"
   },
   "dependencies": {
-    "@supabase/auth-helpers-nextjs": "^0.8.0"
+    "@supabase/auth-helpers-nextjs": "^0.8.0",
     "@anthropic-ai/sdk": "^0.88.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
