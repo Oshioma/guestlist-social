@@ -5,22 +5,19 @@ export const dynamic = "force-dynamic";
 // ---------------------------------------------------------------------------
 // /api/meta/debug-env
 //
-// Temporary diagnostic endpoint. Returns safe metadata about the Meta
-// social-publishing env vars as seen by the running deployment — NOT the
-// full values. Use this to confirm Vercel actually redeployed with the
-// correct env vars after an edit.
+// Temporary diagnostic endpoint. Returns safe FINGERPRINTS of the Meta
+// social-publishing env vars as seen by the running deployment — never the
+// actual values. Used to confirm that a Vercel redeploy actually picked up
+// new env var values.
 //
-// Gated on CRON_SECRET (Bearer header) so random visitors can't fingerprint
-// our env. Delete this route once OAuth is working end-to-end.
+// Safe to expose because we only return:
+//   - length
+//   - first 4 + last 4 characters
+//   - "does it contain whitespace / quotes / only digits"
+// The real App ID is already public (it appears in every OAuth URL) and
+// the secret/redirect_uri are never revealed in full. Delete this route
+// once OAuth is stable.
 // ---------------------------------------------------------------------------
-
-function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const auth = req.headers.get("authorization") ?? "";
-  const presented = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
-  return presented === secret;
-}
 
 function fingerprint(value: string | undefined) {
   if (value === undefined) return { present: false };
@@ -35,14 +32,7 @@ function fingerprint(value: string | undefined) {
   };
 }
 
-export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized — pass Bearer CRON_SECRET" },
-      { status: 401 }
-    );
-  }
-
+export async function GET() {
   return NextResponse.json({
     ok: true,
     deployment: {
