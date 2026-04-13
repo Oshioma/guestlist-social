@@ -54,3 +54,16 @@ export function capitalise(s: string): string {
   if (!s) return s;
   return s[0].toUpperCase() + s.slice(1);
 }
+
+// One row per active pattern_feedback slice, pre-projected into its
+// English phrasing so downstream surfaces (reaper dry-run preview, any
+// future pattern-centric widget) don't need to re-join against
+// global_learnings just to render.
+export type PatternCandidate = {
+  pattern_key: string;
+  industry: string | null;
+  positive: number;
+  negative: number;
+  decisive: number;
+  phrase: string;
+};

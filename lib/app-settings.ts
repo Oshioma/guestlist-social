@@ -98,3 +98,15 @@ export async function setReaperSettings(
   );
   if (error) throw new Error(`save reaper settings: ${error.message}`);
 }
+
+// Shared predicate so the cron sweep and the settings-page dry-run preview
+// can never drift on what "failing hard enough to retire" means.
+export function shouldRetirePattern(
+  positive: number,
+  negative: number,
+  settings: ReaperSettings
+): boolean {
+  const decisive = positive + negative;
+  if (decisive < settings.minDecisiveVerdicts) return false;
+  return negative / decisive >= settings.negRatio;
+}

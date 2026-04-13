@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getReaperSettings } from "@/lib/app-settings";
+import { getReaperSettings, shouldRetirePattern } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 // Pattern feedback is small (one row per pattern slice). The whole sweep
@@ -85,8 +85,9 @@ async function handle(req: Request) {
     );
   }
 
+  const reaperSettings = await getReaperSettings(supabase);
   const { minDecisiveVerdicts: minDecisive, negRatio: negRatioThreshold } =
-    await getReaperSettings(supabase);
+    reaperSettings;
 
   // Only the active slice — already-retired rows stay retired (we never
   // un-retire automatically; that's an explicit operator action).
@@ -113,11 +114,9 @@ async function handle(req: Request) {
   }[]) {
     const positive = Number(row.positive_verdicts ?? 0);
     const negative = Number(row.negative_verdicts ?? 0);
+    if (!shouldRetirePattern(positive, negative, reaperSettings)) continue;
     const decisive = positive + negative;
-    if (decisive < minDecisive) continue;
     const negRatio = negative / decisive;
-    if (negRatio < negRatioThreshold) continue;
-
     const pct = Math.round(negRatio * 100);
     candidates.push({
       pattern_key: row.pattern_key,

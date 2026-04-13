@@ -5,7 +5,8 @@
 // integers, which is what the operator is typing.
 
 import { useMemo, useState, useTransition } from "react";
-import { capitalise } from "@/lib/pattern-phrases";
+import { capitalise, type PatternCandidate } from "@/lib/pattern-phrases";
+import { shouldRetirePattern } from "@/lib/app-settings";
 import {
   saveReaperSettings,
   resetReaperSettings,
@@ -15,18 +16,6 @@ import {
 type Bounds = {
   minDecisiveVerdicts: { min: number; max: number };
   negRatioPercent: { min: number; max: number };
-};
-
-// One row per active pattern_feedback slice, already projected into the
-// chatty phrasing so the preview doesn't need to reach back for
-// global_learnings labels. Server component builds these.
-export type PatternCandidate = {
-  pattern_key: string;
-  industry: string | null;
-  positive: number;
-  negative: number;
-  decisive: number;
-  phrase: string;
 };
 
 const MAX_PREVIEW_NAMED = 6;
@@ -77,24 +66,20 @@ export default function ReaperThresholdsForm({
     });
   }
 
-  // Live dry-run: apply the in-flight input values to the active slices and
-  // see what the next reaper sweep would retire. Mirrors the filter in
-  // /api/cron/retire-stale-patterns — decisive >= minDecisive AND
-  // negative/decisive >= negRatio. Pure read, computed on every keystroke so
-  // the operator can feel the thresholds move.
+  // Live dry-run against the shared reaper predicate — keeps the preview
+  // in lockstep with the cron sweep so the two can't disagree on what
+  // "failing hard enough" means.
   const preview = useMemo(() => {
     const minDec = Number(minDecisive);
     const pct = Number(negPct);
     if (!Number.isFinite(minDec) || !Number.isFinite(pct)) {
       return { matched: [] as PatternCandidate[], invalid: true };
     }
-    const ratio = pct / 100;
+    const settings = { minDecisiveVerdicts: minDec, negRatio: pct / 100 };
     const matched = patterns
-      .filter(
-        (p) => p.decisive >= minDec && p.negative / p.decisive >= ratio
-      )
+      .filter((p) => shouldRetirePattern(p.positive, p.negative, settings))
+      // Worst offenders first — highest negative ratio, then biggest sample.
       .sort((a, b) => {
-        // Worst offenders first — highest negative ratio, then biggest sample.
         const ra = a.negative / a.decisive;
         const rb = b.negative / b.decisive;
         if (rb !== ra) return rb - ra;

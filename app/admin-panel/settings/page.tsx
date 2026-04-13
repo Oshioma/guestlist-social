@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { actionPhrase } from "@/lib/pattern-phrases";
+import { actionPhrase, type PatternCandidate } from "@/lib/pattern-phrases";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
-import ReaperThresholdsForm, {
-  type PatternCandidate,
-} from "../components/ReaperThresholdsForm";
+import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
   getReaperSettings,
@@ -37,10 +35,8 @@ export default async function SettingsPage() {
       DEFAULT_REAPER_SETTINGS.minDecisiveVerdicts &&
     reaperSettings.negRatio === DEFAULT_REAPER_SETTINGS.negRatio;
 
-  // Fetch the active pattern_feedback slice and the matching labels so the
-  // reaper form can render a live dry-run preview. The preview filter runs
-  // client-side on every keystroke, so we pre-project rows into the chatty
-  // phrasing here and avoid shipping the global_learnings table to the wire.
+  // Pre-project each active slice into its English phrasing here so the
+  // client-side preview doesn't need to re-ship global_learnings.
   const [{ data: feedbackRows }, { data: learningRows }] = await Promise.all([
     adminClient
       .from("pattern_feedback")
