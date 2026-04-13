@@ -26,12 +26,12 @@ type MetaConfig = {
 };
 
 export function getMetaConfig(): MetaConfig {
-  const appId = process.env.META_APP_ID;
-  const appSecret = process.env.META_APP_SECRET;
-  const redirectUri = process.env.META_OAUTH_REDIRECT_URI;
+  const appId = process.env.META_SOCIAL_APP_ID;
+  const appSecret = process.env.META_SOCIAL_APP_SECRET;
+  const redirectUri = process.env.META_SOCIAL_OAUTH_REDIRECT_URI;
   if (!appId || !appSecret || !redirectUri) {
     throw new Error(
-      "Missing META_APP_ID / META_APP_SECRET / META_OAUTH_REDIRECT_URI env vars"
+      "Missing META_SOCIAL_APP_ID / META_SOCIAL_APP_SECRET / META_SOCIAL_OAUTH_REDIRECT_URI env vars"
     );
   }
   return { appId, appSecret, redirectUri };

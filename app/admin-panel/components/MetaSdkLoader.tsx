@@ -5,7 +5,9 @@
 // Meta's JS SDK is loaded asynchronously — there are no files to host, we
 // just drop this snippet into the page and the SDK attaches itself to
 // window.FB. The App ID is public (it's exposed in every OAuth URL anyway),
-// so we read it from NEXT_PUBLIC_META_APP_ID.
+// so we read it from NEXT_PUBLIC_META_SOCIAL_APP_ID. This is the *social
+// publishing* app — a separate Meta app from the marketing/ads one, so the
+// env var intentionally uses the META_SOCIAL_ prefix.
 //
 // The actual OAuth flow + token storage is still server-side via
 // /api/meta/connect + /api/meta/callback — this SDK is only loaded so Meta
@@ -15,7 +17,7 @@
 import Script from "next/script";
 
 export default function MetaSdkLoader() {
-  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+  const appId = process.env.NEXT_PUBLIC_META_SOCIAL_APP_ID;
   if (!appId) return null;
 
   return (
