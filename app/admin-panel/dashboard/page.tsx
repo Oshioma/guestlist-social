@@ -10,6 +10,7 @@ import TopPriorities from "../components/TopPriorities";
 import WhatsWorkingNow from "../components/WhatsWorkingNow";
 import DecisionAccuracy from "../components/DecisionAccuracy";
 import PatternFeedbackPanel from "../components/PatternFeedbackPanel";
+import EngineActivityStrip from "../components/EngineActivityStrip";
 
 export const dynamic = "force-dynamic";
 
@@ -162,6 +163,13 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Activity strip: the most basic question first — is the engine
+            actually doing anything? Reads the queue and the measurement
+            loop and answers in one sentence. Lives at the top because
+            "is it moving?" is a strictly smaller question than "is it
+            moving in the right direction?" */}
+        <EngineActivityStrip />
 
         {/* Cross-client intelligence: what's actually working across the
             whole agency, not just inside one account. Sits above
