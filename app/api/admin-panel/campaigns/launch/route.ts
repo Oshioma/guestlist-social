@@ -1,18 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-// You should authenticate the user in production!
-async function getUser(req: NextRequest) {
-  const access_token = req.headers.get("supabase-access-token");
-  if (!access_token) return null;
-  const { data } = await supabase.auth.getUser(access_token);
-  return data?.user || null;
-}
+// ...supabase setup as before
 
 export async function POST(req: NextRequest) {
   const user = await getUser(req);
@@ -20,15 +6,38 @@ export async function POST(req: NextRequest) {
 
   const { template_id, inputs } = await req.json();
 
-  // Compose your payload for template_launches
+  // Fetch template and variables for backend validation
+  const { data: template, error: tplErr } = await supabase
+    .from("campaign_templates")
+    .select("id, template_variables(*)")
+    .eq("id", template_id)
+    .single();
+
+  if (tplErr || !template) return NextResponse.json({ error: "Template not found." }, { status: 404 });
+
+  // Validate all variables
+  for (const v of template.template_variables || []) {
+    if (v.required && !(inputs && inputs[v.key])) {
+      return NextResponse.json({ error: `Missing field: ${v.key}` }, { status: 400 });
+    }
+    if (v.validation_rule && inputs && inputs[v.key]) {
+      try {
+        const re = new RegExp(v.validation_rule);
+        if (!re.test(inputs[v.key])) {
+          return NextResponse.json({ error: `Validation failed for: ${v.key}` }, { status: 400 });
+        }
+      } catch {}
+    }
+  }
+
+  // Insert launch as QUEUED (for async processing or just for status clarity)
   const launchInsert = {
     template_id,
     client_id: inputs.client_id,
     inputs_json: inputs,
-    status: "created",
+    status: "queued",
     created_by: user.id,
     created_at: new Date().toISOString(),
-    // Fill in other fields as needed (resolved_payload_json, etc)
   };
 
   const { data, error } = await supabase
@@ -37,9 +46,7 @@ export async function POST(req: NextRequest) {
     .select("*")
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(data);
 }
