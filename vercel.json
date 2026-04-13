@@ -8,6 +8,10 @@
     {
       "path": "/api/measure-decision-outcomes",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/publish-meta-queue",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
