@@ -578,7 +578,9 @@ function IdeaRow({
   const [showCaptions, setShowCaptions] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
   const [linkValue, setLinkValue] = useState(idea.designLink);
+  const [editTitle, setEditTitle] = useState(idea.title);
   const [editText, setEditText] = useState(idea.idea);
+  const [editNotes, setEditNotes] = useState(idea.notes);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
   const [editPillarId, setEditPillarId] = useState<string | null>(
@@ -607,7 +609,9 @@ function IdeaRow({
         editText,
         editCategory,
         editMonth,
-        editPillarId
+        editPillarId,
+        editTitle,
+        editNotes
       );
       setIsEditing(false);
     });
@@ -620,55 +624,82 @@ function IdeaRow({
   }
 
   if (isEditing) {
+    const reset = () => {
+      setEditTitle(idea.title);
+      setEditText(idea.idea);
+      setEditNotes(idea.notes);
+      setEditCategory(idea.category);
+      setEditMonth(idea.month);
+      setEditPillarId(idea.pillarId);
+      setIsEditing(false);
+    };
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7", flexWrap: "wrap" }}>
-        <select
-          value={editCategory}
-          onChange={(e) => setEditCategory(e.target.value)}
-          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
-        <select
-          value={editMonth}
-          onChange={(e) => setEditMonth(e.target.value)}
-          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
-        >
-          <option value="">No month</option>
-          {MONTHS.map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-        <select
-          value={editPillarId ?? ""}
-          onChange={(e) => setEditPillarId(e.target.value || null)}
-          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
-        >
-          <option value="">No pillar</option>
-          {pillars.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            value={editCategory}
+            onChange={(e) => setEditCategory(e.target.value)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <select
+            value={editMonth}
+            onChange={(e) => setEditMonth(e.target.value)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            <option value="">No month</option>
+            {MONTHS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <select
+            value={editPillarId ?? ""}
+            onChange={(e) => setEditPillarId(e.target.value || null)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            <option value="">No pillar</option>
+            {pillars.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            placeholder="Title (optional)"
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontWeight: 600 }}
+          />
+        </div>
         <input
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
+          placeholder="Idea"
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }
+            if (e.key === "Escape") reset();
           }}
-          style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
+          style={{ ...inputStyle, padding: "6px 10px" }}
         />
-        <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
-          {isPending ? "..." : "Save"}
-        </button>
-        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
-          Cancel
-        </button>
+        <textarea
+          value={editNotes}
+          onChange={(e) => setEditNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          rows={2}
+          style={{ ...inputStyle, padding: "6px 10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+        />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+            {isPending ? "..." : "Save"}
+          </button>
+          <button onClick={reset} style={btnStyle("#f3f4f6", "#374151")}>
+            Cancel
+          </button>
+        </div>
       </div>
     );
   }
@@ -749,10 +780,22 @@ function IdeaRow({
             flex: 1,
             fontSize: 14,
             color: "#18181b",
+            display: "inline-flex",
+            flexDirection: "column",
+            gap: 2,
             textDecoration: isUsed ? "line-through" : "none",
+            minWidth: 0,
           }}
         >
-          {idea.idea}
+          {idea.title && (
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{idea.title}</span>
+          )}
+          <span>{idea.idea}</span>
+          {idea.notes && (
+            <span style={{ fontSize: 12, color: "#71717a", whiteSpace: "pre-wrap" }}>
+              {idea.notes}
+            </span>
+          )}
         </span>
         {idea.createdBy && (
           <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
@@ -948,7 +991,9 @@ function AddIdeaForm({
   themeId: string | null;
   pillars: ContentPillar[];
 }) {
+  const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [notes, setNotes] = useState("");
   const [category, setCategory] = useState("carousel");
   const [month, setMonth] = useState(MONTHS[0]?.value ?? "");
   const [pillarId, setPillarId] = useState<string | null>(null);
@@ -964,65 +1009,86 @@ function AddIdeaForm({
         text,
         category,
         month,
-        pillarId
+        pillarId,
+        title,
+        notes
       );
+      setTitle("");
       setText("");
+      setNotes("");
     });
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}
+      style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}
     >
-      <select
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
-      >
-        {CATEGORIES.map((c) => (
-          <option key={c.value} value={c.value}>{c.label}</option>
-        ))}
-      </select>
-      <select
-        value={month}
-        onChange={(e) => setMonth(e.target.value)}
-        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
-      >
-        <option value="">No month</option>
-        {MONTHS.map((m) => (
-          <option key={m.value} value={m.value}>{m.label}</option>
-        ))}
-      </select>
-      <select
-        value={pillarId ?? ""}
-        onChange={(e) => setPillarId(e.target.value || null)}
-        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
-      >
-        <option value="">No pillar</option>
-        {pillars.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add an idea..."
-        style={{ ...inputStyle, flex: 1 }}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+        <select
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          <option value="">No month</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+        <select
+          value={pillarId ?? ""}
+          onChange={(e) => setPillarId(e.target.value || null)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          <option value="">No pillar</option>
+          {pillars.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title (optional)"
+          style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Idea..."
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <button
+          type="submit"
+          disabled={isPending || !text.trim()}
+          style={{
+            ...btnStyle("#18181b", "#fff"),
+            padding: "8px 16px",
+            opacity: isPending || !text.trim() ? 0.5 : 1,
+          }}
+        >
+          {isPending ? "..." : "Add"}
+        </button>
+      </div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        rows={2}
+        style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
       />
-      <button
-        type="submit"
-        disabled={isPending || !text.trim()}
-        style={{
-          ...btnStyle("#18181b", "#fff"),
-          padding: "8px 16px",
-          opacity: isPending || !text.trim() ? 0.5 : 1,
-        }}
-      >
-        {isPending ? "..." : "Add"}
-      </button>
     </form>
   );
 }

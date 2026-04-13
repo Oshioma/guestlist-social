@@ -22,6 +22,7 @@ import {
   createContentPillarAction,
   updateContentPillarAction,
   archiveContentPillarAction,
+  createIdeaFromProoferAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -224,6 +225,17 @@ export default function ProoferBoard({
   const [openIdeaPickerKey, setOpenIdeaPickerKey] = useState<string | null>(
     null
   );
+  type IdeaDraft = { title: string; idea: string; notes: string };
+  const [ideaDrafts, setIdeaDrafts] = useState<Record<string, IdeaDraft>>({});
+  const [pillarModal, setPillarModal] = useState<
+    | {
+        postKey: string;
+        dateKey: string;
+        platform: ProoferPlatform;
+        kind: IdeaKind;
+      }
+    | null
+  >(null);
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -472,6 +484,80 @@ export default function ProoferBoard({
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not add comment");
+      }
+    });
+  }
+
+  function getIdeaDraft(key: string): IdeaDraft {
+    return ideaDrafts[key] ?? { title: "", idea: "", notes: "" };
+  }
+
+  function updateIdeaDraft(key: string, patch: Partial<IdeaDraft>) {
+    setIdeaDrafts((prev) => ({
+      ...prev,
+      [key]: { ...getIdeaDraft(key), ...patch },
+    }));
+  }
+
+  function deriveIdeaKind(platform: ProoferPlatform): IdeaKind {
+    if (platform === "instagram_story") return "story";
+    if (platform === "instagram_reel") return "video";
+    return "video";
+  }
+
+  function handleCreateIdea(pillarId: string | null) {
+    if (!pillarModal) return;
+    const key = pillarModal.postKey;
+    const draft = getIdeaDraft(key);
+    if (!draft.idea.trim()) {
+      alert("Write an idea first.");
+      return;
+    }
+
+    const { dateKey, platform, kind } = pillarModal;
+    startTransition(async () => {
+      try {
+        const { id, kind: createdKind } = await createIdeaFromProoferAction(
+          clientId,
+          kind,
+          pillarId,
+          draft.title,
+          draft.idea,
+          draft.notes
+        );
+        // Attach the new idea to the post draft and save.
+        const current = getDraftFor(dateKey, platform);
+        const nextDraft: Draft = {
+          ...current,
+          pillarId: pillarId ?? current.pillarId,
+          linkedIdeaId: id,
+          linkedIdeaKind: createdKind,
+        };
+        updateDraft(dateKey, platform, nextDraft);
+        await saveProoferPostAction(
+          clientId,
+          dateKey,
+          platform,
+          nextDraft.caption,
+          nextDraft.mediaUrls,
+          nextDraft.pillarId,
+          nextDraft.linkedIdeaId,
+          nextDraft.linkedIdeaKind
+        );
+        setIdeaDrafts((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        setDrafts((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        setPillarModal(null);
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not create idea");
       }
     });
   }
@@ -1516,22 +1602,6 @@ export default function ProoferBoard({
                               </div>
                             </>
                           )}
-                          {selectedIdea && !isOpen && (
-                            <div
-                              style={{
-                                marginTop: 4,
-                                padding: "6px 8px",
-                                background: "#f4f4f5",
-                                borderRadius: 6,
-                                fontSize: 11,
-                                color: "#52525b",
-                                fontStyle: "italic",
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {selectedIdea.text}
-                            </div>
-                          )}
                         </div>
                       );
                     })()}
@@ -1581,6 +1651,7 @@ export default function ProoferBoard({
                         padding: "0 8px",
                       }}
                     >
+                      {/* status buttons */}
                       {["proofed", "check", "improve", "approved"].map(
                         (statusValue) => {
                           const btn = STATUS_BUTTONS.find(
@@ -1639,6 +1710,170 @@ export default function ProoferBoard({
                       )}
                     </div>
                   </div>
+
+                  {(() => {
+                    const key = postKey(dateKey, activePlatform);
+                    const linkedKey =
+                      draft.linkedIdeaId && draft.linkedIdeaKind
+                        ? `${draft.linkedIdeaKind}:${draft.linkedIdeaId}`
+                        : null;
+                    const linkedIdea = linkedKey
+                      ? ideasById.get(linkedKey) ?? null
+                      : null;
+
+                    if (linkedIdea) {
+                      if (!linkedIdea.title && !linkedIdea.notes) return null;
+                      return (
+                        <div
+                          style={{
+                            padding: "8px 10px",
+                            background: "#fafafa",
+                            border: "1px solid #e4e4e7",
+                            borderRadius: 8,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                          }}
+                        >
+                          {linkedIdea.title && (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "#18181b",
+                              }}
+                            >
+                              {linkedIdea.title}
+                            </span>
+                          )}
+                          {linkedIdea.notes && (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "#52525b",
+                                whiteSpace: "pre-wrap",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {linkedIdea.notes}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // No idea selected → inline add-idea form.
+                    const ideaDraft = getIdeaDraft(key);
+                    return (
+                      <div
+                        style={{
+                          padding: "8px 10px",
+                          background: "#fafafa",
+                          border: "1px dashed #e4e4e7",
+                          borderRadius: 8,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: "#71717a",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
+                          Add idea
+                        </div>
+                        <input
+                          value={ideaDraft.title}
+                          onChange={(e) =>
+                            updateIdeaDraft(key, { title: e.target.value })
+                          }
+                          placeholder="Title (optional)"
+                          disabled={isLocked}
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 8px",
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        />
+                        <input
+                          value={ideaDraft.idea}
+                          onChange={(e) =>
+                            updateIdeaDraft(key, { idea: e.target.value })
+                          }
+                          placeholder="Idea..."
+                          disabled={isLocked}
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 8px",
+                            fontSize: 12,
+                          }}
+                        />
+                        <textarea
+                          value={ideaDraft.notes}
+                          onChange={(e) =>
+                            updateIdeaDraft(key, { notes: e.target.value })
+                          }
+                          placeholder="Notes (optional)"
+                          rows={2}
+                          disabled={isLocked}
+                          style={{
+                            ...inputStyle,
+                            padding: "6px 8px",
+                            fontSize: 12,
+                            resize: "vertical",
+                            fontFamily: "inherit",
+                            lineHeight: 1.4,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            isLocked ||
+                            isPending ||
+                            !ideaDraft.idea.trim()
+                          }
+                          onClick={() =>
+                            setPillarModal({
+                              postKey: key,
+                              dateKey,
+                              platform: activePlatform,
+                              kind: deriveIdeaKind(activePlatform),
+                            })
+                          }
+                          style={{
+                            alignSelf: "flex-start",
+                            padding: "6px 12px",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            border: "none",
+                            borderRadius: 6,
+                            background: "#18181b",
+                            color: "#fff",
+                            cursor:
+                              isLocked ||
+                              isPending ||
+                              !ideaDraft.idea.trim()
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              isLocked ||
+                              isPending ||
+                              !ideaDraft.idea.trim()
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          Save to pillar…
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   <div
                     style={{
@@ -2317,6 +2552,141 @@ export default function ProoferBoard({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {pillarModal && (
+        <div
+          onClick={() => setPillarModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              background: "#fff",
+              borderRadius: 12,
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#18181b",
+              }}
+            >
+              Save idea to pillar
+            </div>
+            <div style={{ fontSize: 12, color: "#71717a" }}>
+              Pick a pillar to save this new {pillarModal.kind} idea into. It
+              will be attached to this post.
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                maxHeight: 260,
+                overflowY: "auto",
+              }}
+            >
+              {initialPillars.length === 0 && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#a1a1aa",
+                    padding: 10,
+                    textAlign: "center",
+                  }}
+                >
+                  No pillars yet for this client. Create one first.
+                </div>
+              )}
+              {initialPillars.map((pillar) => (
+                <button
+                  key={pillar.id}
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => handleCreateIdea(pillar.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 12px",
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 8,
+                    background: "#fff",
+                    cursor: isPending ? "not-allowed" : "pointer",
+                    textAlign: "left",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#18181b",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      background: pillar.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ flex: 1 }}>{pillar.name}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setPillarModal(null)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #e4e4e7",
+                  background: "#fff",
+                  color: "#3f3f46",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => handleCreateIdea(null)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #e4e4e7",
+                  background: "#f4f4f5",
+                  color: "#3f3f46",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: isPending ? "not-allowed" : "pointer",
+                }}
+              >
+                Save without pillar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -100,7 +100,9 @@ export async function addVideoIdeaAction(
   idea: string,
   category: string,
   month: string = "",
-  pillarId: string | null = null
+  pillarId: string | null = null,
+  title: string = "",
+  notes: string = ""
 ) {
   if (!clientId || !idea.trim()) {
     throw new Error("Client and idea text are required.");
@@ -115,7 +117,9 @@ export async function addVideoIdeaAction(
     client_id: clientId,
     theme_id: themeId || null,
     pillar_id: pillarId || null,
+    title: title.trim(),
     idea: idea.trim(),
+    notes: notes.trim(),
     category: category || "general",
     month: month || "",
     created_by: createdBy,
@@ -136,7 +140,9 @@ export async function updateVideoIdeaAction(
   idea: string,
   category: string,
   month: string = "",
-  pillarId: string | null = null
+  pillarId: string | null = null,
+  title: string = "",
+  notes: string = ""
 ) {
   if (!id || !idea.trim()) {
     throw new Error("ID and idea text are required.");
@@ -147,7 +153,9 @@ export async function updateVideoIdeaAction(
   const { error } = await supabase
     .from("video_ideas")
     .update({
+      title: title.trim(),
       idea: idea.trim(),
+      notes: notes.trim(),
       category: category || "general",
       month: month || "",
       pillar_id: pillarId || null,

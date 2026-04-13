@@ -197,6 +197,68 @@ export async function archiveContentPillarAction(pillarId: string) {
   revalidatePillarConsumers();
 }
 
+const IDEA_KIND_TABLE_FOR_CREATE: Record<
+  "video" | "carousel" | "story",
+  { table: string; extras: Record<string, unknown> }
+> = {
+  video: { table: "video_ideas", extras: {} },
+  carousel: { table: "carousel_ideas", extras: { captions: [] } },
+  story: { table: "story_ideas", extras: {} },
+};
+
+export async function createIdeaFromProoferAction(
+  clientId: string,
+  kindRaw: string,
+  pillarId: string | null,
+  title: string,
+  idea: string,
+  notes: string,
+  category: string = "general",
+  month: string = ""
+): Promise<{ id: string; kind: "video" | "carousel" | "story" }> {
+  const kind =
+    kindRaw === "video" || kindRaw === "carousel" || kindRaw === "story"
+      ? kindRaw
+      : "video";
+
+  if (!clientId) {
+    throw new Error("Client is required.");
+  }
+  const cleanIdea = idea.trim();
+  if (!cleanIdea) {
+    throw new Error("Idea text is required.");
+  }
+
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { table, extras } = IDEA_KIND_TABLE_FOR_CREATE[kind];
+
+  const { data, error } = await supabase
+    .from(table)
+    .insert({
+      client_id: clientId,
+      pillar_id: pillarId || null,
+      title: title.trim(),
+      idea: cleanIdea,
+      notes: notes.trim(),
+      category: category || "general",
+      month: month || "",
+      created_by: authorEmail,
+      ...extras,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    console.error("createIdeaFromProoferAction error:", error);
+    throw new Error("Could not create idea.");
+  }
+
+  revalidatePillarConsumers();
+  return { id: String(data.id), kind };
+}
+
 export async function setProoferPostPillarAction(
   postId: string,
   pillarId: string | null
