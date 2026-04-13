@@ -4,7 +4,8 @@
 // handled by the server action — this component only ever sees percent
 // integers, which is what the operator is typing.
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { capitalise } from "@/lib/pattern-phrases";
 import {
   saveReaperSettings,
   resetReaperSettings,
@@ -16,16 +17,32 @@ type Bounds = {
   negRatioPercent: { min: number; max: number };
 };
 
+// One row per active pattern_feedback slice, already projected into the
+// chatty phrasing so the preview doesn't need to reach back for
+// global_learnings labels. Server component builds these.
+export type PatternCandidate = {
+  pattern_key: string;
+  industry: string | null;
+  positive: number;
+  negative: number;
+  decisive: number;
+  phrase: string;
+};
+
+const MAX_PREVIEW_NAMED = 6;
+
 export default function ReaperThresholdsForm({
   initialMinDecisive,
   initialNegRatioPercent,
   bounds,
   isDefault,
+  patterns,
 }: {
   initialMinDecisive: number;
   initialNegRatioPercent: number;
   bounds: Bounds;
   isDefault: boolean;
+  patterns: PatternCandidate[];
 }) {
   const [minDecisive, setMinDecisive] = useState(String(initialMinDecisive));
   const [negPct, setNegPct] = useState(String(initialNegRatioPercent));
@@ -59,6 +76,32 @@ export default function ReaperThresholdsForm({
       handleResult(result);
     });
   }
+
+  // Live dry-run: apply the in-flight input values to the active slices and
+  // see what the next reaper sweep would retire. Mirrors the filter in
+  // /api/cron/retire-stale-patterns — decisive >= minDecisive AND
+  // negative/decisive >= negRatio. Pure read, computed on every keystroke so
+  // the operator can feel the thresholds move.
+  const preview = useMemo(() => {
+    const minDec = Number(minDecisive);
+    const pct = Number(negPct);
+    if (!Number.isFinite(minDec) || !Number.isFinite(pct)) {
+      return { matched: [] as PatternCandidate[], invalid: true };
+    }
+    const ratio = pct / 100;
+    const matched = patterns
+      .filter(
+        (p) => p.decisive >= minDec && p.negative / p.decisive >= ratio
+      )
+      .sort((a, b) => {
+        // Worst offenders first — highest negative ratio, then biggest sample.
+        const ra = a.negative / a.decisive;
+        const rb = b.negative / b.decisive;
+        if (rb !== ra) return rb - ra;
+        return b.decisive - a.decisive;
+      });
+    return { matched, invalid: false };
+  }, [minDecisive, negPct, patterns]);
 
   return (
     <form
@@ -198,6 +241,105 @@ export default function ReaperThresholdsForm({
           </span>
         )}
       </div>
+
+      <PreviewStrip preview={preview} total={patterns.length} />
     </form>
+  );
+}
+
+function PreviewStrip({
+  preview,
+  total,
+}: {
+  preview: { matched: PatternCandidate[]; invalid: boolean };
+  total: number;
+}) {
+  if (preview.invalid) {
+    return null;
+  }
+
+  const { matched } = preview;
+  const named = matched.slice(0, MAX_PREVIEW_NAMED);
+  const overflow = matched.length - named.length;
+
+  const headline =
+    matched.length === 0
+      ? total === 0
+        ? "No active patterns yet — nothing to retire."
+        : "Nothing would be retired with these numbers."
+      : matched.length === 1
+        ? "If the reaper swept right now, it would retire 1 pattern:"
+        : `If the reaper swept right now, it would retire ${matched.length} patterns:`;
+
+  const tone = matched.length === 0 ? "neutral" : "warn";
+  const bg = tone === "warn" ? "#fef2f2" : "#f4f4f5";
+  const border = tone === "warn" ? "#fecaca" : "#e4e4e7";
+  const titleColor = tone === "warn" ? "#991b1b" : "#52525b";
+
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: "12px 14px",
+        background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: 10,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: titleColor }}>
+        {headline}
+      </div>
+      {matched.length > 0 && (
+        <ul
+          style={{
+            margin: "10px 0 0",
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          {named.map((p) => {
+            const pct = Math.round((p.negative / p.decisive) * 100);
+            return (
+              <li
+                key={`${p.pattern_key}|${p.industry ?? ""}`}
+                style={{
+                  fontSize: 12,
+                  color: "#7f1d1d",
+                  lineHeight: 1.45,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{capitalise(p.phrase)}</span>
+                {p.industry && (
+                  <span style={{ color: "#a1a1aa" }}> · {p.industry}</span>
+                )}
+                <span style={{ color: "#a1a1aa" }}>
+                  {" "}
+                  · failed {p.negative} of {p.decisive} ({pct}%)
+                </span>
+              </li>
+            );
+          })}
+          {overflow > 0 && (
+            <li
+              style={{
+                fontSize: 11,
+                color: "#a1a1aa",
+                fontStyle: "italic",
+                marginTop: 2,
+              }}
+            >
+              and {overflow} more
+            </li>
+          )}
+        </ul>
+      )}
+      <div style={{ marginTop: 10, fontSize: 11, color: "#71717a" }}>
+        Previewing against {total} active pattern{total === 1 ? "" : "s"}. This
+        is a dry run — nothing is retired until the next reaper sweep.
+      </div>
+    </div>
   );
 }
