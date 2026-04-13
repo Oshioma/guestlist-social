@@ -17,6 +17,9 @@ import {
   markProoferQueueItemFailedAction,
   removeProoferQueueItemAction,
 } from "../../lib/proofer-actions";
+import { publishMetaQueueItem } from "../../lib/meta-publish";
+
+type ClientLite = { id: string; name: string };
 
 type ReadyPost = ProoferPost & {
   clientName: string;
@@ -138,13 +141,18 @@ export default function PublishQueueBoard({
   readyPosts,
   queueItems,
   defaultScheduleValue,
+  clients = [],
 }: {
   readyPosts: ReadyPost[];
   queueItems: QueueItem[];
   defaultScheduleValue: string;
+  clients?: ClientLite[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [connectClientId, setConnectClientId] = useState<string>(
+    clients[0]?.id ?? ""
+  );
 
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>(
     {}
@@ -252,6 +260,43 @@ export default function PublishQueueBoard({
     });
   }
 
+  function handlePublishNow(queueId: string) {
+    if (
+      !confirm(
+        "Publish this post to Meta right now? It will go live on the connected Facebook Page or Instagram account."
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const result = await publishMetaQueueItem(queueId);
+        if (result.ok) {
+          alert(
+            result.publishUrl
+              ? `Published! ${result.publishUrl}`
+              : "Published to Meta."
+          );
+        } else {
+          alert(`Publish failed: ${result.error}`);
+        }
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not publish");
+      }
+    });
+  }
+
+  function handleConnectMeta() {
+    if (!connectClientId) {
+      alert("Pick a client first.");
+      return;
+    }
+    window.location.href = `/api/meta/connect?clientId=${encodeURIComponent(
+      connectClientId
+    )}`;
+  }
+
   function handleMarkFailed(queueId: string) {
     const note = (failureNoteDrafts[queueId] ?? "").trim();
 
@@ -307,6 +352,61 @@ export default function PublishQueueBoard({
           Facebook, schedule them, then mark them published or failed.
         </p>
       </div>
+
+      <SectionCard title="Meta connection">
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "#52525b" }}>
+            Connect a Facebook Page (and the linked Instagram professional
+            account) so approved posts can be published straight from the
+            queue.
+          </span>
+          <select
+            value={connectClientId}
+            onChange={(e) => setConnectClientId(e.target.value)}
+            disabled={clients.length === 0}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#18181b",
+            }}
+          >
+            {clients.length === 0 && <option value="">No clients</option>}
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleConnectMeta}
+            disabled={!connectClientId}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              background: connectClientId ? "#1877f2" : "#e4e4e7",
+              color: connectClientId ? "#fff" : "#a1a1aa",
+              border: "none",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: connectClientId ? "pointer" : "not-allowed",
+            }}
+          >
+            Connect Meta
+          </button>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Overview">
         <div
@@ -620,6 +720,19 @@ export default function PublishQueueBoard({
                       style={darkButton}
                     >
                       Schedule
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePublishNow(item.id)}
+                      disabled={isPending}
+                      style={{
+                        ...darkButton,
+                        background: "#1877f2",
+                        borderColor: "#1877f2",
+                      }}
+                    >
+                      Publish now
                     </button>
 
                     <button
