@@ -27,11 +27,11 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // Pass the function references only!
+  // 🟢 Use await cookies() and headers()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies, headers }
+    { cookies: await cookies(), headers: await headers() }
   );
 
   let query = supabase
