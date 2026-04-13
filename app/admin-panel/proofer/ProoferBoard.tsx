@@ -1360,9 +1360,7 @@ export default function ProoferBoard({
                                   : active
                                   ? 1
                                   : 0.35,
-                                transform: active ? "scale(1.15)" : "scale(1)",
-                                transition:
-                                  "opacity 120ms ease, transform 120ms ease",
+                                transition: "opacity 120ms ease",
                               }}
                               onMouseEnter={(e) => {
                                 if (!disableThisButton && !active) {
