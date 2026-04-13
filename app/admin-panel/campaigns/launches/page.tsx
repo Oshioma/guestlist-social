@@ -1,21 +1,34 @@
-// ...other imports
-export default async function LaunchesPage() {
-  const launches = await fetch("/api/admin-panel/campaigns/launches").then(r=>r.json());
+import Link from "next/link";
+
+type Launch = {
+  template_id: string;
+  error_log?: string;
+  created_at: string;
+};
+
+type Props = {
+  launches: Launch[];
+};
+
+export default function LaunchesPage({ launches }: Props) {
   return (
-    <main>
-      <h1 className="text-xl mb-4">🕓 Campaign Launches</h1>
-      <ul>
-        {launches.map((launch:any)=>(
-          <li key={launch.id}>
-            <b>{launch.template?.name || launch.template_id}</b> for client [{launch.client_id}]
-            <span> &nbsp;[{launch.status}]</span>
-            {launch.error_log && <span className="text-red-600"> &nbsp;Error: {launch.error_log}</span>}
-            <span> &nbsp;on {new Date(launch.created_at).toLocaleString()}</span>
-            <Link className="ml-2" href={`/admin-panel/campaigns/launch/${launch.template_id}`}>Relaunch</Link>
-          </li>
-        ))}
-      </ul>
-      <Link className="btn mt-8" href="/admin-panel/campaigns">← Back to Templates</Link>
-    </main>
+    <ul>
+      {launches.map((launch) => (
+        <li key={launch.template_id}>
+          {launch.error_log && (
+            <span className="text-red-600">&nbsp;Error: {launch.error_log}</span>
+          )}
+          <span>
+            &nbsp;on {new Date(launch.created_at).toLocaleString()}
+          </span>
+          <Link
+            className="ml-2"
+            href={`/admin-panel/campaigns/launch/${launch.template_id}`}
+          >
+            Relaunch
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
