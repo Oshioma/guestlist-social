@@ -9,6 +9,7 @@ import EmptyState from "../components/EmptyState";
 import TopPriorities from "../components/TopPriorities";
 import WhatsWorkingNow from "../components/WhatsWorkingNow";
 import DecisionAccuracy from "../components/DecisionAccuracy";
+import PatternFeedbackPanel from "../components/PatternFeedbackPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +174,11 @@ export default async function DashboardPage() {
             tells you the playbook, the other tells you whether the playbook
             is paying off when we act on it. */}
         <DecisionAccuracy />
+
+        {/* Per-pattern read on the same loop, in plain English. Decision
+            accuracy is the headline number; this is the breakdown — which
+            specific moves are paying off and which aren't. */}
+        <PatternFeedbackPanel />
 
         {/* Top-3 priorities — the calmest and most decisive surface in the
             product. Everything below is supporting context. */}
