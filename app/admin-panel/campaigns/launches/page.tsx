@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies, headers } from "next/headers";
-import { createServerComponentClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr"; // ✅ FIXED: correct import!
 import { SyncButton } from "./SyncButton";
 import { ErrorEditor } from "./ErrorEditor";
 
@@ -27,8 +27,8 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // ✅ Use ssr package and pass context
-  const supabase = createServerComponentClient({ cookies, headers });
+  // ✅ Use correct Supabase SSR client function and context
+  const supabase = createServerClient({ cookies, headers });
 
   let query = supabase
     .from("launches")
