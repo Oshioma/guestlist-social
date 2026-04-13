@@ -27,7 +27,6 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // Correct usage for Supabase SSR with Next.js
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -150,5 +149,13 @@ export default async function Page({
           >
             Prev
           </Link>
-          {Array.from({ length: total
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <Link
+              key={i}
+              href={queryStr({ page: i + 1 })}
+              className={`px-3 py-2 rounded ${
+                page === i + 1
+                  ? "bg-black text-white"
+                  : "bg-gray-200 text-black hover:bg-gray-300"
+             
 
