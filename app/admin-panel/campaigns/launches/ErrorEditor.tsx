@@ -11,11 +11,11 @@ export function ErrorEditor({ initial, template_id }: ErrorEditorProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initial || "");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<null | string>(null);
+  const [msg, setMsg] = useState<null | string>(null);
 
   async function save() {
     setSaving(true);
-    setMessage(null);
+    setMsg(null);
     const res = await fetch("/api/launches-edit", {
       method: "POST",
       body: JSON.stringify({ template_id, error_log: value }),
@@ -24,13 +24,12 @@ export function ErrorEditor({ initial, template_id }: ErrorEditorProps) {
     setSaving(false);
     setEditing(false);
 
-    if (res.ok) {
-      setMessage("Saved!");
-    } else {
+    if (res.ok) setMsg("Saved!");
+    else {
       const data = await res.json();
-      setMessage(data.error ? `Error: ${data.error}` : "Failed to save.");
+      setMsg(data.error ? `Error: ${data.error}` : "Failed to save.");
     }
-    // Optionally: refresh page, mutate cache, or refetch launches.
+    // Optionally: router.refresh() to reload data
   }
 
   if (!editing)
@@ -44,7 +43,7 @@ export function ErrorEditor({ initial, template_id }: ErrorEditorProps) {
         >
           Edit
         </button>
-        {message && <span className="ml-2 text-xs text-gray-600">{message}</span>}
+        {msg && <span className="ml-2 text-xs text-gray-600">{msg}</span>}
       </span>
     );
 
