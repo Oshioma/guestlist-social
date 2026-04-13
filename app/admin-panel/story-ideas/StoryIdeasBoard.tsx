@@ -9,6 +9,7 @@ import {
   updateStoryIdeaAction,
   updateStoryDesignLinkAction,
   deleteStoryIdeaAction,
+  setStoryIdeaNotesAction,
 } from "../lib/story-idea-actions";
 import type { StoryIdea, StoryTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
@@ -575,6 +576,8 @@ function IdeaRow({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(idea.notes);
   const [linkValue, setLinkValue] = useState(idea.designLink);
   const [editText, setEditText] = useState(idea.idea);
   const [editNotes, setEditNotes] = useState(idea.notes);
@@ -594,6 +597,13 @@ function IdeaRow({
     startTransition(async () => {
       await updateStoryDesignLinkAction(idea.id, linkValue);
       setEditingLink(false);
+    });
+  }
+
+  function handleSaveNotes() {
+    startTransition(async () => {
+      await setStoryIdeaNotesAction(idea.id, notesValue);
+      setEditingNotes(false);
     });
   }
 
@@ -696,8 +706,8 @@ function IdeaRow({
     <div
       style={{
         display: "flex",
-        gap: 10,
-        alignItems: "center",
+        flexDirection: "column",
+        gap: 6,
         padding: "8px 10px",
         borderRadius: 6,
         background: isUsed ? "#f4f4f5" : "#fff",
@@ -706,147 +716,215 @@ function IdeaRow({
       }}
       title={isUsed ? "Used in a proofer post" : undefined}
     >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          padding: "2px 8px",
-          borderRadius: 999,
-          background: colors.bg,
-          color: colors.text,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {idea.category}
-      </span>
-      {pillar && (
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <span
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 5,
             fontSize: 11,
             fontWeight: 600,
             padding: "2px 8px",
             borderRadius: 999,
-            background: "#f4f4f5",
-            color: "#3f3f46",
+            background: colors.bg,
+            color: colors.text,
             whiteSpace: "nowrap",
           }}
         >
+          {idea.category}
+        </span>
+        {pillar && (
           <span
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: pillar.color,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#f4f4f5",
+              color: "#3f3f46",
+              whiteSpace: "nowrap",
             }}
-          />
-          {pillar.name}
-        </span>
-      )}
-      {isUsed && (
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            padding: "2px 8px",
-            borderRadius: 999,
-            background: "#e4e4e7",
-            color: "#52525b",
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Used
-        </span>
-      )}
-      {monthLabel && (
-        <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
-          {monthLabel}
-        </span>
-      )}
-      <span
-        style={{
-          flex: 1,
-          fontSize: 14,
-          color: "#18181b",
-          display: "inline-flex",
-          flexDirection: "column",
-          gap: 2,
-          textDecoration: isUsed ? "line-through" : "none",
-          minWidth: 0,
-        }}
-      >
-        <span>{idea.idea}</span>
-        {idea.notes && (
-          <span style={{ fontSize: 12, color: "#71717a", whiteSpace: "pre-wrap" }}>
-            {idea.notes}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: pillar.color,
+              }}
+            />
+            {pillar.name}
           </span>
         )}
-      </span>
-      {idea.createdBy && (
-        <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
-          {idea.createdBy.split("@")[0]}
+        {isUsed && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#e4e4e7",
+              color: "#52525b",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Used
+          </span>
+        )}
+        {monthLabel && (
+          <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
+            {monthLabel}
+          </span>
+        )}
+        <span
+          style={{
+            flex: 1,
+            fontSize: 14,
+            color: "#18181b",
+            textDecoration: isUsed ? "line-through" : "none",
+            minWidth: 0,
+          }}
+        >
+          {idea.idea}
         </span>
-      )}
-      {editingLink ? (
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <input
-            value={linkValue}
-            onChange={(e) => setLinkValue(e.target.value)}
-            placeholder="Paste Google Drive link..."
+        {idea.createdBy && (
+          <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
+            {idea.createdBy.split("@")[0]}
+          </span>
+        )}
+        {editingLink ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input
+              value={linkValue}
+              onChange={(e) => setLinkValue(e.target.value)}
+              placeholder="Paste Google Drive link..."
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveLink();
+                if (e.key === "Escape") { setLinkValue(idea.designLink); setEditingLink(false); }
+              }}
+              style={{ ...inputStyle, padding: "4px 8px", fontSize: 12, width: 220 }}
+            />
+            <button onClick={handleSaveLink} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button onClick={() => { setLinkValue(idea.designLink); setEditingLink(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+              Cancel
+            </button>
+          </div>
+        ) : idea.designLink ? (
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <a
+              href={idea.designLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 11, fontWeight: 600, color: "#1e40af", textDecoration: "underline", whiteSpace: "nowrap" }}
+            >
+              Design
+            </a>
+            <button onClick={() => setEditingLink(true)} style={{ ...btnStyle("#f3f4f6", "#374151"), padding: "2px 6px", fontSize: 10 }}>
+              edit
+            </button>
+          </div>
+        ) : (
+          <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <button onClick={() => setEditingLink(true)} style={btnStyle("#f3f4f6", "#71717a")}>
+              + Link
+            </button>
+            <ImageUpload
+              folder={`story/${idea.id}`}
+              compact
+              accept="image/*,video/*"
+              label="Upload"
+              onUploaded={(url) => {
+                setLinkValue(url);
+                startTransition(async () => {
+                  await updateStoryDesignLinkAction(idea.id, url);
+                });
+              }}
+            />
+          </span>
+        )}
+        <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
+        <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
+          {isPending ? "..." : "Delete"}
+        </button>
+      </div>
+
+      {editingNotes ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <textarea
+            value={notesValue}
+            onChange={(e) => setNotesValue(e.target.value)}
+            placeholder="Notes..."
             autoFocus
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleSaveLink();
-              if (e.key === "Escape") { setLinkValue(idea.designLink); setEditingLink(false); }
+              if (e.key === "Escape") {
+                setNotesValue(idea.notes);
+                setEditingNotes(false);
+              }
             }}
-            style={{ ...inputStyle, padding: "4px 8px", fontSize: 12, width: 220 }}
+            rows={3}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontSize: 12, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
           />
-          <button onClick={handleSaveLink} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
-            {isPending ? "..." : "Save"}
-          </button>
-          <button onClick={() => { setLinkValue(idea.designLink); setEditingLink(false); }} style={btnStyle("#f3f4f6", "#374151")}>
-            Cancel
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <button onClick={handleSaveNotes} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button onClick={() => { setNotesValue(idea.notes); setEditingNotes(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+              Cancel
+            </button>
+          </div>
         </div>
-      ) : idea.designLink ? (
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <a
-            href={idea.designLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 11, fontWeight: 600, color: "#1e40af", textDecoration: "underline", whiteSpace: "nowrap" }}
-          >
-            Design
-          </a>
-          <button onClick={() => setEditingLink(true)} style={{ ...btnStyle("#f3f4f6", "#374151"), padding: "2px 6px", fontSize: 10 }}>
-            edit
-          </button>
+      ) : idea.notes ? (
+        <div
+          onClick={() => {
+            setNotesValue(idea.notes);
+            setEditingNotes(true);
+          }}
+          title="Click to edit notes"
+          style={{
+            fontSize: 12,
+            color: "#71717a",
+            whiteSpace: "pre-wrap",
+            cursor: "pointer",
+            padding: "4px 8px",
+            borderRadius: 6,
+            background: "#fafafa",
+            border: "1px dashed transparent",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#e4e4e7";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "transparent";
+          }}
+        >
+          {idea.notes}
         </div>
       ) : (
-        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-          <button onClick={() => setEditingLink(true)} style={btnStyle("#f3f4f6", "#71717a")}>
-            + Link
-          </button>
-          <ImageUpload
-            folder={`story/${idea.id}`}
-            compact
-            accept="image/*,video/*"
-            label="Upload"
-            onUploaded={(url) => {
-              setLinkValue(url);
-              startTransition(async () => {
-                await updateStoryDesignLinkAction(idea.id, url);
-              });
-            }}
-          />
-        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setNotesValue("");
+            setEditingNotes(true);
+          }}
+          style={{
+            alignSelf: "flex-start",
+            padding: "3px 8px",
+            fontSize: 11,
+            fontWeight: 600,
+            border: "1px dashed #e4e4e7",
+            borderRadius: 6,
+            background: "transparent",
+            color: "#71717a",
+            cursor: "pointer",
+          }}
+        >
+          + Notes
+        </button>
       )}
-      <button onClick={() => setIsEditing(true)} style={btnStyle("#dbeafe", "#1e40af")}>Edit</button>
-      <button onClick={handleDelete} disabled={isPending} style={btnStyle("#fee2e2", "#991b1b")}>
-        {isPending ? "..." : "Delete"}
-      </button>
     </div>
   );
 }

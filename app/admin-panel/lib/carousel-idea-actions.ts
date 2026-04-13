@@ -169,6 +169,25 @@ export async function updateCarouselIdeaAction(
   revalidatePath("/app/proofer");
 }
 
+export async function setCarouselIdeaNotesAction(id: string, notes: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("carousel_ideas")
+    .update({
+      notes: notes.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setCarouselIdeaNotesAction error:", error);
+    throw new Error("Could not update notes.");
+  }
+  revalidatePath("/app/carousel-ideas");
+  revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
+}
+
 export async function setCarouselIdeaPillarAction(
   id: string,
   pillarId: string | null

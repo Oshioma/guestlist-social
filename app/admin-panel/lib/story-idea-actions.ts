@@ -168,6 +168,25 @@ export async function updateStoryIdeaAction(
   revalidatePath("/app/proofer");
 }
 
+export async function setStoryIdeaNotesAction(id: string, notes: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("story_ideas")
+    .update({
+      notes: notes.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setStoryIdeaNotesAction error:", error);
+    throw new Error("Could not update notes.");
+  }
+  revalidatePath("/app/story-ideas");
+  revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
+}
+
 export async function setStoryIdeaPillarAction(
   id: string,
   pillarId: string | null

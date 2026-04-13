@@ -582,6 +582,9 @@ export default function ProoferBoard({
       alert("Idea text is required.");
       return;
     }
+    // Close the edit UI synchronously so the save click feels instant —
+    // the network round-trip then runs in the background transition.
+    setEditingLinkedIdea(null);
     startTransition(async () => {
       try {
         await updateIdeaFromProoferAction(
@@ -591,7 +594,6 @@ export default function ProoferBoard({
           draft.notes,
           draft.pillarId
         );
-        setEditingLinkedIdea(null);
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not update idea");
@@ -1763,8 +1765,10 @@ export default function ProoferBoard({
                         editingLinkedIdea?.id === linkedIdea.id &&
                         editingLinkedIdea?.kind === linkedIdea.kind;
                       const notesKey = `${linkedIdea.kind}:${linkedIdea.id}`;
+                      // Default expanded — user explicitly collapsing sets
+                      // the key to false.
                       const isExpanded =
-                        isEditingThis || Boolean(expandedNoteKeys[notesKey]);
+                        isEditingThis || expandedNoteKeys[notesKey] !== false;
                       const hasNotes = Boolean(linkedIdea.notes.trim());
 
                       return (
@@ -1775,6 +1779,9 @@ export default function ProoferBoard({
                             borderRadius: 8,
                             display: "flex",
                             flexDirection: "column",
+                            minWidth: 0,
+                            maxWidth: "100%",
+                            overflow: "hidden",
                           }}
                         >
                           <div
@@ -1783,6 +1790,7 @@ export default function ProoferBoard({
                               alignItems: "center",
                               gap: 8,
                               padding: "8px 10px",
+                              minWidth: 0,
                             }}
                           >
                             <button
@@ -1807,6 +1815,7 @@ export default function ProoferBoard({
                                 font: "inherit",
                                 textAlign: "left",
                                 minWidth: 0,
+                                overflow: "hidden",
                               }}
                             >
                               <span
@@ -1847,6 +1856,7 @@ export default function ProoferBoard({
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
                                     minWidth: 0,
+                                    display: "block",
                                   }}
                                 >
                                   {linkedIdea.notes.replace(/\s+/g, " ")}
@@ -2329,6 +2339,11 @@ export default function ProoferBoard({
                               : "Upload media"
                           }
                           accept="image/*,video/*"
+                        />
+                        <PasteLinkInput
+                          onSubmit={(url) =>
+                            addMediaUrl(dateKey, activePlatform, url)
+                          }
                         />
                         {draft.mediaUrls.length > 0 && (
                           <span style={{ fontSize: 11, color: "#a1a1aa" }}>
@@ -2950,6 +2965,107 @@ export default function ProoferBoard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  function submit() {
+    const cleaned = value.trim();
+    if (!cleaned) return;
+    onSubmit(cleaned);
+    setValue("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px dashed #e4e4e7",
+          background: "#fff",
+          color: "#3f3f46",
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        + Paste link
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Paste image / video URL..."
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+          if (e.key === "Escape") {
+            setValue("");
+            setOpen(false);
+          }
+        }}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: "1px solid #e4e4e7",
+          fontSize: 13,
+          background: "#fff",
+          color: "#18181b",
+          minWidth: 240,
+        }}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!value.trim()}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "none",
+          background: "#18181b",
+          color: "#fff",
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: value.trim() ? "pointer" : "not-allowed",
+          opacity: value.trim() ? 1 : 0.5,
+        }}
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setValue("");
+          setOpen(false);
+        }}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #e4e4e7",
+          background: "#fff",
+          color: "#3f3f46",
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }

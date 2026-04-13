@@ -169,6 +169,25 @@ export async function updateVideoIdeaAction(
   revalidatePath("/app/proofer");
 }
 
+export async function setVideoIdeaNotesAction(id: string, notes: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("video_ideas")
+    .update({
+      notes: notes.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setVideoIdeaNotesAction error:", error);
+    throw new Error("Could not update notes.");
+  }
+  revalidatePath("/app/video-ideas");
+  revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
+}
+
 export async function setVideoIdeaPillarAction(
   id: string,
   pillarId: string | null

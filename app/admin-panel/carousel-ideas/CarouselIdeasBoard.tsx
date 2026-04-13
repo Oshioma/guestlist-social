@@ -10,6 +10,7 @@ import {
   updateCarouselCaptionsAction,
   updateCarouselDesignLinkAction,
   deleteCarouselIdeaAction,
+  setCarouselIdeaNotesAction,
 } from "../lib/carousel-idea-actions";
 import type { CarouselIdea, CarouselTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
@@ -577,6 +578,8 @@ function IdeaRow({
   const [isEditing, setIsEditing] = useState(false);
   const [showCaptions, setShowCaptions] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(idea.notes);
   const [linkValue, setLinkValue] = useState(idea.designLink);
   const [editText, setEditText] = useState(idea.idea);
   const [editNotes, setEditNotes] = useState(idea.notes);
@@ -597,6 +600,13 @@ function IdeaRow({
     startTransition(async () => {
       await updateCarouselDesignLinkAction(idea.id, linkValue);
       setEditingLink(false);
+    });
+  }
+
+  function handleSaveNotes() {
+    startTransition(async () => {
+      await setCarouselIdeaNotesAction(idea.id, notesValue);
+      setEditingNotes(false);
     });
   }
 
@@ -771,19 +781,11 @@ function IdeaRow({
             flex: 1,
             fontSize: 14,
             color: "#18181b",
-            display: "inline-flex",
-            flexDirection: "column",
-            gap: 2,
             textDecoration: isUsed ? "line-through" : "none",
             minWidth: 0,
           }}
         >
-          <span>{idea.idea}</span>
-          {idea.notes && (
-            <span style={{ fontSize: 12, color: "#71717a", whiteSpace: "pre-wrap" }}>
-              {idea.notes}
-            </span>
-          )}
+          {idea.idea}
         </span>
         {idea.createdBy && (
           <span style={{ fontSize: 11, color: "#a1a1aa", whiteSpace: "nowrap" }}>
@@ -856,6 +858,83 @@ function IdeaRow({
           {isPending ? "..." : "Delete"}
         </button>
       </div>
+
+      {editingNotes ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "flex-start", padding: "0 10px 8px" }}>
+          <textarea
+            value={notesValue}
+            onChange={(e) => setNotesValue(e.target.value)}
+            placeholder="Notes..."
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setNotesValue(idea.notes);
+                setEditingNotes(false);
+              }
+            }}
+            rows={3}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontSize: 12, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <button onClick={handleSaveNotes} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button onClick={() => { setNotesValue(idea.notes); setEditingNotes(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : idea.notes ? (
+        <div
+          onClick={() => {
+            setNotesValue(idea.notes);
+            setEditingNotes(true);
+          }}
+          title="Click to edit notes"
+          style={{
+            fontSize: 12,
+            color: "#71717a",
+            whiteSpace: "pre-wrap",
+            cursor: "pointer",
+            margin: "0 10px 8px",
+            padding: "4px 8px",
+            borderRadius: 6,
+            background: "#fafafa",
+            border: "1px dashed transparent",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#e4e4e7";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "transparent";
+          }}
+        >
+          {idea.notes}
+        </div>
+      ) : (
+        <div style={{ padding: "0 10px 8px" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setNotesValue("");
+              setEditingNotes(true);
+            }}
+            style={{
+              padding: "3px 8px",
+              fontSize: 11,
+              fontWeight: 600,
+              border: "1px dashed #e4e4e7",
+              borderRadius: 6,
+              background: "transparent",
+              color: "#71717a",
+              cursor: "pointer",
+            }}
+          >
+            + Notes
+          </button>
+        </div>
+      )}
+
       {showCaptions && (
         <CaptionsEditor ideaId={idea.id} captions={idea.captions} captionImages={idea.captionImages} />
       )}
