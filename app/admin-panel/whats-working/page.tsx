@@ -4,6 +4,7 @@ import { capitalizeFirst, humanAgo } from "@/app/admin-panel/lib/utils";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
 import GenerateGlobalLearningsButton from "@/app/admin-panel/components/GenerateGlobalLearningsButton";
+import UnretirePatternButton from "@/app/admin-panel/components/UnretirePatternButton";
 
 export const dynamic = "force-dynamic";
 
@@ -178,27 +179,46 @@ function PatternCard({
           {pattern.pattern_label}
         </div>
         {isRetired && (
-          <span
-            title={
-              feedback?.retired_reason
-                ? `Retired by the reaper · ${feedback.retired_reason}`
-                : "Retired by the reaper"
-            }
-            style={{
-              padding: "2px 8px",
-              borderRadius: 999,
-              fontSize: 10,
-              fontWeight: 700,
-              background: "#991b1b",
-              color: "#fff",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Retired
-          </span>
+          <>
+            <span
+              title={
+                feedback?.retired_reason
+                  ? `Retired by the reaper · ${feedback.retired_reason}`
+                  : "Retired by the reaper"
+              }
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 10,
+                fontWeight: 700,
+                background: "#991b1b",
+                color: "#fff",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              Retired
+            </span>
+            <UnretirePatternButton
+              patternKey={pattern.pattern_key}
+              industry={pattern.industry}
+            />
+          </>
         )}
       </div>
+      {isRetired && feedback?.retired_reason && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "#991b1b",
+            marginTop: 6,
+            fontStyle: "italic",
+          }}
+        >
+          Engine stopped using this — {feedback.retired_reason}. Bring it back
+          if you think the bad streak had an outside cause.
+        </div>
+      )}
       <div style={{ fontSize: 13, color: "#52525b", marginTop: 4 }}>
         {pattern.action_summary}
       </div>
