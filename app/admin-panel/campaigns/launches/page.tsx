@@ -27,7 +27,6 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // Correct: pass only { cookies }
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -86,6 +85,5 @@ export default async function Page({
             type="text"
             name="search"
             placeholder="Search Template ID"
-            defaultValue={search}
-            className="border text-sm
+            defaultValue
 
