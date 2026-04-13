@@ -27,6 +27,7 @@
  *     working.
  */
 
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "./SectionCard";
 
@@ -35,6 +36,11 @@ import SectionCard from "./SectionCard";
 // we'd rather show nothing than something misleading.
 const MIN_DECISIVE = 3;
 const MAX_PER_COLUMN = 3;
+// How far back we count "the reaper just killed something" for the
+// notification banner. Seven days lines up with the cron's weekly
+// schedule — anything older is "old news, you've already seen it".
+const RECENT_RETIRE_DAYS = 7;
+const MAX_RECENT_NAMED = 3;
 
 // Plain-English action phrases. Keys are the bare pattern_key shape minted
 // by generate-global-learnings/route.ts (without the industry suffix). New
@@ -101,6 +107,28 @@ type SliceRow = {
   label: string;
 };
 
+type RecentRetirement = {
+  pattern_key: string;
+  industry: string | null;
+  retired_at: string;
+  retired_reason: string | null;
+  phrase: string;
+};
+
+// "Tue", "Mon", "today" — short relative-date label for the banner. Don't
+// bother with humanAgo here because the banner only shows entries from
+// the last 7 days, so calendar-day phrasing is more readable than
+// "5 hours ago".
+function shortRelativeDay(iso: string): string {
+  const then = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - then.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  return then.toLocaleDateString("en-GB", { weekday: "short" });
+}
+
 function plainSentence(slice: SliceRow): string {
   const action = actionPhrase(slice.pattern_key, slice.label);
   const { positive, decisive } = slice;
@@ -130,7 +158,7 @@ export default async function PatternFeedbackPanel() {
       supabase
         .from("pattern_feedback")
         .select(
-          "pattern_key, industry, positive_verdicts, negative_verdicts, retired_at"
+          "pattern_key, industry, positive_verdicts, negative_verdicts, retired_at, retired_reason"
         ),
       supabase.from("global_learnings").select("pattern_key, pattern_label"),
     ]);
@@ -158,6 +186,8 @@ export default async function PatternFeedbackPanel() {
   }
 
   let retiredCount = 0;
+  const recentRetirements: RecentRetirement[] = [];
+  const recentCutoff = Date.now() - RECENT_RETIRE_DAYS * 24 * 60 * 60 * 1000;
   const slices: SliceRow[] = [];
   for (const f of (feedbackRows ?? []) as {
     pattern_key: string;
@@ -165,9 +195,23 @@ export default async function PatternFeedbackPanel() {
     positive_verdicts: number | null;
     negative_verdicts: number | null;
     retired_at: string | null;
+    retired_reason: string | null;
   }[]) {
     if (f.retired_at) {
       retiredCount++;
+      const retiredMs = Date.parse(f.retired_at);
+      if (Number.isFinite(retiredMs) && retiredMs >= recentCutoff) {
+        recentRetirements.push({
+          pattern_key: f.pattern_key,
+          industry: f.industry,
+          retired_at: f.retired_at,
+          retired_reason: f.retired_reason,
+          phrase: actionPhrase(
+            f.pattern_key,
+            labelByKey.get(f.pattern_key) ?? null
+          ),
+        });
+      }
       continue;
     }
     const positive = Number(f.positive_verdicts ?? 0);
@@ -207,6 +251,12 @@ export default async function PatternFeedbackPanel() {
 
   const empty = working.length === 0 && notWorking.length === 0;
 
+  // Newest first so the banner reads "this week's news" — the operator sees
+  // what just got killed before they see what got killed last week.
+  recentRetirements.sort(
+    (a, b) => Date.parse(b.retired_at) - Date.parse(a.retired_at)
+  );
+
   return (
     <SectionCard title="What the engine is learning">
       <div style={{ fontSize: 12, color: "#71717a", marginTop: -8, marginBottom: 14 }}>
@@ -214,6 +264,10 @@ export default async function PatternFeedbackPanel() {
         {retiredCount > 0 &&
           ` ${retiredCount} pattern${retiredCount === 1 ? "" : "s"} retired by the reaper.`}
       </div>
+
+      {recentRetirements.length > 0 && (
+        <RecentRetirementsBanner retirements={recentRetirements} />
+      )}
 
       {empty ? (
         <div style={{ fontSize: 13, color: "#a1a1aa", padding: "8px 0" }}>
@@ -243,6 +297,116 @@ export default async function PatternFeedbackPanel() {
         </div>
       )}
     </SectionCard>
+  );
+}
+
+function RecentRetirementsBanner({
+  retirements,
+}: {
+  retirements: RecentRetirement[];
+}) {
+  const named = retirements.slice(0, MAX_RECENT_NAMED);
+  const overflow = retirements.length - named.length;
+  const total = retirements.length;
+
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        background: "#fef2f2",
+        border: "1px solid #fecaca",
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#991b1b" }}>
+          {total === 1
+            ? "1 move was retired this week"
+            : `${total} moves were retired this week`}
+        </div>
+        <Link
+          href="/whats-working"
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#991b1b",
+            textDecoration: "none",
+            padding: "3px 10px",
+            borderRadius: 999,
+            background: "#fff",
+            border: "1px solid #fecaca",
+          }}
+        >
+          Review them →
+        </Link>
+      </div>
+      <ul
+        style={{
+          margin: "8px 0 0",
+          padding: 0,
+          listStyle: "none",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+        }}
+      >
+        {named.map((r) => (
+          <li
+            key={`${r.pattern_key}|${r.industry ?? ""}`}
+            style={{
+              fontSize: 12,
+              color: "#7f1d1d",
+              lineHeight: 1.45,
+            }}
+          >
+            <span style={{ fontWeight: 600 }}>
+              {r.phrase[0].toUpperCase() + r.phrase.slice(1)}
+            </span>
+            {r.industry && (
+              <span style={{ color: "#a1a1aa" }}> · {r.industry}</span>
+            )}
+            {r.retired_reason && (
+              <span style={{ color: "#a1a1aa" }}> · {r.retired_reason}</span>
+            )}
+            <span style={{ color: "#a1a1aa" }}>
+              {" "}
+              · {shortRelativeDay(r.retired_at)}
+            </span>
+          </li>
+        ))}
+        {overflow > 0 && (
+          <li
+            style={{
+              fontSize: 11,
+              color: "#a1a1aa",
+              fontStyle: "italic",
+              marginTop: 2,
+            }}
+          >
+            and {overflow} more
+          </li>
+        )}
+      </ul>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 11,
+          color: "#7f1d1d",
+        }}
+      >
+        Hit &ldquo;Give it another chance&rdquo; on the playbook page if you
+        think the bad streak had an outside cause.
+      </div>
+    </div>
   );
 }
 
