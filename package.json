@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "migrations:check": "node --env-file=.env.local scripts/check-schema.mjs"
+    "migrations:check": "node --env-file=.env.local scripts/check-schema.mjs",
+    "smoke:reaper": "node --env-file=.env.local scripts/smoke-reaper-loop.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
