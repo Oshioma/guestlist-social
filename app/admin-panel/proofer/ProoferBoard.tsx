@@ -1284,24 +1284,99 @@ export default function ProoferBoard({
                     gap: 10,
                   }}
                 >
-                  <textarea
-                    value={draft.caption}
-                    onChange={(e) =>
-                      updateDraft(dateKey, activePlatform, {
-                        caption: e.target.value,
-                      })
-                    }
-                    placeholder="Write a caption..."
-                    disabled={isLocked}
+                  <div
                     style={{
-                      ...inputStyle,
-                      minHeight: 70,
-                      resize: "vertical",
-                      fontFamily: "inherit",
-                      opacity: isLocked ? 0.7 : 1,
-                      cursor: isLocked ? "not-allowed" : "text",
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "stretch",
                     }}
-                  />
+                  >
+                    <textarea
+                      value={draft.caption}
+                      onChange={(e) =>
+                        updateDraft(dateKey, activePlatform, {
+                          caption: e.target.value,
+                        })
+                      }
+                      placeholder="Write a caption..."
+                      disabled={isLocked}
+                      style={{
+                        ...inputStyle,
+                        flex: 1,
+                        minHeight: 70,
+                        resize: "vertical",
+                        fontFamily: "inherit",
+                        opacity: isLocked ? 0.7 : 1,
+                        cursor: isLocked ? "not-allowed" : "text",
+                      }}
+                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        justifyContent: "center",
+                        paddingRight: 2,
+                      }}
+                    >
+                      {STATUS_BUTTONS.map((btn) => {
+                        const active = effectiveStatus === btn.value;
+                        const disableThisButton =
+                          isPending ||
+                          (isLocked && btn.value !== "approved");
+
+                        return (
+                          <button
+                            key={btn.value}
+                            type="button"
+                            title={btn.label}
+                            aria-label={btn.label}
+                            onClick={() =>
+                              handleStatus(
+                                dateKey,
+                                activePlatform,
+                                btn.value
+                              )
+                            }
+                            disabled={disableThisButton}
+                            style={{
+                              width: 16,
+                              height: 16,
+                              padding: 0,
+                              borderRadius: "50%",
+                              border: active
+                                ? `2px solid ${btn.color}`
+                                : "1px solid #e4e4e7",
+                              background: btn.dot,
+                              cursor: disableThisButton
+                                ? "not-allowed"
+                                : "pointer",
+                              boxShadow: active
+                                ? `0 0 0 2px ${btn.bg}`
+                                : "none",
+                              opacity: disableThisButton
+                                ? 0.4
+                                : active
+                                ? 1
+                                : 0.55,
+                              transition:
+                                "opacity 120ms ease, transform 120ms ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!disableThisButton && !active) {
+                                e.currentTarget.style.opacity = "1";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!disableThisButton && !active) {
+                                e.currentTarget.style.opacity = "0.55";
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
 
                   <div
                     style={{
@@ -1684,62 +1759,10 @@ export default function ProoferBoard({
                       gap: 8,
                       flexWrap: "wrap",
                       alignItems: "center",
+                      justifyContent: "flex-end",
                     }}
                   >
-                    {STATUS_BUTTONS.map((btn) => {
-                      const active = effectiveStatus === btn.value;
-                      const disableThisButton =
-                        isPending ||
-                        (isLocked && btn.value !== "approved");
-
-                      return (
-                        <button
-                          key={btn.value}
-                          type="button"
-                          title={btn.label}
-                          aria-label={btn.label}
-                          onClick={() =>
-                            handleStatus(dateKey, activePlatform, btn.value)
-                          }
-                          disabled={disableThisButton}
-                          style={{
-                            width: 22,
-                            height: 22,
-                            padding: 0,
-                            borderRadius: "50%",
-                            border: active
-                              ? `2px solid ${btn.color}`
-                              : "1px solid #e4e4e7",
-                            background: btn.dot,
-                            cursor: disableThisButton
-                              ? "not-allowed"
-                              : "pointer",
-                            boxShadow: active
-                              ? `0 0 0 2px ${btn.bg}`
-                              : "none",
-                            opacity: disableThisButton
-                              ? 0.4
-                              : active
-                              ? 1
-                              : 0.55,
-                            transition:
-                              "opacity 120ms ease, transform 120ms ease",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!disableThisButton && !active) {
-                              e.currentTarget.style.opacity = "1";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!disableThisButton && !active) {
-                              e.currentTarget.style.opacity = "0.55";
-                            }
-                          }}
-                        />
-                      );
-                    })}
-
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
                       <button
                         type="button"
                         onClick={() => handleSave(dateKey, activePlatform)}
