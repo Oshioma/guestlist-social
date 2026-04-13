@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getReaperSettings } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 // Pattern feedback is small (one row per pattern slice). The whole sweep
@@ -33,22 +34,11 @@ export const dynamic = "force-dynamic";
 // retired_at where it's currently NULL.
 // ---------------------------------------------------------------------------
 
-// Minimum decisive (positive + negative) verdicts before a pattern can be
-// retired. Three is the in-memory veto threshold; five is "we've now seen
-// it fail enough times that this isn't a passing bad streak".
-const MIN_DECISIVE_VERDICTS = 5;
-// Negative ratio at which we flip the row. Matches the in-memory veto's
-// 0.6 — same shape, different stakes.
-const RETIRE_NEG_RATIO = 0.6;
-
-function admin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Missing Supabase env vars");
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+// Thresholds are tunable per agency via the Settings page. Defaults live
+// in lib/app-settings.ts (5 decisive verdicts, 0.6 negative ratio) and
+// kick in if no row has been saved yet. The in-memory veto over in
+// /api/generate-decisions still uses the stricter 3+/0.6 fallback —
+// retirement is heavier than a single-request veto by design.
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -87,13 +77,16 @@ async function handle(req: Request) {
 
   let supabase;
   try {
-    supabase = admin();
+    supabase = createAdminClient();
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 }
     );
   }
+
+  const { minDecisiveVerdicts: minDecisive, negRatio: negRatioThreshold } =
+    await getReaperSettings(supabase);
 
   // Only the active slice — already-retired rows stay retired (we never
   // un-retire automatically; that's an explicit operator action).
@@ -121,9 +114,9 @@ async function handle(req: Request) {
     const positive = Number(row.positive_verdicts ?? 0);
     const negative = Number(row.negative_verdicts ?? 0);
     const decisive = positive + negative;
-    if (decisive < MIN_DECISIVE_VERDICTS) continue;
+    if (decisive < minDecisive) continue;
     const negRatio = negative / decisive;
-    if (negRatio < RETIRE_NEG_RATIO) continue;
+    if (negRatio < negRatioThreshold) continue;
 
     const pct = Math.round(negRatio * 100);
     candidates.push({
@@ -173,8 +166,8 @@ async function handle(req: Request) {
   return NextResponse.json({
     ok: true,
     threshold: {
-      min_decisive_verdicts: MIN_DECISIVE_VERDICTS,
-      negative_ratio: RETIRE_NEG_RATIO,
+      min_decisive_verdicts: minDecisive,
+      negative_ratio: negRatioThreshold,
     },
     scanned: feedbackRows?.length ?? 0,
     retired: retiredCount,

@@ -1,7 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
+import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
+import {
+  getReaperSettings,
+  REAPER_BOUNDS,
+  DEFAULT_REAPER_SETTINGS,
+} from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +22,16 @@ export default async function SettingsPage() {
     .order("name", { ascending: true });
 
   const clientList = clients ?? [];
+
+  // Read reaper settings via the service-role client so we always see what
+  // was actually saved, regardless of whether RLS is on for app_settings.
+  // The page is admin-only at the route level so this isn't a privilege leak.
+  const reaperSettings = await getReaperSettings(createAdminClient());
+  const reaperPercent = Math.round(reaperSettings.negRatio * 100);
+  const reaperIsDefault =
+    reaperSettings.minDecisiveVerdicts ===
+      DEFAULT_REAPER_SETTINGS.minDecisiveVerdicts &&
+    reaperSettings.negRatio === DEFAULT_REAPER_SETTINGS.negRatio;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -167,10 +184,19 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Preferences">
-        <div style={{ fontSize: 14, color: "#71717a" }}>
-          Settings and preferences will be configurable here.
-        </div>
+      <SectionCard title="When to retire failing moves">
+        <ReaperThresholdsForm
+          initialMinDecisive={reaperSettings.minDecisiveVerdicts}
+          initialNegRatioPercent={reaperPercent}
+          bounds={{
+            minDecisiveVerdicts: REAPER_BOUNDS.minDecisiveVerdicts,
+            negRatioPercent: {
+              min: Math.round(REAPER_BOUNDS.negRatio.min * 100),
+              max: Math.round(REAPER_BOUNDS.negRatio.max * 100),
+            },
+          }}
+          isDefault={reaperIsDefault}
+        />
       </SectionCard>
     </div>
   );
