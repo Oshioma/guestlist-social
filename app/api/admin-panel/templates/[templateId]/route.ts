@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Supabase setup using env vars
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -9,8 +8,9 @@ const supabase = createClient(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { templateId: string } }
+  context: { params: { templateId: string } }
 ) {
+  const { templateId } = context.params;
   // Fetch the template and its variables
   const { data: template, error } = await supabase
     .from("campaign_templates")
@@ -22,7 +22,7 @@ export async function GET(
         )
       `
     )
-    .eq("id", params.templateId)
+    .eq("id", templateId)
     .single();
 
   if (error || !template) {
