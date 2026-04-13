@@ -55,5 +55,14 @@ export async function GET(req: Request) {
     `&state=${state}` +
     `&scope=${scopes}`;
 
+  // Dump the exact URL we're sending the user to so it's visible in
+  // Vercel Runtime Logs when diagnosing OAuth errors ("Feature
+  // Unavailable", "Invalid App ID", "URL Blocked", etc.). Nothing in
+  // this URL is sensitive — client_id, redirect_uri and scopes are all
+  // plaintext query params that Meta receives anyway.
+  console.log(
+    `[meta/connect] clientId=${clientId} redirectUri=${redirectUri} appId=${appId} url=${authorizeUrl}`
+  );
+
   return NextResponse.redirect(authorizeUrl);
 }

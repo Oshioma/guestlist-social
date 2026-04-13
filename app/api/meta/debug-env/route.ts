@@ -41,6 +41,13 @@ export async function GET() {
       commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     },
     meta_social: {
+      // The App ID is already public (it's in every OAuth URL), so we
+      // dump it in full — makes copy/paste debugging faster.
+      META_SOCIAL_APP_ID_full: process.env.META_SOCIAL_APP_ID ?? null,
+      // The redirect URI is also sent in plaintext to Meta in the OAuth
+      // URL, so it's not a secret either.
+      META_SOCIAL_OAUTH_REDIRECT_URI_full:
+        process.env.META_SOCIAL_OAUTH_REDIRECT_URI ?? null,
       META_SOCIAL_APP_ID: fingerprint(process.env.META_SOCIAL_APP_ID),
       META_SOCIAL_APP_SECRET: fingerprint(process.env.META_SOCIAL_APP_SECRET),
       META_SOCIAL_OAUTH_REDIRECT_URI: fingerprint(
