@@ -30,6 +30,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SectionCard from "./SectionCard";
+import UnretirePatternButton from "./UnretirePatternButton";
 
 // Same threshold the engine uses for its in-memory pattern veto. Below
 // this, the sample is too small to draw any conclusion either way and
@@ -351,36 +352,51 @@ function RecentRetirementsBanner({
       </div>
       <ul
         style={{
-          margin: "8px 0 0",
+          margin: "10px 0 0",
           padding: 0,
           listStyle: "none",
           display: "flex",
           flexDirection: "column",
-          gap: 4,
+          gap: 8,
         }}
       >
         {named.map((r) => (
           <li
             key={`${r.pattern_key}|${r.industry ?? ""}`}
             style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
               fontSize: 12,
               color: "#7f1d1d",
               lineHeight: 1.45,
+              padding: "6px 10px",
+              background: "#fff",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
             }}
           >
-            <span style={{ fontWeight: 600 }}>
-              {r.phrase[0].toUpperCase() + r.phrase.slice(1)}
-            </span>
-            {r.industry && (
-              <span style={{ color: "#a1a1aa" }}> · {r.industry}</span>
-            )}
-            {r.retired_reason && (
-              <span style={{ color: "#a1a1aa" }}> · {r.retired_reason}</span>
-            )}
-            <span style={{ color: "#a1a1aa" }}>
-              {" "}
-              · {shortRelativeDay(r.retired_at)}
-            </span>
+            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+              <span style={{ fontWeight: 600 }}>
+                {r.phrase[0].toUpperCase() + r.phrase.slice(1)}
+              </span>
+              {r.industry && (
+                <span style={{ color: "#a1a1aa" }}> · {r.industry}</span>
+              )}
+              {r.retired_reason && (
+                <span style={{ color: "#a1a1aa" }}> · {r.retired_reason}</span>
+              )}
+              <span style={{ color: "#a1a1aa" }}>
+                {" "}
+                · {shortRelativeDay(r.retired_at)}
+              </span>
+            </div>
+            <UnretirePatternButton
+              patternKey={r.pattern_key}
+              industry={r.industry}
+            />
           </li>
         ))}
         {overflow > 0 && (
@@ -392,19 +408,24 @@ function RecentRetirementsBanner({
               marginTop: 2,
             }}
           >
-            and {overflow} more
+            and {overflow} more — see the{" "}
+            <Link href="/whats-working" style={{ color: "#991b1b" }}>
+              playbook
+            </Link>
           </li>
         )}
       </ul>
       <div
         style={{
-          marginTop: 8,
+          marginTop: 10,
           fontSize: 11,
           color: "#7f1d1d",
         }}
       >
-        Hit &ldquo;Give it another chance&rdquo; on the playbook page if you
-        think the bad streak had an outside cause.
+        Click &ldquo;Give it another chance&rdquo; if you think the bad streak
+        had an outside cause — Meta outage, holiday week, competitor stunt.
+        Verdict history stays intact, so if it keeps failing the reaper will
+        retire it again next week.
       </div>
     </div>
   );
