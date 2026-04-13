@@ -21,6 +21,13 @@ import { publishMetaQueueItem } from "../../lib/meta-publish";
 
 type ClientLite = { id: string; name: string };
 
+type ConnectedAccount = {
+  clientId: string;
+  platform: "facebook" | "instagram";
+  accountId: string;
+  accountName: string;
+};
+
 type ReadyPost = ProoferPost & {
   clientName: string;
 };
@@ -142,11 +149,13 @@ export default function PublishQueueBoard({
   queueItems,
   defaultScheduleValue,
   clients = [],
+  connectedAccounts = [],
 }: {
   readyPosts: ReadyPost[];
   queueItems: QueueItem[];
   defaultScheduleValue: string;
   clients?: ClientLite[];
+  connectedAccounts?: ConnectedAccount[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -163,6 +172,29 @@ export default function PublishQueueBoard({
   const [failureNoteDrafts, setFailureNoteDrafts] = useState<
     Record<string, string>
   >({});
+
+  const clientNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of clients) map[c.id] = c.name;
+    return map;
+  }, [clients]);
+
+  const accountsByClient = useMemo(() => {
+    const map: Record<string, ConnectedAccount[]> = {};
+    for (const acc of connectedAccounts) {
+      if (!map[acc.clientId]) map[acc.clientId] = [];
+      map[acc.clientId].push(acc);
+    }
+    return map;
+  }, [connectedAccounts]);
+
+  const connectedClientIds = useMemo(
+    () =>
+      Object.keys(accountsByClient).sort((a, b) =>
+        (clientNameById[a] ?? "").localeCompare(clientNameById[b] ?? "")
+      ),
+    [accountsByClient, clientNameById]
+  );
 
   const scheduledItems = useMemo(
     () =>
@@ -355,56 +387,172 @@ export default function PublishQueueBoard({
 
       <SectionCard title="Meta connection">
         <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
+          style={{ display: "flex", flexDirection: "column", gap: 14 }}
         >
-          <span style={{ fontSize: 13, color: "#52525b" }}>
-            Connect a Facebook Page (and the linked Instagram professional
-            account) so approved posts can be published straight from the
-            queue.
-          </span>
-          <select
-            value={connectClientId}
-            onChange={(e) => setConnectClientId(e.target.value)}
-            disabled={clients.length === 0}
+          <div
             style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #e4e4e7",
-              background: "#fff",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#18181b",
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
-            {clients.length === 0 && <option value="">No clients</option>}
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={handleConnectMeta}
-            disabled={!connectClientId}
+            <span style={{ fontSize: 13, color: "#52525b" }}>
+              Connect a Facebook Page (and the linked Instagram professional
+              account) so approved posts can be published straight from the
+              queue.
+            </span>
+            <select
+              value={connectClientId}
+              onChange={(e) => setConnectClientId(e.target.value)}
+              disabled={clients.length === 0}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#18181b",
+              }}
+            >
+              {clients.length === 0 && <option value="">No clients</option>}
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleConnectMeta}
+              disabled={!connectClientId}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: connectClientId ? "#1877f2" : "#e4e4e7",
+                color: connectClientId ? "#fff" : "#a1a1aa",
+                border: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: connectClientId ? "pointer" : "not-allowed",
+              }}
+            >
+              Connect Meta
+            </button>
+          </div>
+
+          <div
             style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              background: connectClientId ? "#1877f2" : "#e4e4e7",
-              color: connectClientId ? "#fff" : "#a1a1aa",
-              border: "none",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: connectClientId ? "pointer" : "not-allowed",
+              borderTop: "1px solid #f4f4f5",
+              paddingTop: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
             }}
           >
-            Connect Meta
-          </button>
+            <div
+              style={{
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                color: "#71717a",
+                fontWeight: 700,
+              }}
+            >
+              Currently connected
+            </div>
+
+            {connectedClientIds.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#71717a" }}>
+                No connected Meta accounts yet. Pick a client above and click
+                Connect Meta.
+              </div>
+            ) : (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                {connectedClientIds.map((cid) => {
+                  const accs = accountsByClient[cid] ?? [];
+                  const fb = accs.filter((a) => a.platform === "facebook");
+                  const ig = accs.filter((a) => a.platform === "instagram");
+                  return (
+                    <div
+                      key={cid}
+                      style={{
+                        border: "1px solid #e4e4e7",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        background: "#fafafa",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 800,
+                          color: "#18181b",
+                        }}
+                      >
+                        {clientNameById[cid] ?? `Client ${cid}`}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                        }}
+                      >
+                        {fb.map((a) => (
+                          <span
+                            key={`fb-${a.accountId}`}
+                            title={`Facebook Page ${a.accountId}`}
+                            style={{
+                              padding: "3px 9px",
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: "#e7f0fe",
+                              border: "1px solid #1877f2",
+                              color: "#1d4ed8",
+                            }}
+                          >
+                            FB · {a.accountName || a.accountId}
+                          </span>
+                        ))}
+                        {ig.map((a) => (
+                          <span
+                            key={`ig-${a.accountId}`}
+                            title={`Instagram ${a.accountId}`}
+                            style={{
+                              padding: "3px 9px",
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: "#fdf2f8",
+                              border: "1px solid #ec4899",
+                              color: "#be185d",
+                            }}
+                          >
+                            IG · @{a.accountName || a.accountId}
+                          </span>
+                        ))}
+                        {fb.length === 0 && ig.length === 0 && (
+                          <span
+                            style={{ fontSize: 12, color: "#71717a" }}
+                          >
+                            No Pages or IG accounts
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </SectionCard>
 
