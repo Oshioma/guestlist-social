@@ -1,48 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-// import fetch from 'node-fetch'; (if not available globally)
+import { launchMetaFullChain, resolvePayload } from "@/lib/meta-payload";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Helper: meta API config—replace with your app’s real values
-const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
-const META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
-const META_GRAPH_API = "https://graph.facebook.com/v19.0";
-
+// Example auth extractor (replace with your real method if needed)
 async function getUser(req: NextRequest) {
   const access_token = req.headers.get("supabase-access-token");
   if (!access_token) return null;
   const { data } = await supabase.auth.getUser(access_token);
   return data?.user || null;
-}
-
-function resolvePayload(template: any, inputs: any) {
-  // Example: Flatten/transform your variables into Meta’s desired payload structure.
-  // This must match your campaign/ad structure for Meta!
-  // Replace this with your real mapping logic.
-  return {
-    name: inputs.campaign_name || template.name,
-    status: "PAUSED", // Always create paused (as per project requirement)
-    objective: template.objective || "LEAD_GENERATION",
-    special_ad_category: "NONE",
-    // ...other mappings as needed from inputs/template
-    // NOTE: You'll need to add logic for ad sets, creatives, etc.
-  };
-}
-
-async function createMetaCampaign(payload: any) {
-  // Call Meta Graph API. Here, we only show the campaign creation step for brevity.
-  const url = `${META_GRAPH_API}/act_${META_AD_ACCOUNT_ID}/campaigns?access_token=${META_ACCESS_TOKEN}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  return { data, ok: res.ok, status: res.status };
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const { template_id, inputs } = await req.json();
 
-  // Fetch the template and variables for validation & resolution
+  // 1. Fetch the template and variables, validate
   const { data: template, error: tplErr } = await supabase
     .from("campaign_templates")
     .select("*, template_variables(*)")
@@ -59,7 +29,7 @@ export async function POST(req: NextRequest) {
     .single();
   if (tplErr || !template) return NextResponse.json({ error: "Template not found." }, { status: 404 });
 
-  // Validate variables (similar as before)
+  // 2. Confirm all needed inputs exist (simple required validation)
   for (const v of template.template_variables || []) {
     if (v.required && !(inputs && inputs[v.key])) {
       return NextResponse.json({ error: `Missing field: ${v.key}` }, { status: 400 });
@@ -74,34 +44,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 1. Resolve payload for Meta
-  const payload = resolvePayload(template, inputs);
-
-  // 2. Create campaign in Meta *paused*
   let metaResult: any = null;
   let metaError: string | null = null;
-  let campaign_id: string | null = null;
-
   try {
-    const resp = await createMetaCampaign(payload);
-    metaResult = resp.data;
-    if (!resp.ok) {
-      metaError = JSON.stringify(metaResult);
-    } else {
-      campaign_id = metaResult.id || null;
-    }
+    metaResult = await launchMetaFullChain(template, inputs);
   } catch (err: any) {
     metaError = err.toString();
   }
 
-  // Insert launch record with status & Meta ID/error
+  // 3. Save launch record in DB
   const launchRecord = {
     template_id,
     client_id: inputs.client_id,
     inputs_json: inputs,
-    resolved_payload_json: payload,
-    meta_campaign_id: campaign_id,
-    status: campaign_id ? "created" : "error",
+    resolved_payload_json: resolvePayload(template, inputs),
+    meta_campaign_id: metaResult?.campaign_id || null,
+    meta_adset_id: metaResult?.adset_id || null,
+    meta_creative_id: metaResult?.creative_id || null,
+    meta_ad_id: metaResult?.ad_id || null,
+    status: metaResult?.ad_id ? "created" : "error",
     error_log: metaError,
     created_by: user.id,
     created_at: new Date().toISOString(),
@@ -112,7 +73,6 @@ export async function POST(req: NextRequest) {
     .insert([launchRecord])
     .select("*")
     .single();
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json(launchData);
