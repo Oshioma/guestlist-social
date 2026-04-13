@@ -1,14 +1,10 @@
 import Link from "next/link";
 
-// You can fetch from your backend here instead!
-const dummyLaunches = [
-  { template_id: '123', created_at: new Date().toISOString(), error_log: 'Sample error' },
-  { template_id: '456', created_at: new Date().toISOString() }
-];
-
 export default function Page() {
-  // Replace dummyLaunches with real data from an API/database if needed!
-  const launches = dummyLaunches;
+  const launches = [
+    { template_id: "123", created_at: new Date().toISOString(), error_log: "Sample error" },
+    { template_id: "456", created_at: new Date().toISOString() }
+  ];
 
   return (
     <ul>
