@@ -187,7 +187,7 @@ export async function getVideoIdeasData(): Promise<{
 
   const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
     id: String(row.id),
-    clientId: String(row.client_id),
+    clientId: row.client_id,
     name: row.name ?? "",
     color: row.color ?? "#18181b",
     description: row.description ?? "",
@@ -337,7 +337,7 @@ export async function getCarouselIdeasData(): Promise<{
 
   const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
     id: String(row.id),
-    clientId: String(row.client_id),
+    clientId: row.client_id,
     name: row.name ?? "",
     color: row.color ?? "#18181b",
     description: row.description ?? "",
@@ -422,7 +422,7 @@ export async function getStoryIdeasData(): Promise<{
 
   const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
     id: String(row.id),
-    clientId: String(row.client_id),
+    clientId: row.client_id,
     name: row.name ?? "",
     color: row.color ?? "#18181b",
     description: row.description ?? "",
