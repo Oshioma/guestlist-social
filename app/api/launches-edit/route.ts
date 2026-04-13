@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies, headers } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
 // This API endpoint expects a POST JSON body: { template_id: string, error_log: string | null }
 export async function POST(req: Request) {
   const { template_id, error_log } = await req.json();
 
-  const supabase = createServerComponentClient();
+  // Use new Supabase SSR client with request context
+  const supabase = createServerClient({ cookies, headers });
 
   const { error } = await supabase
     .from("launches")
