@@ -1089,7 +1089,7 @@ export default function ProoferBoard({
                       </select>
                     </div>
 
-                    {initialPillars.length > 0 && (() => {
+                    {(() => {
                       const selectedPillar = draft.pillarId
                         ? pillarsById.get(draft.pillarId) ?? null
                         : null;
@@ -1580,6 +1580,58 @@ export default function ProoferBoard({
                             } · drag order with ◀ ▶`}
                           </span>
                         )}
+                        <div
+                          style={{
+                            marginLeft: "auto",
+                            display: "flex",
+                            gap: 6,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSave(dateKey, activePlatform)
+                            }
+                            disabled={isPending || !hasDraft || isLocked}
+                            style={{
+                              padding: "8px 14px",
+                              borderRadius: 8,
+                              background:
+                                hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
+                              color:
+                                hasDraft && !isLocked ? "#fff" : "#a1a1aa",
+                              border: "none",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor:
+                                hasDraft && !isLocked
+                                  ? "pointer"
+                                  : "not-allowed",
+                            }}
+                          >
+                            Save
+                          </button>
+                          {(post || hasDraft) && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(dateKey, activePlatform)
+                              }
+                              disabled={isPending || isLocked}
+                              style={{
+                                ...secondaryButtonStyle,
+                                color: "#991b1b",
+                                opacity: isLocked ? 0.6 : 1,
+                                cursor:
+                                  isPending || isLocked
+                                    ? "not-allowed"
+                                    : "pointer",
+                              }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1758,58 +1810,8 @@ export default function ProoferBoard({
 
                   <div
                     style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleSave(dateKey, activePlatform)}
-                        disabled={isPending || !hasDraft || isLocked}
-                        style={{
-                          padding: "8px 14px",
-                          borderRadius: 8,
-                          background:
-                            hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
-                          color: hasDraft && !isLocked ? "#fff" : "#a1a1aa",
-                          border: "none",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor:
-                            hasDraft && !isLocked ? "pointer" : "not-allowed",
-                        }}
-                      >
-                        Save
-                      </button>
-
-                      {(post || hasDraft) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(dateKey, activePlatform)}
-                          disabled={isPending || isLocked}
-                          style={{
-                            ...secondaryButtonStyle,
-                            color: "#991b1b",
-                            opacity: isLocked ? 0.6 : 1,
-                            cursor:
-                              isPending || isLocked ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 2,
                       borderTop: "1px solid #f4f4f5",
-                      paddingTop: 12,
+                      paddingTop: 8,
                       display: "flex",
                       flexDirection: "column",
                       gap: 10,
