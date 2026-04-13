@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
+import { metaAuthorizeUrl } from "../../../admin-panel/lib/meta-auth";
+
+// GET /api/meta/connect?clientId=<id>
+//
+// Step 1 of the Meta OAuth flow. Generates a signed state cookie containing
+// the client id + random nonce, then redirects the user to Meta's OAuth
+// dialog. The callback route verifies the cookie before exchanging the
+// code, so we can't be tricked into storing tokens against the wrong client.
+//
+// All Meta credentials come from META_SOCIAL_APP_ID / META_SOCIAL_APP_SECRET
+// / META_SOCIAL_OAUTH_REDIRECT_URI — a dedicated app separate from the
+// marketing/ads app that uses META_APP_ID in this same codebase. Do not
+// swap back to META_APP_ID or the callback will try to exchange the code
+// against a different app's secret and fail.
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -25,44 +39,20 @@ export async function GET(req: Request) {
     maxAge: 600,
   });
 
-  // 🔥 DEFINE THIS CLEARLY
-  const redirectUri =
-    process.env.NODE_ENV === "production"
-      ? "https://www.guestlistsocial.com/api/meta/callback"
-      : "http://localhost:3000/api/meta/callback";
-
-  const appId = process.env.META_APP_ID;
-
-  if (!appId) {
-    return NextResponse.json(
-      { error: "Missing META_APP_ID" },
-      { status: 500 }
+  try {
+    const authorizeUrl = metaAuthorizeUrl(state);
+    // Dump the exact URL we're sending the user to so it's visible in
+    // Vercel Runtime Logs when diagnosing OAuth errors ("Feature
+    // Unavailable", "Invalid App ID", "URL Blocked", etc.). Nothing in
+    // this URL is sensitive — client_id, redirect_uri and scopes are
+    // all plaintext query params that Meta receives anyway.
+    console.log(
+      `[meta/connect] clientId=${clientId} redirectUri=${process.env.META_SOCIAL_OAUTH_REDIRECT_URI} appId=${process.env.META_SOCIAL_APP_ID} url=${authorizeUrl}`
     );
+    return NextResponse.redirect(authorizeUrl);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[meta/connect] config error: ${message}`);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const scopes = [
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_manage_posts",
-    "instagram_basic",
-    "instagram_content_publish",
-  ].join(",");
-
-  const authorizeUrl =
-    `https://www.facebook.com/v19.0/dialog/oauth` +
-    `?client_id=${appId}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&state=${state}` +
-    `&scope=${scopes}`;
-
-  // Dump the exact URL we're sending the user to so it's visible in
-  // Vercel Runtime Logs when diagnosing OAuth errors ("Feature
-  // Unavailable", "Invalid App ID", "URL Blocked", etc.). Nothing in
-  // this URL is sensitive — client_id, redirect_uri and scopes are all
-  // plaintext query params that Meta receives anyway.
-  console.log(
-    `[meta/connect] clientId=${clientId} redirectUri=${redirectUri} appId=${appId} url=${authorizeUrl}`
-  );
-
-  return NextResponse.redirect(authorizeUrl);
 }
