@@ -27,11 +27,11 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // ✅ Include url and key as arguments
+  // ✅ FIXED: Call cookies() and headers()!
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies, headers }
+    { cookies: cookies(), headers: headers() }
   );
 
   let query = supabase
