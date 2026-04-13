@@ -9,7 +9,6 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   if (error) return <div>Error loading launches: {error.message}</div>;
-
   if (!launches?.length) return <div>No launches found.</div>;
 
   return (
@@ -22,10 +21,7 @@ export default async function Page() {
           <span>
             &nbsp;on {new Date(launch.created_at).toLocaleString()}
           </span>
-          <Link
-            className="ml-2"
-            href={`/admin-panel/campaigns/launch/${launch.template_id}`}
-          >
+          <Link className="ml-2" href={`/admin-panel/campaigns/launch/${launch.template_id}`}>
             Relaunch
           </Link>
         </li>
