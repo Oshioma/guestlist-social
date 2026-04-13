@@ -100,7 +100,6 @@ export async function addStoryIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!clientId || !idea.trim()) {
@@ -116,7 +115,6 @@ export async function addStoryIdeaAction(
     client_id: clientId,
     theme_id: themeId || null,
     pillar_id: pillarId || null,
-    title: title.trim(),
     idea: idea.trim(),
     notes: notes.trim(),
     category: category || "general",
@@ -140,7 +138,6 @@ export async function updateStoryIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!id || !idea.trim()) {
@@ -152,7 +149,6 @@ export async function updateStoryIdeaAction(
   const { error } = await supabase
     .from("story_ideas")
     .update({
-      title: title.trim(),
       idea: idea.trim(),
       notes: notes.trim(),
       category: category || "general",

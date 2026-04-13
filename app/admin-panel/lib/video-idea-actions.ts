@@ -101,7 +101,6 @@ export async function addVideoIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!clientId || !idea.trim()) {
@@ -117,7 +116,6 @@ export async function addVideoIdeaAction(
     client_id: clientId,
     theme_id: themeId || null,
     pillar_id: pillarId || null,
-    title: title.trim(),
     idea: idea.trim(),
     notes: notes.trim(),
     category: category || "general",
@@ -141,7 +139,6 @@ export async function updateVideoIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!id || !idea.trim()) {
@@ -153,7 +150,6 @@ export async function updateVideoIdeaAction(
   const { error } = await supabase
     .from("video_ideas")
     .update({
-      title: title.trim(),
       idea: idea.trim(),
       notes: notes.trim(),
       category: category || "general",

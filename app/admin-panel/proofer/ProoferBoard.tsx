@@ -226,8 +226,9 @@ export default function ProoferBoard({
   const [openIdeaPickerKey, setOpenIdeaPickerKey] = useState<string | null>(
     null
   );
-  type IdeaDraft = { title: string; idea: string; notes: string };
+  type IdeaDraft = { idea: string; notes: string };
   const [ideaDrafts, setIdeaDrafts] = useState<Record<string, IdeaDraft>>({});
+  const [expandedNoteKeys, setExpandedNoteKeys] = useState<Record<string, boolean>>({});
   const [pillarModal, setPillarModal] = useState<
     | {
         postKey: string;
@@ -238,7 +239,6 @@ export default function ProoferBoard({
     | null
   >(null);
   type LinkedIdeaEditDraft = {
-    title: string;
     idea: string;
     notes: string;
     pillarId: string | null;
@@ -501,7 +501,7 @@ export default function ProoferBoard({
   }
 
   function getIdeaDraft(key: string): IdeaDraft {
-    return ideaDrafts[key] ?? { title: "", idea: "", notes: "" };
+    return ideaDrafts[key] ?? { idea: "", notes: "" };
   }
 
   function updateIdeaDraft(key: string, patch: Partial<IdeaDraft>) {
@@ -533,7 +533,6 @@ export default function ProoferBoard({
           clientId,
           kind,
           pillarId,
-          draft.title,
           draft.idea,
           draft.notes
         );
@@ -586,7 +585,6 @@ export default function ProoferBoard({
         await updateIdeaFromProoferAction(
           id,
           kind,
-          draft.title,
           draft.idea,
           draft.notes,
           draft.pillarId
@@ -1789,22 +1787,6 @@ export default function ProoferBoard({
                               Edit idea
                             </div>
                             <input
-                              value={d.title}
-                              onChange={(e) =>
-                                setEditingLinkedIdea({
-                                  ...editingLinkedIdea,
-                                  draft: { ...d, title: e.target.value },
-                                })
-                              }
-                              placeholder="Title (optional)"
-                              style={{
-                                ...inputStyle,
-                                padding: "6px 8px",
-                                fontSize: 12,
-                                fontWeight: 600,
-                              }}
-                            />
-                            <input
                               value={d.idea}
                               onChange={(e) =>
                                 setEditingLinkedIdea({
@@ -1828,7 +1810,7 @@ export default function ProoferBoard({
                                 })
                               }
                               placeholder="Notes (optional)"
-                              rows={2}
+                              rows={4}
                               style={{
                                 ...inputStyle,
                                 padding: "6px 8px",
@@ -1906,6 +1888,9 @@ export default function ProoferBoard({
                         );
                       }
 
+                      const notesKey = `${linkedIdea.kind}:${linkedIdea.id}`;
+                      const isExpanded = Boolean(expandedNoteKeys[notesKey]);
+                      const hasNotes = Boolean(linkedIdea.notes.trim());
                       return (
                         <div
                           style={{
@@ -1915,7 +1900,7 @@ export default function ProoferBoard({
                             borderRadius: 8,
                             display: "flex",
                             flexDirection: "column",
-                            gap: 4,
+                            gap: 6,
                           }}
                         >
                           <div
@@ -1928,47 +1913,14 @@ export default function ProoferBoard({
                           >
                             <div
                               style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 4,
-                                flex: 1,
-                                minWidth: 0,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: "#71717a",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
                               }}
                             >
-                              {linkedIdea.title && (
-                                <span
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    color: "#18181b",
-                                  }}
-                                >
-                                  {linkedIdea.title}
-                                </span>
-                              )}
-                              {linkedIdea.notes && (
-                                <span
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#52525b",
-                                    whiteSpace: "pre-wrap",
-                                    lineHeight: 1.5,
-                                  }}
-                                >
-                                  {linkedIdea.notes}
-                                </span>
-                              )}
-                              {!linkedIdea.title && !linkedIdea.notes && (
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: "#a1a1aa",
-                                    fontStyle: "italic",
-                                  }}
-                                >
-                                  No title or notes yet.
-                                </span>
-                              )}
+                              Idea notes
                             </div>
                             <button
                               type="button"
@@ -1978,7 +1930,6 @@ export default function ProoferBoard({
                                   id: linkedIdea.id,
                                   kind: linkedIdea.kind,
                                   draft: {
-                                    title: linkedIdea.title,
                                     idea: linkedIdea.text,
                                     notes: linkedIdea.notes,
                                     pillarId: linkedIdea.pillarId,
@@ -2001,6 +1952,40 @@ export default function ProoferBoard({
                               Edit idea
                             </button>
                           </div>
+                          {hasNotes ? (
+                            <div
+                              onClick={() =>
+                                setExpandedNoteKeys((prev) => ({
+                                  ...prev,
+                                  [notesKey]: !isExpanded,
+                                }))
+                              }
+                              title={isExpanded ? "Click to collapse" : "Click to expand"}
+                              style={{
+                                fontSize: 12,
+                                color: "#52525b",
+                                whiteSpace: "pre-wrap",
+                                lineHeight: 1.5,
+                                cursor: "pointer",
+                                display: "-webkit-box",
+                                WebkitBoxOrient: "vertical",
+                                WebkitLineClamp: isExpanded ? "unset" : 3,
+                                overflow: "hidden",
+                              }}
+                            >
+                              {linkedIdea.notes}
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "#a1a1aa",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              No notes yet. Click "Edit idea" to add some.
+                            </div>
+                          )}
                         </div>
                       );
                     }
@@ -2031,20 +2016,6 @@ export default function ProoferBoard({
                           Add idea
                         </div>
                         <input
-                          value={ideaDraft.title}
-                          onChange={(e) =>
-                            updateIdeaDraft(key, { title: e.target.value })
-                          }
-                          placeholder="Title (optional)"
-                          disabled={isLocked}
-                          style={{
-                            ...inputStyle,
-                            padding: "6px 8px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
-                        />
-                        <input
                           value={ideaDraft.idea}
                           onChange={(e) =>
                             updateIdeaDraft(key, { idea: e.target.value })
@@ -2063,7 +2034,7 @@ export default function ProoferBoard({
                             updateIdeaDraft(key, { notes: e.target.value })
                           }
                           placeholder="Notes (optional)"
-                          rows={2}
+                          rows={4}
                           disabled={isLocked}
                           style={{
                             ...inputStyle,
@@ -2864,7 +2835,6 @@ export default function ProoferBoard({
                 <button
                   key={pillar.id}
                   type="button"
-                  disabled={isPending}
                   onClick={() => handleCreateIdea(pillar.id)}
                   style={{
                     display: "flex",
@@ -2874,7 +2844,7 @@ export default function ProoferBoard({
                     border: "1px solid #e4e4e7",
                     borderRadius: 8,
                     background: "#fff",
-                    cursor: isPending ? "not-allowed" : "pointer",
+                    cursor: "pointer",
                     textAlign: "left",
                     fontSize: 13,
                     fontWeight: 600,
@@ -2913,7 +2883,6 @@ export default function ProoferBoard({
               </button>
               <button
                 type="button"
-                disabled={isPending}
                 onClick={() => handleCreateIdea(null)}
                 style={{
                   padding: "8px 14px",
@@ -2923,7 +2892,7 @@ export default function ProoferBoard({
                   color: "#3f3f46",
                   fontSize: 12,
                   fontWeight: 700,
-                  cursor: isPending ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                 }}
               >
                 Save without pillar

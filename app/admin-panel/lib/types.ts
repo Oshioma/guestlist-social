@@ -106,7 +106,6 @@ export type VideoIdea = {
   clientId: string;
   themeId: string | null;
   pillarId: string | null;
-  title: string;
   idea: string;
   notes: string;
   category: string;
@@ -132,7 +131,6 @@ export type CarouselIdea = {
   clientId: string;
   themeId: string | null;
   pillarId: string | null;
-  title: string;
   idea: string;
   notes: string;
   category: string;
@@ -160,7 +158,6 @@ export type StoryIdea = {
   clientId: string;
   themeId: string | null;
   pillarId: string | null;
-  title: string;
   idea: string;
   notes: string;
   category: string;

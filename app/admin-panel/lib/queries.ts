@@ -176,7 +176,6 @@ export async function getVideoIdeasData(): Promise<{
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
     pillarId: row.pillar_id ? String(row.pillar_id) : null,
-    title: row.title ?? "",
     idea: row.idea ?? "",
     notes: row.notes ?? "",
     category: row.category ?? "general",
@@ -324,7 +323,6 @@ export async function getCarouselIdeasData(): Promise<{
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
     pillarId: row.pillar_id ? String(row.pillar_id) : null,
-    title: row.title ?? "",
     idea: row.idea ?? "",
     notes: row.notes ?? "",
     category: row.category ?? "general",
@@ -415,7 +413,6 @@ export async function getStoryIdeasData(): Promise<{
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
     pillarId: row.pillar_id ? String(row.pillar_id) : null,
-    title: row.title ?? "",
     idea: row.idea ?? "",
     notes: row.notes ?? "",
     category: row.category ?? "general",
@@ -446,7 +443,6 @@ export type ProoferIdeaLite = {
   id: string;
   kind: "video" | "carousel" | "story";
   pillarId: string | null;
-  title: string;
   text: string;
   notes: string;
   category: string;
@@ -506,21 +502,21 @@ export async function getProoferData(
       supabase
         .from("video_ideas")
         .select(
-          "id, pillar_id, title, idea, notes, category, month, used_in_post_id"
+          "id, pillar_id, idea, notes, category, month, used_in_post_id"
         )
         .eq("client_id", clientId)
         .order("created_at", { ascending: false }),
       supabase
         .from("carousel_ideas")
         .select(
-          "id, pillar_id, title, idea, notes, category, month, used_in_post_id"
+          "id, pillar_id, idea, notes, category, month, used_in_post_id"
         )
         .eq("client_id", clientId)
         .order("created_at", { ascending: false }),
       supabase
         .from("story_ideas")
         .select(
-          "id, pillar_id, title, idea, notes, category, month, used_in_post_id"
+          "id, pillar_id, idea, notes, category, month, used_in_post_id"
         )
         .eq("client_id", clientId)
         .order("created_at", { ascending: false }),
@@ -544,7 +540,6 @@ export async function getProoferData(
       id: String(row.id),
       kind: "video" as const,
       pillarId: row.pillar_id ? String(row.pillar_id) : null,
-      title: row.title ?? "",
       text: row.idea ?? "",
       notes: row.notes ?? "",
       category: row.category ?? "general",
@@ -555,7 +550,6 @@ export async function getProoferData(
       id: String(row.id),
       kind: "carousel" as const,
       pillarId: row.pillar_id ? String(row.pillar_id) : null,
-      title: row.title ?? "",
       text: row.idea ?? "",
       notes: row.notes ?? "",
       category: row.category ?? "general",
@@ -566,7 +560,6 @@ export async function getProoferData(
       id: String(row.id),
       kind: "story" as const,
       pillarId: row.pillar_id ? String(row.pillar_id) : null,
-      title: row.title ?? "",
       text: row.idea ?? "",
       notes: row.notes ?? "",
       category: row.category ?? "general",

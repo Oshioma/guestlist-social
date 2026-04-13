@@ -210,7 +210,6 @@ export async function createIdeaFromProoferAction(
   clientId: string,
   kindRaw: string,
   pillarId: string | null,
-  title: string,
   idea: string,
   notes: string,
   category: string = "general",
@@ -239,7 +238,6 @@ export async function createIdeaFromProoferAction(
     .insert({
       client_id: clientId,
       pillar_id: pillarId || null,
-      title: title.trim(),
       idea: cleanIdea,
       notes: notes.trim(),
       category: category || "general",
@@ -262,7 +260,6 @@ export async function createIdeaFromProoferAction(
 export async function updateIdeaFromProoferAction(
   id: string,
   kindRaw: string,
-  title: string,
   idea: string,
   notes: string,
   pillarId: string | null
@@ -286,7 +283,6 @@ export async function updateIdeaFromProoferAction(
   const { error } = await supabase
     .from(table)
     .update({
-      title: title.trim(),
       idea: cleanIdea,
       notes: notes.trim(),
       pillar_id: pillarId || null,

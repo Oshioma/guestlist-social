@@ -100,7 +100,6 @@ export async function addCarouselIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!clientId || !idea.trim()) {
@@ -116,7 +115,6 @@ export async function addCarouselIdeaAction(
     client_id: clientId,
     theme_id: themeId || null,
     pillar_id: pillarId || null,
-    title: title.trim(),
     idea: idea.trim(),
     notes: notes.trim(),
     category: category || "general",
@@ -141,7 +139,6 @@ export async function updateCarouselIdeaAction(
   category: string,
   month: string = "",
   pillarId: string | null = null,
-  title: string = "",
   notes: string = ""
 ) {
   if (!id || !idea.trim()) {
@@ -153,7 +150,6 @@ export async function updateCarouselIdeaAction(
   const { error } = await supabase
     .from("carousel_ideas")
     .update({
-      title: title.trim(),
       idea: idea.trim(),
       notes: notes.trim(),
       category: category || "general",

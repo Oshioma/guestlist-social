@@ -578,7 +578,6 @@ function IdeaRow({
   const [showCaptions, setShowCaptions] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
   const [linkValue, setLinkValue] = useState(idea.designLink);
-  const [editTitle, setEditTitle] = useState(idea.title);
   const [editText, setEditText] = useState(idea.idea);
   const [editNotes, setEditNotes] = useState(idea.notes);
   const [editCategory, setEditCategory] = useState(idea.category);
@@ -610,7 +609,6 @@ function IdeaRow({
         editCategory,
         editMonth,
         editPillarId,
-        editTitle,
         editNotes
       );
       setIsEditing(false);
@@ -625,7 +623,6 @@ function IdeaRow({
 
   if (isEditing) {
     const reset = () => {
-      setEditTitle(idea.title);
       setEditText(idea.idea);
       setEditNotes(idea.notes);
       setEditCategory(idea.category);
@@ -668,28 +665,22 @@ function IdeaRow({
             ))}
           </select>
           <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            placeholder="Title (optional)"
-            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontWeight: 600 }}
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            placeholder="Idea"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") reset();
+            }}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
           />
         </div>
-        <input
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          placeholder="Idea"
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") reset();
-          }}
-          style={{ ...inputStyle, padding: "6px 10px" }}
-        />
         <textarea
           value={editNotes}
           onChange={(e) => setEditNotes(e.target.value)}
           placeholder="Notes (optional)"
-          rows={2}
+          rows={3}
           style={{ ...inputStyle, padding: "6px 10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
         />
         <div style={{ display: "flex", gap: 8 }}>
@@ -787,9 +778,6 @@ function IdeaRow({
             minWidth: 0,
           }}
         >
-          {idea.title && (
-            <span style={{ fontWeight: 700, fontSize: 13 }}>{idea.title}</span>
-          )}
           <span>{idea.idea}</span>
           {idea.notes && (
             <span style={{ fontSize: 12, color: "#71717a", whiteSpace: "pre-wrap" }}>
@@ -991,7 +979,6 @@ function AddIdeaForm({
   themeId: string | null;
   pillars: ContentPillar[];
 }) {
-  const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [notes, setNotes] = useState("");
   const [category, setCategory] = useState("carousel");
@@ -1010,10 +997,8 @@ function AddIdeaForm({
         category,
         month,
         pillarId,
-        title,
         notes
       );
-      setTitle("");
       setText("");
       setNotes("");
     });
@@ -1057,17 +1042,9 @@ function AddIdeaForm({
           ))}
         </select>
         <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title (optional)"
-          style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
-        />
-      </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Idea..."
+          placeholder="Add an idea..."
           style={{ ...inputStyle, flex: 1 }}
         />
         <button
@@ -1086,7 +1063,7 @@ function AddIdeaForm({
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes (optional)"
-        rows={2}
+        rows={3}
         style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
       />
     </form>

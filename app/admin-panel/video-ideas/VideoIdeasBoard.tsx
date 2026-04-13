@@ -576,7 +576,6 @@ function IdeaRow({
   const [isEditing, setIsEditing] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
   const [linkValue, setLinkValue] = useState(idea.designLink);
-  const [editTitle, setEditTitle] = useState(idea.title);
   const [editText, setEditText] = useState(idea.idea);
   const [editNotes, setEditNotes] = useState(idea.notes);
   const [editCategory, setEditCategory] = useState(idea.category);
@@ -607,7 +606,6 @@ function IdeaRow({
         editCategory,
         editMonth,
         editPillarId,
-        editTitle,
         editNotes
       );
       setIsEditing(false);
@@ -656,35 +654,29 @@ function IdeaRow({
             ))}
           </select>
           <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            placeholder="Title (optional)"
-            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontWeight: 600 }}
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            placeholder="Idea"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") { setEditText(idea.idea); setEditNotes(idea.notes); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }
+            }}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
           />
         </div>
-        <input
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          placeholder="Idea"
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") { setEditTitle(idea.title); setEditText(idea.idea); setEditNotes(idea.notes); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }
-          }}
-          style={{ ...inputStyle, padding: "6px 10px" }}
-        />
         <textarea
           value={editNotes}
           onChange={(e) => setEditNotes(e.target.value)}
           placeholder="Notes (optional)"
-          rows={2}
+          rows={3}
           style={{ ...inputStyle, padding: "6px 10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
         />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
             {isPending ? "..." : "Save"}
           </button>
-          <button onClick={() => { setEditTitle(idea.title); setEditText(idea.idea); setEditNotes(idea.notes); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+          <button onClick={() => { setEditText(idea.idea); setEditNotes(idea.notes); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
             Cancel
           </button>
         </div>
@@ -778,9 +770,6 @@ function IdeaRow({
           minWidth: 0,
         }}
       >
-        {idea.title && (
-          <span style={{ fontWeight: 700, fontSize: 13 }}>{idea.title}</span>
-        )}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           {idea.idea}
           {idea.designLink && (
@@ -872,7 +861,6 @@ function AddIdeaForm({
   themeId: string | null;
   pillars: ContentPillar[];
 }) {
-  const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [notes, setNotes] = useState("");
   const [category, setCategory] = useState("reel");
@@ -891,10 +879,8 @@ function AddIdeaForm({
         category,
         month,
         pillarId,
-        title,
         notes
       );
-      setTitle("");
       setText("");
       setNotes("");
     });
@@ -938,17 +924,9 @@ function AddIdeaForm({
           ))}
         </select>
         <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title (optional)"
-          style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
-        />
-      </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Idea..."
+          placeholder="Add an idea..."
           style={{ ...inputStyle, flex: 1 }}
         />
         <button
@@ -967,7 +945,7 @@ function AddIdeaForm({
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes (optional)"
-        rows={2}
+        rows={3}
         style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
       />
     </form>
