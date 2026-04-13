@@ -1316,65 +1316,68 @@ export default function ProoferBoard({
                         flexDirection: "column",
                         gap: 6,
                         justifyContent: "center",
-                        paddingRight: 2,
+                        alignItems: "center",
+                        padding: "0 8px",
                       }}
                     >
-                      {STATUS_BUTTONS.map((btn) => {
-                        const active = effectiveStatus === btn.value;
-                        const disableThisButton =
-                          isPending ||
-                          (isLocked && btn.value !== "approved");
+                      {["proofed", "check", "improve", "approved"].map(
+                        (statusValue) => {
+                          const btn = STATUS_BUTTONS.find(
+                            (b) => b.value === statusValue
+                          )!;
+                          const active = effectiveStatus === btn.value;
+                          const disableThisButton =
+                            isPending ||
+                            (isLocked && btn.value !== "approved");
 
-                        return (
-                          <button
-                            key={btn.value}
-                            type="button"
-                            title={btn.label}
-                            aria-label={btn.label}
-                            onClick={() =>
-                              handleStatus(
-                                dateKey,
-                                activePlatform,
-                                btn.value
-                              )
-                            }
-                            disabled={disableThisButton}
-                            style={{
-                              width: 16,
-                              height: 16,
-                              padding: 0,
-                              borderRadius: "50%",
-                              border: active
-                                ? `2px solid ${btn.color}`
-                                : "1px solid #e4e4e7",
-                              background: btn.dot,
-                              cursor: disableThisButton
-                                ? "not-allowed"
-                                : "pointer",
-                              boxShadow: active
-                                ? `0 0 0 2px ${btn.bg}`
-                                : "none",
-                              opacity: disableThisButton
-                                ? 0.4
-                                : active
-                                ? 1
-                                : 0.55,
-                              transition:
-                                "opacity 120ms ease, transform 120ms ease",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!disableThisButton && !active) {
-                                e.currentTarget.style.opacity = "1";
+                          return (
+                            <button
+                              key={btn.value}
+                              type="button"
+                              title={btn.label}
+                              aria-label={btn.label}
+                              onClick={() =>
+                                handleStatus(
+                                  dateKey,
+                                  activePlatform,
+                                  btn.value
+                                )
                               }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!disableThisButton && !active) {
-                                e.currentTarget.style.opacity = "0.55";
-                              }
-                            }}
-                          />
-                        );
-                      })}
+                              disabled={disableThisButton}
+                              style={{
+                                width: 16,
+                                height: 16,
+                                padding: 0,
+                                borderRadius: "50%",
+                                border: "1px solid #e4e4e7",
+                                background: btn.dot,
+                                cursor: disableThisButton
+                                  ? "not-allowed"
+                                  : "pointer",
+                                boxShadow: "none",
+                                opacity: disableThisButton
+                                  ? 0.35
+                                  : active
+                                  ? 1
+                                  : 0.35,
+                                transform: active ? "scale(1.15)" : "scale(1)",
+                                transition:
+                                  "opacity 120ms ease, transform 120ms ease",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!disableThisButton && !active) {
+                                  e.currentTarget.style.opacity = "0.75";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!disableThisButton && !active) {
+                                  e.currentTarget.style.opacity = "0.35";
+                                }
+                              }}
+                            />
+                          );
+                        }
+                      )}
                     </div>
                   </div>
 
