@@ -27,6 +27,7 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
+  // Correct usage for Supabase SSR with Next.js
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -85,5 +86,69 @@ export default async function Page({
             type="text"
             name="search"
             placeholder="Search Template ID"
-            defaultValue
+            defaultValue={search}
+            className="border text-sm rounded px-2 py-1"
+          />
+          <input type="hidden" name="filter" value={filter} />
+          <button
+            type="submit"
+            className="ml-2 bg-gray-700 text-white px-3 py-1 rounded text-xs"
+          >
+            Search
+          </button>
+        </form>
+      </div>
+
+      {error && (
+        <div className="bg-red-100 text-red-700 px-3 py-2 rounded mb-4">
+          Error: {error.message}
+        </div>
+      )}
+
+      <div className="mb-3 text-sm text-gray-500">
+        {`Showing ${fromIdx}–${toIdx} of ${count || 0} launches`}
+      </div>
+      <ul className="space-y-3">
+        {launches && launches.length > 0 ? (
+          launches.map((launch: Launch) => (
+            <li
+              key={launch.template_id}
+              className="p-4 bg-gray-50 border rounded flex flex-col sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex-1 space-x-2">
+                <ErrorEditor
+                  initial={launch.error_log}
+                  template_id={launch.template_id}
+                />
+                <span className="text-xs text-gray-400 ml-2">
+                  on {new Date(launch.created_at).toLocaleString()}
+                </span>
+              </div>
+              <Link
+                className="mt-2 sm:mt-0 sm:ml-4 bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700 text-sm"
+                href={`/admin-panel/campaigns/launch/${launch.template_id}`}
+              >
+                Relaunch
+              </Link>
+            </li>
+          ))
+        ) : (
+          <li className="text-gray-500 text-center py-6">No launches found.</li>
+        )}
+      </ul>
+
+      {totalPages > 1 && (
+        <nav className="mt-7 flex gap-1 justify-center flex-wrap text-sm">
+          <Link
+            href={queryStr({ page: Math.max(1, page - 1) })}
+            aria-disabled={page === 1}
+            className={`px-3 py-2 rounded ${
+              page === 1
+                ? "bg-gray-100 text-gray-400 pointer-events-none"
+                : "bg-gray-200 text-black hover:bg-gray-300"
+            }`}
+          >
+            Prev
+          </Link>
+          {Array.from({ length: total
 
