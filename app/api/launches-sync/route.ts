@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies, headers } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-// UPDATE THIS path for your actual utility:
 import { getRemoteLaunches } from "@/lib/getRemoteLaunches";
 
 export async function POST() {
-  const supabase = createServerComponentClient();
+  // Initialize Supabase SSR client with request context
+  const supabase = createServerClient({ cookies, headers });
   const remoteLaunches = await getRemoteLaunches();
 
   // Clean input, take only needed fields
