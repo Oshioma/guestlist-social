@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CarouselIdeasPage() {
   try {
-    const { clients, themes, ideas } = await getCarouselIdeasData();
+    const { clients, themes, ideas, pillars } = await getCarouselIdeasData();
 
     const clientsWithContent = new Set([
       ...themes.map((t) => t.clientId),
@@ -54,7 +54,12 @@ export default async function CarouselIdeasPage() {
           />
         </div>
 
-        <CarouselIdeasBoard clients={clients} themes={themes} ideas={ideas} />
+        <CarouselIdeasBoard
+          clients={clients}
+          themes={themes}
+          ideas={ideas}
+          pillars={pillars}
+        />
       </div>
     );
   } catch (error) {

@@ -48,6 +48,7 @@ export default async function ProoferPage({
         initialMonth={selectedMonth}
         initialPosts={data.posts}
         initialPillars={data.pillars}
+        initialIdeas={data.ideas}
       />
     );
   } catch (err) {

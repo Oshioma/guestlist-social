@@ -120,10 +120,11 @@ export async function getVideoIdeasData(): Promise<{
   clients: { id: string; name: string }[];
   themes: ContentTheme[];
   ideas: VideoIdea[];
+  pillars: ContentPillar[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, themesRes, ideasRes] = await Promise.all([
+  const [clientsRes, themesRes, ideasRes, pillarsRes] = await Promise.all([
     supabase
       .from("clients")
       .select("id, name, status")
@@ -137,6 +138,11 @@ export async function getVideoIdeasData(): Promise<{
       .from("video_ideas")
       .select("*")
       .order("created_at", { ascending: false }),
+    supabase
+      .from("content_pillars")
+      .select("*")
+      .eq("archived", false)
+      .order("sort_order", { ascending: true }),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
@@ -144,6 +150,9 @@ export async function getVideoIdeasData(): Promise<{
     throw new Error(`content_themes: ${themesRes.error.message}`);
   }
   if (ideasRes.error) throw new Error(`video_ideas: ${ideasRes.error.message}`);
+  if (pillarsRes.error) {
+    throw new Error(`content_pillars: ${pillarsRes.error.message}`);
+  }
 
   const clients = (clientsRes.data ?? [])
     .filter((row) => row.status !== "needs_attention")
@@ -166,15 +175,30 @@ export async function getVideoIdeasData(): Promise<{
     id: row.id,
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
+    pillarId: row.pillar_id ? String(row.pillar_id) : null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
     designLink: row.design_link ?? "",
+    usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 
-  return { clients, themes, ideas };
+  const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    name: row.name ?? "",
+    color: row.color ?? "#18181b",
+    description: row.description ?? "",
+    sortOrder: row.sort_order ?? 0,
+    archived: Boolean(row.archived),
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  return { clients, themes, ideas, pillars };
 }
 
 export async function getTasksData(): Promise<{
@@ -240,10 +264,11 @@ export async function getCarouselIdeasData(): Promise<{
   clients: { id: string; name: string }[];
   themes: CarouselTheme[];
   ideas: CarouselIdea[];
+  pillars: ContentPillar[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, themesRes, ideasRes] = await Promise.all([
+  const [clientsRes, themesRes, ideasRes, pillarsRes] = await Promise.all([
     supabase
       .from("clients")
       .select("id, name, status")
@@ -257,6 +282,11 @@ export async function getCarouselIdeasData(): Promise<{
       .from("carousel_ideas")
       .select("*")
       .order("created_at", { ascending: false }),
+    supabase
+      .from("content_pillars")
+      .select("*")
+      .eq("archived", false)
+      .order("sort_order", { ascending: true }),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
@@ -265,6 +295,9 @@ export async function getCarouselIdeasData(): Promise<{
   }
   if (ideasRes.error) {
     throw new Error(`carousel_ideas: ${ideasRes.error.message}`);
+  }
+  if (pillarsRes.error) {
+    throw new Error(`content_pillars: ${pillarsRes.error.message}`);
   }
 
   const clients = (clientsRes.data ?? [])
@@ -288,6 +321,7 @@ export async function getCarouselIdeasData(): Promise<{
     id: row.id,
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
+    pillarId: row.pillar_id ? String(row.pillar_id) : null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
@@ -296,21 +330,36 @@ export async function getCarouselIdeasData(): Promise<{
       ? row.caption_images
       : [],
     designLink: row.design_link ?? "",
+    usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 
-  return { clients, themes, ideas };
+  const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    name: row.name ?? "",
+    color: row.color ?? "#18181b",
+    description: row.description ?? "",
+    sortOrder: row.sort_order ?? 0,
+    archived: Boolean(row.archived),
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  return { clients, themes, ideas, pillars };
 }
 
 export async function getStoryIdeasData(): Promise<{
   clients: { id: string; name: string }[];
   themes: StoryTheme[];
   ideas: StoryIdea[];
+  pillars: ContentPillar[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, themesRes, ideasRes] = await Promise.all([
+  const [clientsRes, themesRes, ideasRes, pillarsRes] = await Promise.all([
     supabase
       .from("clients")
       .select("id, name, status")
@@ -324,6 +373,11 @@ export async function getStoryIdeasData(): Promise<{
       .from("story_ideas")
       .select("*")
       .order("created_at", { ascending: false }),
+    supabase
+      .from("content_pillars")
+      .select("*")
+      .eq("archived", false)
+      .order("sort_order", { ascending: true }),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
@@ -331,6 +385,9 @@ export async function getStoryIdeasData(): Promise<{
     throw new Error(`story_themes: ${themesRes.error.message}`);
   }
   if (ideasRes.error) throw new Error(`story_ideas: ${ideasRes.error.message}`);
+  if (pillarsRes.error) {
+    throw new Error(`content_pillars: ${pillarsRes.error.message}`);
+  }
 
   const clients = (clientsRes.data ?? [])
     .filter((row) => row.status !== "needs_attention")
@@ -353,16 +410,41 @@ export async function getStoryIdeasData(): Promise<{
     id: row.id,
     clientId: row.client_id,
     themeId: row.theme_id ?? null,
+    pillarId: row.pillar_id ? String(row.pillar_id) : null,
     idea: row.idea ?? "",
     category: row.category ?? "general",
     month: row.month ?? "",
     designLink: row.design_link ?? "",
+    usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
     createdBy: row.created_by ?? "",
     createdAt: row.created_at ?? "",
   }));
 
-  return { clients, themes, ideas };
+  const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    name: row.name ?? "",
+    color: row.color ?? "#18181b",
+    description: row.description ?? "",
+    sortOrder: row.sort_order ?? 0,
+    archived: Boolean(row.archived),
+    createdBy: row.created_by ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  return { clients, themes, ideas, pillars };
 }
+
+export type ProoferIdeaLite = {
+  id: string;
+  kind: "video" | "carousel" | "story";
+  pillarId: string | null;
+  text: string;
+  category: string;
+  month: string;
+  usedInPostId: string | null;
+};
 
 // Proofer: one caption+image slot per (client, day). Returns the list of
 // active clients and (optionally) the posts for a specific client+month.
@@ -373,6 +455,7 @@ export async function getProoferData(
   clients: { id: string; name: string }[];
   posts: ProoferPost[];
   pillars: ContentPillar[];
+  ideas: ProoferIdeaLite[];
 }> {
   const supabase = await createClient();
 
@@ -392,7 +475,7 @@ export async function getProoferData(
     }));
 
   if (!clientId || !month) {
-    return { clients, posts: [], pillars: [] };
+    return { clients, posts: [], pillars: [], ideas: [] };
   }
 
   const [yearStr, monthStr] = month.split("-");
@@ -400,20 +483,83 @@ export async function getProoferData(
   const m = Number(monthStr);
 
   if (!year || !m) {
-    return { clients, posts: [], pillars: [] };
+    return { clients, posts: [], pillars: [], ideas: [] };
   }
 
-  const pillarsRes = await supabase
-    .from("content_pillars")
-    .select("*")
-    .eq("client_id", clientId)
-    .eq("archived", false)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
+  const [pillarsRes, videoIdeasRes, carouselIdeasRes, storyIdeasRes] =
+    await Promise.all([
+      supabase
+        .from("content_pillars")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("archived", false)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("video_ideas")
+        .select(
+          "id, pillar_id, idea, category, month, used_in_post_id"
+        )
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("carousel_ideas")
+        .select(
+          "id, pillar_id, idea, category, month, used_in_post_id"
+        )
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("story_ideas")
+        .select(
+          "id, pillar_id, idea, category, month, used_in_post_id"
+        )
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false }),
+    ]);
 
   if (pillarsRes.error) {
     throw new Error(`content_pillars: ${pillarsRes.error.message}`);
   }
+  if (videoIdeasRes.error) {
+    throw new Error(`video_ideas: ${videoIdeasRes.error.message}`);
+  }
+  if (carouselIdeasRes.error) {
+    throw new Error(`carousel_ideas: ${carouselIdeasRes.error.message}`);
+  }
+  if (storyIdeasRes.error) {
+    throw new Error(`story_ideas: ${storyIdeasRes.error.message}`);
+  }
+
+  const ideas: ProoferIdeaLite[] = [
+    ...(videoIdeasRes.data ?? []).map((row) => ({
+      id: String(row.id),
+      kind: "video" as const,
+      pillarId: row.pillar_id ? String(row.pillar_id) : null,
+      text: row.idea ?? "",
+      category: row.category ?? "general",
+      month: row.month ?? "",
+      usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
+    })),
+    ...(carouselIdeasRes.data ?? []).map((row) => ({
+      id: String(row.id),
+      kind: "carousel" as const,
+      pillarId: row.pillar_id ? String(row.pillar_id) : null,
+      text: row.idea ?? "",
+      category: row.category ?? "general",
+      month: row.month ?? "",
+      usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
+    })),
+    ...(storyIdeasRes.data ?? []).map((row) => ({
+      id: String(row.id),
+      kind: "story" as const,
+      pillarId: row.pillar_id ? String(row.pillar_id) : null,
+      text: row.idea ?? "",
+      category: row.category ?? "general",
+      month: row.month ?? "",
+      usedInPostId: row.used_in_post_id ? String(row.used_in_post_id) : null,
+    })),
+  ];
 
   const pillars: ContentPillar[] = (pillarsRes.data ?? []).map((row) => ({
     id: String(row.id),
@@ -459,6 +605,13 @@ export async function getProoferData(
       postDate: row.post_date ?? "",
       platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
       pillarId: row.pillar_id ? String(row.pillar_id) : null,
+      linkedIdeaId: row.linked_idea_id ? String(row.linked_idea_id) : null,
+      linkedIdeaKind:
+        row.linked_idea_kind === "video" ||
+        row.linked_idea_kind === "carousel" ||
+        row.linked_idea_kind === "story"
+          ? row.linked_idea_kind
+          : null,
       caption: row.caption ?? "",
       imageUrl: row.image_url ?? "",
       mediaUrls,
@@ -540,7 +693,7 @@ export async function getProoferData(
     publishQueue: publishQueueMap.get(post.id) ?? [],
   }));
 
-  return { clients, posts: postsWithRelations, pillars };
+  return { clients, posts: postsWithRelations, pillars, ideas };
 }
 
 export async function getProoferPublishQueueData(): Promise<{
@@ -601,6 +754,13 @@ export async function getProoferPublishQueueData(): Promise<{
       postDate: row.post_date ?? "",
       platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
       pillarId: row.pillar_id ? String(row.pillar_id) : null,
+      linkedIdeaId: row.linked_idea_id ? String(row.linked_idea_id) : null,
+      linkedIdeaKind:
+        row.linked_idea_kind === "video" ||
+        row.linked_idea_kind === "carousel" ||
+        row.linked_idea_kind === "story"
+          ? row.linked_idea_kind
+          : null,
       caption: row.caption ?? "",
       imageUrl: row.image_url ?? "",
       mediaUrls,

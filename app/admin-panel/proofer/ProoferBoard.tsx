@@ -9,8 +9,10 @@ import type {
   ProoferStatus,
   ProoferPlatform,
   ContentPillar,
+  IdeaKind,
 } from "../lib/types";
 import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
+import type { ProoferIdeaLite } from "../lib/queries";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -173,6 +175,7 @@ export default function ProoferBoard({
   initialMonth,
   initialPosts,
   initialPillars,
+  initialIdeas,
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -180,6 +183,7 @@ export default function ProoferBoard({
   initialMonth: string;
   initialPosts: ProoferPost[];
   initialPillars: ContentPillar[];
+  initialIdeas: ProoferIdeaLite[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -193,6 +197,8 @@ export default function ProoferBoard({
     caption: string;
     mediaUrls: string[];
     pillarId: string | null;
+    linkedIdeaId: string | null;
+    linkedIdeaKind: IdeaKind | null;
   };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
@@ -215,12 +221,21 @@ export default function ProoferBoard({
   const [openPillarPickerKey, setOpenPillarPickerKey] = useState<string | null>(
     null
   );
+  const [openIdeaPickerKey, setOpenIdeaPickerKey] = useState<string | null>(
+    null
+  );
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
     initialPillars.forEach((p) => map.set(p.id, p));
     return map;
   }, [initialPillars]);
+
+  const ideasById = useMemo(() => {
+    const map = new Map<string, ProoferIdeaLite>();
+    initialIdeas.forEach((i) => map.set(`${i.kind}:${i.id}`, i));
+    return map;
+  }, [initialIdeas]);
 
   const postsByKey = useMemo(() => {
     const map = new Map<string, ProoferPost>();
@@ -267,6 +282,8 @@ export default function ProoferBoard({
       caption: existing?.caption ?? "",
       mediaUrls: existing?.mediaUrls ?? [],
       pillarId: existing?.pillarId ?? null,
+      linkedIdeaId: existing?.linkedIdeaId ?? null,
+      linkedIdeaKind: existing?.linkedIdeaKind ?? null,
     };
   }
 
@@ -350,7 +367,9 @@ export default function ProoferBoard({
           platform,
           draft.caption,
           draft.mediaUrls,
-          draft.pillarId
+          draft.pillarId,
+          draft.linkedIdeaId,
+          draft.linkedIdeaKind
         );
         setDrafts((prev) => {
           const next = { ...prev };
@@ -380,7 +399,9 @@ export default function ProoferBoard({
             platform,
             draft.caption,
             draft.mediaUrls,
-            draft.pillarId
+            draft.pillarId,
+            draft.linkedIdeaId,
+            draft.linkedIdeaKind
           );
           setDrafts((prev) => {
             const next = { ...prev };
@@ -1232,6 +1253,17 @@ export default function ProoferBoard({
                                       onClick={() => {
                                         updateDraft(dateKey, activePlatform, {
                                           pillarId: pillar.id,
+                                          // Clear idea selection when pillar
+                                          // changes — the existing idea may
+                                          // no longer match.
+                                          linkedIdeaId:
+                                            draft.pillarId === pillar.id
+                                              ? draft.linkedIdeaId
+                                              : null,
+                                          linkedIdeaKind:
+                                            draft.pillarId === pillar.id
+                                              ? draft.linkedIdeaKind
+                                              : null,
                                         });
                                         setOpenPillarPickerKey(null);
                                       }}
@@ -1270,6 +1302,235 @@ export default function ProoferBoard({
                                 })}
                               </div>
                             </>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {(() => {
+                      const selectedPillar = draft.pillarId
+                        ? pillarsById.get(draft.pillarId) ?? null
+                        : null;
+                      if (!selectedPillar) return null;
+
+                      const pickerKey = postKey(dateKey, activePlatform);
+                      const isOpen = openIdeaPickerKey === pickerKey;
+                      const pillarIdeas = initialIdeas.filter(
+                        (idea) => idea.pillarId === selectedPillar.id
+                      );
+                      // Always allow the currently-selected idea to stay
+                      // visible, even if it's marked used elsewhere.
+                      const currentKey = draft.linkedIdeaId && draft.linkedIdeaKind
+                        ? `${draft.linkedIdeaKind}:${draft.linkedIdeaId}`
+                        : null;
+                      const selectableIdeas = pillarIdeas.filter(
+                        (idea) =>
+                          !idea.usedInPostId ||
+                          `${idea.kind}:${idea.id}` === currentKey
+                      );
+                      const selectedIdea = currentKey
+                        ? ideasById.get(currentKey) ?? null
+                        : null;
+
+                      return (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            position: "relative",
+                          }}
+                        >
+                          <span style={labelStyle}>Idea</span>
+                          <button
+                            type="button"
+                            disabled={isLocked}
+                            onClick={() =>
+                              setOpenIdeaPickerKey(isOpen ? null : pickerKey)
+                            }
+                            style={{
+                              ...inputStyle,
+                              padding: "6px 8px",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              textAlign: "left",
+                              cursor: isLocked ? "not-allowed" : "pointer",
+                              opacity: isLocked ? 0.7 : 1,
+                              background: "#fff",
+                            }}
+                          >
+                            <span
+                              style={{
+                                flex: 1,
+                                color: selectedIdea ? "#18181b" : "#a1a1aa",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {selectedIdea
+                                ? selectedIdea.text
+                                : `Pick an idea (${selectableIdeas.length})`}
+                            </span>
+                            <span
+                              style={{ color: "#a1a1aa", fontSize: 10 }}
+                              aria-hidden
+                            >
+                              ▾
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <>
+                              <div
+                                onClick={() => setOpenIdeaPickerKey(null)}
+                                style={{
+                                  position: "fixed",
+                                  inset: 0,
+                                  zIndex: 20,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "100%",
+                                  left: 0,
+                                  right: 0,
+                                  marginTop: 4,
+                                  background: "#fff",
+                                  border: "1px solid #e4e4e7",
+                                  borderRadius: 8,
+                                  boxShadow:
+                                    "0 6px 16px rgba(0,0,0,0.08)",
+                                  zIndex: 21,
+                                  maxHeight: 260,
+                                  overflowY: "auto",
+                                  padding: 4,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateDraft(dateKey, activePlatform, {
+                                      linkedIdeaId: null,
+                                      linkedIdeaKind: null,
+                                    });
+                                    setOpenIdeaPickerKey(null);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    padding: "6px 8px",
+                                    border: "none",
+                                    background:
+                                      draft.linkedIdeaId === null
+                                        ? "#f4f4f5"
+                                        : "transparent",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: "#71717a",
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  None
+                                </button>
+                                {selectableIdeas.length === 0 ? (
+                                  <div
+                                    style={{
+                                      padding: "8px",
+                                      fontSize: 11,
+                                      color: "#a1a1aa",
+                                    }}
+                                  >
+                                    No available ideas in this pillar.
+                                  </div>
+                                ) : (
+                                  selectableIdeas.map((idea) => {
+                                    const key = `${idea.kind}:${idea.id}`;
+                                    const isSelected = key === currentKey;
+                                    return (
+                                      <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => {
+                                          updateDraft(dateKey, activePlatform, {
+                                            linkedIdeaId: idea.id,
+                                            linkedIdeaKind: idea.kind,
+                                          });
+                                          setOpenIdeaPickerKey(null);
+                                        }}
+                                        title={idea.text}
+                                        style={{
+                                          width: "100%",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 6,
+                                          padding: "6px 8px",
+                                          border: "none",
+                                          background: isSelected
+                                            ? "#f4f4f5"
+                                            : "transparent",
+                                          borderRadius: 6,
+                                          cursor: "pointer",
+                                          fontSize: 12,
+                                          fontWeight: 500,
+                                          color: "#18181b",
+                                          textAlign: "left",
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontSize: 9,
+                                            fontWeight: 700,
+                                            padding: "1px 6px",
+                                            borderRadius: 999,
+                                            background: "#f4f4f5",
+                                            color: "#71717a",
+                                            textTransform: "uppercase",
+                                            letterSpacing: "0.04em",
+                                            flexShrink: 0,
+                                          }}
+                                        >
+                                          {idea.kind}
+                                        </span>
+                                        <span
+                                          style={{
+                                            flex: 1,
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          {idea.text}
+                                        </span>
+                                      </button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </>
+                          )}
+                          {selectedIdea && !isOpen && (
+                            <div
+                              style={{
+                                marginTop: 4,
+                                padding: "6px 8px",
+                                background: "#f4f4f5",
+                                borderRadius: 6,
+                                fontSize: 11,
+                                color: "#52525b",
+                                fontStyle: "italic",
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {selectedIdea.text}
+                            </div>
                           )}
                         </div>
                       );

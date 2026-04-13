@@ -99,7 +99,8 @@ export async function addVideoIdeaAction(
   themeId: string | null,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null
 ) {
   if (!clientId || !idea.trim()) {
     throw new Error("Client and idea text are required.");
@@ -113,6 +114,7 @@ export async function addVideoIdeaAction(
   const { error } = await supabase.from("video_ideas").insert({
     client_id: clientId,
     theme_id: themeId || null,
+    pillar_id: pillarId || null,
     idea: idea.trim(),
     category: category || "general",
     month: month || "",
@@ -126,13 +128,15 @@ export async function addVideoIdeaAction(
 
   revalidatePath("/app/video-ideas");
   revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
 }
 
 export async function updateVideoIdeaAction(
   id: string,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null
 ) {
   if (!id || !idea.trim()) {
     throw new Error("ID and idea text are required.");
@@ -146,6 +150,7 @@ export async function updateVideoIdeaAction(
       idea: idea.trim(),
       category: category || "general",
       month: month || "",
+      pillar_id: pillarId || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -157,6 +162,29 @@ export async function updateVideoIdeaAction(
 
   revalidatePath("/app/video-ideas");
   revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
+}
+
+export async function setVideoIdeaPillarAction(
+  id: string,
+  pillarId: string | null
+) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("video_ideas")
+    .update({
+      pillar_id: pillarId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setVideoIdeaPillarAction error:", error);
+    throw new Error("Could not update pillar.");
+  }
+  revalidatePath("/app/video-ideas");
+  revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
 }
 
 export async function updateVideoDesignLinkAction(id: string, designLink: string) {

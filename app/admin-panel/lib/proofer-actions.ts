@@ -80,6 +80,15 @@ function revalidateProoferPaths() {
   revalidatePath("/app/proofer/publish");
 }
 
+function revalidatePillarConsumers() {
+  revalidatePath("/app/proofer");
+  revalidatePath("/app/proofer/publish");
+  revalidatePath("/app/video-ideas");
+  revalidatePath("/app/carousel-ideas");
+  revalidatePath("/app/story-ideas");
+  revalidatePath("/app/content");
+}
+
 // ---------------- PILLARS ----------------
 
 function sanitizeColor(value: string | undefined | null): string {
@@ -128,7 +137,7 @@ export async function createContentPillarAction(
     throw new Error("Could not create pillar.");
   }
 
-  revalidateProoferPaths();
+  revalidatePillarConsumers();
 }
 
 export async function updateContentPillarAction(
@@ -162,7 +171,7 @@ export async function updateContentPillarAction(
     throw new Error("Could not update pillar.");
   }
 
-  revalidateProoferPaths();
+  revalidatePillarConsumers();
 }
 
 export async function archiveContentPillarAction(pillarId: string) {
@@ -185,7 +194,7 @@ export async function archiveContentPillarAction(pillarId: string) {
     throw new Error("Could not archive pillar.");
   }
 
-  revalidateProoferPaths();
+  revalidatePillarConsumers();
 }
 
 export async function setProoferPostPillarAction(
@@ -216,13 +225,69 @@ export async function setProoferPostPillarAction(
 
 // ---------------- POSTS ----------------
 
+const IDEA_KIND_TO_TABLE: Record<"video" | "carousel" | "story", string> = {
+  video: "video_ideas",
+  carousel: "carousel_ideas",
+  story: "story_ideas",
+};
+
+function normalizeIdeaKind(
+  value: unknown
+): "video" | "carousel" | "story" | null {
+  return value === "video" || value === "carousel" || value === "story"
+    ? value
+    : null;
+}
+
+async function releaseIdeaFromPost(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  postId: string,
+  kind: "video" | "carousel" | "story" | null
+) {
+  // If the caller knows the kind, release only that table. Otherwise sweep
+  // all three — used when an idea kind was never recorded.
+  const kinds: ("video" | "carousel" | "story")[] = kind
+    ? [kind]
+    : ["video", "carousel", "story"];
+  for (const k of kinds) {
+    const { error } = await supabase
+      .from(IDEA_KIND_TO_TABLE[k])
+      .update({ used_in_post_id: null, updated_at: new Date().toISOString() })
+      .eq("used_in_post_id", postId);
+    if (error) {
+      console.error(`releaseIdeaFromPost ${k} error:`, error);
+    }
+  }
+}
+
+async function bindIdeaToPost(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  postId: string,
+  ideaId: string,
+  kind: "video" | "carousel" | "story"
+) {
+  const { error } = await supabase
+    .from(IDEA_KIND_TO_TABLE[kind])
+    .update({
+      used_in_post_id: postId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", ideaId);
+  if (error) {
+    console.error(`bindIdeaToPost ${kind} error:`, error);
+    throw new Error("Could not link idea to post.");
+  }
+}
+
 export async function saveProoferPostAction(
   clientId: string,
   postDate: string,
   platform: string,
   caption: string,
   mediaUrls: string[],
-  pillarId: string | null
+  pillarId: string | null,
+  linkedIdeaId: string | null = null,
+  linkedIdeaKindRaw: string | null = null
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
@@ -234,13 +299,18 @@ export async function saveProoferPostAction(
   // (e.g. PublishQueueBoard) that still read the single-column value.
   const primaryImageUrl = normalizedMedia[0] ?? "";
   const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
+  const normalizedLinkedIdeaKind = normalizeIdeaKind(linkedIdeaKindRaw);
+  const normalizedLinkedIdeaId =
+    linkedIdeaId && linkedIdeaId.trim() && normalizedLinkedIdeaKind
+      ? linkedIdeaId
+      : null;
 
   const supabase = await createClient();
   const authorEmail = await getCurrentUserEmail();
 
   const { data: existing } = await supabase
     .from("proofer_posts")
-    .select("id, created_by, status")
+    .select("id, created_by, status, linked_idea_id, linked_idea_kind")
     .eq("client_id", clientId)
     .eq("post_date", postDate)
     .eq("platform", normalizedPlatform)
@@ -263,6 +333,10 @@ export async function saveProoferPostAction(
         image_url: primaryImageUrl,
         media_urls: normalizedMedia,
         pillar_id: normalizedPillarId,
+        linked_idea_id: normalizedLinkedIdeaId,
+        linked_idea_kind: normalizedLinkedIdeaId
+          ? normalizedLinkedIdeaKind
+          : null,
         status: nextStatus,
         updated_at: new Date().toISOString(),
       })
@@ -272,30 +346,65 @@ export async function saveProoferPostAction(
       console.error("saveProoferPostAction update error:", error);
       throw new Error("Could not save post.");
     }
+
+    const previousIdeaId = existing.linked_idea_id
+      ? String(existing.linked_idea_id)
+      : null;
+    const previousKind = normalizeIdeaKind(existing.linked_idea_kind);
+
+    if (previousIdeaId && previousIdeaId !== normalizedLinkedIdeaId) {
+      await releaseIdeaFromPost(supabase, String(existing.id), previousKind);
+    }
+
+    if (normalizedLinkedIdeaId && normalizedLinkedIdeaKind) {
+      await bindIdeaToPost(
+        supabase,
+        String(existing.id),
+        normalizedLinkedIdeaId,
+        normalizedLinkedIdeaKind
+      );
+    }
   } else {
     if (!hasContent) {
       return;
     }
 
-    const { error } = await supabase.from("proofer_posts").insert({
-      client_id: clientId,
-      post_date: postDate,
-      platform: normalizedPlatform,
-      caption,
-      image_url: primaryImageUrl,
-      media_urls: normalizedMedia,
-      pillar_id: normalizedPillarId,
-      status: "check",
-      created_by: authorEmail,
-    });
+    const { data: inserted, error } = await supabase
+      .from("proofer_posts")
+      .insert({
+        client_id: clientId,
+        post_date: postDate,
+        platform: normalizedPlatform,
+        caption,
+        image_url: primaryImageUrl,
+        media_urls: normalizedMedia,
+        pillar_id: normalizedPillarId,
+        linked_idea_id: normalizedLinkedIdeaId,
+        linked_idea_kind: normalizedLinkedIdeaId
+          ? normalizedLinkedIdeaKind
+          : null,
+        status: "check",
+        created_by: authorEmail,
+      })
+      .select("id")
+      .single();
 
-    if (error) {
+    if (error || !inserted) {
       console.error("saveProoferPostAction insert error:", error);
       throw new Error("Could not save post.");
     }
+
+    if (normalizedLinkedIdeaId && normalizedLinkedIdeaKind) {
+      await bindIdeaToPost(
+        supabase,
+        String(inserted.id),
+        normalizedLinkedIdeaId,
+        normalizedLinkedIdeaKind
+      );
+    }
   }
 
-  revalidateProoferPaths();
+  revalidatePillarConsumers();
 }
 
 export async function updateProoferStatusAction(
@@ -367,6 +476,22 @@ export async function deleteProoferPostAction(
   const normalizedPlatform = normalizePlatform(platform);
   const supabase = await createClient();
 
+  const { data: existing } = await supabase
+    .from("proofer_posts")
+    .select("id, linked_idea_id, linked_idea_kind")
+    .eq("client_id", clientId)
+    .eq("post_date", postDate)
+    .eq("platform", normalizedPlatform)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await releaseIdeaFromPost(
+      supabase,
+      String(existing.id),
+      normalizeIdeaKind(existing.linked_idea_kind)
+    );
+  }
+
   const { error } = await supabase
     .from("proofer_posts")
     .delete()
@@ -379,7 +504,7 @@ export async function deleteProoferPostAction(
     throw new Error("Could not delete post.");
   }
 
-  revalidateProoferPaths();
+  revalidatePillarConsumers();
 }
 
 // ---------------- COMMENTS ----------------

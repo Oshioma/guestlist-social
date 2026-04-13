@@ -105,10 +105,12 @@ export type VideoIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
   category: string;
   month: string;
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -127,12 +129,14 @@ export type CarouselIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
   category: string;
   month: string;
   captions: string[];
   captionImages: string[];
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -151,13 +155,17 @@ export type StoryIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
   category: string;
   month: string;
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
+
+export type IdeaKind = "video" | "carousel" | "story";
 
 export type StoryTheme = {
   id: string;
@@ -277,6 +285,8 @@ export type ProoferPost = {
   postDate: string; // "YYYY-MM-DD"
   platform: ProoferPlatform;
   pillarId: string | null;
+  linkedIdeaId: string | null;
+  linkedIdeaKind: IdeaKind | null;
   caption: string;
   imageUrl: string;
   mediaUrls: string[];

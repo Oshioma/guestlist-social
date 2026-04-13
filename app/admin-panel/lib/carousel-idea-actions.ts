@@ -98,7 +98,8 @@ export async function addCarouselIdeaAction(
   themeId: string | null,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null
 ) {
   if (!clientId || !idea.trim()) {
     throw new Error("Client and idea text are required.");
@@ -112,6 +113,7 @@ export async function addCarouselIdeaAction(
   const { error } = await supabase.from("carousel_ideas").insert({
     client_id: clientId,
     theme_id: themeId || null,
+    pillar_id: pillarId || null,
     idea: idea.trim(),
     category: category || "general",
     month: month || "",
@@ -126,13 +128,15 @@ export async function addCarouselIdeaAction(
 
   revalidatePath("/app/carousel-ideas");
   revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
 }
 
 export async function updateCarouselIdeaAction(
   id: string,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null
 ) {
   if (!id || !idea.trim()) {
     throw new Error("ID and idea text are required.");
@@ -146,6 +150,7 @@ export async function updateCarouselIdeaAction(
       idea: idea.trim(),
       category: category || "general",
       month: month || "",
+      pillar_id: pillarId || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -157,6 +162,29 @@ export async function updateCarouselIdeaAction(
 
   revalidatePath("/app/carousel-ideas");
   revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
+}
+
+export async function setCarouselIdeaPillarAction(
+  id: string,
+  pillarId: string | null
+) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("carousel_ideas")
+    .update({
+      pillar_id: pillarId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setCarouselIdeaPillarAction error:", error);
+    throw new Error("Could not update pillar.");
+  }
+  revalidatePath("/app/carousel-ideas");
+  revalidatePath("/app/content");
+  revalidatePath("/app/proofer");
 }
 
 export async function updateCarouselCaptionsAction(

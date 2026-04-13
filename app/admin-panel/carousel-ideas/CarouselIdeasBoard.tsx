@@ -11,8 +11,9 @@ import {
   updateCarouselDesignLinkAction,
   deleteCarouselIdeaAction,
 } from "../lib/carousel-idea-actions";
-import type { CarouselIdea, CarouselTheme } from "../lib/types";
+import type { CarouselIdea, CarouselTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
+import PillarManager from "../components/PillarManager";
 
 type Client = { id: string; name: string };
 
@@ -53,13 +54,18 @@ export default function CarouselIdeasBoard({
   clients,
   themes,
   ideas,
+  pillars,
 }: {
   clients: Client[];
   themes: CarouselTheme[];
   ideas: CarouselIdea[];
+  pillars: ContentPillar[];
 }) {
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id ?? "");
   const [selectedMonth, setSelectedMonth] = useState("");
+
+  const clientPillars = pillars.filter((p) => p.clientId === selectedClient);
+  const pillarsById = new Map(pillars.map((p) => [p.id, p]));
 
   const selectedMonthName = MONTHS.find((m) => m.value === selectedMonth)?.label.split(" ")[0] ?? "";
 
@@ -194,16 +200,24 @@ export default function CarouselIdeasBoard({
           </select>
         </div>
 
-        <AddThemeForm
-          clientId={selectedClient}
-          nextSort={clientThemes.length}
-        />
+        <PillarManager clientId={selectedClient} pillars={clientPillars} />
+
+        <div style={{ marginTop: 16 }}>
+          <AddThemeForm
+            clientId={selectedClient}
+            nextSort={clientThemes.length}
+          />
+        </div>
 
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 8 }}>
             Quick Add Idea
           </div>
-          <AddIdeaForm clientId={selectedClient} themeId={null} />
+          <AddIdeaForm
+            clientId={selectedClient}
+            themeId={null}
+            pillars={clientPillars}
+          />
         </div>
 
         {clientThemes.length === 0 && unlinkedIdeas.length === 0 ? (
@@ -222,6 +236,8 @@ export default function CarouselIdeasBoard({
                   theme={theme}
                   ideas={themeIdeas}
                   clientId={selectedClient}
+                  pillars={clientPillars}
+                  pillarsById={pillarsById}
                 />
               );
             })}
@@ -235,7 +251,12 @@ export default function CarouselIdeasBoard({
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {unlinkedIdeas.map((idea) => (
-                    <IdeaRow key={idea.id} idea={idea} />
+                    <IdeaRow
+                      key={idea.id}
+                      idea={idea}
+                      pillars={clientPillars}
+                      pillarsById={pillarsById}
+                    />
                   ))}
                 </div>
               </div>
@@ -253,10 +274,14 @@ function ThemeBlock({
   theme,
   ideas,
   clientId,
+  pillars,
+  pillarsById,
 }: {
   theme: CarouselTheme;
   ideas: CarouselIdea[];
   clientId: string;
+  pillars: ContentPillar[];
+  pillarsById: Map<string, ContentPillar>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [monthLabel, setMonthLabel] = useState(theme.monthLabel);
@@ -398,11 +423,16 @@ function ThemeBlock({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {ideas.map((idea) => (
-          <IdeaRow key={idea.id} idea={idea} />
+          <IdeaRow
+            key={idea.id}
+            idea={idea}
+            pillars={pillars}
+            pillarsById={pillarsById}
+          />
         ))}
       </div>
 
-      <AddIdeaForm clientId={clientId} themeId={theme.id} />
+      <AddIdeaForm clientId={clientId} themeId={theme.id} pillars={pillars} />
     </div>
   );
 }
@@ -535,7 +565,15 @@ function AddThemeForm({
 
 // ── Idea row ──
 
-function IdeaRow({ idea }: { idea: CarouselIdea }) {
+function IdeaRow({
+  idea,
+  pillars,
+  pillarsById,
+}: {
+  idea: CarouselIdea;
+  pillars: ContentPillar[];
+  pillarsById: Map<string, ContentPillar>;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [showCaptions, setShowCaptions] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
@@ -543,11 +581,16 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   const [editText, setEditText] = useState(idea.idea);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
+  const [editPillarId, setEditPillarId] = useState<string | null>(
+    idea.pillarId
+  );
   const [isPending, startTransition] = useTransition();
 
   const colors = categoryColor(idea.category);
   const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
   const captionCount = idea.captions.filter((c) => c.trim()).length;
+  const pillar = idea.pillarId ? pillarsById.get(idea.pillarId) ?? null : null;
+  const isUsed = Boolean(idea.usedInPostId);
 
   function handleSaveLink() {
     startTransition(async () => {
@@ -559,7 +602,13 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   function handleSave() {
     if (!editText.trim()) return;
     startTransition(async () => {
-      await updateCarouselIdeaAction(idea.id, editText, editCategory, editMonth);
+      await updateCarouselIdeaAction(
+        idea.id,
+        editText,
+        editCategory,
+        editMonth,
+        editPillarId
+      );
       setIsEditing(false);
     });
   }
@@ -592,20 +641,32 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
             <option key={m.value} value={m.value}>{m.label}</option>
           ))}
         </select>
+        <select
+          value={editPillarId ?? ""}
+          onChange={(e) => setEditPillarId(e.target.value || null)}
+          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+        >
+          <option value="">No pillar</option>
+          {pillars.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
         <input
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }
+            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }
           }}
           style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
         />
         <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
           {isPending ? "..." : "Save"}
         </button>
-        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setEditPillarId(idea.pillarId); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
           Cancel
         </button>
       </div>
@@ -613,7 +674,15 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   }
 
   return (
-    <div style={{ borderRadius: 6, background: "#fff", border: "1px solid #f4f4f5" }}>
+    <div
+      style={{
+        borderRadius: 6,
+        background: isUsed ? "#f4f4f5" : "#fff",
+        border: "1px solid #f4f4f5",
+        opacity: isUsed ? 0.6 : 1,
+      }}
+      title={isUsed ? "Used in a proofer post" : undefined}
+    >
       <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px" }}>
         <span
           style={{
@@ -628,12 +697,61 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
         >
           {idea.category}
         </span>
+        {pillar && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#f4f4f5",
+              color: "#3f3f46",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: pillar.color,
+              }}
+            />
+            {pillar.name}
+          </span>
+        )}
+        {isUsed && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#e4e4e7",
+              color: "#52525b",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Used
+          </span>
+        )}
         {monthLabel && (
           <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
             {monthLabel}
           </span>
         )}
-        <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
+        <span
+          style={{
+            flex: 1,
+            fontSize: 14,
+            color: "#18181b",
+            textDecoration: isUsed ? "line-through" : "none",
+          }}
+        >
           {idea.idea}
         </span>
         {idea.createdBy && (
@@ -824,20 +942,30 @@ function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; c
 function AddIdeaForm({
   clientId,
   themeId,
+  pillars,
 }: {
   clientId: string;
   themeId: string | null;
+  pillars: ContentPillar[];
 }) {
   const [text, setText] = useState("");
   const [category, setCategory] = useState("carousel");
   const [month, setMonth] = useState(MONTHS[0]?.value ?? "");
+  const [pillarId, setPillarId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
     startTransition(async () => {
-      await addCarouselIdeaAction(clientId, themeId, text, category, month);
+      await addCarouselIdeaAction(
+        clientId,
+        themeId,
+        text,
+        category,
+        month,
+        pillarId
+      );
       setText("");
     });
   }
@@ -864,6 +992,18 @@ function AddIdeaForm({
         <option value="">No month</option>
         {MONTHS.map((m) => (
           <option key={m.value} value={m.value}>{m.label}</option>
+        ))}
+      </select>
+      <select
+        value={pillarId ?? ""}
+        onChange={(e) => setPillarId(e.target.value || null)}
+        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+      >
+        <option value="">No pillar</option>
+        {pillars.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
         ))}
       </select>
       <input
