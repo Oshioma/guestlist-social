@@ -46,6 +46,7 @@ const STATUS_BUTTONS: {
   bg: string;
   border: string;
   color: string;
+  dot: string;
 }[] = [
   {
     value: "improve",
@@ -53,6 +54,7 @@ const STATUS_BUTTONS: {
     bg: "#fee2e2",
     border: "#fca5a5",
     color: "#991b1b",
+    dot: "#ef4444",
   },
   {
     value: "check",
@@ -60,6 +62,7 @@ const STATUS_BUTTONS: {
     bg: "#fef9c3",
     border: "#fde047",
     color: "#854d0e",
+    dot: "#f59e0b",
   },
   {
     value: "proofed",
@@ -67,6 +70,7 @@ const STATUS_BUTTONS: {
     bg: "#dcfce7",
     border: "#86efac",
     color: "#166534",
+    dot: "#22c55e",
   },
   {
     value: "approved",
@@ -74,6 +78,7 @@ const STATUS_BUTTONS: {
     bg: "#e0f2fe",
     border: "#38bdf8",
     color: "#075985",
+    dot: "#ffffff",
   },
 ];
 
@@ -1691,29 +1696,46 @@ export default function ProoferBoard({
                         <button
                           key={btn.value}
                           type="button"
+                          title={btn.label}
+                          aria-label={btn.label}
                           onClick={() =>
                             handleStatus(dateKey, activePlatform, btn.value)
                           }
                           disabled={disableThisButton}
                           style={{
-                            padding: "6px 14px",
-                            borderRadius: 999,
+                            width: 22,
+                            height: 22,
+                            padding: 0,
+                            borderRadius: "50%",
                             border: active
-                              ? `2px solid ${btn.border}`
+                              ? `2px solid ${btn.color}`
                               : "1px solid #e4e4e7",
-                            background: active ? btn.bg : "#fff",
-                            color: active ? btn.color : "#71717a",
-                            fontSize: 12,
-                            fontWeight: 700,
+                            background: btn.dot,
                             cursor: disableThisButton
                               ? "not-allowed"
                               : "pointer",
-                            boxShadow: active ? `0 0 0 2px ${btn.bg}` : "none",
-                            opacity: disableThisButton ? 0.6 : 1,
+                            boxShadow: active
+                              ? `0 0 0 2px ${btn.bg}`
+                              : "none",
+                            opacity: disableThisButton
+                              ? 0.4
+                              : active
+                              ? 1
+                              : 0.55,
+                            transition:
+                              "opacity 120ms ease, transform 120ms ease",
                           }}
-                        >
-                          {btn.label}
-                        </button>
+                          onMouseEnter={(e) => {
+                            if (!disableThisButton && !active) {
+                              e.currentTarget.style.opacity = "1";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!disableThisButton && !active) {
+                              e.currentTarget.style.opacity = "0.55";
+                            }
+                          }}
+                        />
                       );
                     })}
 
