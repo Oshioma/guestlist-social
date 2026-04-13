@@ -62,5 +62,5 @@ export async function updateContentProgressAction(
     }
   }
 
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/content");
 }

@@ -46,9 +46,9 @@ export default async function LaunchPage() {
       throw new Error("Could not create campaign.");
     }
 
-    revalidatePath(`/app/clients/${clientId}`);
-    revalidatePath("/app/dashboard");
-    revalidatePath("/app/launch");
+    revalidatePath(`/admin-panel/clients/${clientId}`);
+    revalidatePath("/admin-panel/dashboard");
+    revalidatePath("/admin-panel/launch");
   }
 
   return <LaunchForm clients={clients} onLaunch={handleLaunch} />;

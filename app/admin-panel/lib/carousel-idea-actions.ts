@@ -33,8 +33,8 @@ export async function addCarouselThemeAction(
     throw new Error("Could not add theme.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateCarouselThemeAction(
@@ -66,8 +66,8 @@ export async function updateCarouselThemeAction(
     throw new Error("Could not update theme.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function deleteCarouselThemeAction(id: string) {
@@ -87,8 +87,8 @@ export async function deleteCarouselThemeAction(id: string) {
     throw new Error("Could not delete theme.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 // ── Idea actions ──
@@ -124,8 +124,8 @@ export async function addCarouselIdeaAction(
     throw new Error("Could not add idea.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateCarouselIdeaAction(
@@ -155,8 +155,8 @@ export async function updateCarouselIdeaAction(
     throw new Error("Could not update idea.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateCarouselCaptionsAction(
@@ -185,7 +185,7 @@ export async function updateCarouselCaptionsAction(
     throw new Error("Could not update captions.");
   }
 
-  revalidatePath("/app/carousel-ideas");
+  revalidatePath("/admin-panel/carousel-ideas");
 }
 
 export async function updateCarouselDesignLinkAction(id: string, designLink: string) {
@@ -199,7 +199,7 @@ export async function updateCarouselDesignLinkAction(id: string, designLink: str
     console.error("updateCarouselDesignLinkAction error:", error);
     throw new Error("Could not update design link.");
   }
-  revalidatePath("/app/carousel-ideas");
+  revalidatePath("/admin-panel/carousel-ideas");
 }
 
 export async function deleteCarouselIdeaAction(id: string) {
@@ -217,6 +217,6 @@ export async function deleteCarouselIdeaAction(id: string) {
     throw new Error("Could not delete idea.");
   }
 
-  revalidatePath("/app/carousel-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/carousel-ideas");
+  revalidatePath("/admin-panel/content");
 }

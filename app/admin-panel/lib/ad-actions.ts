@@ -85,11 +85,11 @@ export async function createAdAction(
     console.error("Auto-generate actions after ad create:", e);
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath(`/app/clients/${clientId}/ads`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}/edit`);
-  revalidatePath("/app/dashboard");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/ads`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}/edit`);
+  revalidatePath("/admin-panel/dashboard");
 
   redirect(`/app/clients/${clientId}/campaigns/${campaignId}`);
 }
@@ -162,14 +162,14 @@ export async function updateAdAction(
     console.error("Auto-generate actions after ad update:", e);
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath(`/app/clients/${clientId}/ads`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}/edit`);
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/ads`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}/edit`);
   revalidatePath(
-    `/app/clients/${clientId}/campaigns/${campaignId}/ads/${adId}/edit`
+    `/admin-panel/clients/${clientId}/campaigns/${campaignId}/ads/${adId}/edit`
   );
-  revalidatePath("/app/dashboard");
+  revalidatePath("/admin-panel/dashboard");
 
   redirect(`/app/clients/${clientId}/campaigns/${campaignId}`);
 }

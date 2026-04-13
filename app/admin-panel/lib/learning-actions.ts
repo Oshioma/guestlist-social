@@ -37,6 +37,6 @@ export async function createLearningFromAction(
     throw new Error("Could not save learning.");
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
 }

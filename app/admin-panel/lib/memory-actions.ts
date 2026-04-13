@@ -36,7 +36,7 @@ export async function createMemory(formData: FormData) {
     throw new Error("Could not save memory.");
   }
 
-  revalidatePath("/app/memory");
+  revalidatePath("/admin-panel/memory");
 }
 
 export async function deleteMemory(memoryId: string) {
@@ -52,5 +52,5 @@ export async function deleteMemory(memoryId: string) {
     throw new Error("Could not delete memory.");
   }
 
-  revalidatePath("/app/memory");
+  revalidatePath("/admin-panel/memory");
 }

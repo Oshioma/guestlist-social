@@ -48,8 +48,8 @@ export async function createClientAction(formData: FormData) {
     throw new Error("Could not create client.");
   }
 
-  revalidatePath("/app/clients");
-  revalidatePath("/app/dashboard");
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/dashboard");
   redirect("/app/clients");
 }
 
@@ -97,9 +97,9 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     throw new Error("Could not update client.");
   }
 
-  revalidatePath("/app/clients");
-  revalidatePath("/app/dashboard");
-  revalidatePath(`/app/clients/${clientId}`);
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/dashboard");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
   redirect("/app/clients");
 }
 
@@ -116,8 +116,8 @@ export async function archiveClientAction(clientId: string) {
     throw new Error("Could not archive client.");
   }
 
-  revalidatePath("/app/clients");
-  revalidatePath("/app/dashboard");
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/dashboard");
   redirect("/app/clients");
 }
 
@@ -134,7 +134,7 @@ export async function deleteClientAction(clientId: string) {
     throw new Error("Could not delete client.");
   }
 
-  revalidatePath("/app/clients");
-  revalidatePath("/app/dashboard");
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/dashboard");
   redirect("/app/clients");
 }

@@ -46,7 +46,7 @@ export async function createActionFromSuggestion(args: {
   );
 
   if (alreadyExists) {
-    revalidatePath(`/app/clients/${args.clientId}/campaigns/${args.campaignId}`);
+    revalidatePath(`/admin-panel/clients/${args.clientId}/campaigns/${args.campaignId}`);
     return;
   }
 
@@ -65,7 +65,7 @@ export async function createActionFromSuggestion(args: {
     throw new Error("Could not create action from suggestion.");
   }
 
-  revalidatePath(`/app/clients/${args.clientId}`);
-  revalidatePath(`/app/clients/${args.clientId}/campaigns/${args.campaignId}`);
-  revalidatePath("/app/dashboard");
+  revalidatePath(`/admin-panel/clients/${args.clientId}`);
+  revalidatePath(`/admin-panel/clients/${args.clientId}/campaigns/${args.campaignId}`);
+  revalidatePath("/admin-panel/dashboard");
 }

@@ -31,8 +31,8 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     throw new Error("Could not create campaign.");
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath("/app/dashboard");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath("/admin-panel/dashboard");
   redirect(`/app/clients/${clientId}`);
 }
 
@@ -49,9 +49,9 @@ export async function assignCampaignToClient(campaignId: string, clientId: strin
     throw new Error("Could not assign campaign.");
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath("/app/dashboard");
-  revalidatePath("/app/settings");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath("/admin-panel/dashboard");
+  revalidatePath("/admin-panel/settings");
 }
 
 export async function updateCampaignAction(
@@ -88,7 +88,7 @@ export async function updateCampaignAction(
     throw new Error("Could not update campaign.");
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath("/app/dashboard");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath("/admin-panel/dashboard");
   redirect(`/app/clients/${clientId}`);
 }

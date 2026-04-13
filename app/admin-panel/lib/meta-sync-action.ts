@@ -86,8 +86,8 @@ export async function importFromMeta() {
       result.log?.unshift(`Client "${accountName}" ready (id: ${clientId})`);
     }
 
-    revalidatePath("/app/settings");
-    revalidatePath("/app/clients");
+    revalidatePath("/admin-panel/settings");
+    revalidatePath("/admin-panel/clients");
 
     return result;
   } catch (err) {
@@ -130,9 +130,9 @@ export async function syncAllClients() {
     log.push("---");
   }
 
-  revalidatePath("/app/settings");
-  revalidatePath("/app/clients");
-  revalidatePath("/app/dashboard");
+  revalidatePath("/admin-panel/settings");
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/dashboard");
 
   return { ok: allOk, log };
 }
@@ -475,9 +475,9 @@ export async function syncMetaData(clientId: string) {
     }
 
     // Revalidate everything
-    revalidatePath("/app/dashboard");
-    revalidatePath(`/app/clients/${clientId}`);
-    revalidatePath("/app/reports");
+    revalidatePath("/admin-panel/dashboard");
+    revalidatePath(`/admin-panel/clients/${clientId}`);
+    revalidatePath("/admin-panel/reports");
 
     return { ok: true, log };
   } catch (err) {

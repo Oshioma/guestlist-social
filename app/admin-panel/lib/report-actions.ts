@@ -163,8 +163,8 @@ export async function generateClientReport(clientId: string) {
     throw new Error("Could not save report.");
   }
 
-  revalidatePath("/app/reports");
-  revalidatePath(`/app/clients/${clientId}/reports`);
+  revalidatePath("/admin-panel/reports");
+  revalidatePath(`/admin-panel/clients/${clientId}/reports`);
 
   return reportData;
 }
@@ -189,5 +189,5 @@ export async function generateAllClientReports() {
     }
   }
 
-  revalidatePath("/app/reports");
+  revalidatePath("/admin-panel/reports");
 }

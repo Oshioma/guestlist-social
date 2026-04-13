@@ -33,8 +33,8 @@ export async function addStoryThemeAction(
     throw new Error("Could not add theme.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateStoryThemeAction(
@@ -66,8 +66,8 @@ export async function updateStoryThemeAction(
     throw new Error("Could not update theme.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function deleteStoryThemeAction(id: string) {
@@ -87,8 +87,8 @@ export async function deleteStoryThemeAction(id: string) {
     throw new Error("Could not delete theme.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 // ── Idea actions ──
@@ -123,8 +123,8 @@ export async function addStoryIdeaAction(
     throw new Error("Could not add idea.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateStoryIdeaAction(
@@ -154,8 +154,8 @@ export async function updateStoryIdeaAction(
     throw new Error("Could not update idea.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateStoryDesignLinkAction(id: string, designLink: string) {
@@ -169,7 +169,7 @@ export async function updateStoryDesignLinkAction(id: string, designLink: string
     console.error("updateStoryDesignLinkAction error:", error);
     throw new Error("Could not update design link.");
   }
-  revalidatePath("/app/story-ideas");
+  revalidatePath("/admin-panel/story-ideas");
 }
 
 export async function deleteStoryIdeaAction(id: string) {
@@ -187,6 +187,6 @@ export async function deleteStoryIdeaAction(id: string) {
     throw new Error("Could not delete idea.");
   }
 
-  revalidatePath("/app/story-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
 }

@@ -33,8 +33,8 @@ export async function addThemeAction(
     throw new Error("Could not add theme.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateThemeAction(
@@ -66,8 +66,8 @@ export async function updateThemeAction(
     throw new Error("Could not update theme.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function deleteThemeAction(id: string) {
@@ -88,8 +88,8 @@ export async function deleteThemeAction(id: string) {
     throw new Error("Could not delete theme.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 // ── Idea actions ──
@@ -124,8 +124,8 @@ export async function addVideoIdeaAction(
     throw new Error("Could not add idea.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateVideoIdeaAction(
@@ -155,8 +155,8 @@ export async function updateVideoIdeaAction(
     throw new Error("Could not update idea.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }
 
 export async function updateVideoDesignLinkAction(id: string, designLink: string) {
@@ -170,7 +170,7 @@ export async function updateVideoDesignLinkAction(id: string, designLink: string
     console.error("updateVideoDesignLinkAction error:", error);
     throw new Error("Could not update design link.");
   }
-  revalidatePath("/app/video-ideas");
+  revalidatePath("/admin-panel/video-ideas");
 }
 
 export async function deleteVideoIdeaAction(id: string) {
@@ -188,6 +188,6 @@ export async function deleteVideoIdeaAction(id: string) {
     throw new Error("Could not delete idea.");
   }
 
-  revalidatePath("/app/video-ideas");
-  revalidatePath("/app/content");
+  revalidatePath("/admin-panel/video-ideas");
+  revalidatePath("/admin-panel/content");
 }

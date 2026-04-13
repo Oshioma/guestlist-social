@@ -66,7 +66,7 @@ export async function addTaskAction(
     throw new Error("Could not add task.");
   }
 
-  revalidatePath("/app/tasks");
+  revalidatePath("/admin-panel/tasks");
 }
 
 export async function updateTaskAction(
@@ -109,7 +109,7 @@ export async function updateTaskAction(
     throw new Error("Could not update task.");
   }
 
-  revalidatePath("/app/tasks");
+  revalidatePath("/admin-panel/tasks");
 }
 
 export async function updateTaskStatusAction(id: string, status: string) {
@@ -153,7 +153,7 @@ export async function updateTaskStatusAction(id: string, status: string) {
         throw new Error("Could not roll recurring task forward.");
       }
 
-      revalidatePath("/app/tasks");
+      revalidatePath("/admin-panel/tasks");
       return;
     }
   }
@@ -171,7 +171,7 @@ export async function updateTaskStatusAction(id: string, status: string) {
     throw new Error("Could not update task status.");
   }
 
-  revalidatePath("/app/tasks");
+  revalidatePath("/admin-panel/tasks");
 }
 
 export async function deleteTaskAction(id: string) {
@@ -186,5 +186,5 @@ export async function deleteTaskAction(id: string) {
     throw new Error("Could not delete task.");
   }
 
-  revalidatePath("/app/tasks");
+  revalidatePath("/admin-panel/tasks");
 }

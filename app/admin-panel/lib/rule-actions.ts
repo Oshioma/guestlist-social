@@ -236,7 +236,7 @@ export async function generateCampaignActions(
     });
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath(`/app/clients/${clientId}/campaigns/${campaignId}`);
-  revalidatePath("/app/dashboard");
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+  revalidatePath("/admin-panel/dashboard");
 }

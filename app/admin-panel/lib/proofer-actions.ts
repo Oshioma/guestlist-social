@@ -87,7 +87,7 @@ export async function saveProoferPostAction(
     }
   }
 
-  revalidatePath("/app/proofer");
+  revalidatePath("/admin-panel/proofer");
 }
 
 export async function updateProoferStatusAction(
@@ -144,7 +144,7 @@ export async function updateProoferStatusAction(
     }
   }
 
-  revalidatePath("/app/proofer");
+  revalidatePath("/admin-panel/proofer");
 }
 
 export async function deleteProoferPostAction(
@@ -168,5 +168,5 @@ export async function deleteProoferPostAction(
     throw new Error("Could not delete post.");
   }
 
-  revalidatePath("/app/proofer");
+  revalidatePath("/admin-panel/proofer");
 }

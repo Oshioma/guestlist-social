@@ -205,9 +205,9 @@ export async function rewriteReviewWithClaude(reviewId: number): Promise<{
     }
 
     revalidatePath(
-      `/app/clients/${review.client_id}/reviews/${review.id}`
+      `/admin-panel/clients/${review.client_id}/reviews/${review.id}`
     );
-    revalidatePath(`/app/clients/${review.client_id}/reviews`);
+    revalidatePath(`/admin-panel/clients/${review.client_id}/reviews`);
 
     return { ok: true, result: parsed };
   } catch (e) {

@@ -167,9 +167,9 @@ export async function approveProposal(
   if (updErr) throw new Error(updErr.message);
 
   revalidatePath(
-    `/app/clients/${review.client_id}/reviews/${review.id}`
+    `/admin-panel/clients/${review.client_id}/reviews/${review.id}`
   );
-  revalidatePath(`/app/clients/${review.client_id}/reviews`);
+  revalidatePath(`/admin-panel/clients/${review.client_id}/reviews`);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,8 +200,8 @@ export async function sendReviewForApproval(reviewId: number) {
   if (error) throw new Error(error.message);
 
   const clientId = (existing as { client_id: number }).client_id;
-  revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
-  revalidatePath(`/app/clients/${clientId}/reviews`);
+  revalidatePath(`/admin-panel/clients/${clientId}/reviews/${reviewId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/reviews`);
 
   // Best-effort digest. Failures here must not roll back the status flip —
   // the operator can resend manually if Resend is down or the env vars are
@@ -320,7 +320,7 @@ export async function updateReviewNarrative(
   if (updErr) throw new Error(updErr.message);
 
   const clientId = (existing as { client_id: number }).client_id;
-  revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/reviews/${reviewId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +349,6 @@ export async function markReviewApproved(reviewId: number, approvedBy?: string) 
   if (error) throw new Error(error.message);
 
   const clientId = (existing as { client_id: number }).client_id;
-  revalidatePath(`/app/clients/${clientId}/reviews/${reviewId}`);
-  revalidatePath(`/app/clients/${clientId}/reviews`);
+  revalidatePath(`/admin-panel/clients/${clientId}/reviews/${reviewId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}/reviews`);
 }

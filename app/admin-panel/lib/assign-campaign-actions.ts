@@ -58,6 +58,6 @@ export async function assignCampaignToClient({
     throw new Error(`Failed to assign ads: ${updateAdsError.message}`);
   }
 
-  revalidatePath(`/app/clients/${clientId}`);
-  revalidatePath(`/app/clients`);
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  revalidatePath(`/admin-panel/clients`);
 }
