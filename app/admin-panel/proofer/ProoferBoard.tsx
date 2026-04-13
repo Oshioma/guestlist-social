@@ -23,6 +23,7 @@ import {
   updateContentPillarAction,
   archiveContentPillarAction,
   createIdeaFromProoferAction,
+  updateIdeaFromProoferAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -236,6 +237,17 @@ export default function ProoferBoard({
       }
     | null
   >(null);
+  type LinkedIdeaEditDraft = {
+    title: string;
+    idea: string;
+    notes: string;
+    pillarId: string | null;
+  };
+  const [editingLinkedIdea, setEditingLinkedIdea] = useState<{
+    id: string;
+    kind: IdeaKind;
+    draft: LinkedIdeaEditDraft;
+  } | null>(null);
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -558,6 +570,31 @@ export default function ProoferBoard({
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not create idea");
+      }
+    });
+  }
+
+  function handleSaveLinkedIdeaEdit() {
+    if (!editingLinkedIdea) return;
+    const { id, kind, draft } = editingLinkedIdea;
+    if (!draft.idea.trim()) {
+      alert("Idea text is required.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateIdeaFromProoferAction(
+          id,
+          kind,
+          draft.title,
+          draft.idea,
+          draft.notes,
+          draft.pillarId
+        );
+        setEditingLinkedIdea(null);
+        router.refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not update idea");
       }
     });
   }
@@ -1722,7 +1759,153 @@ export default function ProoferBoard({
                       : null;
 
                     if (linkedIdea) {
-                      if (!linkedIdea.title && !linkedIdea.notes) return null;
+                      const isEditingThis =
+                        editingLinkedIdea?.id === linkedIdea.id &&
+                        editingLinkedIdea?.kind === linkedIdea.kind;
+
+                      if (isEditingThis && editingLinkedIdea) {
+                        const d = editingLinkedIdea.draft;
+                        return (
+                          <div
+                            style={{
+                              padding: "8px 10px",
+                              background: "#fff",
+                              border: "1px solid #e4e4e7",
+                              borderRadius: 8,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 6,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: "#71717a",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              Edit idea
+                            </div>
+                            <input
+                              value={d.title}
+                              onChange={(e) =>
+                                setEditingLinkedIdea({
+                                  ...editingLinkedIdea,
+                                  draft: { ...d, title: e.target.value },
+                                })
+                              }
+                              placeholder="Title (optional)"
+                              style={{
+                                ...inputStyle,
+                                padding: "6px 8px",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                            />
+                            <input
+                              value={d.idea}
+                              onChange={(e) =>
+                                setEditingLinkedIdea({
+                                  ...editingLinkedIdea,
+                                  draft: { ...d, idea: e.target.value },
+                                })
+                              }
+                              placeholder="Idea..."
+                              style={{
+                                ...inputStyle,
+                                padding: "6px 8px",
+                                fontSize: 12,
+                              }}
+                            />
+                            <textarea
+                              value={d.notes}
+                              onChange={(e) =>
+                                setEditingLinkedIdea({
+                                  ...editingLinkedIdea,
+                                  draft: { ...d, notes: e.target.value },
+                                })
+                              }
+                              placeholder="Notes (optional)"
+                              rows={2}
+                              style={{
+                                ...inputStyle,
+                                padding: "6px 8px",
+                                fontSize: 12,
+                                resize: "vertical",
+                                fontFamily: "inherit",
+                                lineHeight: 1.4,
+                              }}
+                            />
+                            <select
+                              value={d.pillarId ?? ""}
+                              onChange={(e) =>
+                                setEditingLinkedIdea({
+                                  ...editingLinkedIdea,
+                                  draft: {
+                                    ...d,
+                                    pillarId: e.target.value || null,
+                                  },
+                                })
+                              }
+                              style={{
+                                ...inputStyle,
+                                padding: "6px 8px",
+                                fontSize: 12,
+                              }}
+                            >
+                              <option value="">No pillar</option>
+                              {initialPillars.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={handleSaveLinkedIdeaEdit}
+                                disabled={isPending || !d.idea.trim()}
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: "none",
+                                  borderRadius: 6,
+                                  background: "#18181b",
+                                  color: "#fff",
+                                  cursor:
+                                    isPending || !d.idea.trim()
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  opacity:
+                                    isPending || !d.idea.trim() ? 0.5 : 1,
+                                }}
+                              >
+                                {isPending ? "Saving..." : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingLinkedIdea(null)}
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  border: "1px solid #e4e4e7",
+                                  borderRadius: 6,
+                                  background: "#fff",
+                                  color: "#3f3f46",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div
                           style={{
@@ -1735,29 +1918,89 @@ export default function ProoferBoard({
                             gap: 4,
                           }}
                         >
-                          {linkedIdea.title && (
-                            <span
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              justifyContent: "space-between",
+                              gap: 8,
+                            }}
+                          >
+                            <div
                               style={{
-                                fontSize: 12,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 4,
+                                flex: 1,
+                                minWidth: 0,
+                              }}
+                            >
+                              {linkedIdea.title && (
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#18181b",
+                                  }}
+                                >
+                                  {linkedIdea.title}
+                                </span>
+                              )}
+                              {linkedIdea.notes && (
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#52525b",
+                                    whiteSpace: "pre-wrap",
+                                    lineHeight: 1.5,
+                                  }}
+                                >
+                                  {linkedIdea.notes}
+                                </span>
+                              )}
+                              {!linkedIdea.title && !linkedIdea.notes && (
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#a1a1aa",
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  No title or notes yet.
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={isLocked}
+                              onClick={() =>
+                                setEditingLinkedIdea({
+                                  id: linkedIdea.id,
+                                  kind: linkedIdea.kind,
+                                  draft: {
+                                    title: linkedIdea.title,
+                                    idea: linkedIdea.text,
+                                    notes: linkedIdea.notes,
+                                    pillarId: linkedIdea.pillarId,
+                                  },
+                                })
+                              }
+                              style={{
+                                padding: "4px 10px",
+                                fontSize: 11,
                                 fontWeight: 700,
-                                color: "#18181b",
+                                border: "1px solid #e4e4e7",
+                                borderRadius: 6,
+                                background: "#fff",
+                                color: "#3f3f46",
+                                cursor: isLocked ? "not-allowed" : "pointer",
+                                opacity: isLocked ? 0.5 : 1,
+                                flexShrink: 0,
                               }}
                             >
-                              {linkedIdea.title}
-                            </span>
-                          )}
-                          {linkedIdea.notes && (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#52525b",
-                                whiteSpace: "pre-wrap",
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {linkedIdea.notes}
-                            </span>
-                          )}
+                              Edit idea
+                            </button>
+                          </div>
                         </div>
                       );
                     }

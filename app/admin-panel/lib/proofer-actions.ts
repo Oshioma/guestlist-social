@@ -259,6 +259,49 @@ export async function createIdeaFromProoferAction(
   return { id: String(data.id), kind };
 }
 
+export async function updateIdeaFromProoferAction(
+  id: string,
+  kindRaw: string,
+  title: string,
+  idea: string,
+  notes: string,
+  pillarId: string | null
+) {
+  const kind =
+    kindRaw === "video" || kindRaw === "carousel" || kindRaw === "story"
+      ? kindRaw
+      : null;
+
+  if (!id || !kind) {
+    throw new Error("Idea is required.");
+  }
+  const cleanIdea = idea.trim();
+  if (!cleanIdea) {
+    throw new Error("Idea text is required.");
+  }
+
+  const supabase = await createClient();
+  const table = IDEA_KIND_TABLE_FOR_CREATE[kind].table;
+
+  const { error } = await supabase
+    .from(table)
+    .update({
+      title: title.trim(),
+      idea: cleanIdea,
+      notes: notes.trim(),
+      pillar_id: pillarId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error("updateIdeaFromProoferAction error:", error);
+    throw new Error("Could not update idea.");
+  }
+
+  revalidatePillarConsumers();
+}
+
 export async function setProoferPostPillarAction(
   postId: string,
   pillarId: string | null
