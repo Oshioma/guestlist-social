@@ -1,10 +1,16 @@
 import Link from "next/link";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 
-export default function Page() {
-  const launches = [
-    { template_id: "123", created_at: new Date().toISOString(), error_log: "Sample error" },
-    { template_id: "456", created_at: new Date().toISOString() }
-  ];
+export default async function Page() {
+  const supabase = createServerComponentClient();
+  const { data: launches, error } = await supabase
+    .from("launches")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return <div>Error loading launches: {error.message}</div>;
+
+  if (!launches?.length) return <div>No launches found.</div>;
 
   return (
     <ul>
