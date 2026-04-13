@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies, headers } from "next/headers";
+import { createServerComponentClient } from "@supabase/ssr";
 import { SyncButton } from "./SyncButton";
 import { ErrorEditor } from "./ErrorEditor";
 
@@ -26,7 +27,9 @@ export default async function Page({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  const supabase = createServerComponentClient();
+  // ✅ Use ssr package and pass context
+  const supabase = createServerComponentClient({ cookies, headers });
+
   let query = supabase
     .from("launches")
     .select("*", { count: "exact" })
@@ -42,7 +45,6 @@ export default async function Page({
   const fromIdx = count ? from + 1 : 0;
   const toIdx = count ? Math.min(to + 1, count) : 0;
 
-  // Helper for query string construction
   function queryStr(opts: Record<string, any>) {
     const obj = { filter, page, search, ...opts };
     const qs = Object.entries(obj)
@@ -55,10 +57,8 @@ export default async function Page({
   return (
     <main className="max-w-3xl mx-auto pt-12 px-6">
       <h1 className="text-2xl font-bold mb-4">Launches Admin Dashboard</h1>
-      
       <SyncButton />
 
-      {/* Filtering and Search */}
       <div className="mb-4 flex flex-wrap gap-4 items-end">
         <div className="flex gap-3">
           <Link
@@ -87,7 +87,6 @@ export default async function Page({
             className="border text-sm rounded px-2 py-1"
           />
           <input type="hidden" name="filter" value={filter} />
-          {/* Reset to page 1 on search */}
           <button
             type="submit"
             className="ml-2 bg-gray-700 text-white px-3 py-1 rounded text-xs"
@@ -103,7 +102,6 @@ export default async function Page({
         </div>
       )}
 
-      {/* List of launches */}
       <div className="mb-3 text-sm text-gray-500">
         Showing {fromIdx}–{toIdx} of {count || 0} launches
       </div>
@@ -136,7 +134,6 @@ export default async function Page({
         )}
       </ul>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <nav className="mt-7 flex gap-1 justify-center flex-wrap text-sm">
           <Link
