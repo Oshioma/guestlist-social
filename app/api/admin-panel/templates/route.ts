@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-// This route returns a single campaign template by ID as JSON.
 export async function GET(
   req: Request,
-  { params }: { params: { templateId: string } }
+  context: { params: Promise<{ templateId: string }> }
 ) {
-  // Extract dynamically provided templateId from the URL
-  const { templateId } = params;
+  const { templateId } = await context.params;
 
   if (!templateId) {
     return NextResponse.json(
@@ -17,7 +15,6 @@ export async function GET(
     );
   }
 
-  // Await cookies() in Next.js 16+; provide custom cookie store interface
   const cookieStore = await cookies();
 
   const supabase = createServerClient(
@@ -38,14 +35,12 @@ export async function GET(
     }
   );
 
-  // Fetch from the "campaign_templates" table; update name if your table differs
   const { data, error } = await supabase
-    .from("campaign_templates") // <--- change if your table is named differently
+    .from("campaign_templates")
     .select("*")
-    .eq("id", templateId) // <--- or your PK column
+    .eq("id", templateId)
     .single();
 
-  // If no matching data or Supabase error, respond with 404/error
   if (error || !data) {
     return NextResponse.json(
       { error: error?.message || "Template not found" },
@@ -53,6 +48,5 @@ export async function GET(
     );
   }
 
-  // Success: return the template data as JSON
   return NextResponse.json(data);
 }
