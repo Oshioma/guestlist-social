@@ -1,64 +1,58 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-// Helper: initialize Supabase using environment variables
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use service role for server-only endpoints!
-);
+// This route returns a single campaign template by ID as JSON.
+export async function GET(
+  req: Request,
+  { params }: { params: { templateId: string } }
+) {
+  // Extract dynamically provided templateId from the URL
+  const { templateId } = params;
 
-// Get currently authenticated user from cookies/header (depends on your auth config)
-async function getUser(req: NextRequest) {
-  // This is just a stub. If using Supabase Auth helpers, swap this for your method!
-  // For more robust auth: https://supabase.com/docs/guides/auth/server-side/nextjs
-  const access_token = req.headers.get("supabase-access-token");
-  if (!access_token) return null;
-  const { data } = await supabase.auth.getUser(access_token);
-  return data?.user || null;
-}
-
-export async function GET(req: NextRequest) {
-  // Only fetch templates user can see (private or org-wide)
-  const user = await getUser(req);
-  if (!user) return NextResponse.json([], { status: 401 });
-
-  const { data, error } = await supabase
-    .from("campaign_templates")
-    .select("*")
-    .or(`client_scope.eq.org,created_by.eq.${user.id}`)
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json(data);
-}
-
-export async function POST(req: NextRequest) {
-  const user = await getUser(req);
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await req.json();
-  // Validate input as needed!
-  if (!body.name || !body.slug) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  if (!templateId) {
+    return NextResponse.json(
+      { error: "templateId is required" },
+      { status: 400 }
+    );
   }
 
-  const { data, error } = await supabase.from("campaign_templates").insert([
+  // Await cookies() in Next.js 16+; provide custom cookie store interface
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      name: body.name,
-      slug: body.slug,
-      status: "active",
-      objective: body.objective || "LEAD_GENERATION",
-      template_type: "lead_gen", // or whatever default you want
-      description: body.description || "",
-      created_by: user.id,
-      client_scope: body.client_scope || "private",
-      is_safe_autolaunch: false,
-      version: 1
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options) {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        },
+      },
     }
-  ]).select("*").single();
+  );
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Fetch from the "campaign_templates" table; update name if your table differs
+  const { data, error } = await supabase
+    .from("campaign_templates") // <--- change if your table is named differently
+    .select("*")
+    .eq("id", templateId) // <--- or your PK column
+    .single();
 
+  // If no matching data or Supabase error, respond with 404/error
+  if (error || !data) {
+    return NextResponse.json(
+      { error: error?.message || "Template not found" },
+      { status: 404 }
+    );
+  }
+
+  // Success: return the template data as JSON
   return NextResponse.json(data);
 }
