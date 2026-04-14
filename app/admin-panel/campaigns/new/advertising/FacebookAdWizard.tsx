@@ -2,11 +2,100 @@
 import { useState } from "react";
 import Link from "next/link";
 
-// All the wizard steps—no changes needed from previous assistant messages
+function AdTypeChoice({ next, data }: any) {
+  const [choice, setChoice] = useState(data.adType || "");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (choice) next({ adType: choice });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <h2 className="text-2xl font-semibold mb-3">How would you like to run your ad?</h2>
+      <div className="flex flex-col gap-4">
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            value="existing"
+            checked={choice === "existing"}
+            onChange={() => setChoice("existing")}
+          />
+          Promote an existing Facebook/Instagram post
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            value="new"
+            checked={choice === "new"}
+            onChange={() => setChoice("new")}
+          />
+          Create a new ad
+        </label>
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          className="bg-blue-700 hover:bg-blue-800 px-5 py-2 text-white font-semibold rounded"
+          disabled={!choice}
+        >
+          Next
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ExistingPostPicker({ next, back, data }: any) {
+  // For now, use sample/static posts.
+  const mockPosts = [
+    { id: "fb1", img: "https://placehold.co/320x180/orange/white?text=Spring+Sale", caption: "Big spring sale 🎉" },
+    { id: "ig2", img: "https://placehold.co/320x180/607d8b/white?text=New+Arrivals!", caption: "Checkout our new arrivals!" },
+    { id: "fb3", img: "https://placehold.co/320x180/789262/white?text=Saturday+Event", caption: "Event this Saturday — join us LIVE." },
+  ];
+  const [selected, setSelected] = useState(data.postId || "");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selected) next({ postId: selected });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <h2 className="text-2xl font-semibold mb-3">Choose a post to boost</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {mockPosts.map(post => (
+          <label
+            key={post.id}
+            className={`block border rounded p-3 cursor-pointer ${selected === post.id ? "ring-2 ring-blue-500" : ""}`}
+          >
+            <input
+              type="radio"
+              className="sr-only"
+              checked={selected === post.id}
+              onChange={() => setSelected(post.id)}
+              value={post.id}
+            />
+            <img src={post.img} alt="" className="rounded mb-2 w-full h-32 object-cover" />
+            <div>{post.caption}</div>
+          </label>
+        ))}
+      </div>
+      <div className="flex justify-between mt-4">
+        <button type="button" onClick={back} className="bg-gray-300 px-5 py-2 rounded font-semibold">Back</button>
+        <button type="submit" className="bg-blue-700 hover:bg-blue-800 px-5 py-2 text-white font-semibold rounded" disabled={!selected}>
+          Next
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function StepProgress({ step }: { step: number }) {
+  // Keep or edit steps as desired. This will show steps for both flows.
   const steps = [
-    "Campaign Details",
+    "Ad Type",
+    "Campaign Details / Post",
     "Ad Set",
     "Ad Creative",
     "Review & Confirm"
@@ -39,7 +128,7 @@ function StepProgress({ step }: { step: number }) {
   );
 }
 
-function CampaignDetails({ next, data }: any) {
+function CampaignDetails({ next, back, data }: any) {
   const [name, setName] = useState(data.name || "");
   const [objective, setObjective] = useState(data.objective || "");
 
@@ -48,7 +137,7 @@ function CampaignDetails({ next, data }: any) {
       className="space-y-6"
       onSubmit={e => { e.preventDefault(); next({ name, objective }); }}
     >
-      <StepProgress step={1} />
+      <StepProgress step={2} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-3">Campaign Details</h2>
       <div>
         <label className="block font-medium mb-1">Campaign Name:</label>
@@ -75,7 +164,8 @@ function CampaignDetails({ next, data }: any) {
           <option value="conversions">Conversions</option>
         </select>
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        <button type="button" onClick={back} className="bg-gray-300 px-5 py-2 rounded font-semibold">Back</button>
         <button type="submit" className="bg-blue-700 hover:bg-blue-800 px-5 py-2 text-white font-semibold rounded">
           Next
         </button>
@@ -83,9 +173,6 @@ function CampaignDetails({ next, data }: any) {
     </form>
   );
 }
-
-// ...the rest of the steps (AdSetDetails, AdCreative, Review) and the main FacebookAdWizard function
-// (identical to my previous, validated code)
 
 function AdSetDetails({ next, back, data }: any) {
   const [audience, setAudience] = useState(data.audience || "");
@@ -95,7 +182,7 @@ function AdSetDetails({ next, back, data }: any) {
 
   return (
     <form className="space-y-6" onSubmit={e => { e.preventDefault(); next({ audience, budget, schedule, placement }); }}>
-      <StepProgress step={2} />
+      <StepProgress step={3} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-3">Ad Set Details</h2>
       <div>
         <label className="block font-medium mb-1">Audience:</label>
@@ -158,7 +245,7 @@ function AdCreative({ next, back, data }: any) {
 
   return (
     <form className="space-y-6" onSubmit={e => { e.preventDefault(); next({ headline, description, url, cta }); }}>
-      <StepProgress step={3} />
+      <StepProgress step={4} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-3">Ad Creative</h2>
       <div>
         <label className="block font-medium mb-1">Headline:</label>
@@ -217,19 +304,29 @@ function AdCreative({ next, back, data }: any) {
 function Review({ allData, back, submit, submitting, error }: any) {
   return (
     <div className="space-y-5">
-      <StepProgress step={4} />
+      <StepProgress step={allData.adType === "existing" ? 3 : 5} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-4">Review &amp; Confirm</h2>
       <div className="bg-gray-50 rounded border mb-4 p-4 text-sm">
-        <strong>Campaign Name:</strong> {allData.name} <br />
-        <strong>Objective:</strong> {allData.objective} <hr className="my-2"/>
+        <strong>Campaign Type:</strong> {allData.adType === "existing" ? "Boost Existing Post" : "New Ad"} <br />
+        {allData.adType === "existing" ? (
+          <>
+            <strong>Promoted Post ID:</strong> {allData.postId}
+          </>
+        ) : (
+          <>
+            <strong>Campaign Name:</strong> {allData.name} <br />
+            <strong>Objective:</strong> {allData.objective} <br />
+            <strong>Headline:</strong> {allData.headline} <br />
+            <strong>Description:</strong> {allData.description} <br />
+            <strong>Landing URL:</strong> {allData.url} <br />
+            <strong>Call to Action:</strong> {allData.cta}
+          </>
+        )}
+        <hr className="my-2"/>
         <strong>Audience:</strong> {allData.audience} <br />
         <strong>Budget:</strong> ${allData.budget}/day <br />
         <strong>Schedule:</strong> {allData.schedule} <br />
-        <strong>Placement:</strong> {allData.placement} <hr className="my-2"/>
-        <strong>Headline:</strong> {allData.headline} <br />
-        <strong>Description:</strong> {allData.description} <br />
-        <strong>Landing URL:</strong> {allData.url} <br />
-        <strong>Call to Action:</strong> {allData.cta}
+        <strong>Placement:</strong> {allData.placement} <br />
       </div>
       {error && <div className="text-red-600 mb-2">{error}</div>}
       <div className="flex justify-between">
@@ -267,13 +364,35 @@ export default function FacebookAdWizard() {
     setSubmitting(true);
     setError(null);
     try {
+      // For demonstration: send a different payload if boosting
+      const isBoost = collected.adType === "existing";
       const res = await fetch("/api/admin-panel/campaigns/launches", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          ...collected,
-          type: "advertising"
-        })
+        body: JSON.stringify(isBoost
+          ? {
+              adType: "existing",
+              postId: collected.postId,
+              audience: collected.audience,
+              budget: collected.budget,
+              schedule: collected.schedule,
+              placement: collected.placement,
+              type: "advertising"
+            }
+          : {
+              adType: "new",
+              name: collected.name,
+              type: "advertising",
+              objective: collected.objective,
+              audience: collected.audience,
+              budget: collected.budget,
+              schedule: collected.schedule,
+              placement: collected.placement,
+              headline: collected.headline,
+              description: collected.description,
+              url: collected.url,
+              cta: collected.cta
+            })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -289,30 +408,46 @@ export default function FacebookAdWizard() {
     }
   }
 
-  return (
-    <main className="max-w-2xl mx-auto pt-8 px-3">
-      <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline mb-6 inline-block">
-        ← Back to Campaigns Dashboard
-      </Link>
-      {step === 1 && <CampaignDetails next={next} data={collected} />}
-      {step === 2 && <AdSetDetails next={next} back={back} data={collected} />}
-      {step === 3 && <AdCreative next={next} back={back} data={collected} />}
-      {step === 4 && (
-        <Review
-          allData={collected}
-          back={back}
-          submit={handleSubmit}
-          submitting={submitting}
-          error={error}
-        />
-      )}
-      {step === 5 && (
+  // Decide what to show on each step
+  let currentStep;
+  if (step === 1) {
+    currentStep = <AdTypeChoice next={next} data={collected} />;
+  } else if (collected.adType === "existing") {
+    if (step === 2) currentStep = <ExistingPostPicker next={next} back={back} data={collected} />;
+    else if (step === 3) currentStep = <AdSetDetails next={next} back={back} data={collected} />;
+    else if (step === 4)
+      currentStep = <Review allData={collected} back={back} submit={handleSubmit} submitting={submitting} error={error} />;
+    else if (step === 5)
+      currentStep = (
+        <section className="flex items-center flex-col justify-center h-72">
+          <div className="text-5xl text-green-500 mb-4">🎉</div>
+          <div className="text-2xl font-bold mb-4">Your boosted campaign has been launched!</div>
+          <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline font-semibold">← Back to Campaigns Dashboard</Link>
+        </section>
+      );
+  } else {
+    // NEW AD FLOW
+    if (step === 2) currentStep = <CampaignDetails next={next} back={back} data={collected} />;
+    else if (step === 3) currentStep = <AdSetDetails next={next} back={back} data={collected} />;
+    else if (step === 4) currentStep = <AdCreative next={next} back={back} data={collected} />;
+    else if (step === 5)
+      currentStep = <Review allData={collected} back={back} submit={handleSubmit} submitting={submitting} error={error} />;
+    else if (step === 6)
+      currentStep = (
         <section className="flex items-center flex-col justify-center h-72">
           <div className="text-5xl text-green-500 mb-4">🎉</div>
           <div className="text-2xl font-bold mb-4">Your Facebook ad campaign has been launched!</div>
           <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline font-semibold">← Back to Campaigns Dashboard</Link>
         </section>
-      )}
+      );
+  }
+
+  return (
+    <main className="max-w-2xl mx-auto pt-8 px-3">
+      <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline mb-6 inline-block">
+        ← Back to Campaigns Dashboard
+      </Link>
+      {currentStep}
     </main>
   );
 }
