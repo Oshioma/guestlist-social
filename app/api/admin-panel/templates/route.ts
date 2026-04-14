@@ -2,19 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export async function GET(
-  req: Request,
-  context: { params: Promise<{ templateId: string }> }
-) {
-  const { templateId } = await context.params;
-
-  if (!templateId) {
-    return NextResponse.json(
-      { error: "templateId is required" },
-      { status: 400 }
-    );
-  }
-
+export async function GET() {
   const cookieStore = await cookies();
 
   const supabase = createServerClient(
@@ -38,15 +26,11 @@ export async function GET(
   const { data, error } = await supabase
     .from("campaign_templates")
     .select("*")
-    .eq("id", templateId)
-    .single();
+    .order("created_at", { ascending: false });
 
-  if (error || !data) {
-    return NextResponse.json(
-      { error: error?.message || "Template not found" },
-      { status: 404 }
-    );
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(data || []);
 }
