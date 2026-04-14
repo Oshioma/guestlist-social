@@ -2,30 +2,45 @@ import { NextResponse, NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-// PATCH: edit attributes or move up/down
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { campaignId: string; stepId: string } }
-) {
-  const { campaignId, stepId } = params;
+type RouteContext = {
+  params: Promise<{
+    campaignId: string;
+    stepId: string;
+  }>;
+};
+
+async function getSupabase() {
   const cookieStore = await cookies();
-  const supabase = createServerClient(
+
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) { return cookieStore.get(name)?.value; },
-        set(name, value, options) { cookieStore.set({ name, value, ...options }); },
-        remove(name, options) { cookieStore.set({ name, value: "", ...options, maxAge: 0 }); }
-      }
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options) {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        },
+      },
     }
   );
+}
 
-  // Support reorder
+// PATCH: edit attributes or move up/down
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const { campaignId, stepId } = await context.params;
+  const supabase = await getSupabase();
+
   const url = new URL(request.url);
   const move = url.searchParams.get("move");
+
   if (move === "up" || move === "down") {
-    const { data: step, error: findErr } = await supabase
+    const { data: step } = await supabase
       .from("campaign_steps")
       .select("id, order_index")
       .eq("id", stepId)
@@ -36,10 +51,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Step not found" }, { status: 404 });
     }
 
-    // Find the neighbor step to swap order_index
     const op = move === "up" ? "<" : ">";
-    const orderDir = move === "up" ? "desc" : "asc";
-    const { data: neighbors } = await supabase
+
+    const { data: neighbors, error: neighborError } = await supabase
       .from("campaign_steps")
       .select("id, order_index")
       .eq("campaign_id", campaignId)
@@ -47,33 +61,66 @@ export async function PATCH(
       .order("order_index", { ascending: move !== "up" })
       .limit(1);
 
-    const neighbor = neighbors && neighbors.length > 0 ? neighbors[0] : null;
-    if (!neighbor) {
-      return NextResponse.json({ error: "No step to move with" }, { status: 400 });
+    if (neighborError) {
+      return NextResponse.json(
+        { error: neighborError.message },
+        { status: 500 }
+      );
     }
 
-    // Swap order_index between current and neighbor
-    await supabase
+    const neighbor = neighbors && neighbors.length > 0 ? neighbors[0] : null;
+
+    if (!neighbor) {
+      return NextResponse.json(
+        { error: "No step to move with" },
+        { status: 400 }
+      );
+    }
+
+    const { error: updateCurrentError } = await supabase
       .from("campaign_steps")
       .update({ order_index: neighbor.order_index })
-      .eq("id", stepId);
+      .eq("id", stepId)
+      .eq("campaign_id", campaignId);
 
-    await supabase
+    if (updateCurrentError) {
+      return NextResponse.json(
+        { error: updateCurrentError.message },
+        { status: 500 }
+      );
+    }
+
+    const { error: updateNeighborError } = await supabase
       .from("campaign_steps")
       .update({ order_index: step.order_index })
-      .eq("id", neighbor.id);
+      .eq("id", neighbor.id)
+      .eq("campaign_id", campaignId);
+
+    if (updateNeighborError) {
+      return NextResponse.json(
+        { error: updateNeighborError.message },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ ok: true });
   }
 
-  // Otherwise, update one or more fields
   const body = await request.json();
-  const patch: any = {};
+
+  const patch: Record<string, unknown> = {};
+
   ["type", "name", "content"].forEach((key) => {
-    if (body[key] !== undefined) patch[key] = body[key];
+    if (body[key] !== undefined) {
+      patch[key] = body[key];
+    }
   });
+
   if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    return NextResponse.json(
+      { error: "No fields to update" },
+      { status: 400 }
+    );
   }
 
   const { error } = await supabase
@@ -85,27 +132,14 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
   return NextResponse.json({ ok: true });
 }
 
 // DELETE: delete a step
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { campaignId: string; stepId: string } }
-) {
-  const { campaignId, stepId } = params;
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name) { return cookieStore.get(name)?.value; },
-        set(name, value, options) { cookieStore.set({ name, value, ...options }); },
-        remove(name, options) { cookieStore.set({ name, value: "", ...options, maxAge: 0 }); }
-      }
-    }
-  );
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const { campaignId, stepId } = await context.params;
+  const supabase = await getSupabase();
 
   const { error } = await supabase
     .from("campaign_steps")
