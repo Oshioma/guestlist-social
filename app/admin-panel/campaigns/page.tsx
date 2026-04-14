@@ -14,7 +14,6 @@ export default function CampaignsDashboard() {
   const [showTypePicker, setShowTypePicker] = useState(false);
 
   useEffect(() => {
-    // Fetch campaigns from your API
     fetch("/api/admin-panel/campaigns")
       .then(res => res.json())
       .then(setCampaigns);
@@ -24,11 +23,9 @@ export default function CampaignsDashboard() {
     { value: "advertising", label: "Advertising" },
     { value: "sms", label: "SMS" },
     { value: "email", label: "Email" }
-    // add more as you want
   ];
 
   function handleNewCampaign(type: string) {
-    // Redirect to campaign creation for that type
     window.location.href = `/admin-panel/campaigns/new?type=${type}`;
   }
 
