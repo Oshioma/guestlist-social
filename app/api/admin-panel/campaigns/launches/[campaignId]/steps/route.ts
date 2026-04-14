@@ -1,4 +1,9 @@
-export async function GET(
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+
+// POST: Add a new step to the campaign
+export async function POST(
   req: Request,
   { params }: { params: { campaignId: string } }
 ) {
@@ -16,15 +21,8 @@ export async function GET(
     }
   );
 
-  const { data, error } = await supabase
-    .from("campaign_steps")
-    .select("*")
-    .eq("campaign_id", campaignId)
-    .order("order_index", { ascending: true });
+  const body = await req.json();
+  const { type, name, content } = body;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data || []);
-}
+  // Find the current
+
