@@ -12,7 +12,6 @@ const stepTypes = [
 export default function AddStepPage({ params }: { params: { campaignId: string } }) {
   const [type, setType] = useState<string>("email");
   const [name, setName] = useState("");
-  // These state variables will be used for each step type
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [smsMessage, setSmsMessage] = useState("");
@@ -81,7 +80,6 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
     e.preventDefault();
     setStatus("Saving...");
 
-    // Build the content object based on type
     let content: any = {};
     if (type === "email") {
       content = { subject: emailSubject, body: emailBody };
@@ -120,7 +118,6 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             value={type}
             onChange={e => {
               setType(e.target.value);
-              // Reset per-step fields when swapped
               setEmailSubject(""); setEmailBody(""); setSmsMessage(""); setWaitHours("");
             }}
           >
