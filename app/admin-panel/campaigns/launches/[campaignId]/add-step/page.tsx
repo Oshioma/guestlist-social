@@ -1,0 +1,136 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+// For demo: define some step types
+const stepTypes = [
+  { value: "email", label: "Email" },
+  { value: "sms", label: "SMS" },
+  { value: "wait", label: "Wait/Delay" }
+];
+
+export default function AddStepPage({ params }: { params: { campaignId: string } }) {
+  const [type, setType] = useState<string>("email");
+  const [name, setName] = useState("");
+  const [content, setContent] = useState<any>({});
+  const [status, setStatus] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Example: simple content fields for email step
+  function renderStepFields() {
+    if (type === "email") {
+      return (
+        <>
+          <label className="block mb-2 font-medium">Subject:
+            <input
+              type="text"
+              className="block w-full border rounded px-3 py-2 mb-2"
+              value={content.subject ?? ""}
+              onChange={e => setContent((c: any) => ({ ...c, subject: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="block mb-2 font-medium">Body:
+            <textarea
+              className="block w-full border rounded px-3 py-2 mb-2"
+              rows={5}
+              value={content.body ?? ""}
+              onChange={e => setContent((c: any) => ({ ...c, body: e.target.value }))}
+              required
+            />
+          </label>
+        </>
+      );
+    } else if (type === "sms") {
+      return (
+        <>
+          <label className="block mb-2 font-medium">Message:
+            <textarea
+              className="block w-full border rounded px-3 py-2 mb-2"
+              rows={3}
+              value={content.message ?? ""}
+              onChange={e => setContent((c: any) => ({ ...c, message: e.target.value }))}
+              required
+            />
+          </label>
+        </>
+      );
+    } else if (type === "wait") {
+      return (
+        <>
+          <label className="block mb-2 font-medium">Delay (hours):
+            <input
+              type="number"
+              min={1}
+              className="block w-full border rounded px-3 py-2 mb-2"
+              value={content.hours ?? ""}
+              onChange={e => setContent((c: any) => ({ ...c, hours: e.target.value }))}
+              required
+            />
+          </label>
+        </>
+      );
+    }
+    return null;
+  }
+
+  async function addStep(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("Saving...");
+    const res = await fetch(`/api/admin-panel/campaigns/launches/${params.campaignId}/steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        name,
+        content
+      })
+    });
+    if (res.ok) {
+      setStatus("Step added!");
+      router.push(`/admin-panel/campaigns/launches/${params.campaignId}`);
+    } else {
+      setStatus("Failed to add step.");
+    }
+  }
+
+  return (
+    <main className="max-w-xl mx-auto pt-8 px-4">
+      <h1 className="text-2xl font-bold mb-4">Add Step to Campaign</h1>
+      <form onSubmit={addStep} className="space-y-4">
+        <label className="block">
+          Step Type:
+          <select
+            className="block w-full border rounded px-3 py-2"
+            value={type}
+            onChange={e => {
+              setType(e.target.value);
+              setContent({});
+            }}
+          >
+            {stepTypes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          Step Name:
+          <input
+            type="text"
+            className="block w-full border rounded px-3 py-2"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            required
+          />
+        </label>
+        {renderStepFields()}
+        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Step</button>
+        {status && <div className="mt-2">{status}</div>}
+      </form>
+      <div className="mt-8">
+        <Link href={`/admin-panel/campaigns/launches/${params.campaignId}`} className="text-blue-600 hover:underline">
+          ← Back to Campaign
+        </Link>
+      </div>
+    </main>
+  );
+}
