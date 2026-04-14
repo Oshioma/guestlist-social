@@ -7,7 +7,7 @@ import { FaMagic, FaUserFriends, FaMapMarkerAlt, FaSlidersH } from "react-icons/
 
 function AudiencePicker({ next, back, data }: any) {
   const [choice, setChoice] = useState(data?.audience?.type || "smart");
-  const [custom, setCustom] = useState(
+  const [custom, setCustom] = useState<{ ageMin: number; ageMax: number; gender: string; location: string }>(
     data?.audience?.custom || { ageMin: 25, ageMax: 45, gender: "Any", location: "" }
   );
   function handleCustomChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
