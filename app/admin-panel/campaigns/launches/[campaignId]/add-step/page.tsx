@@ -17,6 +17,7 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
   const [smsMessage, setSmsMessage] = useState("");
   const [waitHours, setWaitHours] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const router = useRouter();
 
   function renderStepFields() {
@@ -79,7 +80,9 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
   async function addStep(e: React.FormEvent) {
     e.preventDefault();
     setStatus("Saving...");
+    setErrorDetails(null);
 
+    // Build the right content object based on type
     let content: any = {};
     if (type === "email") {
       content = { subject: emailSubject, body: emailBody };
@@ -103,7 +106,16 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
       setStatus("Step added!");
       router.push(`/admin-panel/campaigns/launches/${params.campaignId}`);
     } else {
-      setStatus("Failed to add step.");
+      let errMsg = "Unknown error";
+      try {
+        const err = await res.json();
+        errMsg = err.error || errMsg;
+        setErrorDetails(JSON.stringify(err, null, 2));
+        console.error("Add step error:", err);
+      } catch {
+        // ignore JSON parse error
+      }
+      setStatus("Failed to add step: " + errMsg);
     }
   }
 
@@ -118,8 +130,55 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             value={type}
             onChange={e => {
               setType(e.target.value);
-              setEmailSubject(""); setEmailBody(""); setSmsMessage(""); setWaitHours("");
+              setEmailSubject("");
+              setEmailBody("");
+              setSmsMessage("");
+              setWaitHours("");
             }}
           >
-
-
+            {stepTypes.map(s => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          Step Name:
+          <input
+            type="text"
+            className="block w-full border rounded px-3 py-2"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            required
+          />
+        </label>
+        {renderStepFields()}
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Add Step
+        </button>
+        {status && (
+          <div className="mt-2 text-red-600">
+            {status}
+          </div>
+        )}
+        {errorDetails && (
+          <pre className="bg-gray-100 text-xs mt-2 p-2 rounded border border-red-200 text-red-800 max-w-full overflow-x-auto">
+            {errorDetails}
+          </pre>
+        )}
+      </form>
+      <div className="mt-8">
+        <Link
+          href={`/admin-panel/campaigns/launches/${params.campaignId}`}
+          className="text-blue-600 hover:underline"
+        >
+          ← Back to Campaign
+        </Link>
+      </div>
+    </main>
+  );
+}
