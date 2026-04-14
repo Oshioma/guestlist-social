@@ -15,10 +15,12 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
   const [loading, setLoading] = useState(true);
   const [editStepId, setEditStepId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
-  const [editContent, setEditContent] = useState<any>({});
+  const [editEmailSubject, setEditEmailSubject] = useState("");
+  const [editEmailBody, setEditEmailBody] = useState("");
+  const [editSmsMessage, setEditSmsMessage] = useState("");
+  const [editWaitHours, setEditWaitHours] = useState("");
   const [status, setStatus] = useState<string | null>(null);
 
-  // Fetch steps
   async function fetchSteps() {
     setLoading(true);
     const res = await fetch(`/api/admin-panel/campaigns/launches/${params.campaignId}/steps`);
@@ -30,7 +32,51 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
 
   useEffect(() => { fetchSteps(); }, [params.campaignId]);
 
-  // Delete
+  function beginEdit(step: Step) {
+    setEditStepId(step.id);
+    setEditName(step.name);
+    if (step.type === "email") {
+      setEditEmailSubject(step.content?.subject || "");
+      setEditEmailBody(step.content?.body || "");
+      setEditSmsMessage("");
+      setEditWaitHours("");
+    } else if (step.type === "sms") {
+      setEditEmailSubject(""); setEditEmailBody("");
+      setEditSmsMessage(step.content?.message || "");
+      setEditWaitHours("");
+    } else if (step.type === "wait") {
+      setEditEmailSubject(""); setEditEmailBody(""); setEditSmsMessage("");
+      setEditWaitHours(step.content?.hours?.toString() || "");
+    } else {
+      setEditEmailSubject(""); setEditEmailBody(""); setEditSmsMessage(""); setEditWaitHours("");
+    }
+  }
+
+  async function saveEdit(id: number, type: string) {
+    setStatus("Saving...");
+    let content: any = {};
+    if (type === "email") {
+      content = { subject: editEmailSubject, body: editEmailBody };
+    } else if (type === "sms") {
+      content = { message: editSmsMessage };
+    } else if (type === "wait") {
+      content = { hours: Number(editWaitHours) || 0 };
+    }
+    const res = await fetch(`/api/admin-panel/campaigns/launches/${params.campaignId}/steps/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName, content })
+    });
+    if (res.ok) {
+      setEditStepId(null);
+      setEditName(""); setEditEmailSubject(""); setEditEmailBody(""); setEditSmsMessage(""); setEditWaitHours("");
+      fetchSteps();
+      setStatus(null);
+    } else {
+      setStatus("Failed to update step.");
+    }
+  }
+
   async function handleDelete(id: number) {
     if (!confirm("Delete this step?")) return;
     setStatus("Deleting...");
@@ -43,7 +89,6 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
     }
   }
 
-  // Move
   async function handleMove(id: number, direction: "up" | "down") {
     setStatus("Moving...");
     const res = await fetch(
@@ -55,32 +100,6 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
       fetchSteps();
     } else {
       setStatus("Failed to move step.");
-    }
-  }
-
-  // Begin editing step
-  function beginEdit(step: Step) {
-    setEditStepId(step.id);
-    setEditName(step.name);
-    setEditContent(step.content || {});
-  }
-
-  // Save edit
-  async function saveEdit(id: number) {
-    setStatus("Saving...");
-    const res = await fetch(`/api/admin-panel/campaigns/launches/${params.campaignId}/steps/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName, content: editContent })
-    });
-    if (res.ok) {
-      setEditStepId(null);
-      setEditName("");
-      setEditContent({});
-      fetchSteps();
-      setStatus(null);
-    } else {
-      setStatus("Failed to update step.");
     }
   }
 
@@ -116,25 +135,63 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
                       className="border rounded px-2 py-1 w-full"
                       value={editName}
                       onChange={e => setEditName(e.target.value)}
+                      required
                     />
                   </label>
-                  {/* Simple JSON content editor - can improve per your content structure! */}
-                  <label className="block">
-                    Content (JSON):
-                    <textarea
-                      className="border rounded px-2 py-1 w-full"
-                      rows={3}
-                      value={JSON.stringify(editContent, null, 2)}
-                      onChange={e => {
-                        try { setEditContent(JSON.parse(e.target.value)); }
-                        catch { /* ignore bad JSON for now */ }
-                      }}
-                    />
-                  </label>
+                  {/* User-friendly, not JSON! */}
+                  {step.type === "email" && (
+                    <>
+                      <label className="block">
+                        Subject:
+                        <input
+                          type="text"
+                          className="border rounded px-2 py-1 w-full"
+                          value={editEmailSubject}
+                          onChange={e => setEditEmailSubject(e.target.value)}
+                          required
+                        />
+                      </label>
+                      <label className="block">
+                        Body:
+                        <textarea
+                          className="border rounded px-2 py-1 w-full"
+                          rows={4}
+                          value={editEmailBody}
+                          onChange={e => setEditEmailBody(e.target.value)}
+                          required
+                        />
+                      </label>
+                    </>
+                  )}
+                  {step.type === "sms" && (
+                    <label className="block">
+                      Message:
+                      <textarea
+                        className="border rounded px-2 py-1 w-full"
+                        rows={3}
+                        value={editSmsMessage}
+                        onChange={e => setEditSmsMessage(e.target.value)}
+                        required
+                      />
+                    </label>
+                  )}
+                  {step.type === "wait" && (
+                    <label className="block">
+                      Delay (in hours):
+                      <input
+                        type="number"
+                        min={1}
+                        className="border rounded px-2 py-1 w-full"
+                        value={editWaitHours}
+                        onChange={e => setEditWaitHours(e.target.value)}
+                        required
+                      />
+                    </label>
+                  )}
                   <div className="flex gap-2 mt-2">
                     <button
                       className="bg-green-600 text-white px-3 py-1 rounded"
-                      onClick={() => saveEdit(step.id)}
+                      onClick={() => saveEdit(step.id, step.type)}
                       type="button"
                     >
                       Save
@@ -157,10 +214,20 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
                   <div className="text-sm text-gray-700">
                     <strong>Order:</strong> {step.order_index}
                   </div>
-                  <pre className="bg-gray-50 text-xs p-2 rounded overflow-x-auto">
-                    {JSON.stringify(step.content, null, 2)}
-                  </pre>
-
+                  <div className="text-xs text-gray-800">
+                    {step.type === "email" && (
+                      <>
+                        <div><strong>Subject:</strong> {step.content?.subject}</div>
+                        <div><strong>Body:</strong> {step.content?.body}</div>
+                      </>
+                    )}
+                    {step.type === "sms" && (
+                      <div><strong>Message:</strong> {step.content?.message}</div>
+                    )}
+                    {step.type === "wait" && (
+                      <div><strong>Wait (hours):</strong> {step.content?.hours}</div>
+                    )}
+                  </div>
                   <div className="flex flex-wrap mt-2 gap-2">
                     <button
                       disabled={i === 0}
