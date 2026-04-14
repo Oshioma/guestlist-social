@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
 type Campaign = {
@@ -13,6 +14,7 @@ export default function CampaignsDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     fetch("/api/admin-panel/campaigns")
@@ -43,7 +45,7 @@ export default function CampaignsDashboard() {
   ];
 
   function handleNewCampaign(type: string) {
-    window.location.href = `/admin-panel/campaigns/new?type=${type}`;
+    router.push(`/admin-panel/campaigns/new?type=${type}`);
   }
 
   return (
@@ -52,6 +54,7 @@ export default function CampaignsDashboard() {
       <button
         className="mb-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
         onClick={() => setShowTypePicker(v => !v)}
+        type="button"
       >
         + New Campaign
       </button>
@@ -62,8 +65,9 @@ export default function CampaignsDashboard() {
           <div className="flex gap-4 flex-wrap">
             {campaignTypes.map(type => (
               <button
-                className="px-3 py-2 bg-blue-100 rounded hover:bg-blue-200"
                 key={type.value}
+                type="button"
+                className="px-3 py-2 bg-blue-100 rounded hover:bg-blue-200"
                 onClick={() => handleNewCampaign(type.value)}
               >
                 {type.label}
