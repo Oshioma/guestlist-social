@@ -138,7 +138,6 @@ export default function CampaignStepsPage({ params }: { params: { campaignId: st
                       required
                     />
                   </label>
-                  {/* User-friendly, not JSON! */}
                   {step.type === "email" && (
                     <>
                       <label className="block">
