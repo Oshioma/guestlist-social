@@ -65,5 +65,52 @@ export default function CampaignsDashboard() {
                 className="px-3 py-2 bg-blue-100 rounded hover:bg-blue-200"
                 key={type.value}
                 onClick={() => handleNewCampaign(type.value)}
-             ](#)
-
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <h2 className="text-xl font-semibold mb-2">All Campaigns</h2>
+      <table className="w-full border rounded mb-8">
+        <thead>
+          <tr className="bg-gray-100 text-left">
+            <th className="p-2">Name</th>
+            <th className="p-2">Type</th>
+            <th className="p-2">Created</th>
+            <th className="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loadError ? (
+            <tr>
+              <td colSpan={4} className="p-2 text-red-500">{loadError}</td>
+            </tr>
+          ) : campaigns.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="p-2 text-gray-400 italic">No campaigns yet.</td>
+            </tr>
+          ) : (
+            campaigns.map(c => (
+              <tr key={c.id} className="border-t">
+                <td className="p-2">{c.name}</td>
+                <td className="p-2 capitalize">{c.type}</td>
+                <td className="p-2">{new Date(c.created_at).toLocaleDateString()}</td>
+                <td className="p-2">
+                  <Link
+                    href={`/admin-panel/campaigns/launches/${c.id}`}
+                    className="text-blue-700 hover:underline"
+                  >
+                    View
+                  </Link>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </main>
+  );
+}
