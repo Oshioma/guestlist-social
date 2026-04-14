@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 // PATCH: edit attributes or move up/down
 export async function PATCH(
-  req: Request,
-  { params }: { params: { campaignId: string, stepId: string } }
+  request: NextRequest,
+  { params }: { params: { campaignId: string; stepId: string } }
 ) {
   const { campaignId, stepId } = params;
   const cookieStore = await cookies();
@@ -22,7 +22,7 @@ export async function PATCH(
   );
 
   // Support reorder
-  const url = new URL(req.url);
+  const url = new URL(request.url);
   const move = url.searchParams.get("move");
   if (move === "up" || move === "down") {
     const { data: step, error: findErr } = await supabase
@@ -67,7 +67,7 @@ export async function PATCH(
   }
 
   // Otherwise, update one or more fields
-  const body = await req.json();
+  const body = await request.json();
   const patch: any = {};
   ["type", "name", "content"].forEach((key) => {
     if (body[key] !== undefined) patch[key] = body[key];
@@ -90,8 +90,8 @@ export async function PATCH(
 
 // DELETE: delete a step
 export async function DELETE(
-  req: Request,
-  { params }: { params: { campaignId: string, stepId: string } }
+  request: NextRequest,
+  { params }: { params: { campaignId: string; stepId: string } }
 ) {
   const { campaignId, stepId } = params;
   const cookieStore = await cookies();
