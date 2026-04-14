@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-// For demo: define some step types
 const stepTypes = [
   { value: "email", label: "Email" },
   { value: "sms", label: "SMS" },
@@ -13,11 +12,14 @@ const stepTypes = [
 export default function AddStepPage({ params }: { params: { campaignId: string } }) {
   const [type, setType] = useState<string>("email");
   const [name, setName] = useState("");
-  const [content, setContent] = useState<any>({});
+  // These state variables will be used for each step type
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [waitHours, setWaitHours] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const router = useRouter();
 
-  // Example: simple content fields for email step
   function renderStepFields() {
     if (type === "email") {
       return (
@@ -26,8 +28,8 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             <input
               type="text"
               className="block w-full border rounded px-3 py-2 mb-2"
-              value={content.subject ?? ""}
-              onChange={e => setContent((c: any) => ({ ...c, subject: e.target.value }))}
+              value={emailSubject}
+              onChange={e => setEmailSubject(e.target.value)}
               required
             />
           </label>
@@ -35,8 +37,8 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             <textarea
               className="block w-full border rounded px-3 py-2 mb-2"
               rows={5}
-              value={content.body ?? ""}
-              onChange={e => setContent((c: any) => ({ ...c, body: e.target.value }))}
+              value={emailBody}
+              onChange={e => setEmailBody(e.target.value)}
               required
             />
           </label>
@@ -49,8 +51,8 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             <textarea
               className="block w-full border rounded px-3 py-2 mb-2"
               rows={3}
-              value={content.message ?? ""}
-              onChange={e => setContent((c: any) => ({ ...c, message: e.target.value }))}
+              value={smsMessage}
+              onChange={e => setSmsMessage(e.target.value)}
               required
             />
           </label>
@@ -59,13 +61,13 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
     } else if (type === "wait") {
       return (
         <>
-          <label className="block mb-2 font-medium">Delay (hours):
+          <label className="block mb-2 font-medium">Delay (in hours):
             <input
               type="number"
               min={1}
               className="block w-full border rounded px-3 py-2 mb-2"
-              value={content.hours ?? ""}
-              onChange={e => setContent((c: any) => ({ ...c, hours: e.target.value }))}
+              value={waitHours}
+              onChange={e => setWaitHours(e.target.value)}
               required
             />
           </label>
@@ -78,6 +80,17 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
   async function addStep(e: React.FormEvent) {
     e.preventDefault();
     setStatus("Saving...");
+
+    // Build the content object based on type
+    let content: any = {};
+    if (type === "email") {
+      content = { subject: emailSubject, body: emailBody };
+    } else if (type === "sms") {
+      content = { message: smsMessage };
+    } else if (type === "wait") {
+      content = { hours: Number(waitHours) || 0 };
+    }
+
     const res = await fetch(`/api/admin-panel/campaigns/launches/${params.campaignId}/steps`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,6 +100,7 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
         content
       })
     });
+
     if (res.ok) {
       setStatus("Step added!");
       router.push(`/admin-panel/campaigns/launches/${params.campaignId}`);
@@ -106,7 +120,8 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
             value={type}
             onChange={e => {
               setType(e.target.value);
-              setContent({});
+              // Reset per-step fields when swapped
+              setEmailSubject(""); setEmailBody(""); setSmsMessage(""); setWaitHours("");
             }}
           >
             {stepTypes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
