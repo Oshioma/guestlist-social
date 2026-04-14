@@ -2,14 +2,187 @@
 import { useState } from "react";
 import Link from "next/link";
 
+// AudiencePicker, in-file for clarity, but you can place it in its own file if you wish
+import { FaMagic, FaUserFriends, FaMapMarkerAlt, FaSlidersH } from "react-icons/fa";
+
+function AudiencePicker({ next, back, data }: any) {
+  const [choice, setChoice] = useState(data?.audience?.type || "smart");
+  const [custom, setCustom] = useState(
+    data?.audience?.custom || { ageMin: 25, ageMax: 45, gender: "Any", location: "" }
+  );
+  function handleCustomChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    const { name, value } = e.target;
+    setCustom(prev => ({
+      ...prev,
+      [name]: name === "ageMin" || name === "ageMax" ? Number(value) : value
+    }));
+  }
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    next(
+      choice === "custom"
+        ? { audience: { type: "custom", custom } }
+        : { audience: { type: choice } }
+    );
+  }
+  return (
+    <form
+      className="space-y-8"
+      onSubmit={handleSubmit}
+      autoComplete="off"
+    >
+      <h2 className="text-2xl font-semibold mb-3">Who should see your ad?</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <AudienceOption
+          icon={<FaMagic size={30} className="text-blue-600" />}
+          value="smart"
+          selected={choice === "smart"}
+          title="Smart Audience"
+          desc="Let Facebook & Instagram automatically find the right people for your ad."
+          onClick={() => setChoice("smart")}
+        />
+        <AudienceOption
+          icon={<FaUserFriends size={28} className="text-green-600" />}
+          value="lookalike"
+          selected={choice === "lookalike"}
+          title="People like your followers"
+          desc="Show your ad to people similar to your Page or account's current followers."
+          onClick={() => setChoice("lookalike")}
+        />
+        <AudienceOption
+          icon={<FaMapMarkerAlt size={28} className="text-pink-600" />}
+          value="local"
+          selected={choice === "local"}
+          title="Nearby people"
+          desc="Reach people near your store, business or city."
+          onClick={() => setChoice("local")}
+        />
+        <AudienceOption
+          icon={<FaSlidersH size={27} className="text-gray-700" />}
+          value="custom"
+          selected={choice === "custom"}
+          title="Choose audience myself"
+          desc="Pick age, gender and location."
+          onClick={() => setChoice("custom")}
+        />
+      </div>
+      {choice === "custom" && (
+        <div className="rounded border bg-gray-50 p-4 space-y-4 mt-1">
+          <div>
+            <label className="block font-medium">Age range</label>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="number"
+                min={13}
+                max={99}
+                name="ageMin"
+                value={custom.ageMin}
+                onChange={handleCustomChange}
+                className="border p-1 rounded w-16"
+                aria-label="Minimum age"
+              />
+              <span className="mx-1">to</span>
+              <input
+                type="number"
+                min={13}
+                max={99}
+                name="ageMax"
+                value={custom.ageMax}
+                onChange={handleCustomChange}
+                className="border p-1 rounded w-16"
+                aria-label="Maximum age"
+              />
+              <span className="text-gray-500 ml-2">years old</span>
+            </div>
+            <span className="text-gray-400 text-xs ml-1">
+              Most ads must be 18+ depending on product.
+            </span>
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Gender</label>
+            <select
+              name="gender"
+              value={custom.gender}
+              onChange={handleCustomChange}
+              className="border rounded px-2 py-1"
+            >
+              <option value="Any">Everyone</option>
+              <option value="Female">Women only</option>
+              <option value="Male">Men only</option>
+            </select>
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Location</label>
+            <input
+              name="location"
+              value={custom.location}
+              onChange={handleCustomChange}
+              className="border w-full rounded px-2 py-1"
+              placeholder="e.g. New York, United States"
+            />
+            <span className="text-gray-400 text-xs ml-1">
+              Leave blank to include all locations.
+            </span>
+          </div>
+        </div>
+      )}
+      <div className="flex justify-between mt-6">
+        <button
+          type="button"
+          onClick={back}
+          className="bg-gray-300 px-5 py-2 rounded font-semibold"
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          className="bg-blue-700 hover:bg-blue-800 px-6 py-2 text-white font-semibold rounded"
+        >
+          Next
+        </button>
+      </div>
+    </form>
+  );
+}
+function AudienceOption({
+  icon,
+  title,
+  desc,
+  value,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  value: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`block text-left border rounded p-4 w-full flex gap-4 items-center shadow-sm transition-all ring-0 focus:ring-2 outline-none
+      ${selected ? "border-blue-600 ring-2 ring-blue-200 bg-blue-50" : "hover:border-blue-400 bg-white"}`}
+      onClick={onClick}
+    >
+      <div>{icon}</div>
+      <div>
+        <div className="font-bold mb-0.5">{title}</div>
+        <div className="text-gray-500 text-sm">{desc}</div>
+      </div>
+    </button>
+  );
+}
+
+// --- Remaining original wizard steps and logic (unchanged, just integrated) ---
+
 function AdTypeChoice({ next, data }: any) {
   const [choice, setChoice] = useState(data.adType || "");
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (choice) next({ adType: choice });
   }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <h2 className="text-2xl font-semibold mb-3">How would you like to run your ad?</h2>
@@ -45,21 +218,17 @@ function AdTypeChoice({ next, data }: any) {
     </form>
   );
 }
-
 function ExistingPostPicker({ next, back, data }: any) {
-  // For now, use sample/static posts.
   const mockPosts = [
     { id: "fb1", img: "https://placehold.co/320x180/orange/white?text=Spring+Sale", caption: "Big spring sale 🎉" },
     { id: "ig2", img: "https://placehold.co/320x180/607d8b/white?text=New+Arrivals!", caption: "Checkout our new arrivals!" },
     { id: "fb3", img: "https://placehold.co/320x180/789262/white?text=Saturday+Event", caption: "Event this Saturday — join us LIVE." },
   ];
   const [selected, setSelected] = useState(data.postId || "");
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (selected) next({ postId: selected });
   }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <h2 className="text-2xl font-semibold mb-3">Choose a post to boost</h2>
@@ -90,12 +259,11 @@ function ExistingPostPicker({ next, back, data }: any) {
     </form>
   );
 }
-
 function StepProgress({ step }: { step: number }) {
-  // Keep or edit steps as desired. This will show steps for both flows.
   const steps = [
     "Ad Type",
-    "Campaign Details / Post",
+    "Post / Details",
+    "Audience",
     "Ad Set",
     "Ad Creative",
     "Review & Confirm"
@@ -127,11 +295,9 @@ function StepProgress({ step }: { step: number }) {
     </ol>
   );
 }
-
 function CampaignDetails({ next, back, data }: any) {
   const [name, setName] = useState(data.name || "");
   const [objective, setObjective] = useState(data.objective || "");
-
   return (
     <form
       className="space-y-6"
@@ -173,27 +339,14 @@ function CampaignDetails({ next, back, data }: any) {
     </form>
   );
 }
-
 function AdSetDetails({ next, back, data }: any) {
-  const [audience, setAudience] = useState(data.audience || "");
   const [budget, setBudget] = useState(data.budget || "");
   const [schedule, setSchedule] = useState(data.schedule || "");
   const [placement, setPlacement] = useState(data.placement || "automatic");
-
   return (
-    <form className="space-y-6" onSubmit={e => { e.preventDefault(); next({ audience, budget, schedule, placement }); }}>
-      <StepProgress step={3} />
+    <form className="space-y-6" onSubmit={e => { e.preventDefault(); next({ budget, schedule, placement }); }}>
+      <StepProgress step={4} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-3">Ad Set Details</h2>
-      <div>
-        <label className="block font-medium mb-1">Audience:</label>
-        <input
-          className="block w-full border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400"
-          required
-          value={audience}
-          onChange={e => setAudience(e.target.value)}
-          placeholder='e.g. "Women, 25-45, USA"'
-        />
-      </div>
       <div>
         <label className="block font-medium mb-1">Daily Budget ($):</label>
         <input
@@ -236,16 +389,14 @@ function AdSetDetails({ next, back, data }: any) {
     </form>
   );
 }
-
 function AdCreative({ next, back, data }: any) {
   const [headline, setHeadline] = useState(data.headline || "");
   const [description, setDescription] = useState(data.description || "");
   const [url, setUrl] = useState(data.url || "");
   const [cta, setCta] = useState(data.cta || "Learn More");
-
   return (
     <form className="space-y-6" onSubmit={e => { e.preventDefault(); next({ headline, description, url, cta }); }}>
-      <StepProgress step={4} />
+      <StepProgress step={5} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-3">Ad Creative</h2>
       <div>
         <label className="block font-medium mb-1">Headline:</label>
@@ -300,11 +451,10 @@ function AdCreative({ next, back, data }: any) {
     </form>
   );
 }
-
 function Review({ allData, back, submit, submitting, error }: any) {
   return (
     <div className="space-y-5">
-      <StepProgress step={allData.adType === "existing" ? 3 : 5} />
+      <StepProgress step={allData.adType === "existing" ? 5 : 6} />
       <h2 className="text-2xl font-semibold text-blue-700 mb-4">Review &amp; Confirm</h2>
       <div className="bg-gray-50 rounded border mb-4 p-4 text-sm">
         <strong>Campaign Type:</strong> {allData.adType === "existing" ? "Boost Existing Post" : "New Ad"} <br />
@@ -323,7 +473,7 @@ function Review({ allData, back, submit, submitting, error }: any) {
           </>
         )}
         <hr className="my-2"/>
-        <strong>Audience:</strong> {allData.audience} <br />
+        <strong>Audience:</strong> {JSON.stringify(allData.audience)} <br />
         <strong>Budget:</strong> ${allData.budget}/day <br />
         <strong>Schedule:</strong> {allData.schedule} <br />
         <strong>Placement:</strong> {allData.placement} <br />
@@ -346,6 +496,7 @@ function Review({ allData, back, submit, submitting, error }: any) {
   );
 }
 
+// --- Wizard controller ---
 export default function FacebookAdWizard() {
   const [step, setStep] = useState(1);
   const [collected, setCollected] = useState<any>({});
@@ -364,7 +515,7 @@ export default function FacebookAdWizard() {
     setSubmitting(true);
     setError(null);
     try {
-      // For demonstration: send a different payload if boosting
+      // Different POST for boost/new ad with audience
       const isBoost = collected.adType === "existing";
       const res = await fetch("/api/admin-panel/campaigns/launches", {
         method: "POST",
@@ -408,38 +559,38 @@ export default function FacebookAdWizard() {
     }
   }
 
-  // Decide what to show on each step
+  // STEP ORDER:
+  // 1. Ad Type Choice
+  // 2. (existing) ExistingPostPicker; (new) CampaignDetails
+  // 3. AudiencePicker
+  // 4. AdSetDetails
+  // 5. (new) AdCreative; (existing skips)
+  // 6. Review
+  // 7. Success
+
   let currentStep;
   if (step === 1) {
     currentStep = <AdTypeChoice next={next} data={collected} />;
-  } else if (collected.adType === "existing") {
-    if (step === 2) currentStep = <ExistingPostPicker next={next} back={back} data={collected} />;
-    else if (step === 3) currentStep = <AdSetDetails next={next} back={back} data={collected} />;
-    else if (step === 4)
-      currentStep = <Review allData={collected} back={back} submit={handleSubmit} submitting={submitting} error={error} />;
-    else if (step === 5)
-      currentStep = (
-        <section className="flex items-center flex-col justify-center h-72">
-          <div className="text-5xl text-green-500 mb-4">🎉</div>
-          <div className="text-2xl font-bold mb-4">Your boosted campaign has been launched!</div>
-          <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline font-semibold">← Back to Campaigns Dashboard</Link>
-        </section>
-      );
+  } else if (collected.adType === "existing" && step === 2) {
+    currentStep = <ExistingPostPicker next={next} back={back} data={collected} />;
+  } else if (collected.adType === "new" && step === 2) {
+    currentStep = <CampaignDetails next={next} back={back} data={collected} />;
+  } else if (step === 3) {
+    currentStep = <AudiencePicker next={next} back={back} data={collected} />;
+  } else if (step === 4) {
+    currentStep = <AdSetDetails next={next} back={back} data={collected} />;
+  } else if (collected.adType === "new" && step === 5) {
+    currentStep = <AdCreative next={next} back={back} data={collected} />;
+  } else if ((collected.adType === "existing" && step === 5) || (collected.adType === "new" && step === 6)) {
+    currentStep = <Review allData={collected} back={back} submit={handleSubmit} submitting={submitting} error={error} />;
   } else {
-    // NEW AD FLOW
-    if (step === 2) currentStep = <CampaignDetails next={next} back={back} data={collected} />;
-    else if (step === 3) currentStep = <AdSetDetails next={next} back={back} data={collected} />;
-    else if (step === 4) currentStep = <AdCreative next={next} back={back} data={collected} />;
-    else if (step === 5)
-      currentStep = <Review allData={collected} back={back} submit={handleSubmit} submitting={submitting} error={error} />;
-    else if (step === 6)
-      currentStep = (
-        <section className="flex items-center flex-col justify-center h-72">
-          <div className="text-5xl text-green-500 mb-4">🎉</div>
-          <div className="text-2xl font-bold mb-4">Your Facebook ad campaign has been launched!</div>
-          <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline font-semibold">← Back to Campaigns Dashboard</Link>
-        </section>
-      );
+    currentStep = (
+      <section className="flex items-center flex-col justify-center h-72">
+        <div className="text-5xl text-green-500 mb-4">🎉</div>
+        <div className="text-2xl font-bold mb-4">Your campaign has been launched!</div>
+        <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline font-semibold">← Back to Campaigns Dashboard</Link>
+      </section>
+    );
   }
 
   return (
