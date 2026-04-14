@@ -12,11 +12,28 @@ type Campaign = {
 export default function CampaignsDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showTypePicker, setShowTypePicker] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin-panel/campaigns")
       .then(res => res.json())
-      .then(setCampaigns);
+      .then(data => {
+        if (Array.isArray(data)) {
+          setCampaigns(data);
+          setLoadError(null);
+        } else {
+          setCampaigns([]);
+          setLoadError(
+            data?.error
+              ? `Failed to load campaigns: ${data.error}`
+              : "Failed to load campaigns."
+          );
+        }
+      })
+      .catch(() => {
+        setCampaigns([]);
+        setLoadError("Failed to load campaigns (network error).");
+      });
   }, []);
 
   const campaignTypes = [
@@ -50,45 +67,5 @@ export default function CampaignsDashboard() {
                 onClick={() => handleNewCampaign(type.value)}
               >
                 {type.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <h2 className="text-xl font-semibold mb-2">All Campaigns</h2>
-      <table className="w-full border rounded mb-8">
-        <thead>
-          <tr className="bg-gray-100 text-left">
-            <th className="p-2">Name</th>
-            <th className="p-2">Type</th>
-            <th className="p-2">Created</th>
-            <th className="p-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {campaigns.map(c => (
-            <tr key={c.id} className="border-t">
-              <td className="p-2">{c.name}</td>
-              <td className="p-2 capitalize">{c.type}</td>
-              <td className="p-2">{new Date(c.created_at).toLocaleDateString()}</td>
-              <td className="p-2">
-                <Link
-                  href={`/admin-panel/campaigns/launches/${c.id}`}
-                  className="text-blue-700 hover:underline"
-                >
-                  View
-                </Link>
-              </td>
-            </tr>
-          ))}
-          {campaigns.length === 0 && (
-            <tr>
-              <td colSpan={4} className="p-2 text-gray-400 italic">No campaigns yet.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </main>
-  );
-}
+              </button](#)
+
