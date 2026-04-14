@@ -1,6 +1,12 @@
 "use client";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const FacebookAdWizard = dynamic(
+  () => import("./advertising/FacebookAdWizard"),
+  { ssr: false }
+);
 
 export default function NewCampaignPage() {
   const params = useSearchParams();
@@ -19,27 +25,29 @@ export default function NewCampaignPage() {
   }
 
   return (
-    <main className="max-w-xl mx-auto pt-8 px-4">
-      <h1 className="text-2xl font-bold mb-4">Create a {type.charAt(0).toUpperCase() + type.slice(1)} Campaign</h1>
+    <main className="max-w-2xl mx-auto pt-8 px-4">
+      <h1 className="text-2xl font-bold mb-4">
+        Create a {type.charAt(0).toUpperCase() + type.slice(1)} Campaign
+      </h1>
       {type === "advertising" && (
-        <div className="mb-4">
-          {/* Replace with your Facebook Ads wizard when ready! */}
-          <div className="p-4 bg-gray-100 rounded border">Facebook Ads Wizard will go here!</div>
-        </div>
+        <FacebookAdWizard />
       )}
       {type === "sms" && (
         <div className="mb-4">
-          {/* Replace with your SMS wizard when ready! */}
-          <div className="p-4 bg-gray-100 rounded border">SMS Campaign Wizard will go here!</div>
+          {/* SMS Wizard will go here! */}
+          <div className="p-4 bg-gray-100 rounded border">
+            SMS Campaign Wizard will go here!
+          </div>
         </div>
       )}
       {type === "email" && (
         <div className="mb-4">
-          {/* Replace with your Email wizard when ready! */}
-          <div className="p-4 bg-gray-100 rounded border">Email Campaign Wizard will go here!</div>
+          {/* Email Wizard will go here! */}
+          <div className="p-4 bg-gray-100 rounded border">
+            Email Campaign Wizard will go here!
+          </div>
         </div>
       )}
-
       <Link href="/admin-panel/campaigns" className="text-blue-600 hover:underline">
         ← Back
       </Link>
