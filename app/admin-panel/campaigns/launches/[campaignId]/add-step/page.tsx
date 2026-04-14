@@ -121,28 +121,5 @@ export default function AddStepPage({ params }: { params: { campaignId: string }
               setEmailSubject(""); setEmailBody(""); setSmsMessage(""); setWaitHours("");
             }}
           >
-            {stepTypes.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          Step Name:
-          <input
-            type="text"
-            className="block w-full border rounded px-3 py-2"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            required
-          />
-        </label>
-        {renderStepFields()}
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Step</button>
-        {status && <div className="mt-2">{status}</div>}
-      </form>
-      <div className="mt-8">
-        <Link href={`/admin-panel/campaigns/launches/${params.campaignId}`} className="text-blue-600 hover:underline">
-          ← Back to Campaign
-        </Link>
-      </div>
-    </main>
-  );
-}
+
+
