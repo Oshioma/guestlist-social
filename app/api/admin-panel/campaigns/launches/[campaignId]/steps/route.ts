@@ -1,8 +1,4 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
-
-export async function POST(
+export async function GET(
   req: Request,
   { params }: { params: { campaignId: string } }
 ) {
@@ -20,30 +16,15 @@ export async function POST(
     }
   );
 
-  const body = await req.json();
-  const { type, name, content } = body;
-
-  // Get current max order_index for this campaign
-  const { data: steps, error: fetchErr } = await supabase
+  const { data, error } = await supabase
     .from("campaign_steps")
-    .select("order_index")
+    .select("*")
     .eq("campaign_id", campaignId)
-    .order("order_index", { ascending: false })
-    .limit(1);
-
-  const maxOrder = steps && steps.length > 0 ? steps[0].order_index : 0;
-
-  const { error } = await supabase.from("campaign_steps").insert([{
-    campaign_id: Number(campaignId), // cast because params are always strings
-    type,
-    name,
-    content,
-    order_index: maxOrder + 1
-  }]);
+    .order("order_index", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(data || []);
 }
