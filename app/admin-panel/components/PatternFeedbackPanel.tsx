@@ -29,7 +29,8 @@
 
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { actionPhrase, capitalise } from "@/lib/pattern-phrases";
+import { capitalise } from "@/lib/pattern-phrases";
+import { fetchAnnotatedPatternFeedback } from "@/lib/pattern-feedback";
 import SectionCard from "./SectionCard";
 import UnretirePatternButton from "./UnretirePatternButton";
 
@@ -51,7 +52,7 @@ type SliceRow = {
   negative: number;
   decisive: number;
   pos_ratio: number;
-  label: string;
+  phrase: string;
 };
 
 type RecentRetirement = {
@@ -77,7 +78,7 @@ function shortRelativeDay(iso: string): string {
 }
 
 function plainSentence(slice: SliceRow): string {
-  const action = actionPhrase(slice.pattern_key, slice.label);
+  const action = slice.phrase;
   const { positive, decisive } = slice;
   const negative = decisive - positive;
 
@@ -97,82 +98,47 @@ function plainSentence(slice: SliceRow): string {
 export default async function PatternFeedbackPanel() {
   const supabase = await createClient();
 
-  // Two reads in parallel: the verdict ledger and the matching pattern
-  // labels. We need labels as a fallback for any pattern_key that isn't
-  // in ACTION_PHRASES yet, so the panel never shows a raw key string.
-  const [{ data: feedbackRows, error: feedbackErr }, { data: learningRows }] =
-    await Promise.all([
-      supabase
-        .from("pattern_feedback")
-        .select(
-          "pattern_key, industry, positive_verdicts, negative_verdicts, retired_at, retired_reason"
-        ),
-      supabase.from("global_learnings").select("pattern_key, pattern_label"),
-    ]);
+  const { rows: annotated, error: feedbackErr } =
+    await fetchAnnotatedPatternFeedback(supabase);
 
   if (feedbackErr) {
     return (
       <SectionCard title="What the engine is learning">
         <div style={{ fontSize: 13, color: "#a1a1aa" }}>
-          Couldn&rsquo;t load the feedback ledger ({feedbackErr.message}).
+          Couldn&rsquo;t load the feedback ledger ({feedbackErr}).
         </div>
       </SectionCard>
     );
-  }
-
-  // Label lookup. First label for a key wins — duplicates across industry
-  // slices are fine because the human-readable phrasing is the same.
-  const labelByKey = new Map<string, string>();
-  for (const r of (learningRows ?? []) as {
-    pattern_key: string;
-    pattern_label: string | null;
-  }[]) {
-    if (!labelByKey.has(r.pattern_key) && r.pattern_label) {
-      labelByKey.set(r.pattern_key, r.pattern_label);
-    }
   }
 
   let retiredCount = 0;
   const recentRetirements: RecentRetirement[] = [];
   const recentCutoff = Date.now() - RECENT_RETIRE_DAYS * 24 * 60 * 60 * 1000;
   const slices: SliceRow[] = [];
-  for (const f of (feedbackRows ?? []) as {
-    pattern_key: string;
-    industry: string | null;
-    positive_verdicts: number | null;
-    negative_verdicts: number | null;
-    retired_at: string | null;
-    retired_reason: string | null;
-  }[]) {
-    if (f.retired_at) {
+  for (const r of annotated) {
+    if (r.retired_at) {
       retiredCount++;
-      const retiredMs = Date.parse(f.retired_at);
+      const retiredMs = Date.parse(r.retired_at);
       if (Number.isFinite(retiredMs) && retiredMs >= recentCutoff) {
         recentRetirements.push({
-          pattern_key: f.pattern_key,
-          industry: f.industry,
-          retired_at: f.retired_at,
-          retired_reason: f.retired_reason,
-          phrase: actionPhrase(
-            f.pattern_key,
-            labelByKey.get(f.pattern_key) ?? null
-          ),
+          pattern_key: r.pattern_key,
+          industry: r.industry,
+          retired_at: r.retired_at,
+          retired_reason: r.retired_reason,
+          phrase: r.phrase,
         });
       }
       continue;
     }
-    const positive = Number(f.positive_verdicts ?? 0);
-    const negative = Number(f.negative_verdicts ?? 0);
-    const decisive = positive + negative;
-    if (decisive < MIN_DECISIVE) continue;
+    if (r.decisive < MIN_DECISIVE) continue;
     slices.push({
-      pattern_key: f.pattern_key,
-      industry: f.industry,
-      positive,
-      negative,
-      decisive,
-      pos_ratio: positive / decisive,
-      label: labelByKey.get(f.pattern_key) ?? "",
+      pattern_key: r.pattern_key,
+      industry: r.industry,
+      positive: r.positive,
+      negative: r.negative,
+      decisive: r.decisive,
+      pos_ratio: r.positive / r.decisive,
+      phrase: r.phrase,
     });
   }
 

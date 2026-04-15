@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { actionPhrase, type PatternCandidate } from "@/lib/pattern-phrases";
+import { type PatternCandidate } from "@/lib/pattern-phrases";
+import { fetchAnnotatedPatternFeedback } from "@/lib/pattern-feedback";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
@@ -35,46 +36,19 @@ export default async function SettingsPage() {
       DEFAULT_REAPER_SETTINGS.minDecisiveVerdicts &&
     reaperSettings.negRatio === DEFAULT_REAPER_SETTINGS.negRatio;
 
-  // Pre-project each active slice into its English phrasing here so the
-  // client-side preview doesn't need to re-ship global_learnings.
-  const [{ data: feedbackRows }, { data: learningRows }] = await Promise.all([
-    adminClient
-      .from("pattern_feedback")
-      .select("pattern_key, industry, positive_verdicts, negative_verdicts")
-      .is("retired_at", null),
-    adminClient.from("global_learnings").select("pattern_key, pattern_label"),
-  ]);
-
-  const labelByKey = new Map<string, string>();
-  for (const r of (learningRows ?? []) as {
-    pattern_key: string;
-    pattern_label: string | null;
-  }[]) {
-    if (!labelByKey.has(r.pattern_key) && r.pattern_label) {
-      labelByKey.set(r.pattern_key, r.pattern_label);
-    }
-  }
-
-  const reaperPatterns: PatternCandidate[] = [];
-  for (const f of (feedbackRows ?? []) as {
-    pattern_key: string;
-    industry: string | null;
-    positive_verdicts: number | null;
-    negative_verdicts: number | null;
-  }[]) {
-    const positive = Number(f.positive_verdicts ?? 0);
-    const negative = Number(f.negative_verdicts ?? 0);
-    const decisive = positive + negative;
-    if (decisive === 0) continue;
-    reaperPatterns.push({
-      pattern_key: f.pattern_key,
-      industry: f.industry,
-      positive,
-      negative,
-      decisive,
-      phrase: actionPhrase(f.pattern_key, labelByKey.get(f.pattern_key) ?? null),
-    });
-  }
+  // Narrow the annotated feed to the active slice with at least one verdict —
+  // the reaper only sweeps rows it's seen measured outcomes on.
+  const { rows: annotated } = await fetchAnnotatedPatternFeedback(adminClient);
+  const reaperPatterns: PatternCandidate[] = annotated
+    .filter((r) => !r.retired_at && r.decisive > 0)
+    .map((r) => ({
+      pattern_key: r.pattern_key,
+      industry: r.industry,
+      positive: r.positive,
+      negative: r.negative,
+      decisive: r.decisive,
+      phrase: r.phrase,
+    }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
