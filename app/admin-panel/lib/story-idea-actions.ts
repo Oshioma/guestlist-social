@@ -98,7 +98,9 @@ export async function addStoryIdeaAction(
   themeId: string | null,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null,
+  notes: string = ""
 ) {
   if (!clientId || !idea.trim()) {
     throw new Error("Client and idea text are required.");
@@ -112,7 +114,9 @@ export async function addStoryIdeaAction(
   const { error } = await supabase.from("story_ideas").insert({
     client_id: clientId,
     theme_id: themeId || null,
+    pillar_id: pillarId || null,
     idea: idea.trim(),
+    notes: notes.trim(),
     category: category || "general",
     month: month || "",
     created_by: createdBy,
@@ -125,13 +129,16 @@ export async function addStoryIdeaAction(
 
   revalidatePath("/admin-panel/story-ideas");
   revalidatePath("/admin-panel/content");
+  revalidatePath("/admin-panel/proofer");
 }
 
 export async function updateStoryIdeaAction(
   id: string,
   idea: string,
   category: string,
-  month: string = ""
+  month: string = "",
+  pillarId: string | null = null,
+  notes: string = ""
 ) {
   if (!id || !idea.trim()) {
     throw new Error("ID and idea text are required.");
@@ -143,8 +150,10 @@ export async function updateStoryIdeaAction(
     .from("story_ideas")
     .update({
       idea: idea.trim(),
+      notes: notes.trim(),
       category: category || "general",
       month: month || "",
+      pillar_id: pillarId || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -156,6 +165,48 @@ export async function updateStoryIdeaAction(
 
   revalidatePath("/admin-panel/story-ideas");
   revalidatePath("/admin-panel/content");
+  revalidatePath("/admin-panel/proofer");
+}
+
+export async function setStoryIdeaNotesAction(id: string, notes: string) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("story_ideas")
+    .update({
+      notes: notes.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setStoryIdeaNotesAction error:", error);
+    throw new Error("Could not update notes.");
+  }
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
+  revalidatePath("/admin-panel/proofer");
+}
+
+export async function setStoryIdeaPillarAction(
+  id: string,
+  pillarId: string | null
+) {
+  if (!id) throw new Error("ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("story_ideas")
+    .update({
+      pillar_id: pillarId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("setStoryIdeaPillarAction error:", error);
+    throw new Error("Could not update pillar.");
+  }
+  revalidatePath("/admin-panel/story-ideas");
+  revalidatePath("/admin-panel/content");
+  revalidatePath("/admin-panel/proofer");
 }
 
 export async function updateStoryDesignLinkAction(id: string, designLink: string) {

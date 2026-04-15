@@ -1,5 +1,6 @@
 import "./admin.css";
 import AppShell from "./components/AppShell";
+import MetaSdkLoader from "./components/MetaSdkLoader";
 import { requireAdminPanelAccess } from "./lib/auth";
 
 export default async function AdminPanelLayout({
@@ -9,5 +10,10 @@ export default async function AdminPanelLayout({
 }) {
   await requireAdminPanelAccess(["admin", "operator", "viewer"]);
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <>
+      <MetaSdkLoader />
+      <AppShell>{children}</AppShell>
+    </>
+  );
 }

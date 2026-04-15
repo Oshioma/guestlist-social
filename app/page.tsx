@@ -700,6 +700,7 @@ export default function Home() {
               <a href="#work" className="hover:text-white/80 transition-colors">Work</a>
               <a href="#faq" className="hover:text-white/80 transition-colors">FAQ</a>
               <a href="#contact" className="hover:text-white/80 transition-colors">Contact</a>
+              <a href="/privacy" className="hover:text-white/80 transition-colors">Privacy</a>
             </nav>
 
             <div className="text-xs text-center md:text-right">

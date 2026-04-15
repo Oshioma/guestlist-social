@@ -105,10 +105,13 @@ export type VideoIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
+  notes: string;
   category: string;
   month: string;
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -127,12 +130,15 @@ export type CarouselIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
+  notes: string;
   category: string;
   month: string;
   captions: string[];
   captionImages: string[];
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -151,13 +157,18 @@ export type StoryIdea = {
   id: string;
   clientId: string;
   themeId: string | null;
+  pillarId: string | null;
   idea: string;
+  notes: string;
   category: string;
   month: string;
   designLink: string;
+  usedInPostId: string | null;
   createdBy: string;
   createdAt: string;
 };
+
+export type IdeaKind = "video" | "carousel" | "story";
 
 export type StoryTheme = {
   id: string;
@@ -194,16 +205,98 @@ export type Task = {
   updatedAt: string;
 };
 
-export type ProoferStatus = "none" | "improve" | "check" | "proofed";
+export type ProoferStatus =
+  | "none"
+  | "improve"
+  | "check"
+  | "proofed"
+  | "approved";
+
+export type ProoferPlatform =
+  | "instagram_feed"
+  | "instagram_story"
+  | "instagram_reel"
+  | "facebook"
+  | "linkedin"
+  | "tiktok";
+
+export const PROOFER_PLATFORMS: ProoferPlatform[] = [
+  "instagram_feed",
+  "instagram_story",
+  "instagram_reel",
+  "facebook",
+  "linkedin",
+  "tiktok",
+];
+
+export const PROOFER_PLATFORM_LABELS: Record<ProoferPlatform, string> = {
+  instagram_feed: "IG Feed",
+  instagram_story: "IG Story",
+  instagram_reel: "IG Reel",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+};
+
+export type ProoferComment = {
+  id: string;
+  postId: string;
+  comment: string;
+  createdBy: string;
+  resolved: boolean;
+  createdAt: string;
+};
+
+export type PublishQueuePlatform = "instagram" | "facebook";
+
+export type PublishQueueStatus =
+  | "queued"
+  | "scheduled"
+  | "published"
+  | "failed";
+
+export type ProoferPublishQueueItem = {
+  id: string;
+  postId: string;
+  platform: PublishQueuePlatform;
+  status: PublishQueueStatus;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  publishUrl: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContentPillar = {
+  id: string;
+  clientId: string;
+  name: string;
+  color: string;
+  description: string;
+  sortOrder: number;
+  archived: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type ProoferPost = {
   id: string;
   clientId: string;
   postDate: string; // "YYYY-MM-DD"
+  platform: ProoferPlatform;
+  pillarId: string | null;
+  linkedIdeaId: string | null;
+  linkedIdeaKind: IdeaKind | null;
   caption: string;
   imageUrl: string;
+  mediaUrls: string[];
   status: ProoferStatus;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  comments?: ProoferComment[];
+  publishQueue?: ProoferPublishQueueItem[];
 };

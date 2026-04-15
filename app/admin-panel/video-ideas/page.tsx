@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function VideoIdeasPage() {
   try {
-    const { clients, themes, ideas } = await getVideoIdeasData();
+    const { clients, themes, ideas, pillars } = await getVideoIdeasData();
 
     const clientsWithContent = new Set([
       ...themes.map((t) => t.clientId),
@@ -54,7 +54,12 @@ export default async function VideoIdeasPage() {
           />
         </div>
 
-        <VideoIdeasBoard clients={clients} themes={themes} ideas={ideas} />
+        <VideoIdeasBoard
+          clients={clients}
+          themes={themes}
+          ideas={ideas}
+          pillars={pillars}
+        />
       </div>
     );
   } catch (error) {

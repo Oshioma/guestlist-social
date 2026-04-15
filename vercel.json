@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/retire-stale-patterns",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/publish-meta-queue",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

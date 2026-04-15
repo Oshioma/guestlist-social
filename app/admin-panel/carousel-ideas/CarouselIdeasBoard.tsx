@@ -10,9 +10,11 @@ import {
   updateCarouselCaptionsAction,
   updateCarouselDesignLinkAction,
   deleteCarouselIdeaAction,
+  setCarouselIdeaNotesAction,
 } from "../lib/carousel-idea-actions";
-import type { CarouselIdea, CarouselTheme } from "../lib/types";
+import type { CarouselIdea, CarouselTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
+import PillarManager from "../components/PillarManager";
 
 type Client = { id: string; name: string };
 
@@ -53,13 +55,18 @@ export default function CarouselIdeasBoard({
   clients,
   themes,
   ideas,
+  pillars,
 }: {
   clients: Client[];
   themes: CarouselTheme[];
   ideas: CarouselIdea[];
+  pillars: ContentPillar[];
 }) {
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id ?? "");
   const [selectedMonth, setSelectedMonth] = useState("");
+
+  const clientPillars = pillars.filter((p) => p.clientId === selectedClient);
+  const pillarsById = new Map(pillars.map((p) => [p.id, p]));
 
   const selectedMonthName = MONTHS.find((m) => m.value === selectedMonth)?.label.split(" ")[0] ?? "";
 
@@ -194,16 +201,24 @@ export default function CarouselIdeasBoard({
           </select>
         </div>
 
-        <AddThemeForm
-          clientId={selectedClient}
-          nextSort={clientThemes.length}
-        />
+        <PillarManager clientId={selectedClient} pillars={clientPillars} />
+
+        <div style={{ marginTop: 16 }}>
+          <AddThemeForm
+            clientId={selectedClient}
+            nextSort={clientThemes.length}
+          />
+        </div>
 
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 8 }}>
             Quick Add Idea
           </div>
-          <AddIdeaForm clientId={selectedClient} themeId={null} />
+          <AddIdeaForm
+            clientId={selectedClient}
+            themeId={null}
+            pillars={clientPillars}
+          />
         </div>
 
         {clientThemes.length === 0 && unlinkedIdeas.length === 0 ? (
@@ -222,6 +237,8 @@ export default function CarouselIdeasBoard({
                   theme={theme}
                   ideas={themeIdeas}
                   clientId={selectedClient}
+                  pillars={clientPillars}
+                  pillarsById={pillarsById}
                 />
               );
             })}
@@ -235,7 +252,12 @@ export default function CarouselIdeasBoard({
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {unlinkedIdeas.map((idea) => (
-                    <IdeaRow key={idea.id} idea={idea} />
+                    <IdeaRow
+                      key={idea.id}
+                      idea={idea}
+                      pillars={clientPillars}
+                      pillarsById={pillarsById}
+                    />
                   ))}
                 </div>
               </div>
@@ -253,10 +275,14 @@ function ThemeBlock({
   theme,
   ideas,
   clientId,
+  pillars,
+  pillarsById,
 }: {
   theme: CarouselTheme;
   ideas: CarouselIdea[];
   clientId: string;
+  pillars: ContentPillar[];
+  pillarsById: Map<string, ContentPillar>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [monthLabel, setMonthLabel] = useState(theme.monthLabel);
@@ -398,11 +424,16 @@ function ThemeBlock({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {ideas.map((idea) => (
-          <IdeaRow key={idea.id} idea={idea} />
+          <IdeaRow
+            key={idea.id}
+            idea={idea}
+            pillars={pillars}
+            pillarsById={pillarsById}
+          />
         ))}
       </div>
 
-      <AddIdeaForm clientId={clientId} themeId={theme.id} />
+      <AddIdeaForm clientId={clientId} themeId={theme.id} pillars={pillars} />
     </div>
   );
 }
@@ -535,19 +566,35 @@ function AddThemeForm({
 
 // ── Idea row ──
 
-function IdeaRow({ idea }: { idea: CarouselIdea }) {
+function IdeaRow({
+  idea,
+  pillars,
+  pillarsById,
+}: {
+  idea: CarouselIdea;
+  pillars: ContentPillar[];
+  pillarsById: Map<string, ContentPillar>;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [showCaptions, setShowCaptions] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(idea.notes);
   const [linkValue, setLinkValue] = useState(idea.designLink);
   const [editText, setEditText] = useState(idea.idea);
+  const [editNotes, setEditNotes] = useState(idea.notes);
   const [editCategory, setEditCategory] = useState(idea.category);
   const [editMonth, setEditMonth] = useState(idea.month);
+  const [editPillarId, setEditPillarId] = useState<string | null>(
+    idea.pillarId
+  );
   const [isPending, startTransition] = useTransition();
 
   const colors = categoryColor(idea.category);
   const monthLabel = MONTHS.find((m) => m.value === idea.month)?.label ?? idea.month;
   const captionCount = idea.captions.filter((c) => c.trim()).length;
+  const pillar = idea.pillarId ? pillarsById.get(idea.pillarId) ?? null : null;
+  const isUsed = Boolean(idea.usedInPostId);
 
   function handleSaveLink() {
     startTransition(async () => {
@@ -556,10 +603,24 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
     });
   }
 
+  function handleSaveNotes() {
+    startTransition(async () => {
+      await setCarouselIdeaNotesAction(idea.id, notesValue);
+      setEditingNotes(false);
+    });
+  }
+
   function handleSave() {
     if (!editText.trim()) return;
     startTransition(async () => {
-      await updateCarouselIdeaAction(idea.id, editText, editCategory, editMonth);
+      await updateCarouselIdeaAction(
+        idea.id,
+        editText,
+        editCategory,
+        editMonth,
+        editPillarId,
+        editNotes
+      );
       setIsEditing(false);
     });
   }
@@ -571,49 +632,89 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
   }
 
   if (isEditing) {
+    const reset = () => {
+      setEditText(idea.idea);
+      setEditNotes(idea.notes);
+      setEditCategory(idea.category);
+      setEditMonth(idea.month);
+      setEditPillarId(idea.pillarId);
+      setIsEditing(false);
+    };
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7", flexWrap: "wrap" }}>
-        <select
-          value={editCategory}
-          onChange={(e) => setEditCategory(e.target.value)}
-          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
-        <select
-          value={editMonth}
-          onChange={(e) => setEditMonth(e.target.value)}
-          style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
-        >
-          <option value="">No month</option>
-          {MONTHS.map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-        <input
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }
-          }}
-          style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid #e4e4e7" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            value={editCategory}
+            onChange={(e) => setEditCategory(e.target.value)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <select
+            value={editMonth}
+            onChange={(e) => setEditMonth(e.target.value)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            <option value="">No month</option>
+            {MONTHS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <select
+            value={editPillarId ?? ""}
+            onChange={(e) => setEditPillarId(e.target.value || null)}
+            style={{ ...selectStyle, padding: "6px 24px 6px 8px", fontSize: 12 }}
+          >
+            <option value="">No pillar</option>
+            {pillars.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            placeholder="Idea"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") reset();
+            }}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px" }}
+          />
+        </div>
+        <textarea
+          value={editNotes}
+          onChange={(e) => setEditNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          rows={3}
+          style={{ ...inputStyle, padding: "6px 10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
         />
-        <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
-          {isPending ? "..." : "Save"}
-        </button>
-        <button onClick={() => { setEditText(idea.idea); setEditCategory(idea.category); setEditMonth(idea.month); setIsEditing(false); }} style={btnStyle("#f3f4f6", "#374151")}>
-          Cancel
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleSave} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+            {isPending ? "..." : "Save"}
+          </button>
+          <button onClick={reset} style={btnStyle("#f3f4f6", "#374151")}>
+            Cancel
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ borderRadius: 6, background: "#fff", border: "1px solid #f4f4f5" }}>
+    <div
+      style={{
+        borderRadius: 6,
+        background: isUsed ? "#f4f4f5" : "#fff",
+        border: "1px solid #f4f4f5",
+        opacity: isUsed ? 0.6 : 1,
+      }}
+      title={isUsed ? "Used in a proofer post" : undefined}
+    >
       <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px" }}>
         <span
           style={{
@@ -628,12 +729,62 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
         >
           {idea.category}
         </span>
+        {pillar && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#f4f4f5",
+              color: "#3f3f46",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: pillar.color,
+              }}
+            />
+            {pillar.name}
+          </span>
+        )}
+        {isUsed && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "#e4e4e7",
+              color: "#52525b",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Used
+          </span>
+        )}
         {monthLabel && (
           <span style={{ fontSize: 11, color: "#71717a", whiteSpace: "nowrap" }}>
             {monthLabel}
           </span>
         )}
-        <span style={{ flex: 1, fontSize: 14, color: "#18181b" }}>
+        <span
+          style={{
+            flex: 1,
+            fontSize: 14,
+            color: "#18181b",
+            textDecoration: isUsed ? "line-through" : "none",
+            minWidth: 0,
+          }}
+        >
           {idea.idea}
         </span>
         {idea.createdBy && (
@@ -691,6 +842,7 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
             <ImageUpload
               folder={`carousel/${idea.id}`}
               compact
+              accept="image/*,video/*"
               label="Upload"
               onUploaded={(url) => {
                 setLinkValue(url);
@@ -706,6 +858,83 @@ function IdeaRow({ idea }: { idea: CarouselIdea }) {
           {isPending ? "..." : "Delete"}
         </button>
       </div>
+
+      {editingNotes ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "flex-start", padding: "0 10px 8px" }}>
+          <textarea
+            value={notesValue}
+            onChange={(e) => setNotesValue(e.target.value)}
+            placeholder="Notes..."
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setNotesValue(idea.notes);
+                setEditingNotes(false);
+              }
+            }}
+            rows={3}
+            style={{ ...inputStyle, flex: 1, padding: "6px 10px", fontSize: 12, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <button onClick={handleSaveNotes} disabled={isPending} style={btnStyle("#dcfce7", "#166534")}>
+              {isPending ? "..." : "Save"}
+            </button>
+            <button onClick={() => { setNotesValue(idea.notes); setEditingNotes(false); }} style={btnStyle("#f3f4f6", "#374151")}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : idea.notes ? (
+        <div
+          onClick={() => {
+            setNotesValue(idea.notes);
+            setEditingNotes(true);
+          }}
+          title="Click to edit notes"
+          style={{
+            fontSize: 12,
+            color: "#71717a",
+            whiteSpace: "pre-wrap",
+            cursor: "pointer",
+            margin: "0 10px 8px",
+            padding: "4px 8px",
+            borderRadius: 6,
+            background: "#fafafa",
+            border: "1px dashed transparent",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#e4e4e7";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "transparent";
+          }}
+        >
+          {idea.notes}
+        </div>
+      ) : (
+        <div style={{ padding: "0 10px 8px" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setNotesValue("");
+              setEditingNotes(true);
+            }}
+            style={{
+              padding: "3px 8px",
+              fontSize: 11,
+              fontWeight: 600,
+              border: "1px dashed #e4e4e7",
+              borderRadius: 6,
+              background: "transparent",
+              color: "#71717a",
+              cursor: "pointer",
+            }}
+          >
+            + Notes
+          </button>
+        </div>
+      )}
+
       {showCaptions && (
         <CaptionsEditor ideaId={idea.id} captions={idea.captions} captionImages={idea.captionImages} />
       )}
@@ -798,6 +1027,7 @@ function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; c
                 <ImageUpload
                   folder={`carousel/${ideaId}`}
                   compact
+                  accept="image/*,video/*"
                   onUploaded={(url) => updateImageLink(i, url)}
                 />
               </div>
@@ -822,65 +1052,99 @@ function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; c
 function AddIdeaForm({
   clientId,
   themeId,
+  pillars,
 }: {
   clientId: string;
   themeId: string | null;
+  pillars: ContentPillar[];
 }) {
   const [text, setText] = useState("");
+  const [notes, setNotes] = useState("");
   const [category, setCategory] = useState("carousel");
   const [month, setMonth] = useState(MONTHS[0]?.value ?? "");
+  const [pillarId, setPillarId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
     startTransition(async () => {
-      await addCarouselIdeaAction(clientId, themeId, text, category, month);
+      await addCarouselIdeaAction(
+        clientId,
+        themeId,
+        text,
+        category,
+        month,
+        pillarId,
+        notes
+      );
       setText("");
+      setNotes("");
     });
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}
+      style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}
     >
-      <select
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
-      >
-        {CATEGORIES.map((c) => (
-          <option key={c.value} value={c.value}>{c.label}</option>
-        ))}
-      </select>
-      <select
-        value={month}
-        onChange={(e) => setMonth(e.target.value)}
-        style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
-      >
-        <option value="">No month</option>
-        {MONTHS.map((m) => (
-          <option key={m.value} value={m.value}>{m.label}</option>
-        ))}
-      </select>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add an idea..."
-        style={{ ...inputStyle, flex: 1 }}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+        <select
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          <option value="">No month</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+        <select
+          value={pillarId ?? ""}
+          onChange={(e) => setPillarId(e.target.value || null)}
+          style={{ ...selectStyle, padding: "8px 28px 8px 10px", fontSize: 13 }}
+        >
+          <option value="">No pillar</option>
+          {pillars.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add an idea..."
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <button
+          type="submit"
+          disabled={isPending || !text.trim()}
+          style={{
+            ...btnStyle("#18181b", "#fff"),
+            padding: "8px 16px",
+            opacity: isPending || !text.trim() ? 0.5 : 1,
+          }}
+        >
+          {isPending ? "..." : "Add"}
+        </button>
+      </div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        rows={3}
+        style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
       />
-      <button
-        type="submit"
-        disabled={isPending || !text.trim()}
-        style={{
-          ...btnStyle("#18181b", "#fff"),
-          padding: "8px 16px",
-          opacity: isPending || !text.trim() ? 0.5 : 1,
-        }}
-      >
-        {isPending ? "..." : "Add"}
-      </button>
     </form>
   );
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "../../../lib/supabase/server";
 
-const BUCKET = "gsocial";
+const DEFAULT_BUCKET = "gsocial";
+const ALLOWED_BUCKETS = new Set(["gsocial", "postimages"]);
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
@@ -17,6 +18,10 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   const folder = (formData.get("folder") as string) || "general";
+  const requestedBucket = (formData.get("bucket") as string) || DEFAULT_BUCKET;
+  const bucket = ALLOWED_BUCKETS.has(requestedBucket)
+    ? requestedBucket
+    : DEFAULT_BUCKET;
 
   if (!file) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
   const path = `${folder}/${timestamp}_${safeName}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
+    .from(bucket)
     .upload(path, file, {
       contentType: file.type,
       upsert: false,
@@ -62,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  } = supabase.storage.from(bucket).getPublicUrl(path);
 
   return NextResponse.json({ url: publicUrl, path });
 }

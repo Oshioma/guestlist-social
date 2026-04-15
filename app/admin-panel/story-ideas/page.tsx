@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function StoryIdeasPage() {
   try {
-    const { clients, themes, ideas } = await getStoryIdeasData();
+    const { clients, themes, ideas, pillars } = await getStoryIdeasData();
 
     const clientsWithContent = new Set([
       ...themes.map((t) => t.clientId),
@@ -54,7 +54,12 @@ export default async function StoryIdeasPage() {
           />
         </div>
 
-        <StoryIdeasBoard clients={clients} themes={themes} ideas={ideas} />
+        <StoryIdeasBoard
+          clients={clients}
+          themes={themes}
+          ideas={ideas}
+          pillars={pillars}
+        />
       </div>
     );
   } catch (error) {
