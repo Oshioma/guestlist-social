@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../../lib/supabase/server";
-import CampaignForm from "../../../../components/CampaignForm";
+import CampaignCreator from "../../../../components/CampaignCreator";
 import ClientMemories from "../../../../components/ClientMemories";
 import { createCampaignAction } from "../../../../lib/campaign-actions";
+import { getCampaignSuggestions } from "../../../../lib/campaign-suggestions";
 
 type Props = {
   params: Promise<{ clientId: string }>;
@@ -14,14 +15,16 @@ export default async function NewCampaignPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const [{ data: client, error }, { data: memoryRows }] = await Promise.all([
-    supabase.from("clients").select("name").eq("id", clientId).single(),
-    supabase
-      .from("memories")
-      .select("id, note, tag")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [{ data: client, error }, { data: memoryRows }, suggestions] =
+    await Promise.all([
+      supabase.from("clients").select("name").eq("id", clientId).single(),
+      supabase
+        .from("memories")
+        .select("id, note, tag")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false }),
+      getCampaignSuggestions(clientId),
+    ]);
 
   if (error || !client) {
     notFound();
@@ -110,7 +113,7 @@ export default async function NewCampaignPage({ params }: Props) {
 
       <ClientMemories memories={memories} clientName={client.name} />
 
-      <CampaignForm action={action} />
+      <CampaignCreator action={action} suggestions={suggestions} />
     </div>
   );
 }
