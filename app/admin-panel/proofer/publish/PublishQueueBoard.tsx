@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SectionCard from "../../components/SectionCard";
 import CarouselPreview from "../../components/CarouselPreview";
+import BoostPostButton from "../../components/BoostPostButton";
 import type {
   ProoferPost,
   ProoferPublishQueueItem,
@@ -34,6 +35,7 @@ type ReadyPost = ProoferPost & {
 };
 
 type QueueItem = ProoferPublishQueueItem & {
+  clientId: string;
   clientName: string;
   postDate: string;
   caption: string;
@@ -1094,6 +1096,13 @@ export default function PublishQueueBoard({
                       No URL saved
                     </span>
                   )}
+
+                  <BoostPostButton
+                    clientId={item.clientId}
+                    platform={item.platform}
+                    metaPostId={null}
+                    publishUrl={item.publishUrl}
+                  />
 
                   <button
                     type="button"

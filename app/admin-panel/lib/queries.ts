@@ -713,6 +713,7 @@ export async function getProoferPublishQueueData(): Promise<{
   readyPosts: Array<ProoferPost & { clientName: string }>;
   queueItems: Array<
     ProoferPublishQueueItem & {
+      clientId: string;
       clientName: string;
       postDate: string;
       caption: string;
@@ -834,6 +835,7 @@ export async function getProoferPublishQueueData(): Promise<{
 
       return {
         ...item,
+        clientId: post.clientId,
         clientName: clientNameById.get(post.clientId) ?? "Untitled client",
         postDate: post.postDate,
         caption: post.caption,
@@ -846,6 +848,7 @@ export async function getProoferPublishQueueData(): Promise<{
       (
         item
       ): item is ProoferPublishQueueItem & {
+        clientId: string;
         clientName: string;
         postDate: string;
         caption: string;
