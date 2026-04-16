@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
+import { createMetaCampaign } from "../../../lib/meta-campaign-create";
 
 export async function createCampaignAction(clientId: string, formData: FormData) {
   const supabase = await createClient();
@@ -17,18 +18,61 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     throw new Error("Campaign name is required.");
   }
 
-  const { error } = await supabase.from("campaigns").insert({
-    client_id: clientId,
-    name,
-    objective,
-    audience: audience || null,
-    budget,
-    status,
-  });
+  // Try to create in Meta first. If Meta creds aren't configured we still
+  // save locally — the campaign can be pushed to Meta later or picked up
+  // on the next sync. If Meta returns an error we surface it to the
+  // operator but don't block the local save.
+  let metaCampaignId: string | null = null;
+  let metaAdSetId: string | null = null;
+  let metaError: string | null = null;
+
+  const hasMetaCreds =
+    !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID;
+
+  if (hasMetaCreds && budget > 0) {
+    const result = await createMetaCampaign({
+      name,
+      objective,
+      budgetPounds: budget,
+      audience,
+      status,
+    });
+
+    if (result.ok) {
+      metaCampaignId = result.metaCampaignId;
+      metaAdSetId = result.metaAdSetId;
+    } else {
+      metaError = `Meta ${result.step}: ${result.error}`;
+      console.error("createCampaignAction Meta error:", metaError);
+    }
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("campaigns")
+    .insert({
+      client_id: clientId,
+      name,
+      objective,
+      audience: audience || null,
+      budget,
+      status,
+      meta_id: metaCampaignId,
+      meta_status: metaCampaignId ? (status === "testing" || status === "paused" ? "PAUSED" : "ACTIVE") : null,
+      meta_ad_account_name: metaCampaignId ? process.env.META_AD_ACCOUNT_ID : null,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     console.error("createCampaignAction error:", error);
     throw new Error("Could not create campaign.");
+  }
+
+  if (metaError) {
+    throw new Error(
+      `Campaign saved locally (ID ${inserted.id}) but Meta creation failed: ${metaError}. ` +
+      `You can push it to Meta later or add it manually in Ads Manager.`
+    );
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);

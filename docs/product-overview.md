@@ -57,17 +57,24 @@ Key env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 ```
 
 ### Admin panel (high level)
+
+The sidebar is grouped into product areas:
+
+**Workspace** — Dashboard, Clients.
+**Engine** — Meta queue, Playbook, Creative library, Reports, Memory.
+**Publisher** — Proofer (calendar), Publish queue, Ideas (tabbed: Video /
+Carousel / Story), Content (dashboard).
+**Campaigns** — Quick launch.
+**Utility** — Tasks, Settings, Guide.
+
+Key surfaces:
 - `/dashboard` — cross-client growth engine dashboard, includes
   `WhatsWorkingNow`, `TopPriorities`, `PatternFeedbackPanel` and the
   "engine activity strip".
-- `/clients`, `/clients/[id]/...` — client, campaign, ad, creative, report,
-  review CRUD. **New campaign page now carries the engine-suggestions sidebar.**
+- `/clients/[id]/campaigns/new` — campaign form + engine-suggestions sidebar.
 - `/proofer`, `/proofer/publish` — organic scheduling & publishing.
-- `/carousel-ideas`, `/story-ideas`, `/video-ideas` — content planning with
-  content-pillar linkage.
+- `/ideas` — combined ideas board with tabs for Video / Carousel / Story.
 - `/creative` — strategist-grade creative library.
-- `/memory`, `/tasks`, `/meta-queue`, `/whats-working`, `/guide`,
-  `/settings`, `/reports`.
 
 ### Auth & roles
 Middleware (`middleware.ts`) gates `/app` and `/admin-panel`. A user's row(s)
@@ -90,8 +97,9 @@ improved outcomes. The stale-pattern reaper retires patterns whose track
 record has gone bad.
 
 ### Key UI
-- `app/admin-panel/clients/[clientId]/ads/page.tsx` — ad grid with pending
-  decisions, actions, and evidence cards.
+- `app/admin-panel/clients/[clientId]/ads/page.tsx` — tabbed interface
+  (Ads / Actions & Decisions / Playbook / Experiments) via `AdsPageTabs`.
+  All sections server-rendered; tab switching is CSS display-toggle.
 - `app/admin-panel/meta-queue/` — approval queue for Meta writes.
 - `app/admin-panel/dashboard/` — `WhatsWorkingNow` + `TopPriorities` +
   pattern feedback panel + engine activity strip.
@@ -165,7 +173,7 @@ and inline notes editing.
   scheduled posts.
 - `GET  /api/meta/debug-env` — OAuth-config diagnostic.
 - `lib/meta-publish.ts` — `publishMetaQueueItem`, `publishFacebookPost`,
-  `publishInstagramPost`, error/result persistence.
+  `publishInstagramPost`, `publishInstagramStory`, error/result persistence.
 - `lib/proofer-actions.ts` — server actions for post CRUD & status moves,
   plus comment/idea/pillar helpers. Revalidation goes through
   `revalidateProoferPaths` / `revalidatePillarConsumers` helpers.
@@ -177,10 +185,11 @@ and inline notes editing.
 `content_pillar_idea_links`, `connected_meta_accounts`.
 
 ### Status
-Feature-complete for IG feed / FB feed. Scheduling + publishing work via
-cron. Content pillars and idea linking are fully wired through the proofer
-and ideas boards. TikTok exists only as an enum value. Post-publish
-performance tracking is not built.
+Feature-complete for IG Feed, IG Stories, and FB Feed. Scheduling +
+publishing work via cron. Content pillars and idea linking are fully wired
+through the proofer and the combined Ideas page (tabbed: Video / Carousel /
+Story). TikTok and LinkedIn have been removed from the platform enum — no
+backing code existed. Post-publish performance tracking is not built.
 
 ---
 
@@ -272,7 +281,6 @@ it only inserts a local row); that remains on the MVP punch list.
   other settings (threshold tuning for CTR/CPC, connected Meta accounts
   UI) still need work.
 - `/admin-panel/reports` is a shell only.
-- TikTok platform enum value has no backing publish code.
 - Decision Accuracy dashboard tile — schema exists, viz incomplete.
 - Campaign Creator writes only to the local DB; it does not yet call Meta
   to actually create a campaign/adset/ad. Suggestions panel closes the
@@ -288,7 +296,7 @@ it only inserts a local row); that remains on the MVP punch list.
 3. Auto-approve low-risk/high-confidence decisions with audit log.
 4. Threshold-config admin UI (CTR/CPC/pattern consistency).
 5. Hard-reject stale approvals (preflight snapshot older than N minutes).
-6. Split the large `clients/[clientId]/ads/page.tsx` into tabs.
+6. ~~Split the large `clients/[clientId]/ads/page.tsx` into tabs.~~ **Done.**
 7. Standard error banner + retry for `meta-execute-decision` failures.
 
 ### App 2 — Social Publisher
@@ -299,8 +307,8 @@ it only inserts a local row); that remains on the MVP punch list.
    reach/engagement on the calendar card.
 5. Token-refresh / expiry warnings on `connected_meta_accounts`.
 6. Comment workflow: resolved filter + @mentions.
-7. Implement IG Stories path or remove from the enum.
-8. Remove TikTok from the UI until v2.
+7. ~~Implement IG Stories path or remove from the enum.~~ **Done** — `publishInstagramStory()` added.
+8. ~~Remove TikTok from the UI until v2.~~ **Done** — TikTok + LinkedIn removed from platform enums.
 9. Wire `api/upload` into the composer (replace Drive-link notes).
 
 ### App 3 — Campaign Creator
@@ -327,7 +335,7 @@ it only inserts a local row); that remains on the MVP punch list.
    campaign create) with request + response + duration.
 3. RLS review on `proofer_posts`, `proofer_publish_queue`, `ad_decisions`,
    `meta_execution_queue` before giving portal users any write paths.
-4. Add `.env.example`.
+4. ~~Add `.env.example`.~~ **Done.**
 5. One Playwright/Cypress smoke test per app: generate a decision,
    schedule a post, create a campaign with a suggestion applied.
-6. Replace the boilerplate README with a real overview + local-dev guide.
+6. ~~Replace the boilerplate README with a real overview + local-dev guide.~~ **Done.**
