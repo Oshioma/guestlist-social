@@ -1359,7 +1359,7 @@ export default function TasksBoard({
         )}
       </SectionCard>
 
-      {selectedTask && <TaskEditorSheet task={task} />}
+      {selectedTask && <TaskEditorSheet task={selectedTask} />}
     </div>
   );
 }
