@@ -7,6 +7,8 @@ import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
 import AdRow from "@/app/admin-panel/components/AdRow";
+import AdQuickActions from "@/app/admin-panel/components/AdQuickActions";
+import InlineBudgetEdit from "@/app/admin-panel/components/InlineBudgetEdit";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
@@ -234,12 +236,21 @@ export default async function CampaignDetailPage({ params }: Props) {
           gap: 16,
         }}
       >
-        <StatCard
-          stat={{
-            label: "Budget",
-            value: formatCurrency(Number(campaign.budget ?? 0)),
-          }}
-        />
+        <div>
+          <StatCard
+            stat={{
+              label: "Budget",
+              value: formatCurrency(Number(campaign.budget ?? 0)),
+            }}
+          />
+          <div style={{ marginTop: 6, paddingLeft: 2 }}>
+            <InlineBudgetEdit
+              campaignId={Number(campaignId)}
+              currentBudget={Number(campaign.budget ?? 0)}
+              hasMetaAdsetId={!!(campaign as any).meta_adset_id}
+            />
+          </div>
+        </div>
         <StatCard
           stat={{
             label: "Spend",
@@ -520,11 +531,22 @@ export default async function CampaignDetailPage({ params }: Props) {
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: "flex-end",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                     marginTop: 8,
                     marginBottom: 12,
+                    flexWrap: "wrap",
+                    gap: 8,
                   }}
                 >
+                  <AdQuickActions
+                    adId={Number(ad.id)}
+                    adName={ad.name}
+                    currentStatus={ad.status}
+                    hasMetaId={!!ad.metaId}
+                    hasAdsetMetaId={!!ad.adsetMetaId}
+                    hasCreative={!!ad.creativeImageUrl}
+                  />
                   <Link
                     href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
                     style={{

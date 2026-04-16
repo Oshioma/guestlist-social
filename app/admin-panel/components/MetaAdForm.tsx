@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import ImageUpload from "./ImageUpload";
+import CreativeLibraryPicker from "./CreativeLibraryPicker";
 
 type Props = {
   campaignName: string;
+  existingCreatives?: { url: string; name: string }[];
   onSubmit: (data: {
     name: string;
     imageUrl: string;
@@ -27,7 +29,7 @@ const CTA_OPTIONS = [
   { value: "get_quote", label: "Get Quote" },
 ];
 
-export default function MetaAdForm({ campaignName, onSubmit }: Props) {
+export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }: Props) {
   const [name, setName] = useState(`${campaignName} — ad 1`);
   const [imageUrl, setImageUrl] = useState("");
   const [headline, setHeadline] = useState("");
@@ -199,6 +201,12 @@ export default function MetaAdForm({ campaignName, onSubmit }: Props) {
                 label="Upload image"
                 accept="image/*"
               />
+              {existingCreatives && existingCreatives.length > 0 && (
+                <CreativeLibraryPicker
+                  creatives={existingCreatives}
+                  onPick={(url) => setImageUrl(url)}
+                />
+              )}
               <span style={{ fontSize: 11, color: "#71717a" }}>
                 Or paste a URL:
               </span>

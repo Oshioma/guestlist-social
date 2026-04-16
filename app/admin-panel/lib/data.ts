@@ -74,7 +74,7 @@ export const ads: Ad[] = [
     costPerResult: 60,
     performanceStatus: "winner",
     performanceScore: 5,
-    performanceReason: "Strong enough performance with conversions.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Strong enough performance with conversions.",
   },
   {
     id: "ad-2",
@@ -92,7 +92,7 @@ export const ads: Ad[] = [
     costPerResult: 106.67,
     performanceStatus: "winner",
     performanceScore: 4,
-    performanceReason: "Strong CTR with efficient clicks.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Strong CTR with efficient clicks.",
   },
   {
     id: "ad-3",
@@ -110,7 +110,7 @@ export const ads: Ad[] = [
     costPerResult: 105,
     performanceStatus: "winner",
     performanceScore: 4,
-    performanceReason: "Strong enough performance with conversions.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Strong enough performance with conversions.",
   },
   {
     id: "ad-4",
@@ -128,7 +128,7 @@ export const ads: Ad[] = [
     costPerResult: 0,
     performanceStatus: "paused",
     performanceScore: 0,
-    performanceReason: "Paused in Meta.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Paused in Meta.",
   },
   {
     id: "ad-5",
@@ -146,7 +146,7 @@ export const ads: Ad[] = [
     costPerResult: 0,
     performanceStatus: "testing",
     performanceScore: 0,
-    performanceReason: "Still gathering enough spend to judge.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Still gathering enough spend to judge.",
   },
   {
     id: "ad-6",
@@ -164,7 +164,7 @@ export const ads: Ad[] = [
     costPerResult: 76,
     performanceStatus: "winner",
     performanceScore: 6,
-    performanceReason: "Strong enough performance with conversions.",
+    metaId: null, adsetMetaId: null, creativeImageUrl: null, performanceReason: "Strong enough performance with conversions.",
   },
 ];
 

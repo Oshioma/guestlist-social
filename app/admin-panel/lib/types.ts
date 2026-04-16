@@ -33,6 +33,9 @@ export type Ad = {
   performanceStatus: AppPerformanceStatus;
   performanceScore: number;
   performanceReason: string;
+  metaId: string | null;
+  adsetMetaId: string | null;
+  creativeImageUrl: string | null;
 };
 
 export type Creative = {

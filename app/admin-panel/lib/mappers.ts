@@ -82,6 +82,9 @@ export function mapDbAdToUiAd(row: any): Ad {
     performanceStatus: perfStatus,
     performanceScore: perfScore,
     performanceReason: perfReason,
+    metaId: row.meta_id ?? null,
+    adsetMetaId: row.adset_meta_id ?? null,
+    creativeImageUrl: row.creative_image_url ?? null,
   };
 }
 
