@@ -16,6 +16,7 @@
 // reloads the page and the counts change, that's the engine working.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Map of decision_type → plural label for chatty grouping. Keep in sync
@@ -210,6 +211,26 @@ export default async function EngineActivityStrip() {
           <div style={{ fontSize: 13, color: "#52525b" }}>{subline}</div>
         )}
       </div>
+      {pendingCount > 0 && (
+        <Link
+          href="/admin-panel/meta-queue"
+          style={{
+            alignSelf: "center",
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid #fde68a",
+            background: "#fffbeb",
+            color: "#92400e",
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          Review queue →
+        </Link>
+      )}
     </div>
   );
 }
