@@ -68,6 +68,15 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     throw new Error("Could not create campaign.");
   }
 
+  // Store the adset Meta ID on the campaign row so the ad-creation step
+  // can reference it without another lookup.
+  if (metaAdSetId) {
+    await supabase
+      .from("campaigns")
+      .update({ meta_adset_id: metaAdSetId })
+      .eq("id", inserted.id);
+  }
+
   if (metaError) {
     throw new Error(
       `Campaign saved locally (ID ${inserted.id}) but Meta creation failed: ${metaError}. ` +
@@ -77,7 +86,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
   revalidatePath("/admin-panel/dashboard");
-  redirect(`/app/clients/${clientId}`);
+  redirect(`/app/clients/${clientId}/campaigns/${inserted.id}`);
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {
