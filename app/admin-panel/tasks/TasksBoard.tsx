@@ -11,6 +11,7 @@ import type {
   TaskRecurrence,
   TaskStatus,
 } from "../lib/types";
+import { TASKS_CONFIG } from "../lib/tasks-config";
 import {
   addTaskAction,
   addTaskCommentAction,
@@ -19,37 +20,6 @@ import {
   updateTaskAction,
   updateTaskStatusAction,
 } from "../lib/task-actions";
-
-const CATEGORIES: { value: TaskCategory; label: string; color: string }[] = [
-  { value: "video", label: "Video", color: "#22c55e" },
-  { value: "carousel", label: "Carousel", color: "#3b82f6" },
-  { value: "story", label: "Story", color: "#eab308" },
-  { value: "design", label: "Design", color: "#a855f7" },
-  { value: "general", label: "General", color: "#71717a" },
-];
-
-const STATUS_OPTIONS: { value: TaskStatus | "all"; label: string }[] = [
-  { value: "all", label: "All statuses" },
-  { value: "open", label: "Open" },
-  { value: "in_progress", label: "In progress" },
-  { value: "blocked", label: "Blocked" },
-  { value: "completed", label: "Completed" },
-];
-
-const PRIORITY_OPTIONS: { value: TaskPriority | "all"; label: string }[] = [
-  { value: "all", label: "All priorities" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
-];
-
-const RECURRENCE_OPTIONS: { value: TaskRecurrence; label: string }[] = [
-  { value: "none", label: "One-off" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-];
 
 const inputStyle: React.CSSProperties = {
   padding: "10px 12px",
@@ -114,7 +84,7 @@ function priorityColor(priority: TaskPriority) {
 
 function categoryMeta(category: TaskCategory) {
   return (
-    CATEGORIES.find((c) => c.value === category) ?? {
+    TASKS_CONFIG.categories.find((c) => c.value === category) ?? {
       value: "general" as TaskCategory,
       label: "General",
       color: "#71717a",
@@ -152,7 +122,8 @@ export default function TasksBoard({
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
-    category: "general" as TaskCategory,
+    category:
+      TASKS_CONFIG.categories[0]?.value ?? ("general" as TaskCategory),
     assignee: currentUserEmail || "",
     dueDate: "",
     startDate: "",
@@ -250,18 +221,21 @@ export default function TasksBoard({
           assignee: newTask.assignee,
           dueDate: newTask.dueDate,
           startDate: newTask.startDate,
-          recurrence: newTask.recurrence,
+          recurrence: TASKS_CONFIG.allowRecurrence ? newTask.recurrence : "none",
           recurrenceInterval:
-            newTask.recurrence === "none" ? null : newTask.recurrenceInterval,
-          priority: newTask.priority,
-          parentTaskId: parentTaskId ?? null,
-          permissionsScope: "team",
+            TASKS_CONFIG.allowRecurrence && newTask.recurrence !== "none"
+              ? newTask.recurrenceInterval
+              : null,
+          priority: TASKS_CONFIG.allowPriority ? newTask.priority : "medium",
+          parentTaskId: TASKS_CONFIG.allowSubtasks ? parentTaskId ?? null : null,
+          permissionsScope: TASKS_CONFIG.allowPermissionsScope ? "team" : "team",
         });
 
         setNewTask({
           title: "",
           description: "",
-          category: "general",
+          category:
+            TASKS_CONFIG.categories[0]?.value ?? ("general" as TaskCategory),
           assignee: currentUserEmail || "",
           dueDate: "",
           startDate: "",
@@ -383,15 +357,19 @@ export default function TasksBoard({
                 }}
               >
                 <span>{category.label}</span>
-                <span>•</span>
-                <span style={{ color: priorityColor(task.priority), fontWeight: 700 }}>
-                  {task.priority}
-                </span>
+                {TASKS_CONFIG.allowPriority && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: priorityColor(task.priority), fontWeight: 700 }}>
+                      {task.priority}
+                    </span>
+                  </>
+                )}
                 <span>•</span>
                 <span>{task.assignee || "Unassigned"}</span>
                 <span>•</span>
                 <span>{formatDate(task.dueDate)}</span>
-                {task.recurrence !== "none" && (
+                {TASKS_CONFIG.allowRecurrence && task.recurrence !== "none" && (
                   <>
                     <span>•</span>
                     <span>Repeats {task.recurrence}</span>
@@ -416,7 +394,7 @@ export default function TasksBoard({
               disabled={isPending}
               style={{ ...inputStyle, width: 140 }}
             >
-              {STATUS_OPTIONS.filter((s) => s.value !== "all").map((s) => (
+              {TASKS_CONFIG.statuses.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
@@ -459,7 +437,7 @@ export default function TasksBoard({
           </div>
         )}
 
-        {task.subtasks.length > 0 && (
+        {TASKS_CONFIG.allowSubtasks && task.subtasks.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div
               style={{
@@ -508,11 +486,13 @@ export default function TasksBoard({
             assignee: draft.assignee,
             dueDate: draft.dueDate,
             startDate: draft.startDate,
-            recurrence: draft.recurrence,
+            recurrence: TASKS_CONFIG.allowRecurrence ? draft.recurrence : "none",
             recurrenceInterval:
-              draft.recurrence === "none" ? null : draft.recurrenceInterval,
-            priority: draft.priority,
-            permissionsScope: "team",
+              TASKS_CONFIG.allowRecurrence && draft.recurrence !== "none"
+                ? draft.recurrenceInterval
+                : null,
+            priority: TASKS_CONFIG.allowPriority ? draft.priority : "medium",
+            permissionsScope: TASKS_CONFIG.allowPermissionsScope ? "team" : "team",
           });
         } catch (err) {
           alert(err instanceof Error ? err.message : "Could not update task");
@@ -607,7 +587,7 @@ export default function TasksBoard({
                 Edit task
               </h2>
               <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>
-                Improve the task, add subtasks, comments, and manage delivery.
+                Same core engine. App-specific behavior comes from config now.
               </div>
             </div>
             <button
@@ -658,7 +638,7 @@ export default function TasksBoard({
                   }
                   style={inputStyle}
                 >
-                  {CATEGORIES.map((c) => (
+                  {TASKS_CONFIG.categories.map((c) => (
                     <option key={c.value} value={c.value}>
                       {c.label}
                     </option>
@@ -698,41 +678,45 @@ export default function TasksBoard({
                   style={inputStyle}
                 />
 
-                <select
-                  value={draft.priority}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      priority: e.target.value as TaskPriority,
-                    })
-                  }
-                  style={inputStyle}
-                >
-                  {PRIORITY_OPTIONS.filter((p) => p.value !== "all").map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                {TASKS_CONFIG.allowPriority && (
+                  <select
+                    value={draft.priority}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        priority: e.target.value as TaskPriority,
+                      })
+                    }
+                    style={inputStyle}
+                  >
+                    {TASKS_CONFIG.priorities.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-                <select
-                  value={draft.recurrence}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      recurrence: e.target.value as TaskRecurrence,
-                    })
-                  }
-                  style={inputStyle}
-                >
-                  {RECURRENCE_OPTIONS.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+                {TASKS_CONFIG.allowRecurrence && (
+                  <select
+                    value={draft.recurrence}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        recurrence: e.target.value as TaskRecurrence,
+                      })
+                    }
+                    style={inputStyle}
+                  >
+                    {TASKS_CONFIG.recurrences.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-                {draft.recurrence !== "none" && (
+                {TASKS_CONFIG.allowRecurrence && draft.recurrence !== "none" && (
                   <input
                     type="number"
                     min={1}
@@ -775,98 +759,102 @@ export default function TasksBoard({
             </div>
           </SectionCard>
 
-          <SectionCard title={`Subtasks (${task.subtasks.length})`}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", gap: 10 }}>
-                <input
-                  value={subtaskTitle}
-                  onChange={(e) => setSubtaskTitle(e.target.value)}
-                  placeholder="Add subtask"
-                  style={inputStyle}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddSubtask}
-                  disabled={isPending || !subtaskTitle.trim()}
-                  style={primaryButton}
-                >
-                  Add
-                </button>
-              </div>
-
-              {task.subtasks.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#71717a" }}>
-                  No subtasks yet.
+          {TASKS_CONFIG.allowSubtasks && (
+            <SectionCard title={`Subtasks (${task.subtasks.length})`}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input
+                    value={subtaskTitle}
+                    onChange={(e) => setSubtaskTitle(e.target.value)}
+                    placeholder="Add subtask"
+                    style={inputStyle}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddSubtask}
+                    disabled={isPending || !subtaskTitle.trim()}
+                    style={primaryButton}
+                  >
+                    Add
+                  </button>
                 </div>
-              ) : (
+
+                {task.subtasks.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#71717a" }}>
+                    No subtasks yet.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {task.subtasks.map((subtask) => (
+                      <TaskCard key={subtask.id} task={subtask} level={0} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          )}
+
+          {TASKS_CONFIG.allowComments && (
+            <SectionCard title={`Comments (${task.comments?.length ?? 0})`}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Add comment"
+                  style={{
+                    ...inputStyle,
+                    minHeight: 90,
+                    resize: "vertical",
+                  }}
+                />
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleAddComment}
+                    disabled={isPending || !comment.trim()}
+                    style={primaryButton}
+                  >
+                    Add comment
+                  </button>
+                </div>
+
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {task.subtasks.map((subtask) => (
-                    <TaskCard key={subtask.id} task={subtask} level={0} />
+                  {(task.comments ?? []).map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        border: "1px solid #e4e4e7",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#18181b",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {c.createdBy}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: "#52525b",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        {c.body}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              )}
-            </div>
-          </SectionCard>
-
-          <SectionCard title={`Comments (${task.comments?.length ?? 0})`}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Add comment"
-                style={{
-                  ...inputStyle,
-                  minHeight: 90,
-                  resize: "vertical",
-                }}
-              />
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleAddComment}
-                  disabled={isPending || !comment.trim()}
-                  style={primaryButton}
-                >
-                  Add comment
-                </button>
               </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {(task.comments ?? []).map((c) => (
-                  <div
-                    key={c.id}
-                    style={{
-                      border: "1px solid #e4e4e7",
-                      borderRadius: 12,
-                      padding: 12,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#18181b",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {c.createdBy}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#52525b",
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {c.body}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </SectionCard>
+            </SectionCard>
+          )}
 
           <SectionCard title={`Activity (${task.activity?.length ?? 0})`}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -924,55 +912,63 @@ export default function TasksBoard({
               maxWidth: 760,
             }}
           >
-            Better editing flow, subtasks, notifications, recurring tasks,
-            stronger filters, and a cleaner base to copy across your apps.
+            Shared task engine with config-driven categories, labels, and route
+            refresh behavior.
           </p>
         </div>
 
-        <SectionCard title={`Notifications (${notifications.length})`}>
-          {notifications.length === 0 ? (
-            <div style={{ fontSize: 13, color: "#71717a" }}>
-              No unread notifications.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {notifications.slice(0, 6).map((note) => (
-                <div
-                  key={note.id}
-                  style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 12,
-                    padding: 12,
-                    background: "#fff",
-                  }}
-                >
+        {TASKS_CONFIG.allowNotifications && (
+          <SectionCard title={`Notifications (${notifications.length})`}>
+            {notifications.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#71717a" }}>
+                No unread notifications.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {notifications.slice(0, 6).map((note) => (
                   <div
+                    key={note.id}
                     style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: "#18181b",
-                      marginBottom: 4,
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 12,
+                      padding: 12,
+                      background: "#fff",
                     }}
                   >
-                    {note.title}
-                  </div>
-                  {note.body && (
-                    <div style={{ fontSize: 12, color: "#52525b", marginBottom: 8 }}>
-                      {note.body}
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#18181b",
+                        marginBottom: 4,
+                      }}
+                    >
+                      {note.title}
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleMarkNotificationRead(note.id)}
-                    style={secondaryButton}
-                  >
-                    Mark read
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+                    {note.body && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#52525b",
+                          marginBottom: 8,
+                        }}
+                      >
+                        {note.body}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleMarkNotificationRead(note.id)}
+                      style={secondaryButton}
+                    >
+                      Mark read
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        )}
       </div>
 
       <SectionCard title="Filters">
@@ -1000,7 +996,8 @@ export default function TasksBoard({
             }
             style={inputStyle}
           >
-            {STATUS_OPTIONS.map((option) => (
+            <option value="all">All statuses</option>
+            {TASKS_CONFIG.statuses.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1018,7 +1015,7 @@ export default function TasksBoard({
             style={inputStyle}
           >
             <option value="all">All categories</option>
-            {CATEGORIES.map((c) => (
+            {TASKS_CONFIG.categories.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
               </option>
@@ -1043,22 +1040,25 @@ export default function TasksBoard({
             ))}
           </select>
 
-          <select
-            value={filters.priority ?? "all"}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                priority: e.target.value as TaskPriority | "all",
-              })
-            }
-            style={inputStyle}
-          >
-            {PRIORITY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {TASKS_CONFIG.allowPriority && (
+            <select
+              value={filters.priority ?? "all"}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  priority: e.target.value as TaskPriority | "all",
+                })
+              }
+              style={inputStyle}
+            >
+              <option value="all">All priorities</option>
+              {TASKS_CONFIG.priorities.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
 
           <select
             value={filters.due ?? "all"}
@@ -1143,7 +1143,7 @@ export default function TasksBoard({
               }
               style={inputStyle}
             >
-              {CATEGORIES.map((c) => (
+              {TASKS_CONFIG.categories.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
@@ -1183,41 +1183,45 @@ export default function TasksBoard({
               style={inputStyle}
             />
 
-            <select
-              value={newTask.priority}
-              onChange={(e) =>
-                setNewTask((prev) => ({
-                  ...prev,
-                  priority: e.target.value as TaskPriority,
-                }))
-              }
-              style={inputStyle}
-            >
-              {PRIORITY_OPTIONS.filter((p) => p.value !== "all").map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+            {TASKS_CONFIG.allowPriority && (
+              <select
+                value={newTask.priority}
+                onChange={(e) =>
+                  setNewTask((prev) => ({
+                    ...prev,
+                    priority: e.target.value as TaskPriority,
+                  }))
+                }
+                style={inputStyle}
+              >
+                {TASKS_CONFIG.priorities.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            <select
-              value={newTask.recurrence}
-              onChange={(e) =>
-                setNewTask((prev) => ({
-                  ...prev,
-                  recurrence: e.target.value as TaskRecurrence,
-                }))
-              }
-              style={inputStyle}
-            >
-              {RECURRENCE_OPTIONS.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
+            {TASKS_CONFIG.allowRecurrence && (
+              <select
+                value={newTask.recurrence}
+                onChange={(e) =>
+                  setNewTask((prev) => ({
+                    ...prev,
+                    recurrence: e.target.value as TaskRecurrence,
+                  }))
+                }
+                style={inputStyle}
+              >
+                {TASKS_CONFIG.recurrences.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            {newTask.recurrence !== "none" && (
+            {TASKS_CONFIG.allowRecurrence && newTask.recurrence !== "none" && (
               <input
                 type="number"
                 min={1}
