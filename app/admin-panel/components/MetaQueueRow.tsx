@@ -141,9 +141,16 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
     row.status === "failed" ||
     row.status === "cancelled";
 
+  const [lastError, setLastError] = useState<{
+    message: string;
+    action: string;
+    staleApproval?: boolean;
+  } | null>(null);
+
   async function handleAction(action: "approve" | "preview" | "execute" | "cancel") {
     setLoading(action);
     setMessage(null);
+    setLastError(null);
     try {
       const res = await fetch("/api/meta-execute-decision", {
         method: "POST",
@@ -152,8 +159,12 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
       });
       const data = await res.json();
       if (!data.ok) {
+        setLastError({
+          message: data.error,
+          action,
+          staleApproval: data.stale_approval === true,
+        });
         setMessage(`Error: ${data.error}`);
-        // Preview can update last_checked_state even on failure.
         if (action === "preview") {
           setPreviewState({ error: data.error });
           setPreviewAt(new Date().toISOString());
@@ -488,7 +499,7 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
           >
             {loading === "cancel" ? "..." : "Cancel"}
           </button>
-          {message && (
+          {message && !lastError && (
             <span
               style={{
                 fontSize: 11,
@@ -498,6 +509,86 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
               {message}
             </span>
           )}
+        </div>
+      )}
+
+      {lastError && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 13, color: "#991b1b", fontWeight: 500, lineHeight: 1.4 }}>
+            {lastError.message}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {lastError.staleApproval ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLastError(null);
+                  handleAction("preview");
+                }}
+                disabled={loading !== null}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  border: "1px solid #e4e4e7",
+                  background: "#fff",
+                  color: "#18181b",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                Preview fresh state
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setLastError(null);
+                  handleAction(lastError.action as "approve" | "preview" | "execute" | "cancel");
+                }}
+                disabled={loading !== null}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#18181b",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setLastError(null)}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 6,
+                border: "1px solid #fecaca",
+                background: "transparent",
+                color: "#991b1b",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
     </div>

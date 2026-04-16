@@ -32,6 +32,7 @@ import {
   fetchAdState,
   fetchAdsetState,
   assertQueueItemFresh,
+  assertApprovalFresh,
   isDryRun,
   DUPLICATE_COOLDOWN_MS,
 } from "@/lib/meta-execute";
@@ -321,7 +322,7 @@ export async function POST(req: Request) {
         );
       }
 
-      // 2. TTL guard.
+      // 2. TTL guard — row too old to act on.
       try {
         assertQueueItemFresh(row.created_at);
       } catch (err) {
@@ -331,6 +332,17 @@ export async function POST(req: Request) {
           .update({ status: "failed", execution_error: message })
           .eq("id", queueId);
         return NextResponse.json({ ok: false, error: message }, { status: 409 });
+      }
+
+      // 2b. Approval staleness — reject if approved too long ago.
+      try {
+        assertApprovalFresh(row.approved_at);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Stale approval";
+        return NextResponse.json(
+          { ok: false, error: message, stale_approval: true },
+          { status: 409 }
+        );
       }
 
       // 3. Per-action database-aware guards.

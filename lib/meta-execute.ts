@@ -51,6 +51,7 @@ export const MAX_BUDGET_DECREASE_PCT = 50;
 
 /** Queue items older than this are stale — re-queue, don't execute. */
 export const QUEUE_ITEM_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+export const APPROVAL_STALENESS_MS = 60 * 60 * 1000; // 1h
 
 /** Per-source-ad duplicate cooldown. */
 export const DUPLICATE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
@@ -225,6 +226,20 @@ export function assertQueueItemFresh(createdAt: string | Date): void {
   if (Date.now() - created > QUEUE_ITEM_TTL_MS) {
     throw new Error(
       "Queue item is older than 24h — re-queue with fresh state instead of executing."
+    );
+  }
+}
+
+export function assertApprovalFresh(approvedAt: string | null | undefined): void {
+  if (!approvedAt) return;
+  const approved = new Date(approvedAt).getTime();
+  if (Number.isNaN(approved)) return;
+  const ageMs = Date.now() - approved;
+  if (ageMs > APPROVAL_STALENESS_MS) {
+    const ageMin = Math.round(ageMs / 60000);
+    throw new Error(
+      `Approval is ${ageMin} minutes old (limit: ${Math.round(APPROVAL_STALENESS_MS / 60000)} min). ` +
+      `Preview the current Meta state first, then re-approve to execute.`
     );
   }
 }
