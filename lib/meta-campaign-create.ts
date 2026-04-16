@@ -108,6 +108,7 @@ export async function createMetaCampaign(
       status: metaStatus,
       buying_type: "AUCTION",
       special_ad_categories: "NONE",
+      is_adset_budget_sharing_enabled: "false",
     });
 
     const campaignStart = Date.now();
