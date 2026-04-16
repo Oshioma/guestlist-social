@@ -11,8 +11,8 @@ import type {
   TaskRecurrence,
   TaskStatus,
   TaskUserRole,
-} from "../lib/types";
-import { TASKS_CONFIG } from "../lib/tasks-config";
+} from "../lib/tasks/types";
+import { TASKS_CONFIG } from "../lib/tasks/config";
 import {
   addTaskAction,
   addTaskCommentAction,
@@ -20,7 +20,7 @@ import {
   markTaskNotificationReadAction,
   updateTaskAction,
   updateTaskStatusAction,
-} from "../lib/task-actions";
+} from "../lib/tasks/actions";
 
 const inputStyle: React.CSSProperties = {
   padding: "10px 12px",
@@ -121,7 +121,6 @@ export default function TasksBoard({
     currentUserRole === "member";
 
   const canSeeNotifications = TASKS_CONFIG.allowNotifications;
-
   const isViewer = currentUserRole === "viewer";
 
   const [filters, setFilters] = useState<TaskFilters>({
@@ -1360,7 +1359,7 @@ export default function TasksBoard({
         )}
       </SectionCard>
 
-      {selectedTask && <TaskEditorSheet task={selectedTask} />}
+      {selectedTask && <TaskEditorSheet task={task} />}
     </div>
   );
 }
