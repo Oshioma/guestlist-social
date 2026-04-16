@@ -6,6 +6,7 @@ import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
+import AutoApproveForm from "../components/AutoApproveForm";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
   getReaperSettings,
@@ -16,6 +17,9 @@ import {
   DEFAULT_ENGINE_THRESHOLDS,
   ENGINE_BOUNDS,
   type EngineThresholds,
+  getAutoApproveSettings,
+  setAutoApproveSettings,
+  type AutoApproveSettings,
 } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
@@ -33,10 +37,11 @@ export default async function SettingsPage() {
 
   const adminClient = createAdminClient();
 
-  const [reaperSettings, engineSettings, { data: metaAccounts }] =
+  const [reaperSettings, engineSettings, autoApproveSettings, { data: metaAccounts }] =
     await Promise.all([
       getReaperSettings(adminClient),
       getEngineThresholds(adminClient),
+      getAutoApproveSettings(adminClient),
       adminClient
         .from("connected_meta_accounts")
         .select("id, client_id, platform, account_name, token_expires_at, updated_at")
@@ -211,6 +216,17 @@ export default async function SettingsPage() {
             "use server";
             const admin = createAdminClient();
             await setEngineThresholds(admin, values);
+          }}
+        />
+      </SectionCard>
+
+      <SectionCard title="Auto-Approve Decisions">
+        <AutoApproveForm
+          initial={autoApproveSettings}
+          onSave={async (values) => {
+            "use server";
+            const admin = createAdminClient();
+            await setAutoApproveSettings(admin, values as AutoApproveSettings);
           }}
         />
       </SectionCard>

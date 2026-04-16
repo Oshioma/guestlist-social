@@ -183,6 +183,75 @@ export async function setEngineThresholds(
   if (error) throw new Error(`save engine thresholds: ${error.message}`);
 }
 
+// ── Auto-approve settings ────────────────────────────────────────────────
+
+export type AutoApproveSettings = {
+  enabled: boolean;
+  minConfidence: "high" | "medium";
+  allowedTypes: string[];
+};
+
+export const DEFAULT_AUTO_APPROVE: AutoApproveSettings = {
+  enabled: false,
+  minConfidence: "high",
+  allowedTypes: ["pause_or_replace", "kill_test"],
+};
+
+const AUTO_APPROVE_KEY = "auto_approve";
+
+export async function getAutoApproveSettings(
+  supabase: SupabaseClient
+): Promise<AutoApproveSettings> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", AUTO_APPROVE_KEY)
+    .maybeSingle<{ value: Record<string, unknown> }>();
+
+  if (error || !data?.value) return DEFAULT_AUTO_APPROVE;
+
+  const raw = data.value;
+  const enabled = raw.enabled === true;
+  const minConfidence =
+    raw.minConfidence === "medium" ? "medium" : "high";
+  const allowedTypes = Array.isArray(raw.allowedTypes)
+    ? (raw.allowedTypes as string[]).filter(
+        (t) => typeof t === "string" && t.length > 0
+      )
+    : DEFAULT_AUTO_APPROVE.allowedTypes;
+
+  return { enabled, minConfidence, allowedTypes };
+}
+
+export async function setAutoApproveSettings(
+  supabase: SupabaseClient,
+  next: AutoApproveSettings
+): Promise<void> {
+  const { error } = await supabase.from("app_settings").upsert(
+    {
+      key: AUTO_APPROVE_KEY,
+      value: next,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "key" }
+  );
+  if (error) throw new Error(`save auto-approve settings: ${error.message}`);
+}
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+
+export function shouldAutoApprove(
+  settings: AutoApproveSettings,
+  decision: { confidence: string; type: string }
+): boolean {
+  if (!settings.enabled) return false;
+  const rank = CONFIDENCE_RANK[decision.confidence] ?? 0;
+  const minRank = CONFIDENCE_RANK[settings.minConfidence] ?? 3;
+  if (rank < minRank) return false;
+  if (!settings.allowedTypes.includes(decision.type)) return false;
+  return true;
+}
+
 // Shared predicate so the cron sweep and the settings-page dry-run preview
 // can never drift on what "failing hard enough to retire" means.
 export function shouldRetirePattern(

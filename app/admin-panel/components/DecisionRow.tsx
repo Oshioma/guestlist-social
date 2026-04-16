@@ -18,7 +18,7 @@ type DecisionData = {
   meta_action: string | null;
   status: string;
   execution_result: string | null;
-  // Trust enrichment from the page
+  approved_by?: string | null;
   evidence?: string | null;
   last_similar?: string | null;
 };
@@ -140,6 +140,22 @@ export default function DecisionRow({ decision }: { decision: DecisionData }) {
             }}
           >
             {decision.status}
+          </span>
+        )}
+        {decision.approved_by === "auto:engine" && (
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 10,
+              fontWeight: 700,
+              background: "#eef2ff",
+              color: "#4338ca",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Auto-approved
           </span>
         )}
       </div>

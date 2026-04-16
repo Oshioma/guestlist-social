@@ -8,6 +8,10 @@ import {
   getAppPerformanceStatus,
   getPerformanceScore,
 } from "@/app/admin-panel/lib/performance-truth";
+import {
+  getAutoApproveSettings,
+  shouldAutoApprove,
+} from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -496,6 +500,8 @@ export async function POST(req: Request) {
       );
     }
 
+    const autoApproveSettings = await getAutoApproveSettings(supabase);
+
     // Compute CTR/CPC for each ad if not stored, and fall back to live-
     // computed performance_status/score when the persisted columns are
     // empty. The Score Ads button populates those columns, but operators
@@ -536,8 +542,8 @@ export async function POST(req: Request) {
 
     let generated = 0;
     let patternBacked = 0;
+    let autoApproved = 0;
     const errors: string[] = [];
-    // Stats for the queue seeder so the response shows what landed where.
     let queuedPause = 0;
     let queuedBudget = 0;
     let queueDeduped = 0;
@@ -599,6 +605,8 @@ export async function POST(req: Request) {
         continue;
       }
 
+      const isAutoApproved = shouldAutoApprove(autoApproveSettings, decision);
+
       const { error: insertError } = await supabase.from("ad_decisions").insert({
         client_id: clientId,
         ad_id: ad.id,
@@ -607,13 +615,16 @@ export async function POST(req: Request) {
         action: decision.action,
         confidence: decision.confidence,
         meta_action: decision.meta_action,
-        status: "pending",
+        status: isAutoApproved ? "approved" : "pending",
+        approved_by: isAutoApproved ? "auto:engine" : null,
+        approved_at: isAutoApproved ? new Date().toISOString() : null,
       });
 
       if (insertError) {
         errors.push(`Ad ${ad.id}: ${insertError.message}`);
       } else {
         generated++;
+        if (isAutoApproved) autoApproved++;
       }
 
       // ---------------------------------------------------------------
@@ -643,15 +654,25 @@ export async function POST(req: Request) {
           adMetaId: adMetaId!,
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
-          // Pattern provenance — null when this came from getDecision().
-          // The verdict feedback loop reads these to attribute outcomes
-          // back to the originating pattern_feedback row.
           sourcePatternKey: decision.source_pattern_key ?? null,
           sourcePatternIndustry: decision.source_pattern_industry ?? null,
         });
         if (seeded.ok) {
           if (seeded.deduped) queueDeduped++;
-          else queuedPause++;
+          else {
+            queuedPause++;
+            if (isAutoApproved && !seeded.deduped) {
+              await supabase
+                .from("meta_execution_queue")
+                .update({
+                  status: "approved",
+                  approved_by: "auto:engine",
+                  approved_at: new Date().toISOString(),
+                })
+                .eq("id", seeded.queueId)
+                .eq("status", "pending");
+            }
+          }
         } else {
           errors.push(`Queue (pause) ad ${ad.id}: ${seeded.error}`);
         }
@@ -663,7 +684,6 @@ export async function POST(req: Request) {
           campaignId: localCampaignId,
           adId: localAdId,
           adsetMetaId: adsetMetaId!,
-          // Default +15% — under the executor's +20% hard cap.
           reason: decision.reason,
           riskLevel: decision.confidence === "high" ? "low" : "medium",
           sourcePatternKey: decision.source_pattern_key ?? null,
@@ -671,7 +691,20 @@ export async function POST(req: Request) {
         });
         if (seeded.ok) {
           if (seeded.deduped) queueDeduped++;
-          else queuedBudget++;
+          else {
+            queuedBudget++;
+            if (isAutoApproved && !seeded.deduped) {
+              await supabase
+                .from("meta_execution_queue")
+                .update({
+                  status: "approved",
+                  approved_by: "auto:engine",
+                  approved_at: new Date().toISOString(),
+                })
+                .eq("id", seeded.queueId)
+                .eq("status", "pending");
+            }
+          }
         } else {
           errors.push(`Queue (budget) ad ${ad.id}: ${seeded.error}`);
         }
@@ -696,6 +729,7 @@ export async function POST(req: Request) {
       ok: true,
       dry_run: dryRun,
       generated,
+      auto_approved: autoApproved,
       total: ads.length,
       pattern_backed: patternBacked,
       live_status_fallbacks: liveStatusFallbacks,

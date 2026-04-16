@@ -293,6 +293,7 @@ export default async function ClientAdsPage({
       meta_action: d.meta_action,
       status: d.status,
       execution_result: d.execution_result,
+      approved_by: d.approved_by ?? null,
       evidence: formatDecisionEvidence(stats),
       last_similar: formatDecisionLastSimilar(last),
     };
