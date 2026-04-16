@@ -71,6 +71,7 @@ export default async function SettingsPage() {
     updated_at: string | null;
   }[];
 
+  const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
   const hasMetaToken = !!process.env.META_ACCESS_TOKEN;
   const hasMetaAccount = !!process.env.META_AD_ACCOUNT_ID;
   const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
@@ -129,6 +130,7 @@ export default async function SettingsPage() {
             { label: "Meta Social App ID", ok: hasMetaSocialApp, env: "META_SOCIAL_APP_ID" },
             { label: "Anthropic API Key", ok: hasAnthropicKey, env: "ANTHROPIC_API_KEY" },
             { label: "SMTP (email)", ok: hasSmtp, env: "SMTP_HOST" },
+            { label: "OpenAI (image gen)", ok: hasOpenAiKey, env: "OPENAI_API_KEY" },
           ].map((item) => (
             <div
               key={item.env}
@@ -228,6 +230,7 @@ export default async function SettingsPage() {
       <SectionCard title="AI Suggestion Sources">
         <AiSourcesForm
           initial={aiSources}
+          hasOpenAiKey={hasOpenAiKey}
           onSave={async (values) => {
             "use server";
             const admin = createAdminClient();

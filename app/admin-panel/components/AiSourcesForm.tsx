@@ -8,7 +8,9 @@ type Props = {
     metaAdLibrary: boolean;
     clientWebsite: boolean;
     clientWebsiteUrl: string;
+    imageGeneration: boolean;
   };
+  hasOpenAiKey: boolean;
   onSave: (values: Props["initial"]) => Promise<void>;
 };
 
@@ -31,9 +33,15 @@ const SOURCES = [
     description: "Scrape the client's landing page for brand voice, offers, product names, and tone",
     icon: "▣",
   },
+  {
+    key: "imageGeneration" as const,
+    label: "AI Image Generation",
+    description: "Generate ad images with DALL-E. Requires an OpenAI API key (OPENAI_API_KEY env var). ~$0.04 per image.",
+    icon: "▲",
+  },
 ];
 
-export default function AiSourcesForm({ initial, onSave }: Props) {
+export default function AiSourcesForm({ initial, hasOpenAiKey, onSave }: Props) {
   const [values, setValues] = useState(initial);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -43,7 +51,8 @@ export default function AiSourcesForm({ initial, onSave }: Props) {
     values.internalData !== initial.internalData ||
     values.metaAdLibrary !== initial.metaAdLibrary ||
     values.clientWebsite !== initial.clientWebsite ||
-    values.clientWebsiteUrl !== initial.clientWebsiteUrl;
+    values.clientWebsiteUrl !== initial.clientWebsiteUrl ||
+    values.imageGeneration !== initial.imageGeneration;
 
   function handleSave() {
     setSaved(false);
@@ -124,6 +133,22 @@ export default function AiSourcesForm({ initial, onSave }: Props) {
               boxSizing: "border-box",
             }}
           />
+        </div>
+      )}
+
+      {values.imageGeneration && !hasOpenAiKey && (
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            fontSize: 12,
+            color: "#92400e",
+          }}
+        >
+          <strong>OPENAI_API_KEY</strong> not set in your environment.
+          Add it in Vercel → Settings → Environment Variables to enable image generation.
         </div>
       )}
 

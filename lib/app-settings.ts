@@ -21,6 +21,7 @@ export type AiSourceSettings = {
   metaAdLibrary: boolean;
   clientWebsite: boolean;
   clientWebsiteUrl: string;
+  imageGeneration: boolean;
 };
 
 export const DEFAULT_AI_SOURCES: AiSourceSettings = {
@@ -28,6 +29,7 @@ export const DEFAULT_AI_SOURCES: AiSourceSettings = {
   metaAdLibrary: true,
   clientWebsite: false,
   clientWebsiteUrl: "",
+  imageGeneration: false,
 };
 
 const AI_SOURCES_KEY = "ai_suggestion_sources";
@@ -48,6 +50,7 @@ export async function getAiSourceSettings(
     metaAdLibrary: raw.metaAdLibrary !== false,
     clientWebsite: raw.clientWebsite === true,
     clientWebsiteUrl: typeof raw.clientWebsiteUrl === "string" ? raw.clientWebsiteUrl : "",
+    imageGeneration: raw.imageGeneration === true,
   };
 }
 

@@ -43,6 +43,13 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
   const [success, setSuccess] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+  const [creativeLoading, setCreativeLoading] = useState(false);
+  const [creativeBrief, setCreativeBrief] = useState<{
+    brief: string;
+    rationale: string;
+    generatedImageUrl: string | null;
+    imageGenerationEnabled: boolean;
+  } | null>(null);
 
   const ready =
     name.trim() &&
@@ -231,7 +238,116 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
         </div>
 
         <div>
-          <label style={labelStyle}>Image</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Image</label>
+            {clientId && (
+              <button
+                type="button"
+                disabled={creativeLoading}
+                onClick={async () => {
+                  setCreativeLoading(true);
+                  setCreativeBrief(null);
+                  try {
+                    const res = await fetch("/api/ai-creative", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        clientId,
+                        objective: objective ?? "engagement",
+                        campaignName,
+                        headline,
+                        body,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                      setCreativeBrief({
+                        brief: data.brief,
+                        rationale: data.rationale,
+                        generatedImageUrl: data.generatedImageUrl,
+                        imageGenerationEnabled: data.imageGenerationEnabled,
+                      });
+                      if (data.generatedImageUrl) {
+                        setImageUrl(data.generatedImageUrl);
+                      }
+                    } else {
+                      setError(data.error);
+                    }
+                  } catch {
+                    setError("Network error");
+                  } finally {
+                    setCreativeLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: creativeLoading
+                    ? "#c7d2fe"
+                    : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: creativeLoading ? "wait" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+              >
+                {creativeLoading ? "AI generating..." : <><span style={{ fontSize: 12 }}>&#9733;</span> AI Creative</>}
+              </button>
+            )}
+          </div>
+
+          {creativeBrief && (
+            <div
+              style={{
+                marginBottom: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#eef2ff",
+                border: "1px solid #e0e7ff",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#4338ca", textTransform: "uppercase", letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 12 }}>&#9733;</span> AI creative brief
+              </div>
+              <div style={{ fontSize: 12, color: "#18181b", lineHeight: 1.5 }}>
+                {creativeBrief.brief}
+              </div>
+              {creativeBrief.rationale && (
+                <div style={{ fontSize: 11, color: "#6b7280", fontStyle: "italic" }}>
+                  {creativeBrief.rationale}
+                </div>
+              )}
+              {creativeBrief.generatedImageUrl && (
+                <div style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>
+                  Image generated and applied below
+                </div>
+              )}
+              {!creativeBrief.generatedImageUrl && creativeBrief.imageGenerationEnabled && (
+                <div style={{ fontSize: 11, color: "#92400e" }}>
+                  Image generation attempted but failed — use the brief above with Canva or your designer
+                </div>
+              )}
+              {!creativeBrief.imageGenerationEnabled && (
+                <div style={{ fontSize: 11, color: "#71717a" }}>
+                  Use this brief with Canva AI, Midjourney, or your designer. Enable AI Image Generation in Settings to generate directly.
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setCreativeBrief(null)}
+                style={{ alignSelf: "flex-start", padding: "2px 8px", borderRadius: 4, border: "1px solid #c7d2fe", background: "#fff", color: "#4338ca", fontSize: 10, cursor: "pointer" }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           <div
             style={{
               display: "flex",
