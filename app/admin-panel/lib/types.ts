@@ -261,6 +261,12 @@ export type ProoferPublishQueueItem = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  insightsReach: number | null;
+  insightsImpressions: number | null;
+  insightsEngagement: number | null;
+  insightsLikes: number | null;
+  insightsComments: number | null;
+  insightsFetchedAt: string | null;
 };
 
 export type ContentPillar = {

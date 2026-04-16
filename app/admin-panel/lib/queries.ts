@@ -688,6 +688,12 @@ export async function getProoferData(
         createdBy: queueRow.created_by ?? "",
         createdAt: queueRow.created_at ?? "",
         updatedAt: queueRow.updated_at ?? "",
+        insightsReach: queueRow.insights_reach != null ? Number(queueRow.insights_reach) : null,
+        insightsImpressions: queueRow.insights_impressions != null ? Number(queueRow.insights_impressions) : null,
+        insightsEngagement: queueRow.insights_engagement != null ? Number(queueRow.insights_engagement) : null,
+        insightsLikes: queueRow.insights_likes != null ? Number(queueRow.insights_likes) : null,
+        insightsComments: queueRow.insights_comments != null ? Number(queueRow.insights_comments) : null,
+        insightsFetchedAt: queueRow.insights_fetched_at ?? null,
       });
 
       publishQueueMap.set(postId, existing);
@@ -792,6 +798,12 @@ export async function getProoferPublishQueueData(): Promise<{
       createdBy: row.created_by ?? "",
       createdAt: row.created_at ?? "",
       updatedAt: row.updated_at ?? "",
+      insightsReach: row.insights_reach != null ? Number(row.insights_reach) : null,
+      insightsImpressions: row.insights_impressions != null ? Number(row.insights_impressions) : null,
+      insightsEngagement: row.insights_engagement != null ? Number(row.insights_engagement) : null,
+      insightsLikes: row.insights_likes != null ? Number(row.insights_likes) : null,
+      insightsComments: row.insights_comments != null ? Number(row.insights_comments) : null,
+      insightsFetchedAt: row.insights_fetched_at ?? null,
     })
   );
 

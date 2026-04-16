@@ -1104,6 +1104,41 @@ export default function PublishQueueBoard({
                     Remove
                   </button>
                 </div>
+
+                {item.insightsFetchedAt && (
+                  <div
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      padding: "8px 12px",
+                      background: "#f8fafc",
+                      border: "1px solid #f1f5f9",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  >
+                    {item.insightsReach != null && (
+                      <span><strong style={{ color: "#18181b" }}>{item.insightsReach.toLocaleString()}</strong> <span style={{ color: "#71717a" }}>reach</span></span>
+                    )}
+                    {item.insightsImpressions != null && (
+                      <span><strong style={{ color: "#18181b" }}>{item.insightsImpressions.toLocaleString()}</strong> <span style={{ color: "#71717a" }}>impressions</span></span>
+                    )}
+                    {item.insightsEngagement != null && (
+                      <span><strong style={{ color: "#18181b" }}>{item.insightsEngagement.toLocaleString()}</strong> <span style={{ color: "#71717a" }}>engagement</span></span>
+                    )}
+                    {item.insightsLikes != null && (
+                      <span><strong style={{ color: "#18181b" }}>{item.insightsLikes.toLocaleString()}</strong> <span style={{ color: "#71717a" }}>likes</span></span>
+                    )}
+                    {item.insightsComments != null && (
+                      <span><strong style={{ color: "#18181b" }}>{item.insightsComments.toLocaleString()}</strong> <span style={{ color: "#71717a" }}>comments</span></span>
+                    )}
+                    <span style={{ marginLeft: "auto", color: "#a1a1aa", fontSize: 11 }}>
+                      fetched {new Date(item.insightsFetchedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
