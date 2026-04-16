@@ -1,94 +1,35 @@
-import type { Task, TaskPermissionScope, TaskUserRole } from "./types";
+import { getTasksData } from "../lib/tasks/queries";
+import TasksBoard from "./TasksBoard";
+import EmptyState from "../components/EmptyState";
 
-export type TaskActor = {
-  email: string;
-  role: TaskUserRole;
-};
+export const dynamic = "force-dynamic";
 
-export function canViewTask(actor: TaskActor, task: Task): boolean {
-  if (actor.role === "admin") return true;
+export default async function TasksPage() {
+  try {
+    const {
+      tasks,
+      currentUserEmail,
+      currentUserRole,
+      knownUsers,
+      notifications,
+    } = await getTasksData({
+      includeSubtasks: true,
+      includeComments: true,
+      includeActivity: true,
+      includeNotifications: true,
+    });
 
-  if (task.permissionsScope === "admin_only") {
-    return actor.role === "manager";
+    return (
+      <TasksBoard
+        initialTasks={tasks}
+        currentUserEmail={currentUserEmail}
+        currentUserRole={currentUserRole}
+        knownUsers={knownUsers}
+        initialNotifications={notifications}
+      />
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return <EmptyState title="Unable to load tasks" description={message} />;
   }
-
-  if (task.permissionsScope === "private") {
-    return task.assignee === actor.email || task.createdBy === actor.email;
-  }
-
-  return true;
-}
-
-export function canEditTask(actor: TaskActor, task: Task): boolean {
-  if (actor.role === "admin") return true;
-  if (actor.role === "viewer") return false;
-
-  if (task.permissionsScope === "admin_only") {
-    return actor.role === "manager";
-  }
-
-  if (task.createdBy === actor.email) return true;
-  if (task.assignee === actor.email) return true;
-
-  return actor.role === "manager";
-}
-
-export function canDeleteTask(actor: TaskActor, task: Task): boolean {
-  if (actor.role === "admin") return true;
-  if (actor.role === "viewer") return false;
-
-  if (task.permissionsScope === "admin_only") {
-    return actor.role === "manager";
-  }
-
-  return task.createdBy === actor.email || actor.role === "manager";
-}
-
-export function canChangeTaskStatus(actor: TaskActor, task: Task): boolean {
-  if (actor.role === "admin") return true;
-  if (actor.role === "viewer") return false;
-
-  if (task.permissionsScope === "admin_only") {
-    return actor.role === "manager";
-  }
-
-  return (
-    task.assignee === actor.email ||
-    task.createdBy === actor.email ||
-    actor.role === "manager"
-  );
-}
-
-export function canCommentOnTask(actor: TaskActor, task: Task): boolean {
-  if (actor.role === "viewer") return false;
-  return canViewTask(actor, task);
-}
-
-export function canAssignTask(actor: TaskActor, task?: Task): boolean {
-  if (actor.role === "admin") return true;
-  if (actor.role === "viewer") return false;
-
-  if (!task) {
-    return actor.role === "manager" || actor.role === "member";
-  }
-
-  if (task.permissionsScope === "admin_only") {
-    return actor.role === "manager";
-  }
-
-  return actor.role === "manager" || task.createdBy === actor.email;
-}
-
-export function defaultTaskRoleFromEmail(email: string): TaskUserRole {
-  if (!email) return "viewer";
-  return "member";
-}
-
-export function normalizePermissionScope(
-  scope?: string
-): TaskPermissionScope {
-  if (scope === "private" || scope === "team" || scope === "admin_only") {
-    return scope;
-  }
-  return "team";
 }
