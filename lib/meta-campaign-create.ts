@@ -14,6 +14,8 @@
  * meta-sync will pick it up.
  */
 
+import { logMetaWrite } from "./meta-write-log";
+
 const API_VERSION = "v25.0";
 const BASE = `https://graph.facebook.com/${API_VERSION}`;
 
@@ -104,6 +106,7 @@ export async function createMetaCampaign(
       special_ad_categories: "[]",
     });
 
+    const campaignStart = Date.now();
     const campaignRes = await fetch(`${BASE}/${accountId}/campaigns`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -113,6 +116,17 @@ export async function createMetaCampaign(
       id?: string;
       error?: { message?: string };
     };
+
+    logMetaWrite({
+      operation: "campaign:create_campaign",
+      metaEndpoint: `/${accountId}/campaigns`,
+      requestBody: Object.fromEntries(campaignParams.entries()),
+      responseStatus: campaignRes.status,
+      responseBody: campaignData,
+      success: !campaignData.error && !!campaignData.id,
+      errorMessage: campaignData.error?.message ?? null,
+      durationMs: Date.now() - campaignStart,
+    });
 
     if (campaignData.error || !campaignData.id) {
       return {
@@ -138,6 +152,7 @@ export async function createMetaCampaign(
       targeting: JSON.stringify(buildTargeting(input.audience)),
     });
 
+    const adSetStart = Date.now();
     const adSetRes = await fetch(`${BASE}/${accountId}/adsets`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -147,6 +162,17 @@ export async function createMetaCampaign(
       id?: string;
       error?: { message?: string };
     };
+
+    logMetaWrite({
+      operation: "campaign:create_adset",
+      metaEndpoint: `/${accountId}/adsets`,
+      requestBody: Object.fromEntries(adSetParams.entries()),
+      responseStatus: adSetRes.status,
+      responseBody: adSetData,
+      success: !adSetData.error && !!adSetData.id,
+      errorMessage: adSetData.error?.message ?? null,
+      durationMs: Date.now() - adSetStart,
+    });
 
     if (adSetData.error || !adSetData.id) {
       return {

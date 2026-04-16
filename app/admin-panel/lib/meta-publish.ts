@@ -11,6 +11,7 @@
 
 import { revalidatePath } from "next/cache";
 import { META_GRAPH_VERSION, metaServiceClient } from "./meta-auth";
+import { logMetaWrite } from "../../../lib/meta-write-log";
 
 type PublishResult =
   | { ok: true; publishUrl: string | null }
@@ -164,35 +165,56 @@ async function publishFacebookPost(args: {
     if (caption) params.set("caption", caption);
     params.set("access_token", pageToken);
 
+    const endpoint = `/${pageId}/photos`;
+    const start = Date.now();
     const res = await fetch(
-      `https://graph.facebook.com/${META_GRAPH_VERSION}/${pageId}/photos`,
+      `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
       { method: "POST", body: params, cache: "no-store" }
     );
+    const data = (await res.json()) as { id?: string; post_id?: string; error?: { message?: string } };
+    logMetaWrite({
+      operation: "publish:facebook",
+      metaEndpoint: endpoint,
+      requestBody: { url: imageUrl, caption },
+      responseStatus: res.status,
+      responseBody: data,
+      success: res.ok,
+      errorMessage: data.error?.message ?? null,
+      durationMs: Date.now() - start,
+    });
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`FB /photos failed: ${res.status} ${body}`);
+      throw new Error(`FB /photos failed: ${res.status} ${JSON.stringify(data)}`);
     }
-    const data = (await res.json()) as { id?: string; post_id?: string };
     const postId = data.post_id ?? data.id ?? null;
     return postId ? `https://www.facebook.com/${postId}` : null;
   }
 
-  // Text-only fallback
   if (!caption) {
     throw new Error("Facebook post requires a caption or image_url.");
   }
   const params = new URLSearchParams();
   params.set("message", caption);
   params.set("access_token", pageToken);
+  const endpoint = `/${pageId}/feed`;
+  const start = Date.now();
   const res = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${pageId}/feed`,
+    `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
     { method: "POST", body: params, cache: "no-store" }
   );
+  const data = (await res.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:facebook",
+    metaEndpoint: endpoint,
+    requestBody: { message: caption },
+    responseStatus: res.status,
+    responseBody: data,
+    success: res.ok,
+    errorMessage: data.error?.message ?? null,
+    durationMs: Date.now() - start,
+  });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`FB /feed failed: ${res.status} ${body}`);
+    throw new Error(`FB /feed failed: ${res.status} ${JSON.stringify(data)}`);
   }
-  const data = (await res.json()) as { id?: string };
   return data.id ? `https://www.facebook.com/${data.id}` : null;
 }
 
@@ -208,40 +230,58 @@ async function publishInstagramPost(args: {
     throw new Error("Instagram posts require an image_url.");
   }
 
-  // Step 1: create media container
   const containerParams = new URLSearchParams();
   containerParams.set("image_url", imageUrl);
   if (caption) containerParams.set("caption", caption);
   containerParams.set("access_token", pageToken);
 
+  const containerStart = Date.now();
   const containerRes = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
     { method: "POST", body: containerParams, cache: "no-store" }
   );
+  const container = (await containerRes.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:instagram",
+    metaEndpoint: `/${igAccountId}/media`,
+    requestBody: { image_url: imageUrl, caption },
+    responseStatus: containerRes.status,
+    responseBody: container,
+    success: containerRes.ok && !!container.id,
+    errorMessage: container.error?.message ?? null,
+    durationMs: Date.now() - containerStart,
+  });
   if (!containerRes.ok) {
-    const body = await containerRes.text();
-    throw new Error(`IG /media failed: ${containerRes.status} ${body}`);
+    throw new Error(`IG /media failed: ${containerRes.status} ${JSON.stringify(container)}`);
   }
-  const container = (await containerRes.json()) as { id?: string };
   const creationId = container.id;
   if (!creationId) {
     throw new Error("IG /media returned no creation id");
   }
 
-  // Step 2: publish container
   const publishParams = new URLSearchParams();
   publishParams.set("creation_id", creationId);
   publishParams.set("access_token", pageToken);
 
+  const publishStart = Date.now();
   const publishRes = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
     { method: "POST", body: publishParams, cache: "no-store" }
   );
+  const publishData = (await publishRes.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:instagram",
+    metaEndpoint: `/${igAccountId}/media_publish`,
+    requestBody: { creation_id: creationId },
+    responseStatus: publishRes.status,
+    responseBody: publishData,
+    success: publishRes.ok && !!publishData.id,
+    errorMessage: publishData.error?.message ?? null,
+    durationMs: Date.now() - publishStart,
+  });
   if (!publishRes.ok) {
-    const body = await publishRes.text();
-    throw new Error(`IG /media_publish failed: ${publishRes.status} ${body}`);
+    throw new Error(`IG /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`);
   }
-  const publishData = (await publishRes.json()) as { id?: string };
   if (!publishData.id) return null;
 
   // Try to look up the permalink; fall back to null silently on failure.
@@ -277,42 +317,60 @@ async function publishInstagramStory(args: {
     throw new Error("Instagram Stories require an image_url.");
   }
 
-  // Step 1: create story media container (media_type=STORIES)
-  const containerParams = new URLSearchParams();
-  containerParams.set("image_url", imageUrl);
-  containerParams.set("media_type", "STORIES");
-  containerParams.set("access_token", pageToken);
+  const storyContainerParams = new URLSearchParams();
+  storyContainerParams.set("image_url", imageUrl);
+  storyContainerParams.set("media_type", "STORIES");
+  storyContainerParams.set("access_token", pageToken);
 
-  const containerRes = await fetch(
+  const storyContainerStart = Date.now();
+  const storyContainerRes = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
-    { method: "POST", body: containerParams, cache: "no-store" }
+    { method: "POST", body: storyContainerParams, cache: "no-store" }
   );
-  if (!containerRes.ok) {
-    const body = await containerRes.text();
-    throw new Error(`IG Story /media failed: ${containerRes.status} ${body}`);
+  const storyContainer = (await storyContainerRes.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:instagram_story",
+    metaEndpoint: `/${igAccountId}/media`,
+    requestBody: { image_url: imageUrl, media_type: "STORIES" },
+    responseStatus: storyContainerRes.status,
+    responseBody: storyContainer,
+    success: storyContainerRes.ok && !!storyContainer.id,
+    errorMessage: storyContainer.error?.message ?? null,
+    durationMs: Date.now() - storyContainerStart,
+  });
+  if (!storyContainerRes.ok) {
+    throw new Error(`IG Story /media failed: ${storyContainerRes.status} ${JSON.stringify(storyContainer)}`);
   }
-  const container = (await containerRes.json()) as { id?: string };
-  const creationId = container.id;
+  const creationId = storyContainer.id;
   if (!creationId) {
     throw new Error("IG Story /media returned no creation id");
   }
 
-  // Step 2: publish
-  const publishParams = new URLSearchParams();
-  publishParams.set("creation_id", creationId);
-  publishParams.set("access_token", pageToken);
+  const storyPublishParams = new URLSearchParams();
+  storyPublishParams.set("creation_id", creationId);
+  storyPublishParams.set("access_token", pageToken);
 
-  const publishRes = await fetch(
+  const storyPublishStart = Date.now();
+  const storyPublishRes = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
-    { method: "POST", body: publishParams, cache: "no-store" }
+    { method: "POST", body: storyPublishParams, cache: "no-store" }
   );
-  if (!publishRes.ok) {
-    const body = await publishRes.text();
+  const publishData = (await storyPublishRes.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:instagram_story",
+    metaEndpoint: `/${igAccountId}/media_publish`,
+    requestBody: { creation_id: creationId },
+    responseStatus: storyPublishRes.status,
+    responseBody: publishData,
+    success: storyPublishRes.ok && !!publishData.id,
+    errorMessage: publishData.error?.message ?? null,
+    durationMs: Date.now() - storyPublishStart,
+  });
+  if (!storyPublishRes.ok) {
     throw new Error(
-      `IG Story /media_publish failed: ${publishRes.status} ${body}`
+      `IG Story /media_publish failed: ${storyPublishRes.status} ${JSON.stringify(publishData)}`
     );
   }
-  const publishData = (await publishRes.json()) as { id?: string };
   return publishData.id
     ? `https://www.instagram.com/stories/${igAccountId}/${publishData.id}/`
     : null;

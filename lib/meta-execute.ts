@@ -116,9 +116,13 @@ async function metaGet<T>(
 }
 
 /** Write-side POST. Always signed. */
+import { logMetaWrite } from "./meta-write-log";
+
+/** Write-side POST. Logs every call to meta_write_log. */
 async function metaPost<T>(
   path: string,
-  body: Record<string, string>
+  body: Record<string, string>,
+  logContext?: { operation?: string; clientId?: number; adId?: number; queueId?: number }
 ): Promise<T> {
   const { token, appSecret } = getCredentials();
   const params = new URLSearchParams({
@@ -127,12 +131,30 @@ async function metaPost<T>(
     appsecret_proof: appsecretProof(token, appSecret),
   });
 
+  const start = Date.now();
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,
   });
   const data = await res.json();
+  const durationMs = Date.now() - start;
+
+  const success = !data.error;
+  logMetaWrite({
+    operation: logContext?.operation ?? `execute:${path}`,
+    clientId: logContext?.clientId,
+    adId: logContext?.adId,
+    queueId: logContext?.queueId,
+    metaEndpoint: path,
+    requestBody: body,
+    responseStatus: res.status,
+    responseBody: data,
+    success,
+    errorMessage: data.error?.message ?? null,
+    durationMs,
+  });
+
   if (data.error) {
     throw new Error(`Meta POST ${path}: ${data.error.message ?? "unknown"}`);
   }
