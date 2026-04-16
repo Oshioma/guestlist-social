@@ -12,6 +12,7 @@ import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-tru
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
 import AdsPageTabs from "@/app/admin-panel/components/AdsPageTabs";
+import DecisionAccuracy from "@/app/admin-panel/components/DecisionAccuracy";
 import AdActionRow from "@/app/admin-panel/components/AdActionRow";
 import {
   deriveConfidence,
@@ -66,7 +67,7 @@ export default async function ClientAdsPage({
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
   const adsCutoffIso = new Date(Date.now() - SIX_MONTHS_MS).toISOString();
 
-  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes, decisionsRes] = await Promise.all([
+  const [clientRes, adsRes, actionsRes, learningsRes, experimentsRes, playbookRes, decisionsRes, outcomesRes] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("ads")
@@ -99,6 +100,13 @@ export default async function ClientAdsPage({
       .select("*, ads(name)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("decision_outcomes")
+      .select("id, ad_id, decision_type, verdict, verdict_reason, ctr_lift_pct, cpm_change_pct, status, measured_at")
+      .eq("client_id", clientId)
+      .eq("status", "measured")
+      .order("measured_at", { ascending: false })
+      .limit(200),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -108,6 +116,25 @@ export default async function ClientAdsPage({
   const client = clientRes.data;
   const rawAds = adsRes.data ?? [];
   const rawActions = actionsRes.data ?? [];
+
+  // Build a map of ad_id → latest measured outcome for badge display.
+  const rawOutcomes = outcomesRes.data ?? [];
+  const outcomeByAdId = new Map<number, {
+    verdict: string;
+    ctr_lift_pct: number | null;
+    verdict_reason: string | null;
+    measured_at: string | null;
+  }>();
+  for (const o of rawOutcomes as any[]) {
+    if (o.ad_id && !outcomeByAdId.has(o.ad_id)) {
+      outcomeByAdId.set(o.ad_id, {
+        verdict: o.verdict,
+        ctr_lift_pct: o.ctr_lift_pct != null ? Number(o.ctr_lift_pct) : null,
+        verdict_reason: o.verdict_reason,
+        measured_at: o.measured_at,
+      });
+    }
+  }
   const learnings = learningsRes.data ?? [];
   const rawExperiments = experimentsRes.data ?? [];
   const playbook = playbookRes.data ?? [];
@@ -878,6 +905,52 @@ export default async function ClientAdsPage({
                           </div>
                         );
                       })()}
+
+                      {(() => {
+                        const outcome = outcomeByAdId.get(ad.id);
+                        if (!outcome) return null;
+                        const verdictColors: Record<string, { bg: string; text: string; border: string }> = {
+                          positive: { bg: "#ecfdf5", text: "#166534", border: "#bbf7d0" },
+                          neutral: { bg: "#fffbeb", text: "#92400e", border: "#fde68a" },
+                          negative: { bg: "#fef2f2", text: "#991b1b", border: "#fecaca" },
+                          inconclusive: { bg: "#f8fafc", text: "#64748b", border: "#e2e8f0" },
+                        };
+                        const vc = verdictColors[outcome.verdict] ?? verdictColors.inconclusive;
+                        const lift = outcome.ctr_lift_pct;
+                        const liftLabel = lift != null
+                          ? `${lift > 0 ? "+" : ""}${lift.toFixed(1)}% CTR`
+                          : null;
+
+                        return (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                              marginTop: 6,
+                              padding: "5px 10px",
+                              borderRadius: 8,
+                              background: vc.bg,
+                              border: `1px solid ${vc.border}`,
+                              fontSize: 11,
+                              fontWeight: 600,
+                            }}
+                            title={outcome.verdict_reason ?? undefined}
+                          >
+                            <span style={{ color: vc.text, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                              {outcome.verdict}
+                            </span>
+                            {liftLabel && (
+                              <span style={{ color: vc.text }}>{liftLabel}</span>
+                            )}
+                            {outcome.measured_at && (
+                              <span style={{ color: "#a1a1aa", fontWeight: 400 }}>
+                                {new Date(outcome.measured_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     </div>
                   </div>
@@ -933,6 +1006,7 @@ export default async function ClientAdsPage({
         }
         playbookPanel={
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <DecisionAccuracy />
             {/* ── PLAYBOOK ── */}
       <SectionCard title={`${client.name} Playbook`}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
