@@ -17,6 +17,8 @@ export type TaskRecurrence = "none" | "daily" | "weekly" | "monthly";
 
 export type TaskPermissionScope = "private" | "team" | "admin_only";
 
+export type TaskUserRole = "admin" | "manager" | "member" | "viewer";
+
 export type TaskComment = {
   id: string;
   taskId: string;
@@ -92,6 +94,7 @@ export type GetTasksDataInput = {
 export type GetTasksDataResult = {
   tasks: Task[];
   currentUserEmail: string;
+  currentUserRole: TaskUserRole;
   knownUsers: string[];
   notifications: TaskNotification[];
 };
