@@ -4,34 +4,19 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 import type {
   TaskCategory,
+  TaskPermissionScope,
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
-  TaskPermissionScope,
 } from "./types";
-
-const REVALIDATE_PATH = "/admin-panel/tasks";
-
-const VALID_CATEGORIES = [
-  "video",
-  "story",
-  "carousel",
-  "design",
-  "general",
-] as const;
-
-const VALID_STATUSES = [
-  "open",
-  "in_progress",
-  "blocked",
-  "completed",
-] as const;
-
-const VALID_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
-
-const VALID_RECURRENCES = ["none", "daily", "weekly", "monthly"] as const;
-
-const VALID_SCOPES = ["private", "team", "admin_only"] as const;
+import {
+  TASKS_CONFIG,
+  VALID_TASK_CATEGORIES,
+  VALID_TASK_PERMISSION_SCOPES,
+  VALID_TASK_PRIORITIES,
+  VALID_TASK_RECURRENCES,
+  VALID_TASK_STATUSES,
+} from "./tasks-config";
 
 type AddTaskInput = {
   title: string;
@@ -62,31 +47,31 @@ type UpdateTaskInput = {
 };
 
 function normalizeCategory(value?: string): TaskCategory {
-  return VALID_CATEGORIES.includes(value as TaskCategory)
+  return VALID_TASK_CATEGORIES.includes(value as TaskCategory)
     ? (value as TaskCategory)
     : "general";
 }
 
 function normalizeStatus(value?: string): TaskStatus {
-  return VALID_STATUSES.includes(value as TaskStatus)
+  return VALID_TASK_STATUSES.includes(value as TaskStatus)
     ? (value as TaskStatus)
     : "open";
 }
 
 function normalizePriority(value?: string): TaskPriority {
-  return VALID_PRIORITIES.includes(value as TaskPriority)
+  return VALID_TASK_PRIORITIES.includes(value as TaskPriority)
     ? (value as TaskPriority)
     : "medium";
 }
 
 function normalizeRecurrence(value?: string): TaskRecurrence {
-  return VALID_RECURRENCES.includes(value as TaskRecurrence)
+  return VALID_TASK_RECURRENCES.includes(value as TaskRecurrence)
     ? (value as TaskRecurrence)
     : "none";
 }
 
 function normalizeScope(value?: string): TaskPermissionScope {
-  return VALID_SCOPES.includes(value as TaskPermissionScope)
+  return VALID_TASK_PERMISSION_SCOPES.includes(value as TaskPermissionScope)
     ? (value as TaskPermissionScope)
     : "team";
 }
@@ -165,6 +150,10 @@ async function createNotification(params: {
   });
 }
 
+function refreshTasks() {
+  revalidatePath(TASKS_CONFIG.revalidatePath);
+}
+
 export async function addTaskAction(input: AddTaskInput) {
   if (!input.title?.trim()) {
     throw new Error("Task title is required.");
@@ -211,7 +200,7 @@ export async function addTaskAction(input: AddTaskInput) {
     actor,
   });
 
-  if (data.assignee && data.assignee !== actor) {
+  if (TASKS_CONFIG.allowNotifications && data.assignee && data.assignee !== actor) {
     await createNotification({
       taskId: String(data.id),
       userEmail: data.assignee,
@@ -221,7 +210,7 @@ export async function addTaskAction(input: AddTaskInput) {
     });
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
 
 export async function updateTaskAction(input: UpdateTaskInput) {
@@ -278,7 +267,11 @@ export async function updateTaskAction(input: UpdateTaskInput) {
     actor,
   });
 
-  if (existing?.assignee !== (input.assignee ?? "").trim() && input.assignee) {
+  if (
+    TASKS_CONFIG.allowNotifications &&
+    existing?.assignee !== (input.assignee ?? "").trim() &&
+    input.assignee
+  ) {
     await createNotification({
       taskId: input.id,
       userEmail: input.assignee,
@@ -288,7 +281,7 @@ export async function updateTaskAction(input: UpdateTaskInput) {
     });
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
 
 export async function updateTaskStatusAction(input: {
@@ -302,7 +295,9 @@ export async function updateTaskStatusAction(input: {
 
   const { data: existing, error: fetchError } = await supabase
     .from("tasks")
-    .select("id, title, assignee, recurrence, recurrence_interval, due_date")
+    .select(
+      "id, title, assignee, status, recurrence, recurrence_interval, due_date"
+    )
     .eq("id", input.id)
     .maybeSingle();
 
@@ -348,7 +343,7 @@ export async function updateTaskStatusAction(input: {
       newValue: nextDue,
     });
 
-    if (existing.assignee && existing.assignee !== actor) {
+    if (TASKS_CONFIG.allowNotifications && existing.assignee && existing.assignee !== actor) {
       await createNotification({
         taskId: input.id,
         userEmail: existing.assignee,
@@ -358,7 +353,7 @@ export async function updateTaskStatusAction(input: {
       });
     }
 
-    revalidatePath(REVALIDATE_PATH);
+    refreshTasks();
     return;
   }
 
@@ -386,7 +381,7 @@ export async function updateTaskStatusAction(input: {
     newValue: normalizedStatus,
   });
 
-  if (existing?.assignee && existing.assignee !== actor) {
+  if (TASKS_CONFIG.allowNotifications && existing?.assignee && existing.assignee !== actor) {
     await createNotification({
       taskId: input.id,
       userEmail: existing.assignee,
@@ -396,7 +391,7 @@ export async function updateTaskStatusAction(input: {
     });
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
 
 export async function deleteTaskAction(input: { id: string }) {
@@ -417,7 +412,7 @@ export async function deleteTaskAction(input: { id: string }) {
     throw new Error("Could not delete task.");
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
 
 export async function addTaskCommentAction(input: {
@@ -457,7 +452,7 @@ export async function addTaskCommentAction(input: {
     actor,
   });
 
-  if (task?.assignee && task.assignee !== actor) {
+  if (TASKS_CONFIG.allowNotifications && task?.assignee && task.assignee !== actor) {
     await createNotification({
       taskId: input.taskId,
       userEmail: task.assignee,
@@ -467,7 +462,7 @@ export async function addTaskCommentAction(input: {
     });
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
 
 export async function markTaskNotificationReadAction(input: { id: string }) {
@@ -485,5 +480,5 @@ export async function markTaskNotificationReadAction(input: { id: string }) {
     throw new Error("Could not mark notification as read.");
   }
 
-  revalidatePath(REVALIDATE_PATH);
+  refreshTasks();
 }
