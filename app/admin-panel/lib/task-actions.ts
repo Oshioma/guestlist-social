@@ -1,31 +1,115 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
-import { canViewTask, defaultTaskRoleFromEmail } from "./permissions";
 import type {
-  GetTasksDataInput,
-  GetTasksDataResult,
   Task,
-  TaskActivity,
-  TaskActor,
   TaskCategory,
-  TaskComment,
-  TaskNotification,
+  TaskPermissionScope,
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
   TaskUserRole,
 } from "./types";
+import {
+  TASKS_CONFIG,
+  VALID_TASK_CATEGORIES,
+  VALID_TASK_PERMISSION_SCOPES,
+  VALID_TASK_PRIORITIES,
+  VALID_TASK_RECURRENCES,
+  VALID_TASK_STATUSES,
+} from "./tasks-config";
+import {
+  canAssignTask,
+  canChangeTaskStatus,
+  canCommentOnTask,
+  canDeleteTask,
+  canEditTask,
+  defaultTaskRoleFromEmail,
+} from "./permissions";
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+type AddTaskInput = {
+  title: string;
+  description?: string;
+  category?: string;
+  assignee?: string;
+  dueDate?: string;
+  startDate?: string;
+  recurrence?: string;
+  recurrenceInterval?: number | null;
+  priority?: string;
+  parentTaskId?: string | null;
+  permissionsScope?: string;
+};
+
+type UpdateTaskInput = {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  assignee?: string;
+  dueDate?: string;
+  startDate?: string;
+  recurrence?: string;
+  recurrenceInterval?: number | null;
+  priority?: string;
+  permissionsScope?: string;
+};
+
+function normalizeCategory(value?: string): TaskCategory {
+  return VALID_TASK_CATEGORIES.includes(value as TaskCategory)
+    ? (value as TaskCategory)
+    : "general";
 }
 
-function addDays(dateKey: string, days: number) {
-  const d = new Date(dateKey);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+function normalizeStatus(value?: string): TaskStatus {
+  return VALID_TASK_STATUSES.includes(value as TaskStatus)
+    ? (value as TaskStatus)
+    : "open";
 }
 
-function normalizeTaskRow(row: any): Task {
+function normalizePriority(value?: string): TaskPriority {
+  return VALID_TASK_PRIORITIES.includes(value as TaskPriority)
+    ? (value as TaskPriority)
+    : "medium";
+}
+
+function normalizeRecurrence(value?: string): TaskRecurrence {
+  return VALID_TASK_RECURRENCES.includes(value as TaskRecurrence)
+    ? (value as TaskRecurrence)
+    : "none";
+}
+
+function normalizeScope(value?: string): TaskPermissionScope {
+  return VALID_TASK_PERMISSION_SCOPES.includes(value as TaskPermissionScope)
+    ? (value as TaskPermissionScope)
+    : "team";
+}
+
+function advanceDueDate(
+  dueDate: string | null,
+  recurrence: "daily" | "weekly" | "monthly",
+  interval: number | null
+): string {
+  const base = dueDate ? new Date(dueDate) : new Date();
+  const step = interval && interval > 0 ? interval : 1;
+
+  if (Number.isNaN(base.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  if (recurrence === "daily") {
+    base.setDate(base.getDate() + step);
+  } else if (recurrence === "weekly") {
+    base.setDate(base.getDate() + step * 7);
+  } else {
+    base.setMonth(base.getMonth() + step);
+  }
+
+  return base.toISOString().slice(0, 10);
+}
+
+function mapTaskRow(row: any): Task {
   return {
     id: String(row.id),
     parentTaskId: row.parent_task_id ? String(row.parent_task_id) : null,
@@ -43,10 +127,7 @@ function normalizeTaskRow(row: any): Task {
       typeof row.recurrence_interval === "number"
         ? row.recurrence_interval
         : null,
-    permissionsScope: (row.permissions_scope ?? "team") as
-      | "private"
-      | "team"
-      | "admin_only",
+    permissionsScope: (row.permissions_scope ?? "team") as TaskPermissionScope,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
     completedAt: row.completed_at ?? "",
@@ -54,229 +135,437 @@ function normalizeTaskRow(row: any): Task {
   };
 }
 
-async function getCurrentTaskActor(): Promise<TaskActor> {
+async function getActor() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const email = user?.email ?? "";
-
-  // Replace this later with a real memberships/users table lookup.
   let role: TaskUserRole = defaultTaskRoleFromEmail(email);
 
   if (email.endsWith("@admin.com")) role = "admin";
   if (email.endsWith("@manager.com")) role = "manager";
 
-  return { email, role };
+  return {
+    supabase,
+    actor: {
+      email,
+      role,
+    },
+  };
 }
 
-export async function getTasksData(
-  input: GetTasksDataInput = {}
-): Promise<GetTasksDataResult> {
-  const {
-    filters,
-    includeSubtasks = true,
-    includeComments = true,
-    includeActivity = true,
-    includeNotifications = true,
-  } = input;
-
+async function getTaskOrThrow(id: string): Promise<Task> {
   const supabase = await createClient();
-  const actor = await getCurrentTaskActor();
-  const today = todayKey();
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
 
-  let query = supabase.from("tasks").select("*");
-
-  if (filters?.status && filters.status !== "all") {
-    query = query.eq("status", filters.status);
+  if (error || !data) {
+    throw new Error("Task not found.");
   }
 
-  if (filters?.category && filters.category !== "all") {
-    query = query.eq("category", filters.category);
+  return mapTaskRow(data);
+}
+
+async function logTaskActivity(params: {
+  taskId: string;
+  action: string;
+  actor: string;
+  fieldName?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
+}) {
+  const supabase = await createClient();
+
+  await supabase.from("task_activity").insert({
+    task_id: params.taskId,
+    action: params.action,
+    field_name: params.fieldName ?? null,
+    old_value: params.oldValue ?? null,
+    new_value: params.newValue ?? null,
+    actor: params.actor,
+  });
+}
+
+async function createNotification(params: {
+  taskId?: string | null;
+  userEmail: string;
+  type: string;
+  title: string;
+  body?: string;
+}) {
+  const supabase = await createClient();
+
+  await supabase.from("task_notifications").insert({
+    task_id: params.taskId ?? null,
+    user_email: params.userEmail,
+    type: params.type,
+    title: params.title,
+    body: params.body ?? "",
+    is_read: false,
+  });
+}
+
+function refreshTasks() {
+  revalidatePath(TASKS_CONFIG.revalidatePath);
+}
+
+export async function addTaskAction(input: AddTaskInput) {
+  if (!input.title?.trim()) {
+    throw new Error("Task title is required.");
   }
 
-  if (filters?.assignee && filters.assignee !== "all") {
-    query = query.eq("assignee", filters.assignee);
+  const { supabase, actor } = await getActor();
+
+  if (!canAssignTask(actor)) {
+    throw new Error("You do not have permission to create tasks.");
   }
 
-  if (filters?.priority && filters.priority !== "all") {
-    query = query.eq("priority", filters.priority);
+  if (input.parentTaskId) {
+    const parent = await getTaskOrThrow(input.parentTaskId);
+    if (!canEditTask(actor, parent)) {
+      throw new Error("You do not have permission to add a subtask here.");
+    }
   }
 
-  if (filters?.showCompleted === false) {
-    query = query.neq("status", "completed");
+  const normalizedCategory = normalizeCategory(input.category);
+  const normalizedRecurrence = normalizeRecurrence(input.recurrence);
+  const normalizedPriority = normalizePriority(input.priority);
+  const normalizedScope = normalizeScope(input.permissionsScope);
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert({
+      parent_task_id: input.parentTaskId ?? null,
+      title: input.title.trim(),
+      description: (input.description ?? "").trim(),
+      category: normalizedCategory,
+      assignee: (input.assignee ?? "").trim(),
+      created_by: actor.email,
+      due_date: input.dueDate || null,
+      start_date: input.startDate || null,
+      status: "open",
+      priority: normalizedPriority,
+      recurrence: normalizedRecurrence,
+      recurrence_interval:
+        input.recurrenceInterval && input.recurrenceInterval > 0
+          ? input.recurrenceInterval
+          : null,
+      permissions_scope: normalizedScope,
+    })
+    .select("id, assignee, title")
+    .single();
+
+  if (error) {
+    console.error("addTaskAction error:", error);
+    throw new Error("Could not add task.");
   }
 
-  if (filters?.due === "today") {
-    query = query.eq("due_date", today);
-  } else if (filters?.due === "overdue") {
-    query = query.lt("due_date", today).neq("status", "completed");
-  } else if (filters?.due === "upcoming") {
-    query = query.gte("due_date", today).lte("due_date", addDays(today, 14));
-  } else if (filters?.due === "none") {
-    query = query.is("due_date", null);
-  }
-
-  const { data: tasksData, error: tasksError } = await query.order("due_date", {
-    ascending: true,
-    nullsFirst: false,
+  await logTaskActivity({
+    taskId: String(data.id),
+    action: input.parentTaskId ? "subtask_created" : "task_created",
+    actor: actor.email,
   });
 
-  if (tasksError) {
-    throw new Error(`tasks: ${tasksError.message}`);
-  }
-
-  let tasks = (tasksData ?? []).map(normalizeTaskRow);
-
-  tasks = tasks.filter((task) => canViewTask(actor, task));
-
-  if (filters?.q?.trim()) {
-    const q = filters.q.trim().toLowerCase();
-    tasks = tasks.filter((task) => {
-      return (
-        task.title.toLowerCase().includes(q) ||
-        task.description.toLowerCase().includes(q) ||
-        task.assignee.toLowerCase().includes(q) ||
-        task.createdBy.toLowerCase().includes(q)
-      );
+  if (TASKS_CONFIG.allowNotifications && data.assignee && data.assignee !== actor.email) {
+    await createNotification({
+      taskId: String(data.id),
+      userEmail: data.assignee,
+      type: "task_assigned",
+      title: `New task assigned: ${data.title}`,
+      body: `${actor.email} assigned you a task.`,
     });
   }
 
-  const userSet = new Set<string>();
-  if (actor.email) userSet.add(actor.email);
+  refreshTasks();
+}
 
-  tasks.forEach((t) => {
-    if (t.assignee) userSet.add(t.assignee);
-    if (t.createdBy) userSet.add(t.createdBy);
+export async function updateTaskAction(input: UpdateTaskInput) {
+  if (!input.id || !input.title?.trim()) {
+    throw new Error("ID and title are required.");
+  }
+
+  const { supabase, actor } = await getActor();
+  const existing = await getTaskOrThrow(input.id);
+
+  if (!canEditTask(actor, existing)) {
+    throw new Error("You do not have permission to edit this task.");
+  }
+
+  if (input.assignee && !canAssignTask(actor, existing)) {
+    throw new Error("You do not have permission to reassign this task.");
+  }
+
+  const normalizedCategory = normalizeCategory(input.category);
+  const normalizedRecurrence = normalizeRecurrence(input.recurrence);
+  const normalizedPriority = normalizePriority(input.priority);
+  const normalizedScope = normalizeScope(input.permissionsScope);
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      title: input.title.trim(),
+      description: (input.description ?? "").trim(),
+      category: normalizedCategory,
+      assignee: (input.assignee ?? "").trim(),
+      due_date: input.dueDate || null,
+      start_date: input.startDate || null,
+      recurrence: normalizedRecurrence,
+      recurrence_interval:
+        input.recurrenceInterval && input.recurrenceInterval > 0
+          ? input.recurrenceInterval
+          : null,
+      priority: normalizedPriority,
+      permissions_scope: normalizedScope,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.id);
+
+  if (error) {
+    console.error("updateTaskAction error:", error);
+    throw new Error("Could not update task.");
+  }
+
+  await logTaskActivity({
+    taskId: input.id,
+    action: "task_updated",
+    actor: actor.email,
   });
 
-  const [videoRes, carouselRes, storyRes] = await Promise.all([
-    supabase.from("video_ideas").select("created_by"),
-    supabase.from("carousel_ideas").select("created_by"),
-    supabase.from("story_ideas").select("created_by"),
-  ]);
-
-  [videoRes.data, carouselRes.data, storyRes.data].forEach((rows) => {
-    (rows ?? []).forEach((r: { created_by?: string | null }) => {
-      if (r.created_by) userSet.add(r.created_by);
+  if (
+    TASKS_CONFIG.allowNotifications &&
+    existing.assignee !== (input.assignee ?? "").trim() &&
+    input.assignee
+  ) {
+    await createNotification({
+      taskId: input.id,
+      userEmail: input.assignee,
+      type: "task_reassigned",
+      title: `Task assigned: ${input.title.trim()}`,
+      body: `${actor.email} assigned this task to you.`,
     });
-  });
+  }
 
-  const commentsMap = new Map<string, TaskComment[]>();
-  const activityMap = new Map<string, TaskActivity[]>();
-  let notifications: TaskNotification[] = [];
+  refreshTasks();
+}
 
-  const taskIds = tasks.map((t) => t.id);
+export async function updateTaskStatusAction(input: {
+  id: string;
+  status: string;
+}) {
+  if (!input.id) throw new Error("ID is required.");
 
-  if (includeComments && taskIds.length > 0) {
-    const { data, error } = await supabase
-      .from("task_comments")
-      .select("*")
-      .in("task_id", taskIds)
-      .order("created_at", { ascending: true });
+  const { supabase, actor } = await getActor();
+  const existing = await getTaskOrThrow(input.id);
 
-    if (error) throw new Error(`task_comments: ${error.message}`);
+  if (!canChangeTaskStatus(actor, existing)) {
+    throw new Error("You do not have permission to update this task status.");
+  }
 
-    (data ?? []).forEach((row) => {
-      const taskId = String(row.task_id);
-      const existing = commentsMap.get(taskId) ?? [];
-      existing.push({
-        id: String(row.id),
-        taskId,
-        body: row.body ?? "",
-        createdBy: row.created_by ?? "",
-        createdAt: row.created_at ?? "",
-        updatedAt: row.updated_at ?? "",
+  const normalizedStatus = normalizeStatus(input.status);
+
+  if (
+    normalizedStatus === "completed" &&
+    (existing.recurrence === "daily" ||
+      existing.recurrence === "weekly" ||
+      existing.recurrence === "monthly")
+  ) {
+    const nextDue = advanceDueDate(
+      existing.dueDate || null,
+      existing.recurrence as "daily" | "weekly" | "monthly",
+      existing.recurrenceInterval ?? 1
+    );
+
+    const { error: rollError } = await supabase
+      .from("tasks")
+      .update({
+        due_date: nextDue,
+        status: "open",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.id);
+
+    if (rollError) {
+      console.error("updateTaskStatusAction roll error:", rollError);
+      throw new Error("Could not roll recurring task forward.");
+    }
+
+    await logTaskActivity({
+      taskId: input.id,
+      action: "recurring_task_rolled",
+      actor: actor.email,
+      fieldName: "due_date",
+      oldValue: existing.dueDate ?? null,
+      newValue: nextDue,
+    });
+
+    if (
+      TASKS_CONFIG.allowNotifications &&
+      existing.assignee &&
+      existing.assignee !== actor.email
+    ) {
+      await createNotification({
+        taskId: input.id,
+        userEmail: existing.assignee,
+        type: "task_recurring_rolled",
+        title: `Recurring task reopened: ${existing.title}`,
+        body: `Next due date: ${nextDue}`,
       });
-      commentsMap.set(taskId, existing);
+    }
+
+    refreshTasks();
+    return;
+  }
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      status: normalizedStatus,
+      completed_at:
+        normalizedStatus === "completed" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.id);
+
+  if (error) {
+    console.error("updateTaskStatusAction error:", error);
+    throw new Error("Could not update task status.");
+  }
+
+  await logTaskActivity({
+    taskId: input.id,
+    action: "task_status_changed",
+    actor: actor.email,
+    fieldName: "status",
+    oldValue: existing.status ?? null,
+    newValue: normalizedStatus,
+  });
+
+  if (
+    TASKS_CONFIG.allowNotifications &&
+    existing.assignee &&
+    existing.assignee !== actor.email
+  ) {
+    await createNotification({
+      taskId: input.id,
+      userEmail: existing.assignee,
+      type: "task_status_changed",
+      title: `Task updated: ${existing.title}`,
+      body: `Status changed to ${normalizedStatus.replace("_", " ")}.`,
     });
   }
 
-  if (includeActivity && taskIds.length > 0) {
-    const { data, error } = await supabase
-      .from("task_activity")
-      .select("*")
-      .in("task_id", taskIds)
-      .order("created_at", { ascending: false });
+  refreshTasks();
+}
 
-    if (error) throw new Error(`task_activity: ${error.message}`);
+export async function deleteTaskAction(input: { id: string }) {
+  if (!input.id) throw new Error("ID is required.");
 
-    (data ?? []).forEach((row) => {
-      const taskId = String(row.task_id);
-      const existing = activityMap.get(taskId) ?? [];
-      existing.push({
-        id: String(row.id),
-        taskId,
-        action: row.action ?? "",
-        fieldName: row.field_name ?? null,
-        oldValue: row.old_value ?? null,
-        newValue: row.new_value ?? null,
-        actor: row.actor ?? "",
-        createdAt: row.created_at ?? "",
-      });
-      activityMap.set(taskId, existing);
+  const { supabase, actor } = await getActor();
+  const existing = await getTaskOrThrow(input.id);
+
+  if (!canDeleteTask(actor, existing)) {
+    throw new Error("You do not have permission to delete this task.");
+  }
+
+  await logTaskActivity({
+    taskId: input.id,
+    action: "task_deleted",
+    actor: actor.email,
+  });
+
+  const { error } = await supabase.from("tasks").delete().eq("id", input.id);
+
+  if (error) {
+    console.error("deleteTaskAction error:", error);
+    throw new Error("Could not delete task.");
+  }
+
+  refreshTasks();
+}
+
+export async function addTaskCommentAction(input: {
+  taskId: string;
+  body: string;
+}) {
+  if (!input.taskId || !input.body.trim()) {
+    throw new Error("Task and comment body are required.");
+  }
+
+  const { supabase, actor } = await getActor();
+  const task = await getTaskOrThrow(input.taskId);
+
+  if (!canCommentOnTask(actor, task)) {
+    throw new Error("You do not have permission to comment on this task.");
+  }
+
+  const { error } = await supabase.from("task_comments").insert({
+    task_id: input.taskId,
+    body: input.body.trim(),
+    created_by: actor.email,
+  });
+
+  if (error) {
+    console.error("addTaskCommentAction error:", error);
+    throw new Error("Could not add comment.");
+  }
+
+  await logTaskActivity({
+    taskId: input.taskId,
+    action: "comment_added",
+    actor: actor.email,
+  });
+
+  if (
+    TASKS_CONFIG.allowNotifications &&
+    task.assignee &&
+    task.assignee !== actor.email
+  ) {
+    await createNotification({
+      taskId: input.taskId,
+      userEmail: task.assignee,
+      type: "task_comment",
+      title: `New comment on: ${task.title}`,
+      body: `${actor.email} commented on this task.`,
     });
   }
 
-  if (includeNotifications && actor.email) {
-    const { data, error } = await supabase
-      .from("task_notifications")
-      .select("*")
-      .eq("user_email", actor.email)
-      .eq("is_read", false)
-      .order("created_at", { ascending: false });
+  refreshTasks();
+}
 
-    if (error) throw new Error(`task_notifications: ${error.message}`);
+export async function markTaskNotificationReadAction(input: { id: string }) {
+  if (!input.id) throw new Error("Notification ID is required.");
 
-    notifications = (data ?? []).map((row) => ({
-      id: String(row.id),
-      taskId: row.task_id ? String(row.task_id) : null,
-      userEmail: row.user_email ?? "",
-      type: row.type ?? "",
-      title: row.title ?? "",
-      body: row.body ?? "",
-      isRead: Boolean(row.is_read),
-      createdAt: row.created_at ?? "",
-    }));
+  const { supabase, actor } = await getActor();
+
+  const { data: notification, error: fetchError } = await supabase
+    .from("task_notifications")
+    .select("*")
+    .eq("id", input.id)
+    .maybeSingle();
+
+  if (fetchError || !notification) {
+    throw new Error("Notification not found.");
   }
 
-  tasks = tasks.map((task) => ({
-    ...task,
-    comments: commentsMap.get(task.id) ?? [],
-    activity: activityMap.get(task.id) ?? [],
-  }));
-
-  if (includeSubtasks) {
-    const parentTasks = tasks.filter((t) => !t.parentTaskId);
-    const childTasks = tasks.filter((t) => !!t.parentTaskId);
-
-    const byParent = new Map<string, Task[]>();
-
-    childTasks.forEach((task) => {
-      if (!task.parentTaskId) return;
-      const list = byParent.get(task.parentTaskId) ?? [];
-      list.push(task);
-      byParent.set(task.parentTaskId, list);
-    });
-
-    tasks = parentTasks.map((task) => ({
-      ...task,
-      subtasks: (byParent.get(task.id) ?? [])
-        .filter((child) => canViewTask(actor, child))
-        .sort((a, b) => a.title.localeCompare(b.title)),
-    }));
+  if (notification.user_email !== actor.email) {
+    throw new Error("You do not have permission to edit this notification.");
   }
 
-  const knownUsers = Array.from(userSet)
-    .filter((u) => u && u !== "unknown")
-    .sort((a, b) => a.localeCompare(b));
+  const { error } = await supabase
+    .from("task_notifications")
+    .update({ is_read: true })
+    .eq("id", input.id);
 
-  return {
-    tasks,
-    currentUserEmail: actor.email,
-    currentUserRole: actor.role,
-    knownUsers,
-    notifications,
-  };
+  if (error) {
+    console.error("markTaskNotificationReadAction error:", error);
+    throw new Error("Could not mark notification as read.");
+  }
+
+  refreshTasks();
 }
