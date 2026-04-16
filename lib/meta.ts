@@ -14,12 +14,16 @@ const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
 function getCredentials() {
   const token = process.env.META_ACCESS_TOKEN;
-  const accountId = process.env.META_AD_ACCOUNT_ID;
+  let accountId = process.env.META_AD_ACCOUNT_ID;
 
   if (!token || !accountId) {
     throw new Error(
       "Missing META_ACCESS_TOKEN or META_AD_ACCOUNT_ID environment variables."
     );
+  }
+
+  if (!accountId.startsWith("act_")) {
+    accountId = `act_${accountId}`;
   }
 
   return { token, accountId };

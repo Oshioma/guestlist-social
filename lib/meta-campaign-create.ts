@@ -21,11 +21,14 @@ const BASE = `https://graph.facebook.com/${API_VERSION}`;
 
 function getCredentials() {
   const token = process.env.META_ACCESS_TOKEN;
-  const accountId = process.env.META_AD_ACCOUNT_ID;
+  let accountId = process.env.META_AD_ACCOUNT_ID;
   if (!token || !accountId) {
     throw new Error(
       "Missing META_ACCESS_TOKEN or META_AD_ACCOUNT_ID environment variables."
     );
+  }
+  if (!accountId.startsWith("act_")) {
+    accountId = `act_${accountId}`;
   }
   return { token, accountId };
 }
@@ -103,7 +106,8 @@ export async function createMetaCampaign(
       name: input.name,
       objective: metaObjective,
       status: metaStatus,
-      special_ad_categories: "[]",
+      buying_type: "AUCTION",
+      special_ad_categories: "NONE",
     });
 
     const campaignStart = Date.now();
@@ -114,7 +118,7 @@ export async function createMetaCampaign(
     });
     const campaignData = (await campaignRes.json()) as {
       id?: string;
-      error?: { message?: string };
+      error?: { message?: string; error_user_title?: string; error_user_msg?: string };
     };
 
     logMetaWrite({
@@ -129,10 +133,14 @@ export async function createMetaCampaign(
     });
 
     if (campaignData.error || !campaignData.id) {
+      const errParts = [
+        campaignData.error?.message,
+        campaignData.error?.error_user_title,
+        campaignData.error?.error_user_msg,
+      ].filter(Boolean);
       return {
         ok: false,
-        error:
-          campaignData.error?.message ?? "Meta returned no campaign ID.",
+        error: errParts.join(" — ") || "Meta returned no campaign ID.",
         step: "campaign",
       };
     }
