@@ -156,6 +156,7 @@ export async function createMetaCampaign(
       daily_budget: String(dailyBudgetCents),
       billing_event: "IMPRESSIONS",
       optimization_goal: optimizationGoal,
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
       status: metaStatus,
       start_time: startTimeIso,
       targeting: JSON.stringify(buildTargeting(input.audience)),
@@ -169,7 +170,7 @@ export async function createMetaCampaign(
     });
     const adSetData = (await adSetRes.json()) as {
       id?: string;
-      error?: { message?: string };
+      error?: { message?: string; error_user_title?: string; error_user_msg?: string };
     };
 
     logMetaWrite({
@@ -184,9 +185,14 @@ export async function createMetaCampaign(
     });
 
     if (adSetData.error || !adSetData.id) {
+      const errParts = [
+        adSetData.error?.message,
+        adSetData.error?.error_user_title,
+        adSetData.error?.error_user_msg,
+      ].filter(Boolean);
       return {
         ok: false,
-        error: adSetData.error?.message ?? "Meta returned no ad set ID.",
+        error: errParts.join(" — ") || "Meta returned no ad set ID.",
         step: "adset",
       };
     }
