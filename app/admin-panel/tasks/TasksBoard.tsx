@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import SectionCard from "../components/SectionCard";
-import type { Task, TaskCategory, TaskStatus, TaskRecurrence } from "../lib/types";
+import type {
+  Task,
+  TaskCategory,
+  TaskFilters,
+  TaskNotification,
+  TaskPriority,
+  TaskRecurrence,
+  TaskStatus,
+} from "../lib/types";
 import {
   addTaskAction,
+  addTaskCommentAction,
+  deleteTaskAction,
+  markTaskNotificationReadAction,
   updateTaskAction,
   updateTaskStatusAction,
-  deleteTaskAction,
 } from "../lib/task-actions";
 
 const CATEGORIES: { value: TaskCategory; label: string; color: string }[] = [
@@ -18,94 +28,62 @@ const CATEGORIES: { value: TaskCategory; label: string; color: string }[] = [
   { value: "general", label: "General", color: "#71717a" },
 ];
 
-const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
+const STATUS_OPTIONS: { value: TaskStatus | "all"; label: string }[] = [
+  { value: "all", label: "All statuses" },
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In progress" },
+  { value: "blocked", label: "Blocked" },
   { value: "completed", label: "Completed" },
+];
+
+const PRIORITY_OPTIONS: { value: TaskPriority | "all"; label: string }[] = [
+  { value: "all", label: "All priorities" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
 ];
 
 const RECURRENCE_OPTIONS: { value: TaskRecurrence; label: string }[] = [
   { value: "none", label: "One-off" },
+  { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
 ];
 
-const WEEKDAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+const inputStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #e4e4e7",
+  fontSize: 13,
+  background: "#fff",
+  color: "#18181b",
+  fontFamily: "inherit",
+  width: "100%",
+  boxSizing: "border-box",
+};
 
-const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const primaryButton: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  background: "#18181b",
+  color: "#fff",
+  border: "none",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
-// Returns the Monday of the week containing the given date, as a Date at 00:00 local.
-function getMonday(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay(); // 0 Sun..6 Sat
-  const diff = day === 0 ? -6 : 1 - day; // shift to Monday
-  d.setDate(d.getDate() + diff);
-  return d;
-}
-
-function toDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function normalizeDueDate(due: string): string {
-  if (!due) return "";
-  // Accepts "YYYY-MM-DD" or full ISO timestamp
-  return due.slice(0, 10);
-}
-
-function recurrenceSummary(recurrence: TaskRecurrence, dueDate: string) {
-  if (recurrence === "none") return "";
-  if (!dueDate) {
-    return recurrence === "weekly" ? "Repeats weekly" : "Repeats monthly";
-  }
-  const d = new Date(dueDate);
-  if (Number.isNaN(d.getTime())) {
-    return recurrence === "weekly" ? "Repeats weekly" : "Repeats monthly";
-  }
-  if (recurrence === "weekly") {
-    return `Every ${WEEKDAY_NAMES[d.getDay()]}`;
-  }
-  return `Monthly on day ${d.getDate()}`;
-}
-
-function categoryMeta(value: string) {
-  return (
-    CATEGORIES.find((c) => c.value === value) ?? {
-      value: "general" as TaskCategory,
-      label: "General",
-      color: "#71717a",
-    }
-  );
-}
-
-function statusPillStyles(status: TaskStatus) {
-  if (status === "completed")
-    return { bg: "#dcfce7", color: "#166534", border: "#86efac" };
-  if (status === "in_progress")
-    return { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd" };
-  return { bg: "#f4f4f5", color: "#52525b", border: "#e4e4e7" };
-}
-
-function isOverdue(dueDate: string, status: TaskStatus) {
-  if (!dueDate || status === "completed") return false;
-  const d = new Date(dueDate);
-  if (Number.isNaN(d.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return d < today;
-}
+const secondaryButton: React.CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: 10,
+  background: "#fff",
+  color: "#18181b",
+  border: "1px solid #e4e4e7",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 function formatDate(dueDate: string) {
   if (!dueDate) return "No due date";
@@ -118,248 +96,192 @@ function formatDate(dueDate: string) {
   });
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid #e4e4e7",
-  fontSize: 13,
-  background: "#fff",
-  color: "#18181b",
-  fontFamily: "inherit",
-};
+function isOverdue(task: Task) {
+  if (!task.dueDate || task.status === "completed") return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(task.dueDate);
+  due.setHours(0, 0, 0, 0);
+  return due < today;
+}
 
-const primaryButton: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 8,
-  background: "#18181b",
-  color: "#fff",
-  border: "none",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-};
+function priorityColor(priority: TaskPriority) {
+  if (priority === "urgent") return "#b91c1c";
+  if (priority === "high") return "#c2410c";
+  if (priority === "medium") return "#1d4ed8";
+  return "#52525b";
+}
 
-const secondaryButton: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#18181b",
-  border: "1px solid #e4e4e7",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const weekNavButton: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#52525b",
-  border: "1px solid #e4e4e7",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-  minWidth: 32,
-};
+function categoryMeta(category: TaskCategory) {
+  return (
+    CATEGORIES.find((c) => c.value === category) ?? {
+      value: "general" as TaskCategory,
+      label: "General",
+      color: "#71717a",
+    }
+  );
+}
 
 export default function TasksBoard({
   initialTasks,
   currentUserEmail,
   knownUsers,
+  initialNotifications,
 }: {
   initialTasks: Task[];
   currentUserEmail: string;
   knownUsers: string[];
+  initialNotifications: TaskNotification[];
 }) {
-  const [tasks] = useState<Task[]>(initialTasks);
   const [isPending, startTransition] = useTransition();
+  const [tasks] = useState<Task[]>(initialTasks);
+  const [notifications] = useState<TaskNotification[]>(initialNotifications);
 
-  // Week browser state
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [filters, setFilters] = useState<TaskFilters>({
+    q: "",
+    status: "all",
+    category: "all",
+    assignee: "all",
+    priority: "all",
+    due: "all",
+    showCompleted: true,
+  });
 
-  const weekDays = useMemo(() => {
-    const baseMonday = getMonday(new Date());
-    baseMonday.setDate(baseMonday.getDate() + weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(baseMonday);
-      d.setDate(baseMonday.getDate() + i);
-      return {
-        key: toDateKey(d),
-        short: WEEKDAY_SHORT[i],
-        long: WEEKDAY_NAMES[d.getDay()],
-        dayNum: d.getDate(),
-        monthShort: d.toLocaleDateString(undefined, { month: "short" }),
-        date: d,
-      };
-    });
-  }, [weekOffset]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const weekRangeLabel = useMemo(() => {
-    const first = weekDays[0].date;
-    const last = weekDays[6].date;
-    const sameMonth = first.getMonth() === last.getMonth();
-    const firstStr = first.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-    const lastStr = last.toLocaleDateString(undefined, {
-      month: sameMonth ? undefined : "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    return `${firstStr} – ${lastStr}`;
-  }, [weekDays]);
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    category: "general" as TaskCategory,
+    assignee: currentUserEmail || "",
+    dueDate: "",
+    startDate: "",
+    recurrence: "none" as TaskRecurrence,
+    recurrenceInterval: 1,
+    priority: "medium" as TaskPriority,
+  });
 
-  const dueCountByDate = useMemo(() => {
-    const map = new Map<string, number>();
-    tasks.forEach((t) => {
-      const key = normalizeDueDate(t.dueDate);
-      if (!key) return;
-      map.set(key, (map.get(key) ?? 0) + 1);
-    });
-    return map;
-  }, [tasks]);
+  const selectedTask = useMemo(() => {
+    return tasks.find((t) => t.id === selectedTaskId) ?? null;
+  }, [tasks, selectedTaskId]);
 
-  function filterBySelectedDate(list: Task[]): Task[] {
-    if (!selectedDate) return list;
-    return list.filter((t) => normalizeDueDate(t.dueDate) === selectedDate);
-  }
-
-  // New task form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<TaskCategory>("general");
-  const [assignee, setAssignee] = useState(currentUserEmail || "");
-  const [dueDate, setDueDate] = useState("");
-  const [recurrence, setRecurrence] = useState<TaskRecurrence>("none");
-
-  // When a day is selected in the week browser, pre-fill the new-task form's
-  // due date so adding a task for that day is one click away.
-  useEffect(() => {
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
-  }, [selectedDate]);
-
-  // Expand/collapse state — tasks default to collapsed; clicking expands.
-  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(
-    () => new Set()
-  );
-
-  function toggleExpanded(id: string) {
-    setExpandedTaskIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (
+        filters.q &&
+        ![
+          task.title,
+          task.description,
+          task.assignee,
+          task.createdBy,
+        ].some((v) => v.toLowerCase().includes(filters.q!.toLowerCase()))
+      ) {
+        return false;
       }
-      return next;
+
+      if (filters.status && filters.status !== "all" && task.status !== filters.status) {
+        return false;
+      }
+
+      if (
+        filters.category &&
+        filters.category !== "all" &&
+        task.category !== filters.category
+      ) {
+        return false;
+      }
+
+      if (
+        filters.assignee &&
+        filters.assignee !== "all" &&
+        task.assignee !== filters.assignee
+      ) {
+        return false;
+      }
+
+      if (
+        filters.priority &&
+        filters.priority !== "all" &&
+        task.priority !== filters.priority
+      ) {
+        return false;
+      }
+
+      if (filters.showCompleted === false && task.status === "completed") {
+        return false;
+      }
+
+      if (filters.due === "today") {
+        const today = new Date().toISOString().slice(0, 10);
+        if (task.dueDate !== today) return false;
+      } else if (filters.due === "overdue") {
+        if (!isOverdue(task)) return false;
+      } else if (filters.due === "none") {
+        if (task.dueDate) return false;
+      }
+
+      return true;
     });
-  }
+  }, [tasks, filters]);
 
-  // Edit state
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{
-    title: string;
-    description: string;
-    category: TaskCategory;
-    assignee: string;
-    dueDate: string;
-    recurrence: TaskRecurrence;
-  } | null>(null);
+  const myTasks = useMemo(() => {
+    return filteredTasks.filter((t) => t.assignee === currentUserEmail);
+  }, [filteredTasks, currentUserEmail]);
 
-  const myTasks = useMemo(
-    () =>
-      tasks.filter(
-        (t) => t.assignee === currentUserEmail && t.status !== "completed"
-      ),
-    [tasks, currentUserEmail]
-  );
-
-  const myTasksFiltered = useMemo(
-    () => filterBySelectedDate(myTasks),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [myTasks, selectedDate]
-  );
-
-  const allTasksFiltered = useMemo(
-    () => filterBySelectedDate(tasks),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tasks, selectedDate]
-  );
-
-  const myTasksByCategory = useMemo(() => {
-    const groups: Record<string, Task[]> = {};
-    CATEGORIES.forEach((c) => {
-      groups[c.value] = myTasksFiltered.filter((t) => t.category === c.value);
-    });
-    return groups;
-  }, [myTasksFiltered]);
-
-  const allTasksByCategory = useMemo(() => {
-    const groups: Record<string, Task[]> = {};
-    CATEGORIES.forEach((c) => {
-      groups[c.value] = allTasksFiltered.filter((t) => t.category === c.value);
-    });
-    return groups;
-  }, [allTasksFiltered]);
-
-  // Open tasks assigned to anyone other than the current user, grouped by
-  // assignee (so the operator can see what teammates have on their plate).
-  const teamTasksByAssignee = useMemo(() => {
-    const open = allTasksFiltered.filter(
-      (t) =>
-        t.status !== "completed" &&
-        t.assignee &&
-        t.assignee !== currentUserEmail
+  const teamTasks = useMemo(() => {
+    return filteredTasks.filter(
+      (t) => t.assignee && t.assignee !== currentUserEmail
     );
-    const groups = new Map<string, Task[]>();
-    open.forEach((t) => {
-      const list = groups.get(t.assignee) ?? [];
-      list.push(t);
-      groups.set(t.assignee, list);
-    });
-    return Array.from(groups.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0])
-    );
-  }, [allTasksFiltered, currentUserEmail]);
+  }, [filteredTasks, currentUserEmail]);
 
-  function handleAdd() {
-    if (!title.trim()) return;
-    const snapshot = {
-      title: title.trim(),
-      description: description.trim(),
-      category,
-      assignee: assignee.trim(),
-      dueDate,
-      recurrence,
-    };
+  const assigneeOptions = useMemo(() => {
+    return Array.from(new Set([currentUserEmail, ...knownUsers].filter(Boolean)));
+  }, [currentUserEmail, knownUsers]);
+
+  function handleCreateTask(parentTaskId?: string | null) {
+    if (!newTask.title.trim()) return;
+
     startTransition(async () => {
       try {
-        await addTaskAction(
-          snapshot.title,
-          snapshot.description,
-          snapshot.category,
-          snapshot.assignee,
-          snapshot.dueDate,
-          snapshot.recurrence
-        );
-        setTitle("");
-        setDescription("");
-        setDueDate("");
-        setRecurrence("none");
+        await addTaskAction({
+          title: newTask.title,
+          description: newTask.description,
+          category: newTask.category,
+          assignee: newTask.assignee,
+          dueDate: newTask.dueDate,
+          startDate: newTask.startDate,
+          recurrence: newTask.recurrence,
+          recurrenceInterval:
+            newTask.recurrence === "none" ? null : newTask.recurrenceInterval,
+          priority: newTask.priority,
+          parentTaskId: parentTaskId ?? null,
+          permissionsScope: "team",
+        });
+
+        setNewTask({
+          title: "",
+          description: "",
+          category: "general",
+          assignee: currentUserEmail || "",
+          dueDate: "",
+          startDate: "",
+          recurrence: "none",
+          recurrenceInterval: 1,
+          priority: "medium",
+        });
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not add task");
       }
     });
   }
 
-  function handleStatusChange(task: Task, newStatus: TaskStatus) {
+  function handleStatusChange(task: Task, status: TaskStatus) {
     startTransition(async () => {
       try {
-        await updateTaskStatusAction(task.id, newStatus);
+        await updateTaskStatusAction({
+          id: task.id,
+          status,
+        });
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not update status");
       }
@@ -368,109 +290,856 @@ export default function TasksBoard({
 
   function handleDelete(task: Task) {
     if (!confirm(`Delete "${task.title}"?`)) return;
+
     startTransition(async () => {
       try {
-        await deleteTaskAction(task.id);
+        await deleteTaskAction({ id: task.id });
+        if (selectedTaskId === task.id) {
+          setSelectedTaskId(null);
+        }
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not delete");
+        alert(err instanceof Error ? err.message : "Could not delete task");
       }
     });
   }
 
-  function startEdit(task: Task) {
-    setEditingId(task.id);
-    setEditDraft({
+  function handleMarkNotificationRead(id: string) {
+    startTransition(async () => {
+      try {
+        await markTaskNotificationReadAction({ id });
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Could not mark notification as read"
+        );
+      }
+    });
+  }
+
+  function TaskCard({
+    task,
+    level = 0,
+  }: {
+    task: Task;
+    level?: number;
+  }) {
+    const category = categoryMeta(task.category);
+    const overdue = isOverdue(task);
+
+    return (
+      <div
+        style={{
+          border: "1px solid #e4e4e7",
+          borderRadius: 14,
+          background: "#fff",
+          padding: 14,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          marginLeft: level > 0 ? 18 : 0,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{ display: "flex", gap: 10, alignItems: "flex-start", flex: 1 }}
+          >
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: category.color,
+                marginTop: 4,
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#18181b",
+                  marginBottom: 3,
+                }}
+              >
+                {task.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#71717a",
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>{category.label}</span>
+                <span>•</span>
+                <span style={{ color: priorityColor(task.priority), fontWeight: 700 }}>
+                  {task.priority}
+                </span>
+                <span>•</span>
+                <span>{task.assignee || "Unassigned"}</span>
+                <span>•</span>
+                <span>{formatDate(task.dueDate)}</span>
+                {task.recurrence !== "none" && (
+                  <>
+                    <span>•</span>
+                    <span>Repeats {task.recurrence}</span>
+                  </>
+                )}
+                {overdue && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>Overdue</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <select
+              value={task.status}
+              onChange={(e) =>
+                handleStatusChange(task, e.target.value as TaskStatus)
+              }
+              disabled={isPending}
+              style={{ ...inputStyle, width: 140 }}
+            >
+              {STATUS_OPTIONS.filter((s) => s.value !== "all").map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setSelectedTaskId(task.id)}
+              disabled={isPending}
+              style={secondaryButton}
+            >
+              Edit
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDelete(task)}
+              disabled={isPending}
+              style={{
+                ...secondaryButton,
+                color: "#b91c1c",
+                borderColor: "#fecaca",
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+
+        {task.description && (
+          <div
+            style={{
+              fontSize: 13,
+              color: "#52525b",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {task.description}
+          </div>
+        )}
+
+        {task.subtasks.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#52525b",
+              }}
+            >
+              Subtasks ({task.subtasks.length})
+            </div>
+            {task.subtasks.map((subtask) => (
+              <TaskCard key={subtask.id} task={subtask} level={1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function TaskEditorSheet({ task }: { task: Task }) {
+    const [draft, setDraft] = useState({
       title: task.title,
       description: task.description,
       category: task.category,
       assignee: task.assignee,
-      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
-      recurrence: task.recurrence ?? "none",
+      dueDate: task.dueDate,
+      startDate: task.startDate,
+      recurrence: task.recurrence,
+      recurrenceInterval: task.recurrenceInterval ?? 1,
+      priority: task.priority,
     });
-  }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setEditDraft(null);
-  }
+    const [comment, setComment] = useState("");
+    const [subtaskTitle, setSubtaskTitle] = useState("");
 
-  function saveEdit(task: Task) {
-    if (!editDraft) return;
-    const draft = editDraft;
-    startTransition(async () => {
-      try {
-        await updateTaskAction(
-          task.id,
-          draft.title,
-          draft.description,
-          draft.category,
-          draft.assignee,
-          draft.dueDate,
-          draft.recurrence
-        );
-        setEditingId(null);
-        setEditDraft(null);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not update task");
-      }
-    });
-  }
+    function handleSave() {
+      if (!draft.title.trim()) return;
 
-  const assigneeOptions = Array.from(
-    new Set([currentUserEmail, ...knownUsers].filter(Boolean))
-  );
+      startTransition(async () => {
+        try {
+          await updateTaskAction({
+            id: task.id,
+            title: draft.title,
+            description: draft.description,
+            category: draft.category,
+            assignee: draft.assignee,
+            dueDate: draft.dueDate,
+            startDate: draft.startDate,
+            recurrence: draft.recurrence,
+            recurrenceInterval:
+              draft.recurrence === "none" ? null : draft.recurrenceInterval,
+            priority: draft.priority,
+            permissionsScope: "team",
+          });
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "Could not update task");
+        }
+      });
+    }
 
-  function renderTaskRow(task: Task, allowReassign: boolean = true) {
-    const meta = categoryMeta(task.category);
-    const pill = statusPillStyles(task.status);
-    const overdue = isOverdue(task.dueDate, task.status);
-    const isEditing = editingId === task.id;
+    function handleAddSubtask() {
+      if (!subtaskTitle.trim()) return;
 
-    if (isEditing && editDraft) {
-      return (
+      startTransition(async () => {
+        try {
+          await addTaskAction({
+            title: subtaskTitle,
+            description: "",
+            category: draft.category,
+            assignee: draft.assignee,
+            dueDate: draft.dueDate,
+            startDate: draft.startDate,
+            recurrence: "none",
+            recurrenceInterval: null,
+            priority: "medium",
+            parentTaskId: task.id,
+            permissionsScope: "team",
+          });
+
+          setSubtaskTitle("");
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "Could not add subtask");
+        }
+      });
+    }
+
+    function handleAddComment() {
+      if (!comment.trim()) return;
+
+      startTransition(async () => {
+        try {
+          await addTaskCommentAction({
+            taskId: task.id,
+            body: comment,
+          });
+          setComment("");
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "Could not add comment");
+        }
+      });
+    }
+
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(24,24,27,0.36)",
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
         <div
-          key={task.id}
           style={{
-            border: "1px solid #e4e4e7",
-            borderRadius: 12,
-            padding: 12,
-            background: "#fafafa",
+            width: "min(720px, 100%)",
+            height: "100%",
+            background: "#fff",
+            borderLeft: "1px solid #e4e4e7",
+            overflowY: "auto",
+            padding: 20,
+            boxSizing: "border-box",
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 18,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: "#18181b",
+                }}
+              >
+                Edit task
+              </h2>
+              <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>
+                Improve the task, add subtasks, comments, and manage delivery.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedTaskId(null)}
+              style={secondaryButton}
+            >
+              Close
+            </button>
+          </div>
+
+          <SectionCard title="Details">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                placeholder="Task title"
+                style={inputStyle}
+              />
+
+              <textarea
+                value={draft.description}
+                onChange={(e) =>
+                  setDraft({ ...draft, description: e.target.value })
+                }
+                placeholder="Description"
+                style={{
+                  ...inputStyle,
+                  minHeight: 96,
+                  resize: "vertical",
+                }}
+              />
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <select
+                  value={draft.category}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      category: e.target.value as TaskCategory,
+                    })
+                  }
+                  style={inputStyle}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={draft.assignee}
+                  onChange={(e) =>
+                    setDraft({ ...draft, assignee: e.target.value })
+                  }
+                  style={inputStyle}
+                >
+                  <option value="">Unassigned</option>
+                  {assigneeOptions.map((user) => (
+                    <option key={user} value={user}>
+                      {user}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  value={draft.startDate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, startDate: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+
+                <input
+                  type="date"
+                  value={draft.dueDate}
+                  onChange={(e) =>
+                    setDraft({ ...draft, dueDate: e.target.value })
+                  }
+                  style={inputStyle}
+                />
+
+                <select
+                  value={draft.priority}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      priority: e.target.value as TaskPriority,
+                    })
+                  }
+                  style={inputStyle}
+                >
+                  {PRIORITY_OPTIONS.filter((p) => p.value !== "all").map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={draft.recurrence}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      recurrence: e.target.value as TaskRecurrence,
+                    })
+                  }
+                  style={inputStyle}
+                >
+                  {RECURRENCE_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+
+                {draft.recurrence !== "none" && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={draft.recurrenceInterval}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        recurrenceInterval: Number(e.target.value || 1),
+                      })
+                    }
+                    style={inputStyle}
+                    placeholder="Interval"
+                  />
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isPending}
+                  style={primaryButton}
+                >
+                  Save changes
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDelete(task)}
+                  disabled={isPending}
+                  style={{
+                    ...secondaryButton,
+                    color: "#b91c1c",
+                    borderColor: "#fecaca",
+                  }}
+                >
+                  Delete task
+                </button>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={`Subtasks (${task.subtasks.length})`}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  value={subtaskTitle}
+                  onChange={(e) => setSubtaskTitle(e.target.value)}
+                  placeholder="Add subtask"
+                  style={inputStyle}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddSubtask}
+                  disabled={isPending || !subtaskTitle.trim()}
+                  style={primaryButton}
+                >
+                  Add
+                </button>
+              </div>
+
+              {task.subtasks.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#71717a" }}>
+                  No subtasks yet.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {task.subtasks.map((subtask) => (
+                    <TaskCard key={subtask.id} task={subtask} level={0} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          <SectionCard title={`Comments (${task.comments?.length ?? 0})`}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Add comment"
+                style={{
+                  ...inputStyle,
+                  minHeight: 90,
+                  resize: "vertical",
+                }}
+              />
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleAddComment}
+                  disabled={isPending || !comment.trim()}
+                  style={primaryButton}
+                >
+                  Add comment
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(task.comments ?? []).map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 12,
+                      padding: 12,
+                      background: "#fafafa",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#18181b",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {c.createdBy}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#52525b",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {c.body}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={`Activity (${task.activity?.length ?? 0})`}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(task.activity ?? []).map((a) => (
+                <div
+                  key={a.id}
+                  style={{
+                    borderBottom: "1px solid #f4f4f5",
+                    paddingBottom: 8,
+                    fontSize: 13,
+                    color: "#52525b",
+                  }}
+                >
+                  <strong style={{ color: "#18181b" }}>{a.actor}</strong> —{" "}
+                  {a.action.replaceAll("_", " ")}
+                  {a.fieldName ? ` (${a.fieldName})` : ""}
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 16,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 30,
+              lineHeight: 1.05,
+              fontWeight: 700,
+              color: "#18181b",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Tasks
+          </h1>
+          <p
+            style={{
+              margin: "8px 0 0",
+              fontSize: 14,
+              color: "#71717a",
+              maxWidth: 760,
+            }}
+          >
+            Better editing flow, subtasks, notifications, recurring tasks,
+            stronger filters, and a cleaner base to copy across your apps.
+          </p>
+        </div>
+
+        <SectionCard title={`Notifications (${notifications.length})`}>
+          {notifications.length === 0 ? (
+            <div style={{ fontSize: 13, color: "#71717a" }}>
+              No unread notifications.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {notifications.slice(0, 6).map((note) => (
+                <div
+                  key={note.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 12,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#18181b",
+                      marginBottom: 4,
+                    }}
+                  >
+                    {note.title}
+                  </div>
+                  {note.body && (
+                    <div style={{ fontSize: 12, color: "#52525b", marginBottom: 8 }}>
+                      {note.body}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleMarkNotificationRead(note.id)}
+                    style={secondaryButton}
+                  >
+                    Mark read
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Filters">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 10,
           }}
         >
           <input
-            type="text"
-            value={editDraft.title}
+            value={filters.q ?? ""}
+            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            placeholder="Search tasks"
+            style={inputStyle}
+          />
+
+          <select
+            value={filters.status ?? "all"}
             onChange={(e) =>
-              setEditDraft({ ...editDraft, title: e.target.value })
+              setFilters({
+                ...filters,
+                status: e.target.value as TaskStatus | "all",
+              })
             }
             style={inputStyle}
-            placeholder="Title"
-          />
-          <textarea
-            value={editDraft.description}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.category ?? "all"}
             onChange={(e) =>
-              setEditDraft({ ...editDraft, description: e.target.value })
+              setFilters({
+                ...filters,
+                category: e.target.value as TaskCategory | "all",
+              })
             }
-            style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
-            placeholder="Description"
+            style={inputStyle}
+          >
+            <option value="all">All categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.assignee ?? "all"}
+            onChange={(e) =>
+              setFilters({
+                ...filters,
+                assignee: e.target.value,
+              })
+            }
+            style={inputStyle}
+          >
+            <option value="all">All assignees</option>
+            {assigneeOptions.map((user) => (
+              <option key={user} value={user}>
+                {user}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.priority ?? "all"}
+            onChange={(e) =>
+              setFilters({
+                ...filters,
+                priority: e.target.value as TaskPriority | "all",
+              })
+            }
+            style={inputStyle}
+          >
+            {PRIORITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.due ?? "all"}
+            onChange={(e) =>
+              setFilters({
+                ...filters,
+                due: e.target.value as TaskFilters["due"],
+              })
+            }
+            style={inputStyle}
+          >
+            <option value="all">All due dates</option>
+            <option value="today">Due today</option>
+            <option value="overdue">Overdue</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="none">No due date</option>
+          </select>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: "#52525b",
+              padding: "10px 0",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={filters.showCompleted ?? true}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  showCompleted: e.target.checked,
+                })
+              }
+            />
+            Show completed
+          </label>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="New task">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            value={newTask.title}
+            onChange={(e) =>
+              setNewTask((prev) => ({ ...prev, title: e.target.value }))
+            }
+            placeholder="Task title"
+            style={inputStyle}
           />
+
+          <textarea
+            value={newTask.description}
+            onChange={(e) =>
+              setNewTask((prev) => ({ ...prev, description: e.target.value }))
+            }
+            placeholder="Description"
+            style={{
+              ...inputStyle,
+              minHeight: 90,
+              resize: "vertical",
+            }}
+          />
+
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 8,
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 10,
             }}
           >
             <select
-              value={editDraft.category}
+              value={newTask.category}
               onChange={(e) =>
-                setEditDraft({
-                  ...editDraft,
+                setNewTask((prev) => ({
+                  ...prev,
                   category: e.target.value as TaskCategory,
-                })
+                }))
               }
               style={inputStyle}
             >
@@ -480,35 +1149,64 @@ export default function TasksBoard({
                 </option>
               ))}
             </select>
+
             <select
-              value={editDraft.assignee}
+              value={newTask.assignee}
               onChange={(e) =>
-                setEditDraft({ ...editDraft, assignee: e.target.value })
+                setNewTask((prev) => ({ ...prev, assignee: e.target.value }))
               }
               style={inputStyle}
             >
               <option value="">Unassigned</option>
-              {assigneeOptions.map((u) => (
-                <option key={u} value={u}>
-                  {u}
+              {assigneeOptions.map((user) => (
+                <option key={user} value={user}>
+                  {user}
                 </option>
               ))}
             </select>
+
             <input
               type="date"
-              value={editDraft.dueDate}
+              value={newTask.startDate}
               onChange={(e) =>
-                setEditDraft({ ...editDraft, dueDate: e.target.value })
+                setNewTask((prev) => ({ ...prev, startDate: e.target.value }))
               }
               style={inputStyle}
             />
-            <select
-              value={editDraft.recurrence}
+
+            <input
+              type="date"
+              value={newTask.dueDate}
               onChange={(e) =>
-                setEditDraft({
-                  ...editDraft,
+                setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))
+              }
+              style={inputStyle}
+            />
+
+            <select
+              value={newTask.priority}
+              onChange={(e) =>
+                setNewTask((prev) => ({
+                  ...prev,
+                  priority: e.target.value as TaskPriority,
+                }))
+              }
+              style={inputStyle}
+            >
+              {PRIORITY_OPTIONS.filter((p) => p.value !== "all").map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={newTask.recurrence}
+              onChange={(e) =>
+                setNewTask((prev) => ({
+                  ...prev,
                   recurrence: e.target.value as TaskRecurrence,
-                })
+                }))
               }
               style={inputStyle}
             >
@@ -518,671 +1216,32 @@ export default function TasksBoard({
                 </option>
               ))}
             </select>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => saveEdit(task)}
-              disabled={isPending}
-              style={primaryButton}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={cancelEdit}
-              disabled={isPending}
-              style={secondaryButton}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      );
-    }
 
-    const isExpanded = expandedTaskIds.has(task.id);
-
-    return (
-      <div
-        key={task.id}
-        style={{
-          border: "1px solid #e4e4e7",
-          borderRadius: 12,
-          background: "#fff",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => toggleExpanded(task.id)}
-          aria-expanded={isExpanded}
-          style={{
-            appearance: "none",
-            WebkitAppearance: "none",
-            background: "transparent",
-            border: "none",
-            padding: 12,
-            textAlign: "left",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            width: "100%",
-            font: "inherit",
-            color: "inherit",
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              display: "inline-block",
-              width: 12,
-              fontSize: 11,
-              color: "#a1a1aa",
-              transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-              transition: "transform 0.15s ease",
-              flexShrink: 0,
-            }}
-          >
-            ▶
-          </span>
-          <span
-            style={{
-              display: "inline-block",
-              width: 8,
-              height: 8,
-              borderRadius: 999,
-              background: meta.color,
-              flexShrink: 0,
-            }}
-          />
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#18181b",
-              textDecoration:
-                task.status === "completed" ? "line-through" : "none",
-              flex: 1,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {task.title}
-          </span>
-          <span
-            style={{
-              display: "inline-block",
-              padding: "2px 8px",
-              borderRadius: 999,
-              background: pill.bg,
-              color: pill.color,
-              border: `1px solid ${pill.border}`,
-              fontSize: 11,
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          >
-            {STATUS_OPTIONS.find((s) => s.value === task.status)?.label ??
-              task.status}
-          </span>
-          {overdue && (
-            <span
-              style={{
-                display: "inline-block",
-                padding: "2px 8px",
-                borderRadius: 999,
-                background: "#fee2e2",
-                color: "#991b1b",
-                border: "1px solid #fecaca",
-                fontSize: 11,
-                fontWeight: 600,
-                flexShrink: 0,
-              }}
-            >
-              Overdue
-            </span>
-          )}
-          {task.recurrence && task.recurrence !== "none" && (
-            <span
-              style={{
-                display: "inline-block",
-                padding: "2px 8px",
-                borderRadius: 999,
-                background: "#ede9fe",
-                color: "#5b21b6",
-                border: "1px solid #ddd6fe",
-                fontSize: 11,
-                fontWeight: 600,
-                flexShrink: 0,
-              }}
-              title={recurrenceSummary(task.recurrence, task.dueDate)}
-            >
-              {recurrenceSummary(task.recurrence, task.dueDate)}
-            </span>
-          )}
-          <span
-            style={{
-              fontSize: 12,
-              color: "#71717a",
-              flexShrink: 0,
-            }}
-          >
-            {formatDate(task.dueDate)}
-          </span>
-        </button>
-        {isExpanded && (
-          <div
-            style={{
-              padding: "0 12px 12px 34px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            {task.description && (
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "#52525b",
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {task.description}
-              </div>
-            )}
-            <div
-              style={{
-                fontSize: 12,
-                color: "#71717a",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <span>Due: {formatDate(task.dueDate)}</span>
-              <span>·</span>
-              <span>Assignee: {task.assignee || "Unassigned"}</span>
-              {task.createdBy && (
-                <>
-                  <span>·</span>
-                  <span>From: {task.createdBy}</span>
-                </>
-              )}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 6,
-                flexWrap: "wrap",
-                marginTop: 4,
-              }}
-            >
-              <select
-                value={task.status}
-                onChange={(e) =>
-                  handleStatusChange(task, e.target.value as TaskStatus)
-                }
-                disabled={isPending}
-                style={{ ...inputStyle, padding: "6px 8px", fontSize: 12 }}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              {allowReassign && (
-                <button
-                  type="button"
-                  onClick={() => startEdit(task)}
-                  disabled={isPending}
-                  style={secondaryButton}
-                >
-                  Edit
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleDelete(task)}
-                disabled={isPending}
-                style={{
-                  ...secondaryButton,
-                  color: "#b91c1c",
-                  borderColor: "#fecaca",
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 30,
-            lineHeight: 1.05,
-            fontWeight: 700,
-            color: "#18181b",
-            letterSpacing: "-0.03em",
-          }}
-        >
-          Tasks
-        </h1>
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: 14,
-            color: "#71717a",
-            maxWidth: 760,
-          }}
-        >
-          Assign work to teammates, track progress, and keep every category
-          moving. Your own open tasks are shown first.
-        </p>
-      </div>
-
-      <SectionCard
-        title="Week"
-        action={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={() => setWeekOffset((w) => w - 1)}
-              style={weekNavButton}
-              aria-label="Previous week"
-            >
-              &larr;
-            </button>
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#52525b",
-                minWidth: 140,
-                textAlign: "center",
-              }}
-            >
-              {weekRangeLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => setWeekOffset((w) => w + 1)}
-              style={weekNavButton}
-              aria-label="Next week"
-            >
-              &rarr;
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setWeekOffset(0);
-                setSelectedDate(null);
-              }}
-              style={{
-                ...weekNavButton,
-                color: "#18181b",
-                borderColor: "#d4d4d8",
-              }}
-            >
-              Today
-            </button>
-            {selectedDate && (
-              <button
-                type="button"
-                onClick={() => setSelectedDate(null)}
-                style={{
-                  ...weekNavButton,
-                  background: "#18181b",
-                  color: "#fff",
-                  borderColor: "#18181b",
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        }
-      >
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              fontSize: 14,
-            }}
-          >
-            <thead>
-              <tr>
-                {weekDays.map((d) => {
-                  const isSelected = selectedDate === d.key;
-                  const isToday = d.key === toDateKey(new Date());
-                  return (
-                    <th
-                      key={d.key}
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 16px",
-                        fontWeight: 600,
-                        fontSize: 13,
-                        color: isSelected ? "#18181b" : "#71717a",
-                        borderBottom: isSelected
-                          ? "2px solid #18181b"
-                          : "2px solid #e4e4e7",
-                        whiteSpace: "nowrap",
-                        minWidth: 120,
-                        background: isToday ? "#fafafa" : "#fff",
-                      }}
-                    >
-                      {d.short} {d.dayNum} {d.monthShort}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                {weekDays.map((d) => {
-                  const count = dueCountByDate.get(d.key) ?? 0;
-                  const isSelected = selectedDate === d.key;
-                  const colors =
-                    count === 0
-                      ? { bg: "#f3f4f6", text: "#9ca3af" }
-                      : isSelected
-                      ? { bg: "#18181b", text: "#fff" }
-                      : { bg: "#dbeafe", text: "#1e40af" };
-                  return (
-                    <td
-                      key={d.key}
-                      style={{
-                        padding: "10px 16px",
-                        borderBottom: "1px solid #f4f4f5",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedDate(isSelected ? null : d.key)
-                        }
-                        style={{
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          width: "100%",
-                          padding: "10px 12px",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          border: isSelected
-                            ? "1px solid #18181b"
-                            : "1px solid #e4e4e7",
-                          borderRadius: 8,
-                          cursor: "pointer",
-                          backgroundColor: colors.bg,
-                          color: colors.text,
-                          textAlign: "left",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 8,
-                          transition: "all 0.15s ease",
-                        }}
-                      >
-                        <span>
-                          {count === 0
-                            ? "No tasks"
-                            : `${count} task${count === 1 ? "" : "s"}`}
-                        </span>
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {selectedDate && (
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: "#52525b",
-            }}
-          >
-            Showing tasks due on{" "}
-            <strong>
-              {new Date(selectedDate).toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </strong>
-            . Click <strong>Clear</strong> to see all tasks again.
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard title="My open tasks">
-        {myTasks.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#71717a" }}>
-            Nothing assigned to you. Nice.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {CATEGORIES.map((c) => {
-              const list = myTasksByCategory[c.value] ?? [];
-              if (list.length === 0) return null;
-              return (
-                <div key={c.value}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#71717a",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      marginBottom: 8,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        background: c.color,
-                      }}
-                    />
-                    {c.label} ({list.length})
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    {list.map((t) => renderTaskRow(t))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title={`Team tasks (${teamTasksByAssignee.reduce(
-          (sum, [, list]) => sum + list.length,
-          0
-        )})`}
-      >
-        {teamTasksByAssignee.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#71717a" }}>
-            No open tasks assigned to anyone else.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {teamTasksByAssignee.map(([assigneeEmail, list]) => (
-              <div key={assigneeEmail}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "#52525b",
-                    marginBottom: 8,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: 22,
-                      height: 22,
-                      borderRadius: 999,
-                      background: "#18181b",
-                      color: "#fff",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {assigneeEmail.slice(0, 2)}
-                  </span>
-                  <span>{assigneeEmail}</span>
-                  <span style={{ color: "#a1a1aa", fontWeight: 500 }}>
-                    · {list.length} open
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  {list.map((t) => renderTaskRow(t))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard title="New task">
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Task title"
-            style={inputStyle}
-          />
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-            style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
-          />
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "#71717a" }}>Category</span>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                style={inputStyle}
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "#71717a" }}>Assign to</span>
-              <select
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="">Unassigned</option>
-                {assigneeOptions.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "#71717a" }}>Due date</span>
+            {newTask.recurrence !== "none" && (
               <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "#71717a" }}>Repeats</span>
-              <select
-                value={recurrence}
+                type="number"
+                min={1}
+                value={newTask.recurrenceInterval}
                 onChange={(e) =>
-                  setRecurrence(e.target.value as TaskRecurrence)
+                  setNewTask((prev) => ({
+                    ...prev,
+                    recurrenceInterval: Number(e.target.value || 1),
+                  }))
                 }
                 style={inputStyle}
-              >
-                {RECURRENCE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                placeholder="Repeat every"
+              />
+            )}
           </div>
-          {recurrence !== "none" && (
-            <div style={{ fontSize: 12, color: "#71717a" }}>
-              Tip: pick a due date on the first target day (e.g. next Monday) and the task will roll forward automatically when marked completed.
-            </div>
-          )}
+
           <div>
             <button
               type="button"
-              onClick={handleAdd}
-              disabled={isPending || !title.trim()}
+              onClick={() => handleCreateTask(null)}
+              disabled={isPending || !newTask.title.trim()}
               style={{
                 ...primaryButton,
-                opacity: !title.trim() || isPending ? 0.6 : 1,
+                opacity: isPending || !newTask.title.trim() ? 0.6 : 1,
               }}
             >
               Add task
@@ -1191,68 +1250,49 @@ export default function TasksBoard({
         </div>
       </SectionCard>
 
-      <SectionCard title={`All tasks (${tasks.length})`}>
-        {tasks.length === 0 ? (
+      <SectionCard title={`My tasks (${myTasks.length})`}>
+        {myTasks.length === 0 ? (
           <div style={{ fontSize: 13, color: "#71717a" }}>
-            No tasks yet. Create one above.
+            No tasks assigned to you.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {CATEGORIES.map((c) => {
-              const list = allTasksByCategory[c.value] ?? [];
-              return (
-                <div key={c.value}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#71717a",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      marginBottom: 8,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        background: c.color,
-                      }}
-                    />
-                    {c.label} ({list.length})
-                  </div>
-                  {list.length === 0 ? (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#a1a1aa",
-                        padding: "8px 0",
-                      }}
-                    >
-                      No tasks in this category.
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                      }}
-                    >
-                      {list.map((t) => renderTaskRow(t))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {myTasks.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
           </div>
         )}
       </SectionCard>
+
+      <SectionCard title={`Team tasks (${teamTasks.length})`}>
+        {teamTasks.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#71717a" }}>
+            No team tasks in this filter view.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {teamTasks.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title={`All tasks (${filteredTasks.length})`}>
+        {filteredTasks.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#71717a" }}>
+            No tasks match these filters.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filteredTasks.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {selectedTask && <TaskEditorSheet task={selectedTask} />}
     </div>
   );
 }
