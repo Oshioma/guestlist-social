@@ -14,6 +14,54 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// ── AI suggestion source settings ────────────────────────────────────────
+
+export type AiSourceSettings = {
+  internalData: boolean;
+  metaAdLibrary: boolean;
+  clientWebsite: boolean;
+  clientWebsiteUrl: string;
+};
+
+export const DEFAULT_AI_SOURCES: AiSourceSettings = {
+  internalData: true,
+  metaAdLibrary: true,
+  clientWebsite: false,
+  clientWebsiteUrl: "",
+};
+
+const AI_SOURCES_KEY = "ai_suggestion_sources";
+
+export async function getAiSourceSettings(
+  supabase: SupabaseClient
+): Promise<AiSourceSettings> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", AI_SOURCES_KEY)
+    .maybeSingle<{ value: Record<string, unknown> }>();
+
+  if (error || !data?.value) return DEFAULT_AI_SOURCES;
+  const raw = data.value;
+  return {
+    internalData: raw.internalData !== false,
+    metaAdLibrary: raw.metaAdLibrary !== false,
+    clientWebsite: raw.clientWebsite === true,
+    clientWebsiteUrl: typeof raw.clientWebsiteUrl === "string" ? raw.clientWebsiteUrl : "",
+  };
+}
+
+export async function setAiSourceSettings(
+  supabase: SupabaseClient,
+  next: AiSourceSettings
+): Promise<void> {
+  const { error } = await supabase.from("app_settings").upsert(
+    { key: AI_SOURCES_KEY, value: next, updated_at: new Date().toISOString() },
+    { onConflict: "key" }
+  );
+  if (error) throw new Error(`save AI source settings: ${error.message}`);
+}
+
 export type ReaperSettings = {
   // Minimum (positive + negative) verdicts a pattern needs before the
   // reaper is allowed to retire it. Below this, the sample is too small

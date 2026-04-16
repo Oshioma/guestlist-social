@@ -113,7 +113,7 @@ export default async function NewCampaignPage({ params }: Props) {
 
       <ClientMemories memories={memories} clientName={client.name} />
 
-      <CampaignCreator action={action} suggestions={suggestions} />
+      <CampaignCreator clientId={clientId} action={action} suggestions={suggestions} />
     </div>
   );
 }
