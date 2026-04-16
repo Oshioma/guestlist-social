@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getReaperSettings, shouldRetirePattern } from "@/lib/app-settings";
+import { recordPatternLifecycleEvent } from "@/lib/pattern-feedback";
 
 export const dynamic = "force-dynamic";
 // Pattern feedback is small (one row per pattern slice). The whole sweep
@@ -152,7 +153,17 @@ async function handle(req: Request) {
         industry: c.industry,
         error: upErr.message,
       });
+      continue;
     }
+    await recordPatternLifecycleEvent(supabase, {
+      patternKey: c.pattern_key,
+      industry: c.industry,
+      eventType: "retired",
+      reason: c.reason,
+      actor: "reaper",
+      positiveAtEvent: c.positive,
+      negativeAtEvent: c.negative,
+    });
   }
 
   const retiredCount = candidates.length - failed.length;

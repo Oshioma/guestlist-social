@@ -78,3 +78,41 @@ export async function fetchAnnotatedPatternFeedback(
 
   return { rows, error: null };
 }
+
+// Append-only audit log for pattern lifecycle changes. Both the reaper
+// cron and the unretire route call this so the history of every state
+// change is reconstructible without scraping cron logs. Failures here
+// must never roll back the underlying state change — the audit row is
+// nice-to-have, the operator-visible flag is the source of truth.
+export type PatternLifecycleEvent = {
+  patternKey: string;
+  industry: string | null;
+  eventType: "retired" | "unretired";
+  reason: string | null;
+  actor: string;
+  positiveAtEvent?: number | null;
+  negativeAtEvent?: number | null;
+};
+
+export async function recordPatternLifecycleEvent(
+  supabase: SupabaseClient,
+  event: PatternLifecycleEvent
+): Promise<void> {
+  const { error } = await supabase.from("pattern_lifecycle_events").insert({
+    pattern_key: event.patternKey,
+    industry: event.industry ?? "",
+    event_type: event.eventType,
+    reason: event.reason,
+    actor: event.actor,
+    positive_at_event: event.positiveAtEvent ?? null,
+    negative_at_event: event.negativeAtEvent ?? null,
+  });
+  if (error) {
+    // Surface to the cron log without throwing — the caller has already
+    // mutated pattern_feedback successfully and we don't want a missing
+    // table or transient DB hiccup to fail the user-visible action.
+    console.error(
+      `[pattern-lifecycle] failed to record ${event.eventType} for ${event.patternKey}|${event.industry ?? ""}: ${error.message}`
+    );
+  }
+}

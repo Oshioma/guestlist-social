@@ -17,12 +17,13 @@
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { recordPatternLifecycleEvent } from "@/lib/pattern-feedback";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const { patternKey, industry } = await req.json();
+    const { patternKey, industry, actor, note } = await req.json();
 
     if (typeof patternKey !== "string" || patternKey.length === 0) {
       return NextResponse.json(
@@ -53,9 +54,13 @@ export async function POST(req: Request) {
     // Read first so we can return a meaningful response when the row
     // doesn't exist or is already active. The dashboard relies on these
     // states to decide whether to show "brought back" or "already active".
+    // Verdict counts are pulled here so the audit row can snapshot them
+    // alongside the unretire event without a second read.
     const { data: existing, error: readErr } = await supabase
       .from("pattern_feedback")
-      .select("pattern_key, industry, retired_at")
+      .select(
+        "pattern_key, industry, retired_at, positive_verdicts, negative_verdicts"
+      )
       .eq("pattern_key", patternKey)
       .eq("industry", industryKey)
       .maybeSingle();
@@ -97,6 +102,16 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    await recordPatternLifecycleEvent(supabase, {
+      patternKey,
+      industry: industryKey,
+      eventType: "unretired",
+      reason: typeof note === "string" && note.trim() ? note.trim() : null,
+      actor: typeof actor === "string" && actor.trim() ? actor.trim() : "operator",
+      positiveAtEvent: Number(existing.positive_verdicts ?? 0),
+      negativeAtEvent: Number(existing.negative_verdicts ?? 0),
+    });
 
     return NextResponse.json({
       ok: true,
