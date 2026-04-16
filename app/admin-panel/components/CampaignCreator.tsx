@@ -225,6 +225,50 @@ function Section({
                 {s.label}
               </div>
               <div style={{ fontSize: 11, color: "#71717a" }}>{s.evidence}</div>
+              {s.creative && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "flex-start",
+                    padding: "6px 8px",
+                    background: "#f8fafc",
+                    border: "1px solid #f1f5f9",
+                    borderRadius: 8,
+                  }}
+                >
+                  {s.creative.imageUrl && (
+                    <img
+                      src={s.creative.imageUrl}
+                      alt=""
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 6,
+                        objectFit: "cover",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                  <div style={{ fontSize: 11, color: "#52525b", lineHeight: 1.4, minWidth: 0 }}>
+                    {s.creative.headline && (
+                      <div style={{ fontWeight: 600 }}>{s.creative.headline}</div>
+                    )}
+                    {s.creative.body && (
+                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.creative.body}
+                      </div>
+                    )}
+                    {(s.creative.cta || s.creative.hookType || s.creative.formatStyle) && (
+                      <div style={{ color: "#94a3b8", marginTop: 2 }}>
+                        {[s.creative.cta, s.creative.hookType, s.creative.formatStyle]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   type="button"

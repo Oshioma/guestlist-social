@@ -125,6 +125,28 @@ function formatCommentTime(value: string) {
   });
 }
 
+function renderCommentText(text: string): React.ReactNode {
+  const parts = text.split(/(@\w[\w.-]*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("@") ? (
+      <span
+        key={i}
+        style={{
+          color: "#4338ca",
+          fontWeight: 600,
+          background: "#eef2ff",
+          padding: "0 3px",
+          borderRadius: 3,
+        }}
+      >
+        {part}
+      </span>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
 function prettyFileName(url: string): string {
   if (!url) return "";
   try {
@@ -204,6 +226,7 @@ export default function ProoferBoard({
   };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const [hideResolved, setHideResolved] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
     {}
   );
@@ -2649,6 +2672,20 @@ export default function ProoferBoard({
                           gap: 10,
                         }}
                       >
+                        {comments.length > 0 && comments.some((c) => c.resolved) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+                              <input
+                                type="checkbox"
+                                checked={hideResolved}
+                                onChange={(e) => setHideResolved(e.target.checked)}
+                                style={{ width: 14, height: 14 }}
+                              />
+                              Hide resolved
+                            </label>
+                          </div>
+                        )}
+
                         {comments.length === 0 ? (
                           <div style={{ fontSize: 12, color: "#71717a" }}>
                             No comments yet.
@@ -2661,7 +2698,7 @@ export default function ProoferBoard({
                               gap: 8,
                             }}
                           >
-                            {comments.map((comment) => (
+                            {comments.filter((c) => !hideResolved || !c.resolved).map((comment) => (
                               <div
                                 key={comment.id}
                                 style={{
@@ -2753,7 +2790,7 @@ export default function ProoferBoard({
                                     whiteSpace: "pre-wrap",
                                   }}
                                 >
-                                  {comment.comment}
+                                  {renderCommentText(comment.comment)}
                                 </div>
                               </div>
                             ))}

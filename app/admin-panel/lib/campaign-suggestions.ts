@@ -20,6 +20,14 @@ export type CampaignSuggestion = {
     audience?: string;
     budget?: number;
   };
+  creative?: {
+    imageUrl?: string;
+    headline?: string;
+    body?: string;
+    cta?: string;
+    hookType?: string;
+    formatStyle?: string;
+  } | null;
 };
 
 export type CampaignSuggestionBundle = {
@@ -89,7 +97,7 @@ export async function getCampaignSuggestions(
   const winnersPromise = supabase
     .from("ads")
     .select(
-      "id, name, objective, audience, budget, spend, ctr, performance_status, performance_score"
+      "id, name, objective, audience, budget, spend, ctr, performance_status, performance_score, creative_image_url, creative_headline, creative_body, creative_cta, hook_type, format_style"
     )
     .eq("client_id", clientId)
     .eq("performance_status", "winner")
@@ -204,6 +212,12 @@ export async function getCampaignSuggestions(
     spend: number | null;
     ctr: number | null;
     performance_score: number | null;
+    creative_image_url: string | null;
+    creative_headline: string | null;
+    creative_body: string | null;
+    creative_cta: string | null;
+    hook_type: string | null;
+    format_style: string | null;
   };
   const winnerRows = (winnersRes.data ?? []) as AdRow[];
   const winners: CampaignSuggestion[] = winnerRows.map((row) => {
@@ -215,7 +229,13 @@ export async function getCampaignSuggestions(
     if (row.performance_score != null) {
       evidenceParts.push(`score ${row.performance_score}`);
     }
+    if (row.hook_type) evidenceParts.push(row.hook_type);
+    if (row.format_style) evidenceParts.push(row.format_style);
     const cleanName = row.name ? row.name.trim() : "Previous winner";
+
+    const hasCreative =
+      row.creative_image_url || row.creative_headline || row.creative_body || row.creative_cta;
+
     return {
       id: `winner-${row.id}`,
       source: "winner" as const,
@@ -227,6 +247,16 @@ export async function getCampaignSuggestions(
         audience: row.audience ?? undefined,
         budget: row.budget != null ? Number(row.budget) : undefined,
       },
+      creative: hasCreative
+        ? {
+            imageUrl: row.creative_image_url ?? undefined,
+            headline: row.creative_headline ?? undefined,
+            body: row.creative_body ?? undefined,
+            cta: row.creative_cta ?? undefined,
+            hookType: row.hook_type ?? undefined,
+            formatStyle: row.format_style ?? undefined,
+          }
+        : null,
     };
   });
 
