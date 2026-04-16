@@ -2,6 +2,7 @@ import { getProoferPublishQueueData } from "../../lib/queries";
 import { createClient } from "../../../../lib/supabase/server";
 import { metaServiceClient } from "../../lib/meta-auth";
 import PublishQueueBoard from "./PublishQueueBoard";
+import TokenExpiryBanner from "../../components/TokenExpiryBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ export default async function ProoferPublishPage() {
   }
 
   return (
+    <>
+    <TokenExpiryBanner />
     <PublishQueueBoard
       readyPosts={readyPosts}
       queueItems={queueItems}
@@ -63,5 +66,6 @@ export default async function ProoferPublishPage() {
       clients={clients}
       connectedAccounts={connectedAccounts}
     />
+    </>
   );
 }

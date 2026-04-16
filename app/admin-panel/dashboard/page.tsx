@@ -11,6 +11,7 @@ import WhatsWorkingNow from "../components/WhatsWorkingNow";
 import DecisionAccuracy from "../components/DecisionAccuracy";
 import PatternFeedbackPanel from "../components/PatternFeedbackPanel";
 import EngineActivityStrip from "../components/EngineActivityStrip";
+import TokenExpiryBanner from "../components/TokenExpiryBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -169,6 +170,8 @@ export default async function DashboardPage() {
             loop and answers in one sentence. Lives at the top because
             "is it moving?" is a strictly smaller question than "is it
             moving in the right direction?" */}
+        <TokenExpiryBanner />
+
         <EngineActivityStrip />
 
         {/* Cross-client intelligence: what's actually working across the
