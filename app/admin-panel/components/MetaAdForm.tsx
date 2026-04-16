@@ -6,6 +6,8 @@ import CreativeLibraryPicker from "./CreativeLibraryPicker";
 
 type Props = {
   campaignName: string;
+  clientId?: string;
+  objective?: string;
   existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   onSubmit: (data: {
     name: string;
@@ -29,7 +31,7 @@ const CTA_OPTIONS = [
   { value: "get_quote", label: "Get Quote" },
 ];
 
-export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }: Props) {
+export default function MetaAdForm({ campaignName, clientId, objective, existingCreatives, onSubmit }: Props) {
   const [name, setName] = useState(`${campaignName} — ad 1`);
   const [imageUrl, setImageUrl] = useState("");
   const [headline, setHeadline] = useState("");
@@ -39,6 +41,8 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiReasoning, setAiReasoning] = useState<string | null>(null);
 
   const ready =
     name.trim() &&
@@ -133,6 +137,86 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
             }}
           >
             {error}
+          </div>
+        )}
+
+        {clientId && (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "#eef2ff",
+              border: "1px solid #e0e7ff",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={aiLoading}
+                onClick={async () => {
+                  setAiLoading(true);
+                  setAiReasoning(null);
+                  try {
+                    const res = await fetch("/api/ai-write-ad-copy", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        clientId,
+                        objective: objective ?? "engagement",
+                        campaignName,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                      setHeadline(data.headline);
+                      setBody(data.body);
+                      if (data.cta) setCtaType(data.cta);
+                      setAiReasoning(data.reasoning);
+                    } else {
+                      setError(data.error);
+                    }
+                  } catch {
+                    setError("Network error");
+                  } finally {
+                    setAiLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: aiLoading
+                    ? "#c7d2fe"
+                    : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: aiLoading ? "wait" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                {aiLoading ? (
+                  "AI writing..."
+                ) : (
+                  <>
+                    <span style={{ fontSize: 14 }}>&#9733;</span> AI Write Copy
+                  </>
+                )}
+              </button>
+              <span style={{ fontSize: 11, color: "#6b7280" }}>
+                Generates headline, body text, and picks the best CTA
+              </span>
+            </div>
+            {aiReasoning && (
+              <div style={{ fontSize: 11, color: "#4338ca", lineHeight: 1.4, fontStyle: "italic" }}>
+                {aiReasoning}
+              </div>
+            )}
           </div>
         )}
 
