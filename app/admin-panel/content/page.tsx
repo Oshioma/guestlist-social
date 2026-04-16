@@ -127,9 +127,9 @@ export default async function ContentDashboardPage() {
           title="Content Ideas Overview"
           action={
             <div style={{ display: "flex", gap: 8 }}>
-              <Link href="/app/video-ideas" style={actionLinkStyle("#dcfce7", "#166534")}>+ Video</Link>
-              <Link href="/app/carousel-ideas" style={actionLinkStyle("#dbeafe", "#1e40af")}>+ Carousel</Link>
-              <Link href="/app/story-ideas" style={actionLinkStyle("#fef9c3", "#854d0e")}>+ Story</Link>
+              <Link href="/app/ideas" style={actionLinkStyle("#dcfce7", "#166534")}>+ Video</Link>
+              <Link href="/app/ideas" style={actionLinkStyle("#dbeafe", "#1e40af")}>+ Carousel</Link>
+              <Link href="/app/ideas" style={actionLinkStyle("#fef9c3", "#854d0e")}>+ Story</Link>
             </div>
           }
         >
@@ -145,9 +145,9 @@ export default async function ContentDashboardPage() {
               <span style={{ ...tagDot, background: "#854d0e" }} /> Story
             </span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <Link href="/app/video-ideas" style={{ fontSize: 11, color: "#166534", textDecoration: "underline" }}>Manage Video</Link>
-              <Link href="/app/carousel-ideas" style={{ fontSize: 11, color: "#1e40af", textDecoration: "underline" }}>Manage Carousel</Link>
-              <Link href="/app/story-ideas" style={{ fontSize: 11, color: "#854d0e", textDecoration: "underline" }}>Manage Story</Link>
+              <Link href="/app/ideas" style={{ fontSize: 11, color: "#166534", textDecoration: "underline" }}>Manage Video</Link>
+              <Link href="/app/ideas" style={{ fontSize: 11, color: "#1e40af", textDecoration: "underline" }}>Manage Carousel</Link>
+              <Link href="/app/ideas" style={{ fontSize: 11, color: "#854d0e", textDecoration: "underline" }}>Manage Story</Link>
             </div>
           </div>
 

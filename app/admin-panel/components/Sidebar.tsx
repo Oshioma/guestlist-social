@@ -3,35 +3,61 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const navItems = [
-  { label: "Dashboard", href: "/app/dashboard" },
-  { label: "Clients", href: "/app/clients" },
-  { label: "Creative", href: "/app/creative" },
-  { label: "Playbook", href: "/app/whats-working" },
-  { label: "Content", href: "/app/content" },
-  { label: "Video Ideas", href: "/app/video-ideas" },
-  { label: "Carousel Ideas", href: "/app/carousel-ideas" },
-  { label: "Story Ideas", href: "/app/story-ideas" },
-  { label: "Proofer", href: "/app/proofer" },
-  { label: "Tasks", href: "/app/tasks" },
-  { label: "Launch", href: "/app/launch" },
-  { label: "Meta queue", href: "/app/meta-queue" },
-  { label: "Reports", href: "/app/reports" },
-  { label: "Memory", href: "/app/memory" },
-  { label: "Settings", href: "/app/settings" },
-  { label: "Guide", href: "/app/guide" },
-  { label: "About", href: "/app/about" },
+type NavItem = { label: string; href: string };
+type NavGroup = { heading: string; items: NavItem[] };
+
+const navGroups: NavGroup[] = [
+  {
+    heading: "",
+    items: [
+      { label: "Dashboard", href: "/app/dashboard" },
+      { label: "Clients", href: "/app/clients" },
+    ],
+  },
+  {
+    heading: "Engine",
+    items: [
+      { label: "Meta queue", href: "/app/meta-queue" },
+      { label: "Playbook", href: "/app/whats-working" },
+      { label: "Creative library", href: "/app/creative" },
+      { label: "Reports", href: "/app/reports" },
+      { label: "Memory", href: "/app/memory" },
+    ],
+  },
+  {
+    heading: "Publisher",
+    items: [
+      { label: "Proofer", href: "/app/proofer" },
+      { label: "Publish queue", href: "/app/proofer/publish" },
+      { label: "Ideas", href: "/app/ideas" },
+      { label: "Content", href: "/app/content" },
+    ],
+  },
+  {
+    heading: "Campaigns",
+    items: [
+      { label: "Quick launch", href: "/app/launch" },
+    ],
+  },
 ];
 
-// Anything in this list points outside /app/* — typically into another shell
-// (the portal lives at /portal). They render below the main nav with a
-// divider so they're visually separated from the operator's day-to-day items.
-const externalNavItems = [
+const utilityItems: NavItem[] = [
+  { label: "Tasks", href: "/app/tasks" },
+  { label: "Settings", href: "/app/settings" },
+  { label: "Guide", href: "/app/guide" },
+];
+
+const externalItems: NavItem[] = [
   { label: "Client view", href: "/portal" },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+
+  function isActive(href: string): boolean {
+    if (href === "/app/dashboard") return pathname === "/app/dashboard";
+    return pathname === href || pathname.startsWith(href + "/");
+  }
 
   return (
     <aside className="app-sidebar">
@@ -60,64 +86,37 @@ export default function Sidebar() {
       </div>
 
       <nav className="app-sidebar-nav">
-        {navItems.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/app/dashboard" &&
-              pathname.startsWith(item.href + "/")) ||
-            (item.href === "/app/dashboard" &&
-              pathname === "/app/dashboard");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: "block",
-                padding: "8px 12px",
-                borderRadius: 6,
-                fontSize: 14,
-                color: active ? "#fff" : "#a1a1aa",
-                background: active ? "rgba(255,255,255,0.1)" : "transparent",
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+        {navGroups.map((group, gi) => (
+          <div key={gi}>
+            {group.heading && (
+              <div style={groupHeadingStyle}>{group.heading}</div>
+            )}
+            {group.items.map((item) => (
+              <NavLink
+                key={item.href}
+                item={item}
+                active={isActive(item.href)}
+              />
+            ))}
+          </div>
+        ))}
 
-        {/* External shells — divider, then a labelled section. */}
-        <div
-          style={{
-            margin: "12px 8px 6px",
-            paddingTop: 12,
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            fontSize: 10,
-            color: "#71717a",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
-        >
-          Other views
-        </div>
-        {externalNavItems.map((item) => (
-          <Link
+        <div style={groupHeadingStyle}>Utility</div>
+        {utilityItems.map((item) => (
+          <NavLink
             key={item.href}
-            href={item.href}
-            style={{
-              display: "block",
-              padding: "8px 12px",
-              borderRadius: 6,
-              fontSize: 14,
-              color: "#a1a1aa",
-              background: "transparent",
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {item.label}
-          </Link>
+            item={item}
+            active={isActive(item.href)}
+          />
+        ))}
+
+        <div style={groupHeadingStyle}>Other views</div>
+        {externalItems.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+          />
         ))}
       </nav>
 
@@ -132,3 +131,34 @@ export default function Sidebar() {
     </aside>
   );
 }
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      style={{
+        display: "block",
+        padding: "8px 12px",
+        borderRadius: 6,
+        fontSize: 14,
+        color: active ? "#fff" : "#a1a1aa",
+        background: active ? "rgba(255,255,255,0.1)" : "transparent",
+        textDecoration: "none",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+const groupHeadingStyle: React.CSSProperties = {
+  margin: "14px 8px 4px",
+  paddingTop: 10,
+  borderTop: "1px solid rgba(255,255,255,0.08)",
+  fontSize: 10,
+  color: "#71717a",
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  fontWeight: 600,
+};
