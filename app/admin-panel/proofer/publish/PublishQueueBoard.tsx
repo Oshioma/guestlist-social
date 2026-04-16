@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import SectionCard from "../../components/SectionCard";
+import CarouselPreview from "../../components/CarouselPreview";
 import type {
   ProoferPost,
   ProoferPublishQueueItem,
@@ -37,12 +38,9 @@ type QueueItem = ProoferPublishQueueItem & {
   postDate: string;
   caption: string;
   imageUrl: string;
+  mediaUrls: string[];
   postStatus: ProoferStatus;
 };
-
-function isVideoUrl(url: string): boolean {
-  return /\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url);
-}
 
 function formatDate(value: string) {
   if (!value) return "";
@@ -626,42 +624,15 @@ export default function PublishQueueBoard({
                   gap: 14,
                 }}
               >
-                <div
-                  style={{
-                    width: "100%",
-                    aspectRatio: "1 / 1",
-                    borderRadius: 10,
-                    overflow: "hidden",
-                    background: "#f4f4f5",
-                    border: "1px solid #e4e4e7",
-                  }}
-                >
-                  {post.imageUrl ? (
-                    isVideoUrl(post.imageUrl) ? (
-                      <video
-                        src={post.imageUrl}
-                        controls
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    ) : (
-                      <img
-                        src={post.imageUrl}
-                        alt={post.clientName}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    )
-                  ) : null}
-                </div>
+                <CarouselPreview
+                  urls={
+                    post.mediaUrls.length > 0
+                      ? post.mediaUrls
+                      : post.imageUrl
+                      ? [post.imageUrl]
+                      : []
+                  }
+                />
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <div

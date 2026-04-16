@@ -711,6 +711,7 @@ export async function getProoferPublishQueueData(): Promise<{
       postDate: string;
       caption: string;
       imageUrl: string;
+      mediaUrls: string[];
       postStatus: ProoferStatus;
     }
   >;
@@ -825,6 +826,7 @@ export async function getProoferPublishQueueData(): Promise<{
         postDate: post.postDate,
         caption: post.caption,
         imageUrl: post.imageUrl,
+        mediaUrls: post.mediaUrls,
         postStatus: post.status,
       };
     })
@@ -836,6 +838,7 @@ export async function getProoferPublishQueueData(): Promise<{
         postDate: string;
         caption: string;
         imageUrl: string;
+        mediaUrls: string[];
         postStatus: ProoferStatus;
       } => Boolean(item)
     );

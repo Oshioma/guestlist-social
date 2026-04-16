@@ -58,6 +58,10 @@ export default async function ClientAdsPage({
   const { clientId } = await params;
   const supabase = await createClient();
 
+  const { getEngineThresholds } = await import("@/lib/app-settings");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const engineThresholds = await getEngineThresholds(createAdminClient());
+
   // Window the ads list to the last 6 months. Old ads were dragging the
   // page down with rows whose Meta CDN creative URLs had long since
   // expired (rendering as "No preview"), and they pollute the totals
@@ -349,13 +353,13 @@ export default async function ClientAdsPage({
       _ctr: ctr,
       _cpc: cpc,
       _conversions: Number(ad.conversions ?? 0),
-      _perfStatus: getAppPerformanceStatus(forScoring),
-      _perfScore: getPerformanceScore(forScoring),
-      _perfReason: explainPerformanceStatus(forScoring),
+      _perfStatus: getAppPerformanceStatus(forScoring, engineThresholds),
+      _perfScore: getPerformanceScore(forScoring, engineThresholds),
+      _perfReason: explainPerformanceStatus(forScoring, engineThresholds),
       _campaignName: (ad.campaigns as any)?.name ?? "No campaign",
       _suggestion: getActionSuggestion({
-        performance_status: getAppPerformanceStatus(forScoring),
-        performance_reason: explainPerformanceStatus(forScoring),
+        performance_status: getAppPerformanceStatus(forScoring, engineThresholds),
+        performance_reason: explainPerformanceStatus(forScoring, engineThresholds),
       }),
     };
   });

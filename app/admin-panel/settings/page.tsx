@@ -5,11 +5,17 @@ import { fetchAnnotatedPatternFeedback } from "@/lib/pattern-feedback";
 import SectionCard from "../components/SectionCard";
 import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
+import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
   getReaperSettings,
   REAPER_BOUNDS,
   DEFAULT_REAPER_SETTINGS,
+  getEngineThresholds,
+  setEngineThresholds,
+  DEFAULT_ENGINE_THRESHOLDS,
+  ENGINE_BOUNDS,
+  type EngineThresholds,
 } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
@@ -25,16 +31,41 @@ export default async function SettingsPage() {
 
   const clientList = clients ?? [];
 
-  // Read reaper settings via the service-role client so we always see what
-  // was actually saved, regardless of whether RLS is on for app_settings.
-  // The page is admin-only at the route level so this isn't a privilege leak.
   const adminClient = createAdminClient();
-  const reaperSettings = await getReaperSettings(adminClient);
+
+  const [reaperSettings, engineSettings, { data: metaAccounts }] =
+    await Promise.all([
+      getReaperSettings(adminClient),
+      getEngineThresholds(adminClient),
+      adminClient
+        .from("connected_meta_accounts")
+        .select("id, client_id, platform, account_name, token_expires_at, updated_at")
+        .order("updated_at", { ascending: false }),
+    ]);
   const reaperPercent = Math.round(reaperSettings.negRatio * 100);
   const reaperIsDefault =
     reaperSettings.minDecisiveVerdicts ===
       DEFAULT_REAPER_SETTINGS.minDecisiveVerdicts &&
     reaperSettings.negRatio === DEFAULT_REAPER_SETTINGS.negRatio;
+
+  const engineIsDefault = (Object.keys(DEFAULT_ENGINE_THRESHOLDS) as (keyof EngineThresholds)[]).every(
+    (k) => engineSettings[k] === DEFAULT_ENGINE_THRESHOLDS[k]
+  );
+
+  const accounts = (metaAccounts ?? []) as {
+    id: string;
+    client_id: number;
+    platform: string;
+    account_name: string | null;
+    token_expires_at: string | null;
+    updated_at: string | null;
+  }[];
+
+  const hasMetaToken = !!process.env.META_ACCESS_TOKEN;
+  const hasMetaAccount = !!process.env.META_AD_ACCOUNT_ID;
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
+  const hasSmtp = !!process.env.SMTP_HOST;
+  const hasMetaSocialApp = !!process.env.META_SOCIAL_APP_ID;
 
   // Narrow the annotated feed to the active slice with at least one verdict —
   // the reaper only sweeps rows it's seen measured outcomes on.
@@ -78,6 +109,110 @@ export default async function SettingsPage() {
             </div>
           </div>
         </div>
+      </SectionCard>
+
+      <SectionCard title="API Keys">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {[
+            { label: "Meta Access Token", ok: hasMetaToken, env: "META_ACCESS_TOKEN" },
+            { label: "Meta Ad Account ID", ok: hasMetaAccount, env: "META_AD_ACCOUNT_ID" },
+            { label: "Meta Social App ID", ok: hasMetaSocialApp, env: "META_SOCIAL_APP_ID" },
+            { label: "Anthropic API Key", ok: hasAnthropicKey, env: "ANTHROPIC_API_KEY" },
+            { label: "SMTP (email)", ok: hasSmtp, env: "SMTP_HOST" },
+          ].map((item) => (
+            <div
+              key={item.env}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: item.ok ? "#ecfdf5" : "#fef2f2",
+                border: `1px solid ${item.ok ? "#bbf7d0" : "#fecaca"}`,
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: item.ok ? "#22c55e" : "#ef4444",
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#18181b" }}>
+                {item.label}
+              </span>
+              <span style={{ fontSize: 11, color: "#71717a", marginLeft: "auto" }}>
+                {item.ok ? "Configured" : `Missing ${item.env}`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {accounts.length > 0 && (
+        <SectionCard title={`Connected Meta Accounts (${accounts.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {accounts.map((acc) => {
+              const clientName = clientList.find((c) => String(c.id) === String(acc.client_id))?.name ?? `Client ${acc.client_id}`;
+              const expires = acc.token_expires_at ? new Date(acc.token_expires_at) : null;
+              const isExpired = expires ? expires.getTime() < Date.now() : false;
+              const expiresSoon = expires ? expires.getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000 : false;
+
+              return (
+                <div
+                  key={acc.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #e4e4e7",
+                    background: isExpired ? "#fef2f2" : expiresSoon ? "#fffbeb" : "#fff",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 150 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>
+                      {acc.account_name ?? acc.platform}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
+                      {clientName} · {acc.platform}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: isExpired ? "#991b1b" : expiresSoon ? "#92400e" : "#71717a" }}>
+                    {isExpired
+                      ? "Token expired"
+                      : expires
+                      ? `Expires ${expires.toLocaleDateString()}`
+                      : "No expiry set"}
+                  </div>
+                  {acc.updated_at && (
+                    <div style={{ fontSize: 11, color: "#a1a1aa" }}>
+                      Updated {new Date(acc.updated_at).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+
+      <SectionCard title="Engine Scoring Thresholds">
+        <EngineThresholdsForm
+          initial={engineSettings}
+          bounds={ENGINE_BOUNDS}
+          isDefault={engineIsDefault}
+          onSave={async (values) => {
+            "use server";
+            const admin = createAdminClient();
+            await setEngineThresholds(admin, values);
+          }}
+        />
       </SectionCard>
 
       <SectionCard title="Meta Ads Sync">

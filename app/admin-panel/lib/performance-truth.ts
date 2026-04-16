@@ -1,3 +1,8 @@
+import {
+  DEFAULT_ENGINE_THRESHOLDS,
+  type EngineThresholds,
+} from "../../../lib/app-settings";
+
 export type AppPerformanceStatus = "winner" | "losing" | "testing" | "paused";
 
 type AdForScoring = {
@@ -12,15 +17,10 @@ type AdForScoring = {
   cost_per_result?: number | null;
 };
 
-const MIN_SPEND_TO_JUDGE = 10;
-const MIN_IMPRESSIONS_TO_JUDGE = 1000;
-const GOOD_CTR = 2.0;
-const BAD_CTR = 1.0;
-const GOOD_CPC = 1.5;
-const BAD_CPC = 3.0;
-const MAX_COST_PER_RESULT = 8;
-
-export function getPerformanceScore(ad: AdForScoring): number {
+export function getPerformanceScore(
+  ad: AdForScoring,
+  t: EngineThresholds = DEFAULT_ENGINE_THRESHOLDS
+): number {
   const spend = Number(ad.spend ?? 0);
   const ctr = Number(ad.ctr ?? 0);
   const cpc = Number(ad.cpc ?? 0);
@@ -30,24 +30,27 @@ export function getPerformanceScore(ad: AdForScoring): number {
 
   let score = 0;
 
-  if (ctr >= GOOD_CTR) score += 2;
-  if (ctr > 0 && ctr < BAD_CTR) score -= 2;
+  if (ctr >= t.goodCtr) score += 2;
+  if (ctr > 0 && ctr < t.badCtr) score -= 2;
 
   if (conversions >= 1) score += 3;
-  if (spend >= MIN_SPEND_TO_JUDGE && conversions === 0) score -= 2;
+  if (spend >= t.minSpendToJudge && conversions === 0) score -= 2;
 
-  if (cpc > 0 && cpc <= GOOD_CPC) score += 2;
-  if (cpc >= BAD_CPC) score -= 2;
+  if (cpc > 0 && cpc <= t.goodCpc) score += 2;
+  if (cpc >= t.badCpc) score -= 2;
 
-  if (costPerResult > 0 && costPerResult <= MAX_COST_PER_RESULT) score += 2;
-  if (costPerResult > MAX_COST_PER_RESULT) score -= 2;
+  if (costPerResult > 0 && costPerResult <= t.maxCostPerResult) score += 2;
+  if (costPerResult > t.maxCostPerResult) score -= 2;
 
-  if (impressions >= MIN_IMPRESSIONS_TO_JUDGE) score += 1;
+  if (impressions >= t.minImpressionsToJudge) score += 1;
 
   return score;
 }
 
-export function getAppPerformanceStatus(ad: AdForScoring): AppPerformanceStatus {
+export function getAppPerformanceStatus(
+  ad: AdForScoring,
+  t: EngineThresholds = DEFAULT_ENGINE_THRESHOLDS
+): AppPerformanceStatus {
   const metaStatus = String(ad.meta_status ?? ad.status ?? "").toLowerCase();
   const spend = Number(ad.spend ?? 0);
   const impressions = Number(ad.impressions ?? 0);
@@ -55,19 +58,22 @@ export function getAppPerformanceStatus(ad: AdForScoring): AppPerformanceStatus 
   if (metaStatus.includes("paused")) return "paused";
 
   const hasEnoughData =
-    spend >= MIN_SPEND_TO_JUDGE || impressions >= MIN_IMPRESSIONS_TO_JUDGE;
+    spend >= t.minSpendToJudge || impressions >= t.minImpressionsToJudge;
 
   if (!hasEnoughData) return "testing";
 
-  const score = getPerformanceScore(ad);
+  const score = getPerformanceScore(ad, t);
 
   if (score >= 3) return "winner";
   if (score <= -2) return "losing";
   return "testing";
 }
 
-export function explainPerformanceStatus(ad: AdForScoring): string {
-  const status = getAppPerformanceStatus(ad);
+export function explainPerformanceStatus(
+  ad: AdForScoring,
+  t: EngineThresholds = DEFAULT_ENGINE_THRESHOLDS
+): string {
+  const status = getAppPerformanceStatus(ad, t);
   const spend = Number(ad.spend ?? 0);
   const ctr = Number(ad.ctr ?? 0);
   const conversions = Number(ad.conversions ?? 0);
@@ -75,18 +81,18 @@ export function explainPerformanceStatus(ad: AdForScoring): string {
 
   if (status === "paused") return "Paused in Meta.";
   if (status === "testing") {
-    if (spend < MIN_SPEND_TO_JUDGE) return "Still gathering enough spend to judge.";
+    if (spend < t.minSpendToJudge) return "Still gathering enough spend to judge.";
     return "Mixed signals. Keep testing.";
   }
   if (status === "winner") {
     if (conversions > 0) return "Strong enough performance with conversions.";
-    if (ctr >= GOOD_CTR && cpc <= GOOD_CPC) return "Strong CTR with efficient clicks.";
+    if (ctr >= t.goodCtr && cpc <= t.goodCpc) return "Strong CTR with efficient clicks.";
     return "Performance is clearly above threshold.";
   }
-  if (conversions === 0 && spend >= MIN_SPEND_TO_JUDGE) {
+  if (conversions === 0 && spend >= t.minSpendToJudge) {
     return "Spent enough to judge, but no conversions yet.";
   }
-  if (ctr < BAD_CTR) return "Low CTR after meaningful delivery.";
-  if (cpc >= BAD_CPC) return "Clicks are too expensive.";
+  if (ctr < t.badCtr) return "Low CTR after meaningful delivery.";
+  if (cpc >= t.badCpc) return "Clicks are too expensive.";
   return "Performance is below threshold.";
 }

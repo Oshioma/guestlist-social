@@ -99,6 +99,90 @@ export async function setReaperSettings(
   if (error) throw new Error(`save reaper settings: ${error.message}`);
 }
 
+// ── Engine scoring thresholds ────────────────────────────────────────────
+
+export type EngineThresholds = {
+  goodCtr: number;
+  badCtr: number;
+  goodCpc: number;
+  badCpc: number;
+  maxCostPerResult: number;
+  minSpendToJudge: number;
+  minImpressionsToJudge: number;
+};
+
+export const DEFAULT_ENGINE_THRESHOLDS: EngineThresholds = {
+  goodCtr: 2.0,
+  badCtr: 1.0,
+  goodCpc: 1.5,
+  badCpc: 3.0,
+  maxCostPerResult: 8,
+  minSpendToJudge: 10,
+  minImpressionsToJudge: 1000,
+};
+
+export const ENGINE_BOUNDS = {
+  goodCtr: { min: 0.5, max: 10 },
+  badCtr: { min: 0.1, max: 5 },
+  goodCpc: { min: 0.1, max: 10 },
+  badCpc: { min: 0.5, max: 20 },
+  maxCostPerResult: { min: 1, max: 50 },
+  minSpendToJudge: { min: 1, max: 100 },
+  minImpressionsToJudge: { min: 100, max: 10000 },
+} as const;
+
+const ENGINE_KEY = "engine_thresholds";
+
+export async function getEngineThresholds(
+  supabase: SupabaseClient
+): Promise<EngineThresholds> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", ENGINE_KEY)
+    .maybeSingle<{ value: Record<string, unknown> }>();
+
+  if (error || !data?.value) return DEFAULT_ENGINE_THRESHOLDS;
+
+  const raw = data.value;
+  const d = DEFAULT_ENGINE_THRESHOLDS;
+  const b = ENGINE_BOUNDS;
+
+  function num(key: keyof EngineThresholds): number {
+    const v = Number(raw[key]);
+    return Number.isFinite(v) &&
+      v >= b[key].min &&
+      v <= b[key].max
+      ? v
+      : d[key];
+  }
+
+  return {
+    goodCtr: num("goodCtr"),
+    badCtr: num("badCtr"),
+    goodCpc: num("goodCpc"),
+    badCpc: num("badCpc"),
+    maxCostPerResult: num("maxCostPerResult"),
+    minSpendToJudge: num("minSpendToJudge"),
+    minImpressionsToJudge: num("minImpressionsToJudge"),
+  };
+}
+
+export async function setEngineThresholds(
+  supabase: SupabaseClient,
+  next: EngineThresholds
+): Promise<void> {
+  const { error } = await supabase.from("app_settings").upsert(
+    {
+      key: ENGINE_KEY,
+      value: next,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "key" }
+  );
+  if (error) throw new Error(`save engine thresholds: ${error.message}`);
+}
+
 // Shared predicate so the cron sweep and the settings-page dry-run preview
 // can never drift on what "failing hard enough to retire" means.
 export function shouldRetirePattern(
