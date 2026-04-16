@@ -1,0 +1,73 @@
+# CI smoke test for the admin app.
+#
+# Runs on every push and pull request. Two jobs:
+#
+#   check  — always runs. Installs deps, runs the TypeScript compiler in
+#            no-emit mode, then does a full Next.js build with placeholder
+#            env vars. Catches the kind of breakage that simplify-style
+#            review can miss: a server component that imports a now-deleted
+#            helper, a route that depends on a module that doesn't exist on
+#            disk, a typo in a JSX attribute that only surfaces at build.
+#
+#   schema — opt-in. Runs the migrations:check probe against the live DB
+#            but only when the SUPABASE_URL / SUPABASE_KEY repository
+#            secrets are set. Skips silently otherwise so forks and feature
+#            branches without secrets don't get a red X they can't fix.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+        env:
+          # Placeholders so module-level env reads (if any) don't trip the
+          # build. Runtime calls to Supabase / Anthropic don't fire during
+          # `next build` because every dynamic page is force-dynamic.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          ANTHROPIC_API_KEY: placeholder
+
+  schema:
+    name: DB schema drift check
+    runs-on: ubuntu-latest
+    needs: check
+    # Only attempt the live DB probe when the repository has secrets set.
+    # Skipped on forks; can be enabled per-environment by setting the
+    # secrets at the repo or environment level.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Run migrations:check
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        # If the secrets weren't actually configured, the script exits 2
+        # and we treat that as "skipped" rather than "failed" — there's no
+        # signal value in red-X-ing a repo that hasn't been wired up yet.
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Supabase secrets not configured — skipping schema check."
+            exit 0
+          fi
+          node scripts/check-schema.mjs
