@@ -10,6 +10,7 @@ import type {
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
+  TaskUserRole,
 } from "../lib/types";
 import { TASKS_CONFIG } from "../lib/tasks-config";
 import {
@@ -95,17 +96,31 @@ function categoryMeta(category: TaskCategory) {
 export default function TasksBoard({
   initialTasks,
   currentUserEmail,
+  currentUserRole,
   knownUsers,
   initialNotifications,
 }: {
   initialTasks: Task[];
   currentUserEmail: string;
+  currentUserRole: TaskUserRole;
   knownUsers: string[];
   initialNotifications: TaskNotification[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [tasks] = useState<Task[]>(initialTasks);
   const [notifications] = useState<TaskNotification[]>(initialNotifications);
+
+  const canCreateTasks =
+    currentUserRole === "admin" ||
+    currentUserRole === "manager" ||
+    currentUserRole === "member";
+
+  const canComment =
+    currentUserRole === "admin" ||
+    currentUserRole === "manager" ||
+    currentUserRole === "member";
+
+  const canSeeNotifications = TASKS_CONFIG.allowNotifications;
 
   const [filters, setFilters] = useState<TaskFilters>({
     q: "",
@@ -150,7 +165,11 @@ export default function TasksBoard({
         return false;
       }
 
-      if (filters.status && filters.status !== "all" && task.status !== filters.status) {
+      if (
+        filters.status &&
+        filters.status !== "all" &&
+        task.status !== filters.status
+      ) {
         return false;
       }
 
@@ -206,7 +225,9 @@ export default function TasksBoard({
   }, [filteredTasks, currentUserEmail]);
 
   const assigneeOptions = useMemo(() => {
-    return Array.from(new Set([currentUserEmail, ...knownUsers].filter(Boolean)));
+    return Array.from(
+      new Set([currentUserEmail, ...knownUsers].filter(Boolean))
+    );
   }, [currentUserEmail, knownUsers]);
 
   function handleCreateTask(parentTaskId?: string | null) {
@@ -360,7 +381,12 @@ export default function TasksBoard({
                 {TASKS_CONFIG.allowPriority && (
                   <>
                     <span>•</span>
-                    <span style={{ color: priorityColor(task.priority), fontWeight: 700 }}>
+                    <span
+                      style={{
+                        color: priorityColor(task.priority),
+                        fontWeight: 700,
+                      }}
+                    >
                       {task.priority}
                     </span>
                   </>
@@ -378,7 +404,9 @@ export default function TasksBoard({
                 {overdue && (
                   <>
                     <span>•</span>
-                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>Overdue</span>
+                    <span style={{ color: "#b91c1c", fontWeight: 700 }}>
+                      Overdue
+                    </span>
                   </>
                 )}
               </div>
@@ -797,27 +825,35 @@ export default function TasksBoard({
           {TASKS_CONFIG.allowComments && (
             <SectionCard title={`Comments (${task.comments?.length ?? 0})`}>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add comment"
-                  style={{
-                    ...inputStyle,
-                    minHeight: 90,
-                    resize: "vertical",
-                  }}
-                />
+                {canComment ? (
+                  <>
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Add comment"
+                      style={{
+                        ...inputStyle,
+                        minHeight: 90,
+                        resize: "vertical",
+                      }}
+                    />
 
-                <div>
-                  <button
-                    type="button"
-                    onClick={handleAddComment}
-                    disabled={isPending || !comment.trim()}
-                    style={primaryButton}
-                  >
-                    Add comment
-                  </button>
-                </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleAddComment}
+                        disabled={isPending || !comment.trim()}
+                        style={primaryButton}
+                      >
+                        Add comment
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: "#71717a" }}>
+                    You have view-only access, so comments are disabled.
+                  </div>
+                )}
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {(task.comments ?? []).map((c) => (
@@ -912,12 +948,12 @@ export default function TasksBoard({
               maxWidth: 760,
             }}
           >
-            Shared task engine with config-driven categories, labels, and route
-            refresh behavior.
+            Shared task engine with config-driven categories, labels, route
+            refresh behavior, and role-aware UI.
           </p>
         </div>
 
-        {TASKS_CONFIG.allowNotifications && (
+        {canSeeNotifications && (
           <SectionCard title={`Notifications (${notifications.length})`}>
             {notifications.length === 0 ? (
               <div style={{ fontSize: 13, color: "#71717a" }}>
@@ -1103,155 +1139,161 @@ export default function TasksBoard({
       </SectionCard>
 
       <SectionCard title="New task">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input
-            value={newTask.title}
-            onChange={(e) =>
-              setNewTask((prev) => ({ ...prev, title: e.target.value }))
-            }
-            placeholder="Task title"
-            style={inputStyle}
-          />
-
-          <textarea
-            value={newTask.description}
-            onChange={(e) =>
-              setNewTask((prev) => ({ ...prev, description: e.target.value }))
-            }
-            placeholder="Description"
-            style={{
-              ...inputStyle,
-              minHeight: 90,
-              resize: "vertical",
-            }}
-          />
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 10,
-            }}
-          >
-            <select
-              value={newTask.category}
-              onChange={(e) =>
-                setNewTask((prev) => ({
-                  ...prev,
-                  category: e.target.value as TaskCategory,
-                }))
-              }
-              style={inputStyle}
-            >
-              {TASKS_CONFIG.categories.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={newTask.assignee}
-              onChange={(e) =>
-                setNewTask((prev) => ({ ...prev, assignee: e.target.value }))
-              }
-              style={inputStyle}
-            >
-              <option value="">Unassigned</option>
-              {assigneeOptions.map((user) => (
-                <option key={user} value={user}>
-                  {user}
-                </option>
-              ))}
-            </select>
-
+        {canCreateTasks ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <input
-              type="date"
-              value={newTask.startDate}
+              value={newTask.title}
               onChange={(e) =>
-                setNewTask((prev) => ({ ...prev, startDate: e.target.value }))
+                setNewTask((prev) => ({ ...prev, title: e.target.value }))
               }
+              placeholder="Task title"
               style={inputStyle}
             />
 
-            <input
-              type="date"
-              value={newTask.dueDate}
+            <textarea
+              value={newTask.description}
               onChange={(e) =>
-                setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))
+                setNewTask((prev) => ({ ...prev, description: e.target.value }))
               }
-              style={inputStyle}
-            />
-
-            {TASKS_CONFIG.allowPriority && (
-              <select
-                value={newTask.priority}
-                onChange={(e) =>
-                  setNewTask((prev) => ({
-                    ...prev,
-                    priority: e.target.value as TaskPriority,
-                  }))
-                }
-                style={inputStyle}
-              >
-                {TASKS_CONFIG.priorities.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {TASKS_CONFIG.allowRecurrence && (
-              <select
-                value={newTask.recurrence}
-                onChange={(e) =>
-                  setNewTask((prev) => ({
-                    ...prev,
-                    recurrence: e.target.value as TaskRecurrence,
-                  }))
-                }
-                style={inputStyle}
-              >
-                {TASKS_CONFIG.recurrences.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {TASKS_CONFIG.allowRecurrence && newTask.recurrence !== "none" && (
-              <input
-                type="number"
-                min={1}
-                value={newTask.recurrenceInterval}
-                onChange={(e) =>
-                  setNewTask((prev) => ({
-                    ...prev,
-                    recurrenceInterval: Number(e.target.value || 1),
-                  }))
-                }
-                style={inputStyle}
-                placeholder="Repeat every"
-              />
-            )}
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={() => handleCreateTask(null)}
-              disabled={isPending || !newTask.title.trim()}
+              placeholder="Description"
               style={{
-                ...primaryButton,
-                opacity: isPending || !newTask.title.trim() ? 0.6 : 1,
+                ...inputStyle,
+                minHeight: 90,
+                resize: "vertical",
+              }}
+            />
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 10,
               }}
             >
-              Add task
-            </button>
+              <select
+                value={newTask.category}
+                onChange={(e) =>
+                  setNewTask((prev) => ({
+                    ...prev,
+                    category: e.target.value as TaskCategory,
+                  }))
+                }
+                style={inputStyle}
+              >
+                {TASKS_CONFIG.categories.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={newTask.assignee}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, assignee: e.target.value }))
+                }
+                style={inputStyle}
+              >
+                <option value="">Unassigned</option>
+                {assigneeOptions.map((user) => (
+                  <option key={user} value={user}>
+                    {user}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="date"
+                value={newTask.startDate}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, startDate: e.target.value }))
+                }
+                style={inputStyle}
+              />
+
+              <input
+                type="date"
+                value={newTask.dueDate}
+                onChange={(e) =>
+                  setNewTask((prev) => ({ ...prev, dueDate: e.target.value }))
+                }
+                style={inputStyle}
+              />
+
+              {TASKS_CONFIG.allowPriority && (
+                <select
+                  value={newTask.priority}
+                  onChange={(e) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      priority: e.target.value as TaskPriority,
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  {TASKS_CONFIG.priorities.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {TASKS_CONFIG.allowRecurrence && (
+                <select
+                  value={newTask.recurrence}
+                  onChange={(e) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      recurrence: e.target.value as TaskRecurrence,
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  {TASKS_CONFIG.recurrences.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {TASKS_CONFIG.allowRecurrence && newTask.recurrence !== "none" && (
+                <input
+                  type="number"
+                  min={1}
+                  value={newTask.recurrenceInterval}
+                  onChange={(e) =>
+                    setNewTask((prev) => ({
+                      ...prev,
+                      recurrenceInterval: Number(e.target.value || 1),
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="Repeat every"
+                />
+              )}
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => handleCreateTask(null)}
+                disabled={isPending || !newTask.title.trim()}
+                style={{
+                  ...primaryButton,
+                  opacity: isPending || !newTask.title.trim() ? 0.6 : 1,
+                }}
+              >
+                Add task
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "#71717a" }}>
+            You have view-only access.
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title={`My tasks (${myTasks.length})`}>
