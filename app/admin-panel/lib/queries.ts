@@ -1,15 +1,18 @@
 import { createClient } from "../../../lib/supabase/server";
+import { canViewTask, defaultTaskRoleFromEmail } from "./permissions";
 import type {
   GetTasksDataInput,
   GetTasksDataResult,
   Task,
   TaskActivity,
+  TaskActor,
   TaskCategory,
   TaskComment,
   TaskNotification,
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
+  TaskUserRole,
 } from "./types";
 
 function todayKey() {
@@ -51,6 +54,23 @@ function normalizeTaskRow(row: any): Task {
   };
 }
 
+async function getCurrentTaskActor(): Promise<TaskActor> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const email = user?.email ?? "";
+
+  // Replace this later with a real memberships/users table lookup.
+  let role: TaskUserRole = defaultTaskRoleFromEmail(email);
+
+  if (email.endsWith("@admin.com")) role = "admin";
+  if (email.endsWith("@manager.com")) role = "manager";
+
+  return { email, role };
+}
+
 export async function getTasksData(
   input: GetTasksDataInput = {}
 ): Promise<GetTasksDataResult> {
@@ -63,12 +83,7 @@ export async function getTasksData(
   } = input;
 
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const currentUserEmail = user?.email ?? "";
+  const actor = await getCurrentTaskActor();
   const today = todayKey();
 
   let query = supabase.from("tasks").select("*");
@@ -114,6 +129,8 @@ export async function getTasksData(
 
   let tasks = (tasksData ?? []).map(normalizeTaskRow);
 
+  tasks = tasks.filter((task) => canViewTask(actor, task));
+
   if (filters?.q?.trim()) {
     const q = filters.q.trim().toLowerCase();
     tasks = tasks.filter((task) => {
@@ -127,7 +144,7 @@ export async function getTasksData(
   }
 
   const userSet = new Set<string>();
-  if (currentUserEmail) userSet.add(currentUserEmail);
+  if (actor.email) userSet.add(actor.email);
 
   tasks.forEach((t) => {
     if (t.assignee) userSet.add(t.assignee);
@@ -202,11 +219,11 @@ export async function getTasksData(
     });
   }
 
-  if (includeNotifications && currentUserEmail) {
+  if (includeNotifications && actor.email) {
     const { data, error } = await supabase
       .from("task_notifications")
       .select("*")
-      .eq("user_email", currentUserEmail)
+      .eq("user_email", actor.email)
       .eq("is_read", false)
       .order("created_at", { ascending: false });
 
@@ -245,9 +262,9 @@ export async function getTasksData(
 
     tasks = parentTasks.map((task) => ({
       ...task,
-      subtasks: (byParent.get(task.id) ?? []).sort((a, b) =>
-        a.title.localeCompare(b.title)
-      ),
+      subtasks: (byParent.get(task.id) ?? [])
+        .filter((child) => canViewTask(actor, child))
+        .sort((a, b) => a.title.localeCompare(b.title)),
     }));
   }
 
@@ -257,7 +274,8 @@ export async function getTasksData(
 
   return {
     tasks,
-    currentUserEmail,
+    currentUserEmail: actor.email,
+    currentUserRole: actor.role,
     knownUsers,
     notifications,
   };
