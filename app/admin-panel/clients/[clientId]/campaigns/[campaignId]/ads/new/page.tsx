@@ -7,6 +7,7 @@ import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
 import ClientMemories from "@/app/admin-panel/components/ClientMemories";
 import { createAdAction } from "@/app/admin-panel/lib/ad-actions";
 import { createMetaAd } from "@/lib/meta-ad-create";
+import { getCreativeSourcesForClient } from "@/lib/creative-sources";
 import { revalidatePath } from "next/cache";
 
 type Props = {
@@ -21,7 +22,7 @@ export default async function NewAdPage({ params }: Props) {
     { data: client, error: clientError },
     { data: campaign, error: campaignError },
     { data: memoryRows },
-    { data: creativeRows },
+    creativeSources,
   ] = await Promise.all([
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
@@ -35,13 +36,7 @@ export default async function NewAdPage({ params }: Props) {
       .select("id, note, tag")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("ads")
-      .select("creative_image_url, name")
-      .eq("client_id", clientId)
-      .not("creative_image_url", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(50),
+    getCreativeSourcesForClient(clientId),
   ]);
 
   if (clientError || !client || campaignError || !campaign) {
@@ -55,17 +50,6 @@ export default async function NewAdPage({ params }: Props) {
   }));
 
   const hasMetaAdSet = !!(campaign as any).meta_adset_id;
-
-  const existingCreatives = Array.from(
-    new Map(
-      (creativeRows ?? [])
-        .filter((r: any) => r.creative_image_url)
-        .map((r: any) => [
-          r.creative_image_url,
-          { url: r.creative_image_url, name: r.name ?? "Creative" },
-        ])
-    ).values()
-  );
 
   async function localAction(
     _state: { error: string | null },
@@ -186,7 +170,7 @@ export default async function NewAdPage({ params }: Props) {
       {hasMetaAdSet ? (
         <MetaAdForm
           campaignName={campaign.name}
-          existingCreatives={existingCreatives}
+          existingCreatives={creativeSources}
           onSubmit={metaAction}
         />
       ) : (

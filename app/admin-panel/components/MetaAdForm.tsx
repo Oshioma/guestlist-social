@@ -6,7 +6,7 @@ import CreativeLibraryPicker from "./CreativeLibraryPicker";
 
 type Props = {
   campaignName: string;
-  existingCreatives?: { url: string; name: string }[];
+  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   onSubmit: (data: {
     name: string;
     imageUrl: string;
