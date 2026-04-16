@@ -1,37 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Guestlist Social
 
-## Getting Started
+An agency-grade ad ops platform built on Next.js + Supabase. Three products in one admin panel:
 
-First, run the development server:
+1. **Decision Engine** — syncs ad data from Meta, scores every ad, generates recommendations (scale / pause / apply cross-client pattern), queues them for approval, executes against Meta, and measures outcomes.
+2. **Social Publisher (Proofer)** — monthly calendar for planning, proofing, and scheduling organic posts to Instagram (Feed + Stories) and Facebook.
+3. **Campaign Creator** — form for creating campaigns per-client, with a suggestions sidebar that surfaces winning patterns from the decision engine and past winners.
+
+A read-only **Client Portal** at `/portal/[clientId]` gives clients a view of their ads, reviews, and what changed since the last review.
+
+## Tech stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Supabase (Postgres + Auth + RLS) · Anthropic Claude (decisions, reviews, playbooks) · Meta Graph API v19 · Zod · tus.js (resumable uploads) · Vercel
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # fill in your keys
+npm install
+npm run dev                   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Required env vars
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+See [`.env.example`](.env.example) for the full list. At minimum you need:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` + `SUPABASE_SERVICE_ROLE_KEY`
+- `META_ACCESS_TOKEN` + `META_AD_ACCOUNT_ID` (for ad sync)
+- `ANTHROPIC_API_KEY` (for decision engine)
 
-## Learn More
+### Supabase migrations
 
-To learn more about Next.js, take a look at the following resources:
+Migrations live in `supabase/migrations/`. Apply them in date order against your Supabase project.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+app/
+  admin-panel/       operator admin — dashboard, clients, ads, proofer, campaigns
+  portal/            read-only client view
+  api/               API routes (meta-sync, decisions, publishing, cron jobs)
+  login/             auth
+lib/                 shared: meta client, supabase client, cross-pollinate, patterns
+supabase/migrations/ schema migrations (date-ordered SQL files)
+docs/                product-overview.md — detailed doc of all three apps
+```
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-"# levelsout" 
+See [`docs/product-overview.md`](docs/product-overview.md) for a detailed breakdown of the three apps, the data model, current status, and the MVP punch list.

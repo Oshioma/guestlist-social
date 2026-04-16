@@ -11,6 +11,7 @@ import {
 import type { AppPerformanceStatus } from "@/app/admin-panel/lib/performance-truth";
 import { getActionSuggestion } from "@/app/admin-panel/lib/action-engine";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
+import AdsPageTabs from "@/app/admin-panel/components/AdsPageTabs";
 import AdActionRow from "@/app/admin-panel/components/AdActionRow";
 import {
   deriveConfidence,
@@ -426,9 +427,20 @@ export default async function ClientAdsPage({
         ))}
       </div>
 
-      {/* ── ACTION QUEUE ── */}
-      {pendingActions.length > 0 && (
-        <SectionCard title={`Action Queue (${pendingActions.length})`}>
+      <AdsPageTabs
+        counts={{
+          ads: ads.length,
+          actions: pendingActions.length,
+          decisions: pendingDecisions.length,
+          playbook: playbook.length,
+          experiments: rawExperiments.length,
+          learnings: learnings.length,
+        }}
+        actionsPanel={
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* ── ACTION QUEUE ── */}
+            {pendingActions.length > 0 && (
+              <SectionCard title={`Action Queue (${pendingActions.length})`}>
           <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 14px" }}>
             Here&apos;s exactly what you need to do. Fix high priority first.
           </p>
@@ -571,9 +583,59 @@ export default async function ClientAdsPage({
             </details>
           )}
         </SectionCard>
-      )}
+            )}
 
-      {/* ── ALL ADS ── */}
+            {/* ── DECISIONS ── */}
+            <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
+              <p style={{ fontSize: 13, color: "#52525b", margin: "0 0 12px" }}>
+                Ask the engine what to do about this client&apos;s ads. Preview first
+                to see what it would suggest, then run it for real when you&apos;re
+                happy.
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  marginBottom: 16,
+                }}
+              >
+                <PreviewDecisionsButton clientId={clientId} />
+                <GenerateDecisionsButton clientId={clientId} />
+              </div>
+              {pendingDecisions.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {pendingDecisions.map((d: any) => (
+                    <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
+                      <DecisionRow decision={decisionCardProps(d)} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 13, color: "#a1a1aa" }}>
+                  No saved decisions yet. Run the engine above to fill this section.
+                </p>
+              )}
+              {pastDecisions.length > 0 && (
+                <details style={{ marginTop: 12 }}>
+                  <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
+                    {pastDecisions.length} past decisions
+                  </summary>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    {pastDecisions.map((d: any) => (
+                      <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
+                        <DecisionRow decision={decisionCardProps(d)} />
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </SectionCard>
+          </div>
+        }
+        adsPanel={
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* ── ALL ADS ── */}
       <SectionCard title={`All ads · last 6 months (${ads.length})`}>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -867,55 +929,11 @@ export default async function ClientAdsPage({
           />
         )}
       </SectionCard>
-
-      {/* ── DECISIONS ── */}
-      <SectionCard title={`Decisions (${pendingDecisions.length} pending)`}>
-        <p style={{ fontSize: 13, color: "#52525b", margin: "0 0 12px" }}>
-          Ask the engine what to do about this client&apos;s ads. Preview first
-          to see what it would suggest, then run it for real when you&apos;re
-          happy.
-        </p>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-            marginBottom: 16,
-          }}
-        >
-          <PreviewDecisionsButton clientId={clientId} />
-          <GenerateDecisionsButton clientId={clientId} />
-        </div>
-        {pendingDecisions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pendingDecisions.map((d: any) => (
-              <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
-                <DecisionRow decision={decisionCardProps(d)} />
-              </div>
-            ))}
           </div>
-        ) : (
-          <p style={{ fontSize: 13, color: "#a1a1aa" }}>
-            No saved decisions yet. Run the engine above to fill this section.
-          </p>
-        )}
-        {pastDecisions.length > 0 && (
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ fontSize: 12, color: "#71717a", cursor: "pointer" }}>
-              {pastDecisions.length} past decisions
-            </summary>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-              {pastDecisions.map((d: any) => (
-                <div key={d.id} id={`decision-${d.id}`} style={{ scrollMarginTop: 80 }}>
-                  <DecisionRow decision={decisionCardProps(d)} />
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-      </SectionCard>
-
-      {/* ── PLAYBOOK ── */}
+        }
+        playbookPanel={
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* ── PLAYBOOK ── */}
       <SectionCard title={`${client.name} Playbook`}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <GeneratePlaybookButton clientId={clientId} />
@@ -989,48 +1007,6 @@ export default async function ClientAdsPage({
         )}
       </SectionCard>
 
-      {/* ── EXPERIMENTS ── */}
-      <SectionCard title={`Experiments (${rawExperiments.length})`}>
-        <CreateExperimentForm
-          clientId={clientId}
-          ads={rawAds.map((a: any) => ({ id: a.id, name: a.name }))}
-        />
-        {rawExperiments.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-            {rawExperiments.map((exp: any) => (
-              <div key={exp.id} id={`experiment-${exp.id}`} style={{ scrollMarginTop: 80 }}>
-              <ExperimentCard
-                experiment={{
-                  id: exp.id,
-                  title: exp.title,
-                  hypothesis: exp.hypothesis,
-                  variable_tested: exp.variable_tested,
-                  success_metric: exp.success_metric,
-                  secondary_metric: exp.secondary_metric,
-                  status: exp.status,
-                  outcome: exp.outcome,
-                  winner: exp.winner,
-                  confidence: exp.confidence,
-                  started_at: exp.started_at,
-                  completed_at: exp.completed_at,
-                  variants: (exp.experiment_variants ?? []).map((v: any) => ({
-                    id: v.id,
-                    ad_id: v.ad_id,
-                    label: v.label,
-                    role: v.role,
-                    notes: v.notes,
-                    ad_name: v.ads?.name ?? "Unknown ad",
-                    snapshot_before: v.snapshot_before,
-                    snapshot_after: v.snapshot_after,
-                  })),
-                }}
-              />
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
       {learnings.length > 0 && (() => {
         const sorted = [...learnings].sort(
           (a: any, b: any) => Number(b.reliability_score ?? 0) - Number(a.reliability_score ?? 0)
@@ -1084,8 +1060,6 @@ export default async function ClientAdsPage({
                       >
                         {l.outcome}
                       </span>
-
-                      {/* Reliability bar */}
                       <span
                         style={{
                           display: "inline-flex",
@@ -1118,13 +1092,11 @@ export default async function ClientAdsPage({
                         </span>
                         {reliability.toFixed(0)}%
                       </span>
-
                       {timesSeen > 1 && (
                         <span style={{ fontSize: 11, color: "#52525b", fontWeight: 500 }}>
                           seen {timesSeen}x
                         </span>
                       )}
-
                       {l.tags?.map((tag: string) => (
                         <span
                           key={tag}
@@ -1141,19 +1113,9 @@ export default async function ClientAdsPage({
                         </span>
                       ))}
                     </div>
-
-                    <p
-                      style={{
-                        margin: "6px 0 0",
-                        fontSize: 13,
-                        color: "#18181b",
-                        lineHeight: 1.5,
-                      }}
-                    >
+                    <p style={{ margin: "6px 0 0", fontSize: 13, color: "#18181b", lineHeight: 1.5 }}>
                       {l.learning}
                     </p>
-
-                    {/* Avg lifts */}
                     {(avgCtrLift !== 0 || avgCpcChange !== 0) && (
                       <div style={{ marginTop: 4, display: "flex", gap: 12, fontSize: 11 }}>
                         {avgCtrLift !== 0 && (
@@ -1168,15 +1130,8 @@ export default async function ClientAdsPage({
                         )}
                       </div>
                     )}
-
                     {l.created_at && (
-                      <p
-                        style={{
-                          margin: "4px 0 0",
-                          fontSize: 11,
-                          color: "#a1a1aa",
-                        }}
-                      >
+                      <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a1a1aa" }}>
                         {new Date(l.created_at).toLocaleDateString()}
                       </p>
                     )}
@@ -1187,6 +1142,54 @@ export default async function ClientAdsPage({
           </SectionCard>
         );
       })()}
+          </div>
+        }
+        experimentsPanel={
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* ── EXPERIMENTS ── */}
+      <SectionCard title={`Experiments (${rawExperiments.length})`}>
+        <CreateExperimentForm
+          clientId={clientId}
+          ads={rawAds.map((a: any) => ({ id: a.id, name: a.name }))}
+        />
+        {rawExperiments.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+            {rawExperiments.map((exp: any) => (
+              <div key={exp.id} id={`experiment-${exp.id}`} style={{ scrollMarginTop: 80 }}>
+              <ExperimentCard
+                experiment={{
+                  id: exp.id,
+                  title: exp.title,
+                  hypothesis: exp.hypothesis,
+                  variable_tested: exp.variable_tested,
+                  success_metric: exp.success_metric,
+                  secondary_metric: exp.secondary_metric,
+                  status: exp.status,
+                  outcome: exp.outcome,
+                  winner: exp.winner,
+                  confidence: exp.confidence,
+                  started_at: exp.started_at,
+                  completed_at: exp.completed_at,
+                  variants: (exp.experiment_variants ?? []).map((v: any) => ({
+                    id: v.id,
+                    ad_id: v.ad_id,
+                    label: v.label,
+                    role: v.role,
+                    notes: v.notes,
+                    ad_name: v.ads?.name ?? "Unknown ad",
+                    snapshot_before: v.snapshot_before,
+                    snapshot_after: v.snapshot_after,
+                  })),
+                }}
+              />
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+          </div>
+        }
+      />
     </div>
   );
 }

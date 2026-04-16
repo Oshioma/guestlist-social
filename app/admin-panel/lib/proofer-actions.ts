@@ -18,8 +18,6 @@ const VALID_PLATFORMS = [
   "instagram_story",
   "instagram_reel",
   "facebook",
-  "linkedin",
-  "tiktok",
 ] as const;
 type Platform = (typeof VALID_PLATFORMS)[number];
 
