@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { persistImageToStorage } from "@/lib/persist-image";
 import {
   getAdAccount,
   getCampaigns,
@@ -318,6 +319,25 @@ export async function GET(request: Request) {
         creative_image_url = await resolveObjectStoryImage(
           creativeData.object_story_id
         );
+      }
+
+      // Persist the image to Supabase Storage so it never expires.
+      // Fire-and-forget: don't await — sync must stay fast to avoid
+      // Vercel timeout. The URL gets updated on the next sync if this
+      // one doesn't finish in time.
+      if (creative_image_url && !creative_image_url.includes("supabase.co/storage/")) {
+        const metaUrl = creative_image_url;
+        const adMetaId = String(metaAd.id);
+        persistImageToStorage(metaUrl, `meta-creatives/${adMetaId}`)
+          .then(async (persisted) => {
+            if (persisted) {
+              await supabase
+                .from("ads")
+                .update({ creative_image_url: persisted })
+                .eq("meta_id", adMetaId);
+            }
+          })
+          .catch(() => {});
       }
 
       const existingAd = existingAdsByMetaId.get(String(metaAd.id));
