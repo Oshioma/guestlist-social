@@ -220,6 +220,7 @@ function buildTargeting(audience: string): Record<string, unknown> {
     age_min: 18,
     age_max: 65,
     geo_locations: { countries: ["GB"] },
+    targeting_automation: { advantage_audience: 0 },
   };
 
   // Simple keyword extraction from the free-text field — best-effort,
