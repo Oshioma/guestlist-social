@@ -10,6 +10,7 @@
  */
 
 import { logMetaWrite } from "./meta-write-log";
+import { createClient } from "@supabase/supabase-js";
 
 const API_VERSION = "v25.0";
 const BASE = `https://graph.facebook.com/${API_VERSION}`;
@@ -58,9 +59,53 @@ export async function createMetaAd(
 
   const ctaEnum = CTA_MAP[input.ctaType] ?? "LEARN_MORE";
 
+  // Resolve page_id — required by object_story_spec. Look up from
+  // connected_meta_accounts or fall back to the ad account's pages.
+  let pageId = input.pageId ?? null;
+  if (!pageId) {
+    try {
+      const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (sbUrl && sbKey) {
+        const supabase = createClient(sbUrl, sbKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: account } = await supabase
+          .from("connected_meta_accounts")
+          .select("account_id")
+          .eq("platform", "facebook")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (account?.account_id) {
+          pageId = account.account_id;
+        }
+      }
+    } catch { /* fall through */ }
+  }
+  if (!pageId) {
+    // Last resort: fetch pages from the ad account
+    try {
+      const pagesRes = await fetch(
+        `${BASE}/me/accounts?access_token=${token}&limit=1`
+      );
+      if (pagesRes.ok) {
+        const pagesData = await pagesRes.json();
+        pageId = pagesData.data?.[0]?.id ?? null;
+      }
+    } catch { /* fall through */ }
+  }
+  if (!pageId) {
+    return {
+      ok: false,
+      error: "No Facebook Page found. Connect a Facebook page in Settings first.",
+      step: "creative" as const,
+    };
+  }
+
   // ── 1. Create Ad Creative ─────────────────────────────────────────
   const linkData: Record<string, unknown> = {
-    link: input.destinationUrl,
+    link: input.destinationUrl || "https://example.com",
     message: input.body,
     name: input.headline,
     image_url: input.imageUrl,
@@ -71,8 +116,8 @@ export async function createMetaAd(
     access_token: token,
     name: `${input.name} — creative`,
     object_story_spec: JSON.stringify({
+      page_id: pageId,
       link_data: linkData,
-      ...(input.pageId ? { page_id: input.pageId } : {}),
     }),
   });
 

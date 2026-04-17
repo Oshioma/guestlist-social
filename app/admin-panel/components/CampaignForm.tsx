@@ -38,11 +38,11 @@ export default function CampaignForm({
     headline: { suggestion: null, reasoning: null },
   });
   const [aiLoading, setAiLoading] = useState(false);
+  const [nextLoading, setNextLoading] = useState(false);
 
-  useEffect(() => {
+  function fetchSuggestions() {
     if (!clientId) return;
-    setAiLoading(true);
-    fetch("/api/ai-suggest-all", {
+    return fetch("/api/ai-suggest-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, objective: initialValues?.objective ?? "engagement" }),
@@ -57,9 +57,19 @@ export default function CampaignForm({
           });
         }
       })
-      .catch(() => {})
-      .finally(() => setAiLoading(false));
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!clientId) return;
+    setAiLoading(true);
+    fetchSuggestions()?.finally(() => setAiLoading(false));
   }, [clientId]);
+
+  function handleNextIdea() {
+    setNextLoading(true);
+    fetchSuggestions()?.finally(() => setNextLoading(false));
+  }
 
   return (
     <div
@@ -95,6 +105,8 @@ export default function CampaignForm({
                 suggestion={ai.headline.suggestion}
                 reasoning={ai.headline.reasoning}
                 loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='name']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -130,6 +142,8 @@ export default function CampaignForm({
                 suggestion={ai.budget.suggestion}
                 reasoning={ai.budget.reasoning}
                 loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
                 onApply={(v) => {
                   const match = v.match(/(\d+(?:\.\d+)?)/);
                   const num = match ? parseFloat(match[1]) : NaN;
@@ -157,6 +171,8 @@ export default function CampaignForm({
                 suggestion={ai.audience.suggestion}
                 reasoning={ai.audience.reasoning}
                 loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='audience']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -255,7 +271,18 @@ function DurationPicker({
     startDate && endDate
       ? Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000)))
       : 0;
-  const totalBudget = dayCount * budget;
+
+  // Read current budget from the input (it may have changed since page load)
+  const [liveBudget, setLiveBudget] = React.useState(budget);
+  React.useEffect(() => {
+    const input = document.querySelector<HTMLInputElement>("input[name='budget']");
+    if (!input) return;
+    const handler = () => setLiveBudget(Number(input.value) || 0);
+    input.addEventListener("input", handler);
+    handler();
+    return () => input.removeEventListener("input", handler);
+  }, []);
+  const totalBudget = dayCount * liveBudget;
 
   return (
     <div>
@@ -301,9 +328,11 @@ function DurationPicker({
           &#128197;
         </button>
 
-        {dayCount > 0 && budget > 0 && (
+        {dayCount > 0 && (
           <span style={{ fontSize: 13, color: "#18181b", fontWeight: 600, marginLeft: 4 }}>
-            {dayCount} day{dayCount === 1 ? "" : "s"} · Total: £{totalBudget.toFixed(0)}
+            {dayCount} day{dayCount === 1 ? "" : "s"}
+            {liveBudget > 0 && <> · Total: £{totalBudget.toFixed(0)}</>}
+            {liveBudget === 0 && <> · Set budget above</>}
           </span>
         )}
       </div>

@@ -7,6 +7,8 @@ type Props = {
   reasoning: string | null;
   loading: boolean;
   onApply?: (value: string) => void;
+  onNextIdea?: () => void;
+  nextLoading?: boolean;
 };
 
 export default function AiInlineSuggestion({
@@ -14,6 +16,8 @@ export default function AiInlineSuggestion({
   reasoning,
   loading,
   onApply,
+  onNextIdea,
+  nextLoading,
 }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -44,6 +48,7 @@ export default function AiInlineSuggestion({
         alignItems: "center",
         gap: 6,
         animation: "fadeIn 400ms ease",
+        flexWrap: "wrap",
       }}
     >
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -118,6 +123,27 @@ export default function AiInlineSuggestion({
             </span>
           )}
         </span>
+      )}
+
+      {onNextIdea && (
+        <button
+          type="button"
+          onClick={onNextIdea}
+          disabled={nextLoading}
+          title="Get another suggestion"
+          style={{
+            padding: "2px 7px",
+            borderRadius: 5,
+            border: "1px solid #c7d2fe",
+            background: "#fff",
+            color: nextLoading ? "#a5b4fc" : "#4338ca",
+            fontSize: 11,
+            fontWeight: 600,
+            cursor: nextLoading ? "wait" : "pointer",
+          }}
+        >
+          {nextLoading ? "..." : "Next idea"}
+        </button>
       )}
     </span>
   );

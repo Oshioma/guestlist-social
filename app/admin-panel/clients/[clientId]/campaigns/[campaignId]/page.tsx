@@ -291,6 +291,28 @@ export default async function CampaignDetailPage({ params }: Props) {
                 Add ad
               </Link>
 
+              {hasMetaId && (
+                <a
+                  href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${(campaign as any).meta_ad_account_name?.replace("act_", "") ?? ""}&campaign_ids=${(campaign as any).meta_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #e4e4e7",
+                    background: "#fff",
+                    color: "#1e40af",
+                    textDecoration: "none",
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  View in Ads Manager
+                </a>
+              )}
+
               <Link
                 href={`/app/clients/${clientId}/ads`}
                 style={{
