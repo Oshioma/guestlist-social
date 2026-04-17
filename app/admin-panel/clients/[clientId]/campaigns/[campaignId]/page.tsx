@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canRunAds } from "@/lib/auth/permissions";
 import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 
@@ -22,6 +23,7 @@ export const dynamic = "force-dynamic";
 export default async function CampaignDetailPage({ params }: Props) {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
+  const adsAllowed = await canRunAds();
 
   // The legacy `actions` table used to power a "Generated actions" section
   // here, but that surface has been replaced by the per-ad audit trail
@@ -134,23 +136,25 @@ export default async function CampaignDetailPage({ params }: Props) {
           <div style={{ fontSize: 13, color: "#166534", fontWeight: 600 }}>
             Next step: add an ad with creative (image + copy) so Meta has something to show people.
           </div>
-          <Link
-            href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              alignSelf: "flex-start",
-              padding: "10px 18px",
-              borderRadius: 10,
-              background: "#166534",
-              color: "#fff",
-              textDecoration: "none",
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            Add your first ad
-          </Link>
+          {adsAllowed && (
+            <Link
+              href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                alignSelf: "flex-start",
+                padding: "10px 18px",
+                borderRadius: 10,
+                background: "#166534",
+                color: "#fff",
+                textDecoration: "none",
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              Add your first ad
+            </Link>
+          )}
         </div>
       )}
 
@@ -256,40 +260,44 @@ export default async function CampaignDetailPage({ params }: Props) {
                 {campaignStatus}
               </span>
 
-              <Link
-                href={`/app/clients/${clientId}/campaigns/${campaignId}/edit`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  background: "#18181b",
-                  color: "#fff",
-                  textDecoration: "none",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Edit campaign
-              </Link>
+              {adsAllowed && (
+                <>
+                  <Link
+                    href={`/app/clients/${clientId}/campaigns/${campaignId}/edit`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "8px 12px",
+                      borderRadius: 10,
+                      background: "#18181b",
+                      color: "#fff",
+                      textDecoration: "none",
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Edit campaign
+                  </Link>
 
-              <Link
-                href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #e4e4e7",
-                  background: "#fff",
-                  color: "#18181b",
-                  textDecoration: "none",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Add ad
-              </Link>
+                  <Link
+                    href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "8px 12px",
+                      borderRadius: 10,
+                      border: "1px solid #e4e4e7",
+                      background: "#fff",
+                      color: "#18181b",
+                      textDecoration: "none",
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Add ad
+                  </Link>
+                </>
+              )}
 
             </div>
           </div>
@@ -594,7 +602,7 @@ export default async function CampaignDetailPage({ params }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {ads.map((ad) => (
               <div key={ad.id}>
-                <AdRow ad={ad} />
+                <AdRow ad={ad} canEdit={adsAllowed} />
                 <div
                   style={{
                     display: "flex",

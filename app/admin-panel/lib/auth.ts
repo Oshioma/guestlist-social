@@ -1,47 +1,30 @@
-import { redirect } from "next/navigation";
-import { createClient } from "../../../lib/supabase/server";
+// Back-compat shim. The admin-panel layout now calls getMemberAccess()
+// directly; this helper stays so any lingering page imports keep working.
+//
+// New role model: 'admin' | 'member'. Missing user_roles row → 'member'.
+// Anything under /app admits both; specific pages gate on ads access via
+// requireAdsAccess().
 
-export type AppRole = "admin" | "operator" | "viewer";
+import { redirect } from "next/navigation";
+import { getMemberAccess, type MemberRole } from "@/lib/auth/permissions";
+
+export type AppRole = MemberRole;
 
 export async function requireAdminPanelAccess(
-  allowedRoles: AppRole[] = ["admin", "operator", "viewer"]
+  allowedRoles: AppRole[] = ["admin", "member"]
 ) {
-  const supabase = await createClient();
+  const access = await getMemberAccess();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!access) {
     redirect("/sign-in");
   }
 
-  // Resolve the caller's role. We use maybeSingle() here so that a freshly
-  // provisioned Supabase user (created in the Auth dashboard but not yet
-  // listed in user_roles) does not 500 on .single() and bounce back to
-  // /sign-in — that historical behavior produced an invisible redirect loop.
-  //
-  // Missing row → default to "viewer" (read-only). Admins who want to
-  // promote someone can insert a row into user_roles after the first login.
-  const { data: roleRow, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error("requireAdminPanelAccess: user_roles lookup failed", error);
-    redirect("/sign-in");
-  }
-
-  const role = ((roleRow?.role as AppRole | undefined) ?? "viewer") as AppRole;
-
-  if (!allowedRoles.includes(role)) {
-    redirect("/sign-in");
+  if (!allowedRoles.includes(access.role)) {
+    redirect("/post-login");
   }
 
   return {
-    user,
-    role,
+    user: { id: access.userId, email: access.email },
+    role: access.role,
   };
 }

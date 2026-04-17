@@ -7,6 +7,7 @@ import {
   mapDbSuggestionToUiSuggestion,
 } from "../../lib/mappers";
 import { createClient } from "../../../../lib/supabase/server";
+import { canRunAds } from "@/lib/auth/permissions";
 import StatusPill from "../../components/StatusPill";
 import SectionCard from "../../components/SectionCard";
 import AdRow from "../../components/AdRow";
@@ -30,6 +31,7 @@ export default async function ClientDetailPage({
 }) {
   const { clientId } = await params;
   const supabase = await createClient();
+  const adsAllowed = await canRunAds();
 
   const [
     clientRes,
@@ -185,22 +187,24 @@ export default async function ClientDetailPage({
             Edit client
           </Link>
 
-          <Link
-            href={`/app/clients/${clientId}/campaigns/new`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "#18181b",
-              color: "#fff",
-              textDecoration: "none",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            New campaign
-          </Link>
+          {adsAllowed && (
+            <Link
+              href={`/app/clients/${clientId}/campaigns/new`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "8px 12px",
+                borderRadius: 10,
+                background: "#18181b",
+                color: "#fff",
+                textDecoration: "none",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              New campaign
+            </Link>
+          )}
 
           <DeleteClientButton clientId={clientId} />
         </div>
@@ -706,21 +710,23 @@ export default async function ClientDetailPage({
                               {ad.status ?? "testing"}
                             </span>
                           </div>
-                          <Link
-                            href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/${ad.id}/edit`}
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border: "1px solid #e4e4e7",
-                              background: "#fff",
-                              color: "#18181b",
-                              textDecoration: "none",
-                              fontSize: 12,
-                              fontWeight: 500,
-                            }}
-                          >
-                            Edit
-                          </Link>
+                          {adsAllowed && (
+                            <Link
+                              href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/${ad.id}/edit`}
+                              style={{
+                                padding: "4px 10px",
+                                borderRadius: 6,
+                                border: "1px solid #e4e4e7",
+                                background: "#fff",
+                                color: "#18181b",
+                                textDecoration: "none",
+                                fontSize: 12,
+                                fontWeight: 500,
+                              }}
+                            >
+                              Edit
+                            </Link>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -768,41 +774,45 @@ export default async function ClientDetailPage({
                         Open campaign
                       </Link>
 
-                      <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/edit`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid #e4e4e7",
-                          background: "#fff",
-                          color: "#18181b",
-                          textDecoration: "none",
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Edit campaign
-                      </Link>
+                      {adsAllowed && (
+                        <>
+                          <Link
+                            href={`/app/clients/${clientId}/campaigns/${campaign.id}/edit`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "8px 12px",
+                              borderRadius: 10,
+                              border: "1px solid #e4e4e7",
+                              background: "#fff",
+                              color: "#18181b",
+                              textDecoration: "none",
+                              fontSize: 13,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Edit campaign
+                          </Link>
 
-                      <Link
-                        href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/new`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid #e4e4e7",
-                          background: "#fff",
-                          color: "#18181b",
-                          textDecoration: "none",
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Add ad
-                      </Link>
+                          <Link
+                            href={`/app/clients/${clientId}/campaigns/${campaign.id}/ads/new`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "8px 12px",
+                              borderRadius: 10,
+                              border: "1px solid #e4e4e7",
+                              background: "#fff",
+                              color: "#18181b",
+                              textDecoration: "none",
+                              fontSize: 13,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Add ad
+                          </Link>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -824,7 +834,7 @@ export default async function ClientDetailPage({
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {ads.slice(0, 4).map((ad) => (
-              <AdRow key={ad.id} ad={ad} />
+              <AdRow key={ad.id} ad={ad} canEdit={adsAllowed} />
             ))}
             {ads.length > 4 && (
               <Link

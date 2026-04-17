@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../../lib/supabase/server";
+import { requireAdsAccess } from "@/lib/auth/permissions";
 import CampaignCreator from "../../../../components/CampaignCreator";
 import ClientMemories from "../../../../components/ClientMemories";
 import { createCampaignAction } from "../../../../lib/campaign-actions";
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export default async function NewCampaignPage({ params }: Props) {
+  await requireAdsAccess();
   const { clientId } = await params;
   const supabase = await createClient();
 
