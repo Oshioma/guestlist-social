@@ -57,9 +57,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     clientError ||
     !client ||
     campaignError ||
-    !campaign ||
-    adsError ||
-    learningsError
+    !campaign
   ) {
     notFound();
   }
@@ -99,10 +97,12 @@ export default async function CampaignDetailPage({ params }: Props) {
             ? { background: "#f4f4f5", color: "#52525b" }
             : { background: "#fef3c7", color: "#92400e" };
 
-  const learningSuggestions = await generateSuggestionsFromLearnings(
-    clientId,
-    campaignId
-  );
+  let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
+  try {
+    learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
+  } catch {
+    // learnings table may not exist — degrade gracefully
+  }
 
   const hasMetaId = !!(campaign as any).meta_id;
   const hasMetaAdsetId = !!(campaign as any).meta_adset_id;
