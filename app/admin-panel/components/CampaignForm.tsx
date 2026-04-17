@@ -54,7 +54,7 @@ export default function CampaignForm({
           </div>
         )}
 
-        <div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Campaign name</label>
             {clientId && (
@@ -92,7 +92,7 @@ export default function CampaignForm({
             </select>
           </div>
 
-          <div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>Budget (£)</label>
               {clientId && (
@@ -120,7 +120,7 @@ export default function CampaignForm({
           </div>
         </div>
 
-        <div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Audience</label>
             {clientId && (
