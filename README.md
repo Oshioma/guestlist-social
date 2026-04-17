@@ -52,3 +52,4 @@ docs/                product-overview.md, auth.md
 
 - [`docs/product-overview.md`](docs/product-overview.md) — the three apps, data model, current status, MVP punch list.
 - [`docs/auth.md`](docs/auth.md) — how the login / member-admin / ads-access module works and how to port it to another Next.js app.
+- [`docs/tasks-porting.md`](docs/tasks-porting.md) — how to copy the tasks system into another project, including a ready-to-paste prompt for Claude Code.
