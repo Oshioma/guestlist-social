@@ -642,9 +642,9 @@ export default async function ClientDetailPage({
                             src={url}
                             alt=""
                             style={{
-                              width: 48,
-                              height: 48,
-                              borderRadius: 8,
+                              width: 80,
+                              height: 80,
+                              borderRadius: 10,
                               objectFit: "cover",
                               border: "1px solid #e4e4e7",
                               flexShrink: 0,
@@ -654,9 +654,9 @@ export default async function ClientDetailPage({
                         {campaignAdsRaw.length > 5 && (
                           <span
                             style={{
-                              width: 48,
-                              height: 48,
-                              borderRadius: 8,
+                              width: 80,
+                              height: 80,
+                              borderRadius: 10,
                               background: "#f4f4f5",
                               border: "1px solid #e4e4e7",
                               display: "flex",
