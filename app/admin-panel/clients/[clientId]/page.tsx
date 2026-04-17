@@ -545,32 +545,75 @@ export default async function ClientDetailPage({
                       >
                         {campaign.name}
                       </p>
-                      <p
+                      <div
                         style={{
                           margin: "6px 0 0",
-                          fontSize: 13,
+                          display: "flex",
+                          gap: 6,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          fontSize: 12,
                           color: "#71717a",
                         }}
                       >
-                        {campaign.objective ?? "No objective"} ·{" "}
-                        {campaign.audience ?? "No audience set"}
-                      </p>
+                        <span>{campaign.objective ?? "No objective"}</span>
+                        {campaign.audience && (
+                          <>
+                            <span style={{ color: "#d4d4d8" }}>·</span>
+                            <span>{campaign.audience}</span>
+                          </>
+                        )}
+                        {campaign.meta_id && (
+                          <>
+                            <span style={{ color: "#d4d4d8" }}>·</span>
+                            <span style={{ color: "#166534" }}>Meta connected</span>
+                          </>
+                        )}
+                        {campaign.created_at && (
+                          <>
+                            <span style={{ color: "#d4d4d8" }}>·</span>
+                            <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        background: "#f4f4f5",
-                        color: "#52525b",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {campaign.status ?? "testing"}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 10px",
+                          borderRadius: 999,
+                          background:
+                            campaign.status === "live" ? "#dcfce7" :
+                            campaign.status === "paused" ? "#fee2e2" :
+                            "#f4f4f5",
+                          color:
+                            campaign.status === "live" ? "#166534" :
+                            campaign.status === "paused" ? "#991b1b" :
+                            "#52525b",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {campaign.status ?? "draft"}
+                      </div>
+                      {campaignWinners > 0 && (
+                        <span
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            background: "#dcfce7",
+                            color: "#166534",
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {campaignWinners} winner{campaignWinners === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -636,91 +679,39 @@ export default async function ClientDetailPage({
                       marginTop: 14,
                     }}
                   >
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
+                    <div style={miniStatStyle}>
                       <div style={{ fontSize: 12, color: "#71717a" }}>
                         Budget
                       </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {formatCurrency(Number(campaign.budget ?? 0))}
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
+                        {formatCurrency(Number(campaign.budget ?? 0))}/day
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
+                    <div style={miniStatStyle}>
                       <div style={{ fontSize: 12, color: "#71717a" }}>
                         Spend
                       </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
                         {formatCurrency(campaignSpend)}
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
+                    <div style={miniStatStyle}>
                       <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Ads
+                        CTR
                       </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {campaignAdsRaw.length}
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600, color: Number(campaignCtr ?? 0) >= 2 ? "#166534" : "#18181b" }}>
+                        {campaignCtr ? `${campaignCtr}%` : "—"}
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        border: "1px solid #f4f4f5",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
+                    <div style={miniStatStyle}>
                       <div style={{ fontSize: 12, color: "#71717a" }}>
-                        CTR / winners
+                        Ads
                       </div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {campaignCtr ? `${campaignCtr}%` : "—"} / {campaignWinners}
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
+                        {campaignAdsRaw.length}
                       </div>
                     </div>
                   </div>
@@ -991,3 +982,10 @@ export default async function ClientDetailPage({
     </div>
   );
 }
+
+const miniStatStyle: React.CSSProperties = {
+  border: "1px solid #f4f4f5",
+  borderRadius: 12,
+  padding: 12,
+  background: "#fafafa",
+};
