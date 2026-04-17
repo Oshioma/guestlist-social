@@ -32,38 +32,8 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   const hasMetaCreds =
     !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID;
 
-  if (hasMetaCreds && budget > 0) {
-    try {
-      const metaPromise = createMetaCampaign({
-        name,
-        objective,
-        budgetPounds: budget,
-        audience,
-        status,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        placement: placement || undefined,
-      });
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Meta API timed out after 25s")), 25000)
-      );
-
-      const result = await Promise.race([metaPromise, timeoutPromise]);
-
-      if (result.ok) {
-        metaCampaignId = result.metaCampaignId;
-        metaAdSetId = result.metaAdSetId;
-      } else {
-        metaError = `Meta ${result.step}: ${result.error}`;
-        console.error("createCampaignAction Meta error:", metaError);
-      }
-    } catch (err) {
-      metaError = err instanceof Error ? err.message : "Meta creation failed";
-      console.error("createCampaignAction Meta exception:", metaError);
-    }
-  }
-
+  // Save locally FIRST, redirect immediately. Meta creation happens
+  // after via a fire-and-forget API call so the form never hangs.
   const { data: inserted, error } = await supabase
     .from("campaigns")
     .insert({
@@ -73,9 +43,6 @@ export async function createCampaignAction(clientId: string, formData: FormData)
       audience: audience || null,
       budget,
       status,
-      meta_id: metaCampaignId,
-      meta_status: metaCampaignId ? (status === "testing" || status === "paused" ? "PAUSED" : "ACTIVE") : null,
-      meta_ad_account_name: metaCampaignId ? process.env.META_AD_ACCOUNT_ID : null,
     })
     .select("id")
     .single();
@@ -85,20 +52,37 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     throw new Error("Could not create campaign.");
   }
 
-  // Store the adset Meta ID on the campaign row so the ad-creation step
-  // can reference it without another lookup.
-  if (metaAdSetId) {
-    await supabase
-      .from("campaigns")
-      .update({ meta_adset_id: metaAdSetId })
-      .eq("id", inserted.id);
-  }
-
-  if (metaError) {
-    throw new Error(
-      `Campaign saved locally (ID ${inserted.id}) but Meta creation failed: ${metaError}. ` +
-      `You can push it to Meta later or add it manually in Ads Manager.`
-    );
+  // Fire-and-forget: push to Meta in the background. The campaign page
+  // will show "not yet connected to Meta" until this completes.
+  if (hasMetaCreds && budget > 0) {
+    createMetaCampaign({
+      name,
+      objective,
+      budgetPounds: budget,
+      audience,
+      status,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      placement: placement || undefined,
+    })
+      .then(async (result) => {
+        if (result.ok) {
+          await supabase
+            .from("campaigns")
+            .update({
+              meta_id: result.metaCampaignId,
+              meta_adset_id: result.metaAdSetId,
+              meta_status: status === "testing" || status === "paused" ? "PAUSED" : "ACTIVE",
+              meta_ad_account_name: process.env.META_AD_ACCOUNT_ID,
+            })
+            .eq("id", inserted.id);
+        } else {
+          console.error("Background Meta creation failed:", result.error);
+        }
+      })
+      .catch((err) => {
+        console.error("Background Meta creation exception:", err);
+      });
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
