@@ -577,15 +577,23 @@ export default async function CampaignDetailPage({ params }: Props) {
     </div>
   );
   } catch (err) {
-    console.error("CampaignDetailPage error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("CampaignDetailPage error:", message, err);
+    const { clientId: cid } = await params;
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
+      <div style={{ padding: 40 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: "#18181b" }}>
-          Campaign not found
+          Something went wrong loading this campaign
         </h2>
-        <p style={{ fontSize: 14, color: "#71717a", margin: "8px 0" }}>
-          This campaign may still be creating in Meta. Try refreshing in a few seconds.
+        <p style={{ fontSize: 13, color: "#991b1b", margin: "8px 0", background: "#fef2f2", padding: "8px 12px", borderRadius: 8, border: "1px solid #fecaca" }}>
+          {message}
         </p>
+        <Link
+          href={`/app/clients/${cid}`}
+          style={{ fontSize: 14, color: "#4338ca", textDecoration: "underline" }}
+        >
+          Back to client
+        </Link>
       </div>
     );
   }
