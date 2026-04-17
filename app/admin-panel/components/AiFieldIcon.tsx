@@ -77,7 +77,7 @@ export default function AiFieldIcon({
   }
 
   return (
-    <>
+    <div style={{ display: "contents" }}>
       <button
         type="button"
         onClick={handleSuggest}
@@ -226,6 +226,6 @@ export default function AiFieldIcon({
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

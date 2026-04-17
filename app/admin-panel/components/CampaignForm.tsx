@@ -80,44 +80,42 @@ export default function CampaignForm({
           />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div>
-            <label style={labelStyle}>Objective</label>
-            <select name="objective" defaultValue={initialValues?.objective ?? "engagement"} style={inputStyle}>
-              <option value="engagement">Engagement</option>
-              <option value="conversions">Conversions</option>
-              <option value="traffic">Traffic</option>
-              <option value="awareness">Awareness</option>
-              <option value="leads">Leads</option>
-            </select>
-          </div>
+        <div>
+          <label style={labelStyle}>Objective</label>
+          <select name="objective" defaultValue={initialValues?.objective ?? "engagement"} style={inputStyle}>
+            <option value="engagement">Engagement</option>
+            <option value="conversions">Conversions</option>
+            <option value="traffic">Traffic</option>
+            <option value="awareness">Awareness</option>
+            <option value="leads">Leads</option>
+          </select>
+        </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Budget (£)</label>
-              {clientId && (
-                <AiFieldIcon
-                  clientId={clientId}
-                  field="budget"
-                  objective={initialValues?.objective}
-                  campaignName={initialValues?.name}
-                  onApply={(v) => {
-                    const num = parseFloat(v.replace(/[^0-9.]/g, ""));
-                    const input = document.querySelector<HTMLInputElement>("input[name='budget']");
-                    if (input && Number.isFinite(num)) { input.value = String(num); input.dispatchEvent(new Event("input", { bubbles: true })); }
-                  }}
-                />
-              )}
-            </div>
-            <input
-              name="budget"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue={initialValues?.budget ?? 0}
-              style={inputStyle}
-            />
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Budget (£/day)</label>
+            {clientId && (
+              <AiFieldIcon
+                clientId={clientId}
+                field="budget"
+                objective={initialValues?.objective}
+                campaignName={initialValues?.name}
+                onApply={(v) => {
+                  const num = parseFloat(v.replace(/[^0-9.]/g, ""));
+                  const input = document.querySelector<HTMLInputElement>("input[name='budget']");
+                  if (input && Number.isFinite(num)) { input.value = String(num); input.dispatchEvent(new Event("input", { bubbles: true })); }
+                }}
+              />
+            )}
           </div>
+          <input
+            name="budget"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={initialValues?.budget ?? 0}
+            style={inputStyle}
+          />
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
