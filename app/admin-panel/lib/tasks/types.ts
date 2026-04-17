@@ -1,62 +1,8 @@
-// Isolated task module types — import only from this path, never from ../types
+// Host-app re-export of the portable tasks types.
+//
+// The single source of truth lives in features/tasks/types.ts. This shim
+// preserves the existing import path (../lib/tasks/types) used by the UI.
+// To customize types per-project (e.g. narrow TaskCategory to a different
+// enum), define replacements here instead of forking the feature module.
 
-export type TaskCategory =
-  | "video"
-  | "story"
-  | "carousel"
-  | "design"
-  | "general";
-
-export type TaskStatus = "open" | "in_progress" | "completed";
-
-export type TaskRecurrence = "none" | "weekly" | "monthly";
-
-export type Task = {
-  id: string;
-  title: string;
-  description: string;
-  category: TaskCategory;
-  assignee: string;
-  createdBy: string;
-  dueDate: string;
-  status: TaskStatus;
-  recurrence: TaskRecurrence;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ViewMode = "kanban" | "list" | "by-assignee" | "by-category";
-
-export type TaskFilters = {
-  category: TaskCategory | "all";
-  assignee: string | "all";
-  search: string;
-  showCompleted: boolean;
-};
-
-export type SavedView = {
-  id: string;
-  name: string;
-  filters: TaskFilters;
-  viewMode: ViewMode;
-};
-
-export type LocalSubtask = {
-  id: string;
-  title: string;
-  done: boolean;
-};
-
-export type LocalComment = {
-  id: string;
-  author: string;
-  text: string;
-  createdAt: string;
-};
-
-export type ActivityEntry = {
-  id: string;
-  type: "status_change" | "edit" | "created";
-  description: string;
-  at: string;
-};
+export * from "@/features/tasks/types";
