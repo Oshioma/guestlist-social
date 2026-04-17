@@ -159,14 +159,15 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
   return (
     <div
       style={{
-        maxWidth: 720,
+        maxWidth: 760,
         background: "#fff",
         border: "1px solid #e4e4e7",
-        borderRadius: 16,
-        padding: 24,
+        borderRadius: 18,
+        padding: "28px 28px 24px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {error && (
           <div
             style={{
@@ -447,13 +448,14 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
           disabled={!ready || isPending}
           style={{
             border: "none",
-            borderRadius: 10,
-            padding: "12px 14px",
+            borderRadius: 12,
+            padding: "14px 20px",
             background: ready && !isPending ? "#18181b" : "#d4d4d8",
             color: ready && !isPending ? "#fff" : "#a1a1aa",
-            fontSize: 14,
-            fontWeight: 600,
+            fontSize: 15,
+            fontWeight: 700,
             cursor: ready && !isPending ? "pointer" : "not-allowed",
+            width: "100%",
           }}
         >
           {isPending ? "Creating ad in Meta..." : "Create ad"}
@@ -465,18 +467,20 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
 
 const labelStyle: React.CSSProperties = {
   display: "block",
-  fontSize: 12,
-  color: "#71717a",
+  fontSize: 13,
+  fontWeight: 500,
+  color: "#52525b",
   marginBottom: 6,
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   border: "1px solid #e4e4e7",
-  borderRadius: 10,
-  padding: "10px 12px",
-  fontSize: 14,
-  background: "#fff",
+  borderRadius: 12,
+  padding: "12px 14px",
+  fontSize: 15,
+  background: "#fafafa",
   color: "#18181b",
   boxSizing: "border-box",
+  transition: "border-color 150ms, background 150ms",
 };
