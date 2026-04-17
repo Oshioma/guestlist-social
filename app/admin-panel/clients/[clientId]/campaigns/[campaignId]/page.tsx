@@ -104,8 +104,75 @@ export default async function CampaignDetailPage({ params }: Props) {
     campaignId
   );
 
+  const hasMetaId = !!(campaign as any).meta_id;
+  const hasMetaAdsetId = !!(campaign as any).meta_adset_id;
+  const isNewlyCreated = hasMetaId && ads.length === 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {isNewlyCreated && (
+        <div
+          style={{
+            padding: "16px 20px",
+            borderRadius: 14,
+            background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+            border: "1px solid #bbf7d0",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#166534" }}>
+            Campaign created in Meta
+          </div>
+          <div style={{ fontSize: 14, color: "#15803d", lineHeight: 1.5 }}>
+            <strong>{campaign.name}</strong> is set up in your Meta ad account
+            with a {campaign.budget ? `£${Number(campaign.budget).toFixed(0)}/day` : ""} budget.
+            It&rsquo;s currently <strong>{campaignStatus === "testing" || campaignStatus === "paused" ? "paused" : campaignStatus}</strong> and
+            won&rsquo;t spend until you add an ad and activate it.
+          </div>
+          <div style={{ fontSize: 13, color: "#166534", fontWeight: 600 }}>
+            Next step: add an ad with creative (image + copy) so Meta has something to show people.
+          </div>
+          <Link
+            href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              alignSelf: "flex-start",
+              padding: "10px 18px",
+              borderRadius: 10,
+              background: "#166534",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: 14,
+              fontWeight: 700,
+            }}
+          >
+            Add your first ad
+          </Link>
+        </div>
+      )}
+
+      {!isNewlyCreated && hasMetaId && (
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#f0fdf4",
+            border: "1px solid #dcfce7",
+            fontSize: 12,
+            color: "#166534",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+          Connected to Meta · {ads.length} ad{ads.length === 1 ? "" : "s"} · {campaignStatus}
+        </div>
+      )}
+
       <div>
         <Link
           href={`/app/clients/${clientId}`}

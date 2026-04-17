@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import CampaignForm from "./CampaignForm";
-import AiSuggestButton from "./AiSuggestButton";
 import type { CampaignSuggestionBundle, CampaignSuggestion } from "../lib/campaign-suggestions";
 
 type Props = {
@@ -70,75 +69,10 @@ export default function CampaignCreator({
         alignItems: "flex-start",
       }}
     >
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e4e4e7",
-            borderRadius: 16,
-            padding: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 14 }}>&#9733;</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>
-              AI Suggestions
-            </span>
-            <span style={{ fontSize: 11, color: "#71717a" }}>
-              Click any field to get an AI recommendation
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <AiSuggestButton
-              clientId={clientId}
-              field="audience"
-              objective={prefill.objective}
-              budget={prefill.budget}
-              campaignName={prefill.name}
-              onApply={(v) => {
-                setPrefill((p) => ({ ...p, audience: v }));
-                setFormKey((k) => k + 1);
-              }}
-            />
-            <AiSuggestButton
-              clientId={clientId}
-              field="headline"
-              objective={prefill.objective}
-              budget={prefill.budget}
-              campaignName={prefill.name}
-              onApply={(v) => {
-                setPrefill((p) => ({ ...p, name: v }));
-                setFormKey((k) => k + 1);
-              }}
-            />
-            <AiSuggestButton
-              clientId={clientId}
-              field="budget"
-              objective={prefill.objective}
-              campaignName={prefill.name}
-              onApply={(v) => {
-                const num = parseFloat(v.replace(/[^0-9.]/g, ""));
-                if (Number.isFinite(num) && num > 0) {
-                  setPrefill((p) => ({ ...p, budget: num }));
-                  setFormKey((k) => k + 1);
-                }
-              }}
-            />
-            <AiSuggestButton
-              clientId={clientId}
-              field="creative"
-              objective={prefill.objective}
-              budget={prefill.budget}
-              campaignName={prefill.name}
-              onApply={() => {}}
-            />
-          </div>
-        </div>
+      <div style={{ minWidth: 0 }}>
         <CampaignForm
           key={formKey}
+          clientId={clientId}
           title={title}
           submitLabel={submitLabel}
           action={action}

@@ -104,7 +104,7 @@ RATIONALE: [1 sentence on why this visual approach works for this client + objec
 DALLE_PROMPT: [A detailed DALL-E prompt that would generate this image — include style, composition, mood, no text in image]`;
 
     const briefMessage = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 400,
       messages: [{ role: "user", content: briefPrompt }],
     });

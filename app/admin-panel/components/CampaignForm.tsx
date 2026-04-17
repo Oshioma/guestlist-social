@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import AiFieldIcon from "./AiFieldIcon";
 
 type CampaignFormValues = {
   name: string;
@@ -11,6 +12,7 @@ type CampaignFormValues = {
 };
 
 type Props = {
+  clientId?: string;
   title?: string;
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
@@ -18,6 +20,7 @@ type Props = {
 };
 
 export default function CampaignForm({
+  clientId,
   title = "New Campaign",
   submitLabel = "Create campaign",
   action,
@@ -52,7 +55,22 @@ export default function CampaignForm({
         )}
 
         <div>
-          <label style={labelStyle}>Campaign name</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Campaign name</label>
+            {clientId && (
+              <AiFieldIcon
+                clientId={clientId}
+                field="headline"
+                objective={initialValues?.objective}
+                budget={initialValues?.budget}
+                campaignName={initialValues?.name}
+                onApply={(v) => {
+                  const input = document.querySelector<HTMLInputElement>("input[name='name']");
+                  if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
+                }}
+              />
+            )}
+          </div>
           <input
             name="name"
             defaultValue={initialValues?.name ?? ""}
@@ -75,7 +93,22 @@ export default function CampaignForm({
           </div>
 
           <div>
-            <label style={labelStyle}>Budget (£)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Budget (£)</label>
+              {clientId && (
+                <AiFieldIcon
+                  clientId={clientId}
+                  field="budget"
+                  objective={initialValues?.objective}
+                  campaignName={initialValues?.name}
+                  onApply={(v) => {
+                    const num = parseFloat(v.replace(/[^0-9.]/g, ""));
+                    const input = document.querySelector<HTMLInputElement>("input[name='budget']");
+                    if (input && Number.isFinite(num)) { input.value = String(num); input.dispatchEvent(new Event("input", { bubbles: true })); }
+                  }}
+                />
+              )}
+            </div>
             <input
               name="budget"
               type="number"
@@ -88,7 +121,22 @@ export default function CampaignForm({
         </div>
 
         <div>
-          <label style={labelStyle}>Audience</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Audience</label>
+            {clientId && (
+              <AiFieldIcon
+                clientId={clientId}
+                field="audience"
+                objective={initialValues?.objective}
+                budget={initialValues?.budget}
+                campaignName={initialValues?.name}
+                onApply={(v) => {
+                  const input = document.querySelector<HTMLInputElement>("input[name='audience']");
+                  if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
+                }}
+              />
+            )}
+          </div>
           <input
             name="audience"
             defaultValue={initialValues?.audience ?? ""}
