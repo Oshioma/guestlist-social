@@ -21,7 +21,7 @@ export default async function PortalLayout({
 }) {
   const viewer = await getViewer();
   if (!viewer) {
-    redirect("/login?next=/portal");
+    redirect("/sign-in?next=/portal");
   }
 
   return <div className="portal-root">{children}</div>;
