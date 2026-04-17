@@ -641,6 +641,8 @@ export default async function ClientDetailPage({
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
                             style={{
                               width: 80,
                               height: 80,
