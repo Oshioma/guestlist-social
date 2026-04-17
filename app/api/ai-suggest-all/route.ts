@@ -200,6 +200,10 @@ export async function POST(req: Request) {
       } catch { /* skip */ }
     }
 
+    if (sources.customInstructions) {
+      context.push(`\nAGENCY CUSTOM RULES (always follow these):\n${sources.customInstructions}`);
+    }
+
     const contextBlock = context.length > 0 ? context.join("\n") : "No historical data available yet — use general best practices for a new account.";
 
     const anthropic = new Anthropic({ apiKey });

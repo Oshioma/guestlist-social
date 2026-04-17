@@ -176,6 +176,10 @@ export async function POST(req: Request) {
       } catch { /* degrade gracefully */ }
     }
 
+    if (sources.customInstructions) {
+      context.push(`\nAGENCY RULES (always follow):\n${sources.customInstructions}`);
+    }
+
     const contextBlock = context.length > 0
       ? context.join("\n")
       : "No historical data available — use general best practices.";
