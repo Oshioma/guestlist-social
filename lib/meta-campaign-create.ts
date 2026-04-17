@@ -65,6 +65,9 @@ export type CreateCampaignInput = {
   budgetPounds: number;
   audience: string;
   status: string;
+  startDate?: string;
+  endDate?: string;
+  placement?: string;
 };
 
 export type CreateCampaignResult =
@@ -92,12 +95,24 @@ export async function createMetaCampaign(
     100
   );
 
-  // Start time: tomorrow at 00:00 UTC — Meta rejects ad sets with a
-  // start_time in the past.
-  const tomorrow = new Date();
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  tomorrow.setUTCHours(0, 0, 0, 0);
-  const startTimeIso = tomorrow.toISOString();
+  // Start time: use the operator's date or default to tomorrow.
+  let startTimeIso: string;
+  if (input.startDate) {
+    const d = new Date(input.startDate + "T00:00:00Z");
+    if (d.getTime() > Date.now()) {
+      startTimeIso = d.toISOString();
+    } else {
+      const tomorrow = new Date();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      tomorrow.setUTCHours(0, 0, 0, 0);
+      startTimeIso = tomorrow.toISOString();
+    }
+  } else {
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    tomorrow.setUTCHours(0, 0, 0, 0);
+    startTimeIso = tomorrow.toISOString();
+  }
 
   // ── 1. Create Campaign ──────────────────────────────────────────────
   try {
@@ -149,7 +164,7 @@ export async function createMetaCampaign(
     const metaCampaignId = campaignData.id;
 
     // ── 2. Create Ad Set ────────────────────────────────────────────────
-    const adSetParams = new URLSearchParams({
+    const adSetParamsObj: Record<string, string> = {
       access_token: token,
       campaign_id: metaCampaignId,
       name: `${input.name} — ad set`,
@@ -160,7 +175,32 @@ export async function createMetaCampaign(
       status: metaStatus,
       start_time: startTimeIso,
       targeting: JSON.stringify(buildTargeting(input.audience)),
-    });
+    };
+
+    if (input.endDate) {
+      const endDate = new Date(input.endDate + "T23:59:59Z");
+      if (endDate.getTime() > Date.now()) {
+        adSetParamsObj.end_time = endDate.toISOString();
+      }
+    }
+
+    if (input.placement && input.placement !== "automatic") {
+      const placementMap: Record<string, object> = {
+        feed_only: { facebook_positions: ["feed"], instagram_positions: ["stream"] },
+        stories_only: { facebook_positions: ["story"], instagram_positions: ["story"] },
+        feed_and_stories: { facebook_positions: ["feed", "story"], instagram_positions: ["stream", "story"] },
+      };
+      const p = placementMap[input.placement];
+      if (p) {
+        adSetParamsObj.targeting = JSON.stringify({
+          ...buildTargeting(input.audience),
+          publisher_platforms: ["facebook", "instagram"],
+          ...p,
+        });
+      }
+    }
+
+    const adSetParams = new URLSearchParams(adSetParamsObj);
 
     const adSetStart = Date.now();
     const adSetRes = await fetch(`${BASE}/${accountId}/adsets`, {
@@ -220,6 +260,7 @@ function buildTargeting(audience: string): Record<string, unknown> {
     age_min: 18,
     age_max: 65,
     geo_locations: { countries: ["GB"] },
+    targeting_automation: { advantage_audience: 0 },
   };
 
   // Simple keyword extraction from the free-text field — best-effort,

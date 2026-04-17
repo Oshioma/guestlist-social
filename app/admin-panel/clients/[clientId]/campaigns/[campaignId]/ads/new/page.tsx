@@ -27,7 +27,7 @@ export default async function NewAdPage({ params }: Props) {
     supabase.from("clients").select("id, name").eq("id", clientId).single(),
     supabase
       .from("campaigns")
-      .select("id, name, meta_id, meta_adset_id")
+      .select("id, name, objective, meta_id, meta_adset_id")
       .eq("id", campaignId)
       .eq("client_id", clientId)
       .single(),
@@ -170,6 +170,8 @@ export default async function NewAdPage({ params }: Props) {
       {hasMetaAdSet ? (
         <MetaAdForm
           campaignName={campaign.name}
+          clientId={clientId}
+          objective={(campaign as any).objective ?? "engagement"}
           existingCreatives={creativeSources}
           onSubmit={metaAction}
         />

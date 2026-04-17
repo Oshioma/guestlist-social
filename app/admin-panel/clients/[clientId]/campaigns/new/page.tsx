@@ -101,17 +101,12 @@ export default async function NewCampaignPage({ params }: Props) {
               margin: "10px 0 0",
               fontSize: 14,
               color: "#71717a",
-              maxWidth: 700,
             }}
           >
-            Create a new campaign for <strong style={{ color: "#18181b" }}>{client.name}</strong>.
-            Start simple: objective, audience, budget, and status. You can add ads
-            to the campaign after this.
+            For <strong style={{ color: "#18181b" }}>{client.name}</strong>. Add ads after creating.
           </p>
         </div>
       </div>
-
-      <ClientMemories memories={memories} clientName={client.name} />
 
       <CampaignCreator clientId={clientId} action={action} suggestions={suggestions} />
     </div>

@@ -409,14 +409,28 @@ export default async function ClientAdsPage({
         <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
           {client.name} — Ads ({ads.length})
         </h2>
-        <p style={{ fontSize: 14, color: "#71717a", margin: "6px 0 0" }}>
-          Performance scored automatically. Each ad is rated by CTR, CPC, conversions, and spend.
+        <p style={{ fontSize: 13, color: "#71717a", margin: "6px 0 0" }}>
+          Scored by CTR, CPC, conversions and spend. Last 6 months.
         </p>
-        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "4px 0 0" }}>
-          Showing ads created in the last 6 months. Older ads are hidden because their Meta creative URLs typically expire and the totals stop reflecting anything actionable.
-        </p>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <ScoreAndGenerateButton clientId={clientId} />
+          <Link
+            href="/app/meta-queue"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              color: "#18181b",
+              textDecoration: "none",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Meta queue
+          </Link>
         </div>
       </div>
 

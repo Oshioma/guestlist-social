@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import ImageUpload from "./ImageUpload";
 import CreativeLibraryPicker from "./CreativeLibraryPicker";
+import AiInlineSuggestion from "./AiInlineSuggestion";
 
 type Props = {
   campaignName: string;
+  clientId?: string;
+  objective?: string;
   existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   onSubmit: (data: {
     name: string;
@@ -29,7 +32,7 @@ const CTA_OPTIONS = [
   { value: "get_quote", label: "Get Quote" },
 ];
 
-export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }: Props) {
+export default function MetaAdForm({ campaignName, clientId, objective, existingCreatives, onSubmit }: Props) {
   const [name, setName] = useState(`${campaignName} — ad 1`);
   const [imageUrl, setImageUrl] = useState("");
   const [headline, setHeadline] = useState("");
@@ -39,6 +42,50 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  type Sug = { suggestion: string | null; reasoning: string | null };
+  const [ai, setAi] = useState<{ headline: Sug; body: Sug }>({
+    headline: { suggestion: null, reasoning: null },
+    body: { suggestion: null, reasoning: null },
+  });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [nextLoading, setNextLoading] = useState(false);
+
+  function fetchAdCopy() {
+    if (!clientId) return;
+    return fetch("/api/ai-write-ad-copy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, objective: objective ?? "engagement", campaignName }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setAi({
+            headline: { suggestion: data.headline, reasoning: data.reasoning },
+            body: { suggestion: data.body, reasoning: data.reasoning },
+          });
+        }
+      })
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!clientId) return;
+    setAiLoading(true);
+    fetchAdCopy()?.finally(() => setAiLoading(false));
+  }, [clientId]);
+
+  function handleNextIdea() {
+    setNextLoading(true);
+    fetchAdCopy()?.finally(() => setNextLoading(false));
+  }
+  const [creativeLoading, setCreativeLoading] = useState(false);
+  const [creativeBrief, setCreativeBrief] = useState<{
+    brief: string;
+    rationale: string;
+    generatedImageUrl: string | null;
+    imageGenerationEnabled: boolean;
+  } | null>(null);
 
   const ready =
     name.trim() &&
@@ -147,7 +194,101 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
         </div>
 
         <div>
-          <label style={labelStyle}>Image</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Image</label>
+            {clientId && (
+              <button
+                type="button"
+                disabled={creativeLoading}
+                onClick={async () => {
+                  setCreativeLoading(true);
+                  setCreativeBrief(null);
+                  try {
+                    const res = await fetch("/api/ai-creative", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        clientId,
+                        objective: objective ?? "engagement",
+                        campaignName,
+                        headline,
+                        body,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                      setCreativeBrief({
+                        brief: data.brief,
+                        rationale: data.rationale,
+                        generatedImageUrl: data.generatedImageUrl,
+                        imageGenerationEnabled: data.imageGenerationEnabled,
+                      });
+                      if (data.generatedImageUrl) {
+                        setImageUrl(data.generatedImageUrl);
+                      }
+                    } else {
+                      setError(data.error);
+                    }
+                  } catch {
+                    setError("Network error");
+                  } finally {
+                    setCreativeLoading(false);
+                  }
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: creativeLoading
+                    ? "#c7d2fe"
+                    : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: creativeLoading ? "wait" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                }}
+              >
+                {creativeLoading ? "AI generating..." : <><span style={{ fontSize: 12 }}>&#9733;</span> AI Creative</>}
+              </button>
+            )}
+          </div>
+
+          {creativeBrief && (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "8px 10px",
+                borderRadius: 8,
+                background: "#eef2ff",
+                border: "1px solid #e0e7ff",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 11, color: "#4338ca", fontWeight: 700, flexShrink: 0 }}>&#9733;</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: "#18181b", lineHeight: 1.5 }}>
+                  {creativeBrief.brief}
+                </div>
+                {creativeBrief.generatedImageUrl && (
+                  <div style={{ fontSize: 11, color: "#166534", fontWeight: 600, marginTop: 2 }}>
+                    Image applied
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreativeBrief(null)}
+                style={{ background: "none", border: "none", color: "#a1a1aa", fontSize: 14, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
+              >
+                x
+              </button>
+            </div>
+          )}
           <div
             style={{
               display: "flex",
@@ -201,7 +342,7 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
                 label="Upload image"
                 accept="image/*"
               />
-              {existingCreatives && existingCreatives.length > 0 && (
+              {existingCreatives && (
                 <CreativeLibraryPicker
                   creatives={existingCreatives}
                   onPick={(url) => setImageUrl(url)}
@@ -221,7 +362,19 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
         </div>
 
         <div>
-          <label style={labelStyle}>Headline</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Headline</label>
+            {clientId && (
+              <AiInlineSuggestion
+                suggestion={ai.headline.suggestion}
+                reasoning={ai.headline.reasoning}
+                loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
+                onApply={(v) => setHeadline(v)}
+              />
+            )}
+          </div>
           <input
             value={headline}
             onChange={(e) => setHeadline(e.target.value)}
@@ -235,7 +388,19 @@ export default function MetaAdForm({ campaignName, existingCreatives, onSubmit }
         </div>
 
         <div>
-          <label style={labelStyle}>Body text</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Body text</label>
+            {clientId && (
+              <AiInlineSuggestion
+                suggestion={ai.body.suggestion}
+                reasoning={ai.body.reasoning}
+                loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
+                onApply={(v) => setBody(v)}
+              />
+            )}
+          </div>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}

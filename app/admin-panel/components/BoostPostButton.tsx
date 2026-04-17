@@ -70,23 +70,25 @@ export default function BoostPostButton({
     });
   }
 
-  if (!hasPostId) return null;
-
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", gap: 6 }}>
       {!open && !result && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => hasPostId ? setOpen(true) : null}
+          disabled={!hasPostId}
+          title={hasPostId ? "Put money behind this post" : "No Meta post ID — publish via the queue first"}
           style={{
             padding: "6px 12px",
             borderRadius: 8,
             border: "none",
-            background: "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)",
-            color: "#fff",
+            background: hasPostId
+              ? "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)"
+              : "#d4d4d8",
+            color: hasPostId ? "#fff" : "#a1a1aa",
             fontSize: 12,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: hasPostId ? "pointer" : "not-allowed",
             whiteSpace: "nowrap",
           }}
         >

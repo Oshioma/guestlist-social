@@ -58,6 +58,17 @@ function guessObjectiveFromText(text: string): string | undefined {
 export async function getCampaignSuggestions(
   clientId: string
 ): Promise<CampaignSuggestionBundle> {
+  try {
+    return await getCampaignSuggestionsInner(clientId);
+  } catch (err) {
+    console.error("getCampaignSuggestions error:", err);
+    return { playbook: [], agency: [], winners: [] };
+  }
+}
+
+async function getCampaignSuggestionsInner(
+  clientId: string
+): Promise<CampaignSuggestionBundle> {
   const supabase = await createClient();
 
   // 1) Client's own playbook — already curated from reliable learnings,
