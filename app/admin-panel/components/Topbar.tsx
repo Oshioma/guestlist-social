@@ -38,21 +38,39 @@ export default function Topbar() {
       }}
     >
       <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{title}</h1>
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          background: "#18181b",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          fontWeight: 600,
-        }}
-      >
-        GS
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <form action="/sign-out" method="post" style={{ margin: 0 }}>
+          <button
+            type="submit"
+            style={{
+              background: "transparent",
+              border: "1px solid #e4e4e7",
+              borderRadius: 8,
+              padding: "6px 10px",
+              fontSize: 12,
+              color: "#52525b",
+              cursor: "pointer",
+            }}
+          >
+            Sign out
+          </button>
+        </form>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "#18181b",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          GS
+        </div>
       </div>
     </header>
   );

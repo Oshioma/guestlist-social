@@ -1,10 +1,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdsAccess } from "@/lib/auth/permissions";
 import LaunchForm from "@/app/admin-panel/components/LaunchForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function LaunchPage() {
+  await requireAdsAccess();
   const supabase = await createClient();
 
   const { data: clientRows } = await supabase

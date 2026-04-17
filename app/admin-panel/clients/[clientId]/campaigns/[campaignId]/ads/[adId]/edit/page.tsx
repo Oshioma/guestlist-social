@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdsAccess } from "@/lib/auth/permissions";
 import AdForm from "@/app/admin-panel/components/AdForm";
 import ClientMemories from "@/app/admin-panel/components/ClientMemories";
 import { updateAdAction } from "@/app/admin-panel/lib/ad-actions";
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default async function EditAdPage({ params }: Props) {
+  await requireAdsAccess();
   const { clientId, campaignId, adId } = await params;
   const supabase = await createClient();
 
