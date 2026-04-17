@@ -1,4 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
+import { supabaseTasksAdapter } from "./tasks/supabase-adapter";
 import {
   mapDbAdToUiAd,
   mapDbClientToUiClient,
@@ -16,9 +17,6 @@ import type {
   StoryIdea,
   StoryTheme,
   Task,
-  TaskCategory,
-  TaskStatus,
-  TaskRecurrence,
   ProoferPost,
   ProoferStatus,
   ProoferPlatform,
@@ -207,34 +205,14 @@ export async function getTasksData(): Promise<{
   currentUserEmail: string;
   knownUsers: string[];
 }> {
-  const supabase = await createClient();
+  // Generic tasks fetch goes through the portable adapter.
+  const [tasks, currentUserEmail] = await Promise.all([
+    supabaseTasksAdapter.listTasks(),
+    supabaseTasksAdapter.getCurrentUserEmail(),
+  ]);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const currentUserEmail = user?.email ?? "";
-
-  const { data: tasksData, error: tasksError } = await supabase
-    .from("tasks")
-    .select("*")
-    .order("due_date", { ascending: true, nullsFirst: false });
-
-  if (tasksError) throw new Error(`tasks: ${tasksError.message}`);
-
-  const tasks: Task[] = (tasksData ?? []).map((row) => ({
-    id: String(row.id),
-    title: row.title ?? "",
-    description: row.description ?? "",
-    category: (row.category ?? "general") as TaskCategory,
-    assignee: row.assignee ?? "",
-    createdBy: row.created_by ?? "",
-    dueDate: row.due_date ?? "",
-    status: (row.status ?? "open") as TaskStatus,
-    recurrence: (row.recurrence ?? "none") as TaskRecurrence,
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  }));
-
+  // Project-specific: seed the assignee picker with creators from other
+  // content tables. Other projects should replace this block (or drop it).
   const userSet = new Set<string>();
   if (currentUserEmail) userSet.add(currentUserEmail);
   tasks.forEach((t) => {
@@ -242,6 +220,7 @@ export async function getTasksData(): Promise<{
     if (t.createdBy) userSet.add(t.createdBy);
   });
 
+  const supabase = await createClient();
   const [videoRes, carouselRes, storyRes] = await Promise.all([
     supabase.from("video_ideas").select("created_by"),
     supabase.from("carousel_ideas").select("created_by"),
