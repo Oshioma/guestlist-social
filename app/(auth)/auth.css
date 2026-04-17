@@ -1,0 +1,130 @@
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #f4f4f5;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #18181b;
+}
+
+.auth-subtitle {
+  margin: 6px 0 20px;
+  font-size: 14px;
+  color: #71717a;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-field label {
+  display: block;
+  font-size: 12px;
+  color: #71717a;
+  margin-bottom: 6px;
+}
+
+.auth-field input {
+  width: 100%;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #fff;
+  color: #18181b;
+  box-sizing: border-box;
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: #18181b;
+}
+
+.auth-field .input-error {
+  border-color: #fca5a5;
+}
+
+.auth-field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.auth-alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.auth-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.auth-alert-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.auth-submit {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #18181b;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.auth-footer {
+  margin: 0;
+  font-size: 13px;
+  color: #71717a;
+  text-align: center;
+}
+
+.auth-footer a,
+.auth-link-row a {
+  color: #18181b;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-footer a:hover,
+.auth-link-row a:hover {
+  text-decoration: underline;
+}
+
+.auth-link-row {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12px;
+  margin-top: -4px;
+}

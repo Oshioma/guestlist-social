@@ -48,8 +48,10 @@ Key env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 ```
 /                       marketing homepage
-/login                  Supabase auth
-/post-login             role-based redirect
+/sign-in, /sign-up, /forgot-password, /reset-password   Supabase auth
+/auth/callback          PKCE code exchange (email verify + password recovery)
+/sign-out               POST — clears session, redirects to /sign-in
+/post-login             role-based redirect (admin → /app/dashboard, client → /portal/{id})
 /app → /admin-panel     agency admin (next.config rewrite)
 /portal/[clientId]      read-only client view
 /r/[token]              public share links for reviews

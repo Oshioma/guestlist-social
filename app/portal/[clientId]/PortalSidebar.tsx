@@ -122,16 +122,22 @@ export default function PortalSidebar({
             ← Switch client
           </Link>
         ) : (
-          <Link
-            href="/login"
-            style={{
-              fontSize: 12,
-              color: "#94a3b8",
-              textDecoration: "none",
-            }}
-          >
-            Sign out
-          </Link>
+          <form action="/sign-out" method="post" style={{ margin: 0 }}>
+            <button
+              type="submit"
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                fontSize: 12,
+                color: "#94a3b8",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              Sign out
+            </button>
+          </form>
         )}
       </div>
     </aside>
