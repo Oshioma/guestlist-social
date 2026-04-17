@@ -32,6 +32,9 @@ export default function CampaignCreator({
     budget: number;
     audience: string;
     status: string;
+    startDate?: string;
+    endDate?: string;
+    placement?: string;
   }>({
     name: "",
     objective: "engagement",

@@ -9,6 +9,9 @@ type CampaignFormValues = {
   budget: number;
   audience: string;
   status: string;
+  startDate?: string;
+  endDate?: string;
+  placement?: string;
 };
 
 type Props = {
@@ -143,13 +146,43 @@ export default function CampaignForm({
           />
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Start date</label>
+            <input
+              name="startDate"
+              type="date"
+              defaultValue={initialValues?.startDate ?? ""}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>End date (optional)</label>
+            <input
+              name="endDate"
+              type="date"
+              defaultValue={initialValues?.endDate ?? ""}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Placement</label>
+          <select name="placement" defaultValue={initialValues?.placement ?? "automatic"} style={inputStyle}>
+            <option value="automatic">Automatic (recommended)</option>
+            <option value="feed_only">Feed only</option>
+            <option value="stories_only">Stories only</option>
+            <option value="feed_and_stories">Feed + Stories</option>
+          </select>
+        </div>
+
         <div>
           <label style={labelStyle}>Status</label>
           <select name="status" defaultValue={initialValues?.status ?? "testing"} style={inputStyle}>
-            <option value="testing">Testing</option>
-            <option value="winner">Winner</option>
+            <option value="testing">Testing (paused in Meta)</option>
+            <option value="live">Live (active in Meta)</option>
             <option value="paused">Paused</option>
-            <option value="losing">Losing</option>
           </select>
         </div>
 

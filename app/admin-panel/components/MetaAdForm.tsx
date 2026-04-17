@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import ImageUpload from "./ImageUpload";
 import CreativeLibraryPicker from "./CreativeLibraryPicker";
+import AiFieldIcon from "./AiFieldIcon";
 
 type Props = {
   campaignName: string;
@@ -421,7 +422,18 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
         </div>
 
         <div>
-          <label style={labelStyle}>Headline</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Headline</label>
+            {clientId && (
+              <AiFieldIcon
+                clientId={clientId}
+                field="headline"
+                objective={objective}
+                campaignName={campaignName}
+                onApply={(v) => setHeadline(v)}
+              />
+            )}
+          </div>
           <input
             value={headline}
             onChange={(e) => setHeadline(e.target.value)}
@@ -435,7 +447,18 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
         </div>
 
         <div>
-          <label style={labelStyle}>Body text</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Body text</label>
+            {clientId && (
+              <AiFieldIcon
+                clientId={clientId}
+                field="body"
+                objective={objective}
+                campaignName={campaignName}
+                onApply={(v) => setBody(v)}
+              />
+            )}
+          </div>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}

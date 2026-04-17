@@ -13,6 +13,9 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   const audience = String(formData.get("audience") ?? "").trim();
   const budget = Number(formData.get("budget") ?? 0);
   const status = String(formData.get("status") ?? "testing").trim();
+  const startDate = String(formData.get("startDate") ?? "").trim();
+  const endDate = String(formData.get("endDate") ?? "").trim();
+  const placement = String(formData.get("placement") ?? "automatic").trim();
 
   if (!name) {
     throw new Error("Campaign name is required.");
@@ -36,6 +39,9 @@ export async function createCampaignAction(clientId: string, formData: FormData)
       budgetPounds: budget,
       audience,
       status,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      placement: placement || undefined,
     });
 
     if (result.ok) {
