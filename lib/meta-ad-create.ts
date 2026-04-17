@@ -141,12 +141,24 @@ export async function createMetaAd(
     linkData.picture = input.imageUrl;
   }
 
+  // Build object_story_spec — only include page_id, not instagram_actor_id,
+  // to avoid "Ad account does not have access to Instagram account" errors.
+  // Meta will still show the ad on Instagram if placement allows it, but
+  // won't require the ad account to have explicit Instagram access.
+  const storySpec: Record<string, unknown> = {
+    page_id: pageId,
+    link_data: linkData,
+  };
+
   const creativeParams = new URLSearchParams({
     access_token: token,
     name: `${input.name} — creative`,
-    object_story_spec: JSON.stringify({
-      page_id: pageId,
-      link_data: linkData,
+    object_story_spec: JSON.stringify(storySpec),
+    // Tell Meta this is a Facebook feed ad — avoids Instagram permission check
+    degrees_of_freedom_spec: JSON.stringify({
+      creative_features_spec: {
+        standard_enhancements: { enroll_status: "OPT_OUT" },
+      },
     }),
   });
 
