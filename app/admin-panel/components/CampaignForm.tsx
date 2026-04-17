@@ -131,7 +131,8 @@ export default function CampaignForm({
                 reasoning={ai.budget.reasoning}
                 loading={aiLoading}
                 onApply={(v) => {
-                  const num = parseFloat(v.replace(/[^0-9.]/g, ""));
+                  const match = v.match(/(\d+(?:\.\d+)?)/);
+                  const num = match ? parseFloat(match[1]) : NaN;
                   const input = document.querySelector<HTMLInputElement>("input[name='budget']");
                   if (input && Number.isFinite(num)) { input.value = String(num); input.dispatchEvent(new Event("input", { bubbles: true })); }
                 }}
