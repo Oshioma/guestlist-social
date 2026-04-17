@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useActionState } from "react";
-import AiFieldIcon from "./AiFieldIcon";
+import React, { useActionState, useEffect, useState } from "react";
+import AiInlineSuggestion from "./AiInlineSuggestion";
 
 type CampaignFormValues = {
   name: string;
@@ -31,6 +31,36 @@ export default function CampaignForm({
 }: Props) {
   const [state, formAction, pending] = useActionState(action, { error: null });
 
+  type Sug = { suggestion: string | null; reasoning: string | null };
+  const [ai, setAi] = useState<{ audience: Sug; budget: Sug; headline: Sug }>({
+    audience: { suggestion: null, reasoning: null },
+    budget: { suggestion: null, reasoning: null },
+    headline: { suggestion: null, reasoning: null },
+  });
+  const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) return;
+    setAiLoading(true);
+    fetch("/api/ai-suggest-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, objective: initialValues?.objective ?? "engagement" }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.suggestions) {
+          setAi({
+            audience: data.suggestions.audience ?? { suggestion: null, reasoning: null },
+            budget: data.suggestions.budget ?? { suggestion: null, reasoning: null },
+            headline: data.suggestions.headline ?? { suggestion: null, reasoning: null },
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(false));
+  }, [clientId]);
+
   return (
     <div
       style={{
@@ -57,16 +87,14 @@ export default function CampaignForm({
           </div>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Campaign name</label>
             {clientId && (
-              <AiFieldIcon
-                clientId={clientId}
-                field="headline"
-                objective={initialValues?.objective}
-                budget={initialValues?.budget}
-                campaignName={initialValues?.name}
+              <AiInlineSuggestion
+                suggestion={ai.headline.suggestion}
+                reasoning={ai.headline.reasoning}
+                loading={aiLoading}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='name']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -95,14 +123,13 @@ export default function CampaignForm({
         </div>
 
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Budget (£/day)</label>
             {clientId && (
-              <AiFieldIcon
-                clientId={clientId}
-                field="budget"
-                objective={initialValues?.objective}
-                campaignName={initialValues?.name}
+              <AiInlineSuggestion
+                suggestion={ai.budget.suggestion}
+                reasoning={ai.budget.reasoning}
+                loading={aiLoading}
                 onApply={(v) => {
                   const num = parseFloat(v.replace(/[^0-9.]/g, ""));
                   const input = document.querySelector<HTMLInputElement>("input[name='budget']");
@@ -122,15 +149,13 @@ export default function CampaignForm({
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Audience</label>
             {clientId && (
-              <AiFieldIcon
-                clientId={clientId}
-                field="audience"
-                objective={initialValues?.objective}
-                budget={initialValues?.budget}
-                campaignName={initialValues?.name}
+              <AiInlineSuggestion
+                suggestion={ai.audience.suggestion}
+                reasoning={ai.audience.reasoning}
+                loading={aiLoading}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='audience']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
