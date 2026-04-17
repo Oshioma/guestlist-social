@@ -11,6 +11,44 @@ type Props = {
   onApply: (value: string) => void;
 };
 
+export function AiIcon({
+  onClick,
+  loading,
+}: {
+  onClick: () => void;
+  loading: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      title="AI suggest"
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: "50%",
+        border: "none",
+        background: loading
+          ? "#c7d2fe"
+          : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: loading ? "wait" : "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+        flexShrink: 0,
+        transition: "background 200ms",
+      }}
+    >
+      {loading ? "..." : "AI"}
+    </button>
+  );
+}
+
 export default function AiFieldIcon({
   clientId,
   field,
@@ -77,34 +115,8 @@ export default function AiFieldIcon({
   }
 
   return (
-    <div style={{ display: "contents" }}>
-      <button
-        type="button"
-        onClick={handleSuggest}
-        disabled={isPending}
-        title={`AI suggest ${field}`}
-        style={{
-          width: 22,
-          height: 22,
-          borderRadius: "50%",
-          border: "none",
-          background: isPending
-            ? "#c7d2fe"
-            : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
-          color: "#fff",
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: isPending ? "wait" : "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 0,
-          flexShrink: 0,
-          transition: "background 200ms",
-        }}
-      >
-        {isPending ? "..." : "AI"}
-      </button>
+    <>
+      <AiIcon onClick={handleSuggest} loading={isPending} />
 
       <div
         style={{
@@ -112,8 +124,6 @@ export default function AiFieldIcon({
           maxHeight: showPanel ? height + 20 : 0,
           opacity: visible ? 1 : 0,
           transition: "max-height 350ms ease, opacity 300ms ease 50ms",
-          width: "100%",
-          gridColumn: "1 / -1",
         }}
       >
         <div ref={contentRef}>
@@ -121,17 +131,18 @@ export default function AiFieldIcon({
             <div
               style={{
                 marginTop: 8,
-                padding: "12px 14px",
+                marginBottom: 4,
+                padding: "14px 16px",
                 borderRadius: 12,
                 background: error ? "#fef2f2" : "#eef2ff",
                 border: `1px solid ${error ? "#fecaca" : "#e0e7ff"}`,
                 display: "flex",
                 flexDirection: "column",
-                gap: 8,
+                gap: 10,
               }}
             >
               {error && (
-                <div style={{ fontSize: 12, color: "#991b1b", lineHeight: 1.5 }}>
+                <div style={{ fontSize: 14, color: "#991b1b", lineHeight: 1.5 }}>
                   {error}
                 </div>
               )}
@@ -152,22 +163,22 @@ export default function AiFieldIcon({
                     <span style={{ fontSize: 12 }}>&#9733;</span>
                     AI suggestion
                   </div>
-                  <div style={{ fontSize: 13, color: "#18181b", lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 17, fontWeight: 600, color: "#18181b", lineHeight: 1.4 }}>
                     {result.suggestion}
                   </div>
                   {result.reasoning && (
                     <div
                       style={{
-                        fontSize: 11,
-                        color: "#6b7280",
+                        fontSize: 14,
+                        color: "#52525b",
                         fontStyle: "italic",
-                        lineHeight: 1.5,
+                        lineHeight: 1.6,
                       }}
                     >
                       {result.reasoning}
                     </div>
                   )}
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -175,12 +186,12 @@ export default function AiFieldIcon({
                         handleDismiss();
                       }}
                       style={{
-                        padding: "5px 12px",
+                        padding: "6px 14px",
                         borderRadius: 6,
                         border: "none",
                         background: "#4338ca",
                         color: "#fff",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: "pointer",
                       }}
@@ -192,12 +203,12 @@ export default function AiFieldIcon({
                       onClick={handleSuggest}
                       disabled={isPending}
                       style={{
-                        padding: "5px 12px",
+                        padding: "6px 14px",
                         borderRadius: 6,
                         border: "1px solid #c7d2fe",
                         background: "#fff",
                         color: "#4338ca",
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 600,
                         cursor: "pointer",
                       }}
@@ -208,12 +219,12 @@ export default function AiFieldIcon({
                       type="button"
                       onClick={handleDismiss}
                       style={{
-                        padding: "5px 12px",
+                        padding: "6px 14px",
                         borderRadius: 6,
                         border: "1px solid #e4e4e7",
                         background: "#fff",
                         color: "#71717a",
-                        fontSize: 11,
+                        fontSize: 12,
                         cursor: "pointer",
                       }}
                     >
@@ -226,6 +237,6 @@ export default function AiFieldIcon({
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
