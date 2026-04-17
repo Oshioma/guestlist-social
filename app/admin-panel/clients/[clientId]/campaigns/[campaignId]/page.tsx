@@ -291,6 +291,24 @@ export default async function CampaignDetailPage({ params }: Props) {
                 Add ad
               </Link>
 
+              <Link
+                href={`/app/clients/${clientId}/ads`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #e4e4e7",
+                  background: "#fff",
+                  color: "#18181b",
+                  textDecoration: "none",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                All ads &amp; actions
+              </Link>
+
             </div>
           </div>
         </div>
@@ -342,144 +360,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.15fr 0.85fr",
-          gap: 20,
-        }}
-      >
-        <SectionCard title="Campaign summary">
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 14,
-                padding: 14,
-                background: "#fafafa",
-              }}
-            >
-              <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600 }}>
-                Audience
-              </p>
-              <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                {campaign.audience ?? "No audience set"}
-              </p>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 14,
-                padding: 14,
-                background: "#fafafa",
-              }}
-            >
-              <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600 }}>
-                Objective
-              </p>
-              <p style={{ margin: 0, fontSize: 14, color: "#52525b" }}>
-                {campaign.objective ?? "No objective set"}
-              </p>
-            </div>
-
-            {campaign.notes ? (
-              <div
-                style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 14,
-                  padding: 14,
-                  background: "#fafafa",
-                }}
-              >
-                <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600 }}>
-                  Notes
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 14,
-                    color: "#52525b",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {campaign.notes}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Signals">
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={signalBoxStyle}>
-              <div style={signalLabelStyle}>Winners</div>
-              <div style={signalValueStyle}>{winners.length}</div>
-            </div>
-            <div style={signalBoxStyle}>
-              <div style={signalLabelStyle}>Testing</div>
-              <div style={signalValueStyle}>{drafts.length}</div>
-            </div>
-            <div style={signalBoxStyle}>
-              <div style={signalLabelStyle}>Paused</div>
-              <div style={signalValueStyle}>{paused.length}</div>
-            </div>
-            <div style={signalBoxStyle}>
-              <div style={signalLabelStyle}>Ended</div>
-              <div style={signalValueStyle}>{ended.length}</div>
-            </div>
-          </div>
-        </SectionCard>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 20,
-        }}
-      >
-        <SectionCard title={`Learnings (${(learningRows ?? []).length})`}>
-          {(learningRows ?? []).length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {(learningRows ?? []).map((learning) => (
-                <div key={learning.id} style={cardStyle}>
-                  <div style={cardTitleStyle}>
-                    {learning.problem || "Untitled learning"}
-                  </div>
-
-                  {learning.change_made ? (
-                    <div style={cardTextStyle}>
-                      <strong style={{ color: "#18181b" }}>Change:</strong>{" "}
-                      {learning.change_made}
-                    </div>
-                  ) : null}
-
-                  {learning.result ? (
-                    <div style={cardTextStyle}>
-                      <strong style={{ color: "#18181b" }}>Result:</strong>{" "}
-                      {learning.result}
-                    </div>
-                  ) : null}
-
-                  {learning.outcome ? (
-                    <div style={cardMutedStyle}>
-                      <strong style={{ color: "#18181b" }}>Outcome:</strong>{" "}
-                      {learning.outcome}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No learnings yet"
-              description="Completed actions can be turned into campaign learnings."
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard
+      <SectionCard
           title={`Suggestions from past learnings (${learningSuggestions.length})`}
         >
           {learningSuggestions.length > 0 ? (
@@ -567,7 +448,6 @@ export default async function CampaignDetailPage({ params }: Props) {
             />
           )}
         </SectionCard>
-      </div>
 
       <SectionCard
         title={`Ads in this campaign (${ads.length})`}
@@ -646,52 +526,3 @@ export default async function CampaignDetailPage({ params }: Props) {
   );
 }
 
-const signalBoxStyle: React.CSSProperties = {
-  border: "1px solid #e4e4e7",
-  borderRadius: 12,
-  padding: 12,
-  background: "#fff",
-};
-
-const signalLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#71717a",
-};
-
-const signalValueStyle: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 18,
-  fontWeight: 700,
-};
-
-const cardStyle: React.CSSProperties = {
-  border: "1px solid #e4e4e7",
-  borderRadius: 14,
-  padding: 14,
-  background: "#fff",
-};
-
-const cardTitleStyle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#18181b",
-  marginBottom: 6,
-};
-
-const cardTextStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: "#52525b",
-  marginBottom: 6,
-};
-
-const cardMutedStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: "#71717a",
-};
-
-const subheadStyle: React.CSSProperties = {
-  margin: "0 0 10px",
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#18181b",
-};

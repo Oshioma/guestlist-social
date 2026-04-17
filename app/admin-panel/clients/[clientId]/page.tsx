@@ -202,6 +202,24 @@ export default async function ClientDetailPage({
             New campaign
           </Link>
 
+          <Link
+            href={`/app/clients/${clientId}/ads`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              color: "#18181b",
+              textDecoration: "none",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Ads &amp; actions
+          </Link>
+
           <DeleteClientButton clientId={clientId} />
         </div>
 

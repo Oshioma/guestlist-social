@@ -97,43 +97,18 @@ export default function CampaignCreator({
         }}
       >
         <div>
-          <div
-            style={{
-              display: "inline-block",
-              padding: "3px 8px",
-              borderRadius: 999,
-              background: "#eef2ff",
-              color: "#4338ca",
-              fontSize: 10,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-            }}
-          >
-            From the engine
-          </div>
           <h2
             style={{
-              margin: "8px 0 2px",
-              fontSize: 16,
+              margin: 0,
+              fontSize: 15,
               fontWeight: 700,
               color: "#18181b",
-              letterSpacing: "-0.01em",
             }}
           >
-            Suggestions for this campaign
+            What&rsquo;s worked before
           </h2>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 12,
-              color: "#71717a",
-              lineHeight: 1.5,
-            }}
-          >
-            Click <strong>Apply</strong> to pre-fill the form with a pattern
-            we&rsquo;ve seen work — from this client, the agency, or a past
-            winning ad. You can still edit anything before you save.
+          <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
+            Click <strong>Apply</strong> to pre-fill the form.
           </p>
         </div>
 

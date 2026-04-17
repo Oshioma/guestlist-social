@@ -191,8 +191,8 @@ export default function CampaignForm({
         <div>
           <label style={labelStyle}>Status</label>
           <select name="status" defaultValue={initialValues?.status ?? "testing"} style={inputStyle}>
-            <option value="testing">Testing (paused in Meta)</option>
-            <option value="live">Live (active in Meta)</option>
+            <option value="testing">Draft — paused until ready</option>
+            <option value="live">Live — active and spending</option>
             <option value="paused">Paused</option>
           </select>
         </div>
