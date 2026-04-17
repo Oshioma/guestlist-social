@@ -574,6 +574,60 @@ export default async function ClientDetailPage({
                     </div>
                   </div>
 
+                  {(() => {
+                    const thumbs = campaignAdsRaw
+                      .map((ad) => ad.creative_image_url as string | null)
+                      .filter((url): url is string => !!url)
+                      .slice(0, 5);
+                    if (thumbs.length === 0) return null;
+                    return (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          marginTop: 12,
+                          overflowX: "auto",
+                        }}
+                      >
+                        {thumbs.map((url, i) => (
+                          <img
+                            key={i}
+                            src={url}
+                            alt=""
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 8,
+                              objectFit: "cover",
+                              border: "1px solid #e4e4e7",
+                              flexShrink: 0,
+                            }}
+                          />
+                        ))}
+                        {campaignAdsRaw.length > 5 && (
+                          <span
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 8,
+                              background: "#f4f4f5",
+                              border: "1px solid #e4e4e7",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 12,
+                              color: "#71717a",
+                              fontWeight: 600,
+                              flexShrink: 0,
+                            }}
+                          >
+                            +{campaignAdsRaw.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   <div
                     style={{
                       display: "grid",
