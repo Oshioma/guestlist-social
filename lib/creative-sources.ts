@@ -79,35 +79,10 @@ export async function getCreativeSourcesForClient(
     }
   }
 
-  // 3. From Meta ad account (existing creatives in Ads Manager)
-  try {
-    const token = process.env.META_ACCESS_TOKEN;
-    let accountId = process.env.META_AD_ACCOUNT_ID;
-    if (token && accountId) {
-      if (!accountId.startsWith("act_")) accountId = `act_${accountId}`;
-      const url = `https://graph.facebook.com/${API_VERSION}/${accountId}/adcreatives?fields=id,name,thumbnail_url,image_url,object_story_spec&limit=30&access_token=${token}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        for (const c of data.data ?? []) {
-          const imgUrl =
-            c.image_url ??
-            c.thumbnail_url ??
-            c.object_story_spec?.link_data?.image_url ??
-            null;
-          if (imgUrl) {
-            add({
-              url: imgUrl,
-              name: c.name ?? `Meta creative ${c.id}`,
-              source: "meta",
-            });
-          }
-        }
-      }
-    }
-  } catch {
-    // Meta fetch failed — degrade gracefully, other sources still work
-  }
+  // 3. Meta ad account creatives — skipped for the picker because Meta
+  // CDN URLs (thumbnail_url, image_url) are temporary and expire. When
+  // used in a new ad creative, Meta rejects them. Only permanent URLs
+  // (Supabase Storage from our own uploads) are reliable for ad creation.
 
   return sources;
 }
