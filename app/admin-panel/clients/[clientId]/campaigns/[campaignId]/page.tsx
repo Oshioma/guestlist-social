@@ -25,6 +25,7 @@ type Props = {
 export const dynamic = "force-dynamic";
 
 export default async function CampaignDetailPage({ params }: Props) {
+  try {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
   const adsAllowed = await canRunAds();
@@ -69,7 +70,10 @@ export default async function CampaignDetailPage({ params }: Props) {
   }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
-  const creativeSources = await getCreativeSourcesForClient(clientId);
+  let creativeSources: Awaited<ReturnType<typeof getCreativeSourcesForClient>> = [];
+  try {
+    creativeSources = await getCreativeSourcesForClient(clientId);
+  } catch { /* degrade gracefully */ }
 
   const winners = ads.filter((ad) => ad.status === "active" && ad.ctr >= 2.5);
   const paused = ads.filter((ad) => ad.status === "paused");
@@ -572,5 +576,18 @@ export default async function CampaignDetailPage({ params }: Props) {
       </SectionCard>
     </div>
   );
+  } catch (err) {
+    console.error("CampaignDetailPage error:", err);
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#18181b" }}>
+          Campaign not found
+        </h2>
+        <p style={{ fontSize: 14, color: "#71717a", margin: "8px 0" }}>
+          This campaign may still be creating in Meta. Try refreshing in a few seconds.
+        </p>
+      </div>
+    );
+  }
 }
 
