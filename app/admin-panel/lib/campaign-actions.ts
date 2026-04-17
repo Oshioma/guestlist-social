@@ -33,23 +33,34 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID;
 
   if (hasMetaCreds && budget > 0) {
-    const result = await createMetaCampaign({
-      name,
-      objective,
-      budgetPounds: budget,
-      audience,
-      status,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-      placement: placement || undefined,
-    });
+    try {
+      const metaPromise = createMetaCampaign({
+        name,
+        objective,
+        budgetPounds: budget,
+        audience,
+        status,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        placement: placement || undefined,
+      });
 
-    if (result.ok) {
-      metaCampaignId = result.metaCampaignId;
-      metaAdSetId = result.metaAdSetId;
-    } else {
-      metaError = `Meta ${result.step}: ${result.error}`;
-      console.error("createCampaignAction Meta error:", metaError);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Meta API timed out after 25s")), 25000)
+      );
+
+      const result = await Promise.race([metaPromise, timeoutPromise]);
+
+      if (result.ok) {
+        metaCampaignId = result.metaCampaignId;
+        metaAdSetId = result.metaAdSetId;
+      } else {
+        metaError = `Meta ${result.step}: ${result.error}`;
+        console.error("createCampaignAction Meta error:", metaError);
+      }
+    } catch (err) {
+      metaError = err instanceof Error ? err.message : "Meta creation failed";
+      console.error("createCampaignAction Meta exception:", metaError);
     }
   }
 
