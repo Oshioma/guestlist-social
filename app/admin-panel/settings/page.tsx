@@ -353,21 +353,22 @@ export default async function SettingsPage() {
             </p>
           )}
 
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              background: "#fffbeb",
-              border: "1px solid #fde68a",
-              fontSize: 12,
-              color: "#92400e",
-            }}
-          >
-            <strong>Required env vars:</strong> META_ACCESS_TOKEN and
-            META_AD_ACCOUNT_ID must be set in your environment. The sync pulls
-            all campaigns and ads from the connected ad account into the selected
-            client.
-          </div>
+          {!hasMetaToken && (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                fontSize: 12,
+                color: "#991b1b",
+              }}
+            >
+              <strong>META_ACCESS_TOKEN</strong> and{" "}
+              <strong>META_AD_ACCOUNT_ID</strong> are not set. Add them in
+              Vercel → Settings → Environment Variables to enable Meta sync.
+            </div>
+          )}
         </div>
       </SectionCard>
 
