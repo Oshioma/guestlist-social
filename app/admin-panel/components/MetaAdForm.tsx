@@ -42,8 +42,6 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [aiReasoning, setAiReasoning] = useState<string | null>(null);
-
   type Sug = { suggestion: string | null; reasoning: string | null };
   const [ai, setAi] = useState<{ headline: Sug; body: Sug }>({
     headline: { suggestion: null, reasoning: null },
@@ -175,86 +173,6 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
           </div>
         )}
 
-        {clientId && (
-          <div
-            style={{
-              padding: "12px 14px",
-              borderRadius: 12,
-              background: "#eef2ff",
-              border: "1px solid #e0e7ff",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                disabled={aiLoading}
-                onClick={async () => {
-                  setAiLoading(true);
-                  setAiReasoning(null);
-                  try {
-                    const res = await fetch("/api/ai-write-ad-copy", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        clientId,
-                        objective: objective ?? "engagement",
-                        campaignName,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.ok) {
-                      setHeadline(data.headline);
-                      setBody(data.body);
-                      if (data.cta) setCtaType(data.cta);
-                      setAiReasoning(data.reasoning);
-                    } else {
-                      setError(data.error);
-                    }
-                  } catch {
-                    setError("Network error");
-                  } finally {
-                    setAiLoading(false);
-                  }
-                }}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: aiLoading
-                    ? "#c7d2fe"
-                    : "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)",
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: aiLoading ? "wait" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                {aiLoading ? (
-                  "AI writing..."
-                ) : (
-                  <>
-                    <span style={{ fontSize: 14 }}>&#9733;</span> AI Write Copy
-                  </>
-                )}
-              </button>
-              <span style={{ fontSize: 11, color: "#6b7280" }}>
-                Generates headline, body text, and picks the best CTA
-              </span>
-            </div>
-            {aiReasoning && (
-              <div style={{ fontSize: 11, color: "#4338ca", lineHeight: 1.4, fontStyle: "italic" }}>
-                {aiReasoning}
-              </div>
-            )}
-          </div>
-        )}
-
         <div>
           <label style={labelStyle}>Ad name</label>
           <input
@@ -331,48 +249,33 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
           {creativeBrief && (
             <div
               style={{
-                marginBottom: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
+                marginBottom: 8,
+                padding: "8px 10px",
+                borderRadius: 8,
                 background: "#eef2ff",
                 border: "1px solid #e0e7ff",
                 display: "flex",
-                flexDirection: "column",
-                gap: 6,
+                alignItems: "flex-start",
+                gap: 8,
               }}
             >
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#4338ca", textTransform: "uppercase", letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 12 }}>&#9733;</span> AI creative brief
+              <span style={{ fontSize: 11, color: "#4338ca", fontWeight: 700, flexShrink: 0 }}>&#9733;</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: "#18181b", lineHeight: 1.5 }}>
+                  {creativeBrief.brief}
+                </div>
+                {creativeBrief.generatedImageUrl && (
+                  <div style={{ fontSize: 11, color: "#166534", fontWeight: 600, marginTop: 2 }}>
+                    Image applied
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: 12, color: "#18181b", lineHeight: 1.5 }}>
-                {creativeBrief.brief}
-              </div>
-              {creativeBrief.rationale && (
-                <div style={{ fontSize: 11, color: "#6b7280", fontStyle: "italic" }}>
-                  {creativeBrief.rationale}
-                </div>
-              )}
-              {creativeBrief.generatedImageUrl && (
-                <div style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>
-                  Image generated and applied below
-                </div>
-              )}
-              {!creativeBrief.generatedImageUrl && creativeBrief.imageGenerationEnabled && (
-                <div style={{ fontSize: 11, color: "#92400e" }}>
-                  Image generation attempted but failed — use the brief above with Canva or your designer
-                </div>
-              )}
-              {!creativeBrief.imageGenerationEnabled && (
-                <div style={{ fontSize: 11, color: "#71717a" }}>
-                  Use this brief with Canva AI, Midjourney, or your designer. Enable AI Image Generation in Settings to generate directly.
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setCreativeBrief(null)}
-                style={{ alignSelf: "flex-start", padding: "2px 8px", borderRadius: 4, border: "1px solid #c7d2fe", background: "#fff", color: "#4338ca", fontSize: 10, cursor: "pointer" }}
+                style={{ background: "none", border: "none", color: "#a1a1aa", fontSize: 14, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
               >
-                Dismiss
+                x
               </button>
             </div>
           )}
