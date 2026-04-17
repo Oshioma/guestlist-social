@@ -401,7 +401,7 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
                 label="Upload image"
                 accept="image/*"
               />
-              {existingCreatives && existingCreatives.length > 0 && (
+              {existingCreatives && (
                 <CreativeLibraryPicker
                   creatives={existingCreatives}
                   onPick={(url) => setImageUrl(url)}

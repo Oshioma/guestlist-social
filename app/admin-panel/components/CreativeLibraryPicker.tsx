@@ -35,9 +35,9 @@ export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
 
-  if (creatives.length === 0) return null;
+  const isEmpty = creatives.length === 0;
 
-  const filtered = filter === "all"
+  const filtered = isEmpty ? [] : filter === "all"
     ? creatives
     : creatives.filter((c) => c.source === filter);
 
@@ -51,22 +51,28 @@ export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
     <div>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => !isEmpty && setOpen(!open)}
+        disabled={isEmpty}
+        title={isEmpty ? "No existing creatives — upload your first image or sync ads from Meta" : undefined}
         style={{
           padding: "4px 10px",
           borderRadius: 6,
           border: "1px solid #e4e4e7",
           background: "#fff",
-          color: "#18181b",
+          color: isEmpty ? "#a1a1aa" : "#18181b",
           fontSize: 12,
           fontWeight: 600,
-          cursor: "pointer",
+          cursor: isEmpty ? "not-allowed" : "pointer",
         }}
       >
-        {open ? "Close library" : `Pick from library (${creatives.length})`}
+        {isEmpty
+          ? "No library images yet"
+          : open
+          ? "Close library"
+          : `Pick from library (${creatives.length})`}
       </button>
 
-      {open && (
+      {open && !isEmpty && (
         <div
           style={{
             marginTop: 8,
