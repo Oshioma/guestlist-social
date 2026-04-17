@@ -48,11 +48,11 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
     body: { suggestion: null, reasoning: null },
   });
   const [aiLoading, setAiLoading] = useState(false);
+  const [nextLoading, setNextLoading] = useState(false);
 
-  useEffect(() => {
+  function fetchAdCopy() {
     if (!clientId) return;
-    setAiLoading(true);
-    fetch("/api/ai-write-ad-copy", {
+    return fetch("/api/ai-write-ad-copy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, objective: objective ?? "engagement", campaignName }),
@@ -66,9 +66,19 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
           });
         }
       })
-      .catch(() => {})
-      .finally(() => setAiLoading(false));
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!clientId) return;
+    setAiLoading(true);
+    fetchAdCopy()?.finally(() => setAiLoading(false));
   }, [clientId]);
+
+  function handleNextIdea() {
+    setNextLoading(true);
+    fetchAdCopy()?.finally(() => setNextLoading(false));
+  }
   const [creativeLoading, setCreativeLoading] = useState(false);
   const [creativeBrief, setCreativeBrief] = useState<{
     brief: string;
@@ -359,6 +369,8 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
                 suggestion={ai.headline.suggestion}
                 reasoning={ai.headline.reasoning}
                 loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
                 onApply={(v) => setHeadline(v)}
               />
             )}
@@ -383,6 +395,8 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
                 suggestion={ai.body.suggestion}
                 reasoning={ai.body.reasoning}
                 loading={aiLoading}
+                onNextIdea={handleNextIdea}
+                nextLoading={nextLoading}
                 onApply={(v) => setBody(v)}
               />
             )}

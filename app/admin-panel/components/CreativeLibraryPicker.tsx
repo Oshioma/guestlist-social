@@ -31,6 +31,18 @@ const STATUS_COLORS: Record<string, string> = {
 
 type Filter = "all" | "ads" | "proofer" | "meta";
 
+function thumbUrl(url: string): string {
+  if (!url) return url;
+  // Supabase Storage supports /render/image/public with transform params
+  if (url.includes("supabase.co/storage/v1/object/public/")) {
+    return url.replace(
+      "/storage/v1/object/public/",
+      "/storage/v1/render/image/public/"
+    ) + "?width=200&height=200&resize=cover&quality=60";
+  }
+  return url;
+}
+
 export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -149,8 +161,11 @@ export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
                   title={c.name}
                 >
                   <img
-                    src={c.url}
+                    src={thumbUrl(c.url)}
                     alt={c.name}
+                    loading="lazy"
+                    width={100}
+                    height={100}
                     style={{
                       width: "100%",
                       aspectRatio: "1 / 1",
