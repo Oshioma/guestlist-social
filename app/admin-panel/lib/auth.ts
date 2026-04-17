@@ -13,13 +13,13 @@ export async function requireAdminPanelAccess(
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/sign-in");
   }
 
   // Resolve the caller's role. We use maybeSingle() here so that a freshly
   // provisioned Supabase user (created in the Auth dashboard but not yet
   // listed in user_roles) does not 500 on .single() and bounce back to
-  // /login — that historical behavior produced an invisible redirect loop.
+  // /sign-in — that historical behavior produced an invisible redirect loop.
   //
   // Missing row → default to "viewer" (read-only). Admins who want to
   // promote someone can insert a row into user_roles after the first login.
@@ -31,13 +31,13 @@ export async function requireAdminPanelAccess(
 
   if (error) {
     console.error("requireAdminPanelAccess: user_roles lookup failed", error);
-    redirect("/login");
+    redirect("/sign-in");
   }
 
   const role = ((roleRow?.role as AppRole | undefined) ?? "viewer") as AppRole;
 
   if (!allowedRoles.includes(role)) {
-    redirect("/login");
+    redirect("/sign-in");
   }
 
   return {
