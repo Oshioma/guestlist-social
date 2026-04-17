@@ -5,21 +5,18 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getCampaigns,
   getAds,
-  getAdSets,
+  getAdAccount,
   getAdInsights,
   getDailyAdInsights,
   getAdPlacementInsights,
   getAdDemographicInsights,
   mapMetaStatus,
   mapMetaObjective,
-  insightToAdRow,
   creativeToAdRow,
   resolveVideoSource,
   resolveVideoPoster,
   resolveObjectStoryImage,
-  targetingToAudience,
 } from "@/lib/meta";
-import { getAdAccount } from "@/lib/meta";
 
 // Service-role client. Same reasoning as /api/meta-sync: this file's
 // sync routines INSERT new campaigns/ads when Meta returns objects we
@@ -203,21 +200,10 @@ export async function syncMetaData(clientId: string) {
 
     log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // 2. Ad Sets → audience data
-    const metaAdSets = await getAdSets();
-    const adSetAudienceMap = new Map<string, string>();
-    for (const adSet of metaAdSets) {
-      adSetAudienceMap.set(adSet.id, targetingToAudience(adSet));
-    }
-    log.push(`Fetched ${metaAdSets.length} ad sets`);
-
-    // 3. Ads + Insights (last 12 months)
-    const [metaAds, insights] = await Promise.all([
-      getAds(),
-      getAdInsights({ datePreset: "last_year" }),
-    ]);
-
-    const insightByAdId = new Map(insights.map((i) => [i.ad_id, i]));
+    // 2. Ads (skip ad sets + insights for speed — those can be synced
+    // via the full /api/meta-sync route which has more headroom).
+    const metaAds = await getAds();
+    log.push(`Fetched ${metaAds.length} ads`);
 
     let adsCreated = 0;
     let adsUpdated = 0;
@@ -226,21 +212,18 @@ export async function syncMetaData(clientId: string) {
       const supabaseCampaignId = campaignMap.get(metaAd.campaign_id);
       if (!supabaseCampaignId) continue;
 
-      const insight = insightByAdId.get(metaAd.id);
-      const adData = insight
-        ? insightToAdRow(insight)
-        : {
-            name: metaAd.name,
-            spend: 0,
-            impressions: 0,
-            clicks: 0,
-            cost_per_result: 0,
-            conversions: 0,
-            engagement: 0,
-            followers_gained: 0,
-          };
+      const adData = {
+        name: metaAd.name,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        cost_per_result: 0,
+        conversions: 0,
+        engagement: 0,
+        followers_gained: 0,
+      };
 
-      const audience = adSetAudienceMap.get(metaAd.adset_id) ?? null;
+      const audience: string | null = null;
       const creativeHook = metaAd.creative
         ? [metaAd.creative.title, metaAd.creative.body]
             .filter(Boolean)
