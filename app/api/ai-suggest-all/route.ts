@@ -230,7 +230,7 @@ ${contextBlock}
 
 Based on everything above, suggest:
 
-1. CAMPAIGN NAME: A specific, memorable campaign name that reflects the brand and objective. Not generic — reference the actual product/service.
+1. CAMPAIGN NAME: A specific campaign name using the client's actual business name. Never use "[Brand]" or placeholders — use their real name.
 
 2. BUDGET: A specific daily budget in £. Factor in: what spend levels produced winners for this client, minimum to get meaningful data for ${objective} campaigns, and what competitors are likely spending.
 
@@ -244,8 +244,10 @@ RULES:
 - If winners used certain audiences/hooks that worked, lean into those.
 - If losers failed with certain approaches, explicitly avoid them.
 - Match the brand voice from their organic posts.
-- Keep suggestions SHORT (max 60 chars) but specific.
-- Budget suggestion should be a single number like "£15/day", not a range.`
+- Campaign name: max 50 chars, use the real business name
+- Audience: max 80 chars, be specific with age + location + interests
+- Budget: single number like "£15/day", not a range
+- Never use placeholder text like "[Brand]" or "[Product]" — use real names`
       }],
     });
 
