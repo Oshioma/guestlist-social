@@ -6,7 +6,7 @@
 // hard-coding /app/dashboard as the destination, the form sends every user
 // here, and we redirect server-side based on the viewer's resolved role.
 //
-//   - No viewer  → /login
+//   - No viewer  → /sign-in
 //   - Admin      → ?next param or /app/dashboard
 //   - Client     → /portal/{theirClientId} (their own room)
 //
@@ -39,13 +39,13 @@ export default async function PostLoginPage({
   const viewer = await getViewer();
 
   if (!viewer) {
-    redirect("/login");
+    redirect("/sign-in");
   }
 
   if (viewer.role === "client") {
     // Defensive fallback if role is client but no linked clientId is available
     if (!viewer.clientId) {
-      redirect("/login?error=missing_client");
+      redirect("/sign-in?error=missing_client");
     }
     redirect(`/portal/${viewer.clientId}`);
   }

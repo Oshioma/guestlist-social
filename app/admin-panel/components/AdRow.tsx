@@ -18,7 +18,7 @@ const priorityColors: Record<string, { bg: string; text: string }> = {
   low: { bg: "#f4f4f5", text: "#71717a" },
 };
 
-export default function AdRow({ ad }: { ad: Ad }) {
+export default function AdRow({ ad, canEdit = true }: { ad: Ad; canEdit?: boolean }) {
   const colors = perfColors[ad.performanceStatus] ?? perfColors.testing;
   const suggestion = getActionSuggestion({
     performance_status: ad.performanceStatus,
@@ -88,7 +88,7 @@ export default function AdRow({ ad }: { ad: Ad }) {
         </div>
 
         <div style={{ width: 120, display: "flex", gap: 6, justifyContent: "flex-end" }}>
-          {ad.campaignId && (
+          {canEdit && ad.campaignId && (
             <Link
               href={`/app/clients/${ad.clientId}/campaigns/${ad.campaignId}/ads/${ad.id}/edit`}
               style={{
