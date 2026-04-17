@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canRunAds } from "@/lib/auth/permissions";
 import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
+import { revalidatePath } from "next/cache";
+import { createMetaAd } from "@/lib/meta-ad-create";
+import { getCreativeSourcesForClient } from "@/lib/creative-sources";
+import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
 
 import SectionCard from "@/app/admin-panel/components/SectionCard";
@@ -65,6 +69,7 @@ export default async function CampaignDetailPage({ params }: Props) {
   }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
+  const creativeSources = await getCreativeSourcesForClient(clientId);
 
   const winners = ads.filter((ad) => ad.status === "active" && ad.ctr >= 2.5);
   const paused = ads.filter((ad) => ad.status === "paused");
@@ -112,46 +117,63 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {hasNoAds && (
-        <div
-          style={{
-            padding: "20px 24px",
-            borderRadius: 14,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#18181b" }}>
-            Campaign created — now add an ad
-          </div>
-          <div style={{ fontSize: 14, color: "#52525b", lineHeight: 1.5 }}>
-            Upload an image, write your headline and copy, and the ad will be
-            created in Meta. It starts paused so you can review before going live.
-          </div>
-          {adsAllowed && (
-            <Link
-              href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                alignSelf: "flex-start",
-                padding: "10px 20px",
-                borderRadius: 10,
-                background: "#18181b",
-                color: "#fff",
-                textDecoration: "none",
-                fontSize: 14,
-                fontWeight: 700,
-              }}
-            >
+      {hasNoAds && hasMetaAdsetId && adsAllowed && (() => {
+        async function inlineMetaAction(data: {
+          name: string;
+          imageUrl: string;
+          headline: string;
+          body: string;
+          ctaType: string;
+          destinationUrl: string;
+        }): Promise<{ error?: string }> {
+          "use server";
+          const adsetMetaId = (campaign as any).meta_adset_id as string;
+          const result = await createMetaAd({
+            adsetMetaId,
+            name: data.name,
+            imageUrl: data.imageUrl,
+            headline: data.headline,
+            body: data.body,
+            ctaType: data.ctaType,
+            destinationUrl: data.destinationUrl,
+          });
+          if (!result.ok) {
+            return { error: `Meta ${result.step}: ${result.error}` };
+          }
+          const supabaseInner = await createClient();
+          await supabaseInner.from("ads").insert({
+            client_id: clientId,
+            campaign_id: campaignId,
+            meta_id: result.adId,
+            name: data.name,
+            status: "testing",
+            creative_image_url: data.imageUrl,
+            creative_headline: data.headline,
+            creative_body: data.body,
+            creative_cta: data.ctaType,
+          });
+          revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+          return {};
+        }
+
+        return (
+          <div>
+            <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
               Add your first ad
-            </Link>
-          )}
-        </div>
-      )}
+            </h2>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
+              Upload an image, write your copy, and the ad will be created in Meta. Starts paused so you can review.
+            </p>
+            <MetaAdForm
+              campaignName={campaign.name}
+              clientId={clientId}
+              objective={(campaign as any).objective ?? "engagement"}
+              existingCreatives={creativeSources}
+              onSubmit={inlineMetaAction}
+            />
+          </div>
+        );
+      })()}
 
       {!hasNoAds && hasMetaId && (
         <div
