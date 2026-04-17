@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import ImageUpload from "./ImageUpload";
 import CreativeLibraryPicker from "./CreativeLibraryPicker";
-import AiFieldIcon from "./AiFieldIcon";
+import AiInlineSuggestion from "./AiInlineSuggestion";
 
 type Props = {
   campaignName: string;
@@ -42,8 +42,35 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+
+  type Sug = { suggestion: string | null; reasoning: string | null };
+  const [ai, setAi] = useState<{ headline: Sug; body: Sug }>({
+    headline: { suggestion: null, reasoning: null },
+    body: { suggestion: null, reasoning: null },
+  });
+  const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) return;
+    setAiLoading(true);
+    fetch("/api/ai-write-ad-copy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, objective: objective ?? "engagement", campaignName }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setAi({
+            headline: { suggestion: data.headline, reasoning: data.reasoning },
+            body: { suggestion: data.body, reasoning: data.reasoning },
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(false));
+  }, [clientId]);
   const [creativeLoading, setCreativeLoading] = useState(false);
   const [creativeBrief, setCreativeBrief] = useState<{
     brief: string;
@@ -422,14 +449,13 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
         </div>
 
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Headline</label>
             {clientId && (
-              <AiFieldIcon
-                clientId={clientId}
-                field="headline"
-                objective={objective}
-                campaignName={campaignName}
+              <AiInlineSuggestion
+                suggestion={ai.headline.suggestion}
+                reasoning={ai.headline.reasoning}
+                loading={aiLoading}
                 onApply={(v) => setHeadline(v)}
               />
             )}
@@ -447,14 +473,13 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
         </div>
 
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Body text</label>
             {clientId && (
-              <AiFieldIcon
-                clientId={clientId}
-                field="body"
-                objective={objective}
-                campaignName={campaignName}
+              <AiInlineSuggestion
+                suggestion={ai.body.suggestion}
+                reasoning={ai.body.reasoning}
+                loading={aiLoading}
                 onApply={(v) => setBody(v)}
               />
             )}
