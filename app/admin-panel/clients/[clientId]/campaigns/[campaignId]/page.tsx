@@ -108,33 +108,28 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   const hasMetaId = !!(campaign as any).meta_id;
   const hasMetaAdsetId = !!(campaign as any).meta_adset_id;
-  const isNewlyCreated = hasMetaId && ads.length === 0;
+  const hasNoAds = ads.length === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {isNewlyCreated && (
+      {hasNoAds && (
         <div
           style={{
-            padding: "16px 20px",
+            padding: "20px 24px",
             borderRadius: 14,
-            background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
-            border: "1px solid #bbf7d0",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
             display: "flex",
             flexDirection: "column",
             gap: 10,
           }}
         >
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#166534" }}>
-            Campaign created in Meta
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#18181b" }}>
+            Campaign created — now add an ad
           </div>
-          <div style={{ fontSize: 14, color: "#15803d", lineHeight: 1.5 }}>
-            <strong>{campaign.name}</strong> is set up in your Meta ad account
-            with a {campaign.budget ? `£${Number(campaign.budget).toFixed(0)}/day` : ""} budget.
-            It&rsquo;s currently <strong>{campaignStatus === "testing" || campaignStatus === "paused" ? "paused" : campaignStatus}</strong> and
-            won&rsquo;t spend until you add an ad and activate it.
-          </div>
-          <div style={{ fontSize: 13, color: "#166534", fontWeight: 600 }}>
-            Next step: add an ad with creative (image + copy) so Meta has something to show people.
+          <div style={{ fontSize: 14, color: "#52525b", lineHeight: 1.5 }}>
+            Upload an image, write your headline and copy, and the ad will be
+            created in Meta. It starts paused so you can review before going live.
           </div>
           {adsAllowed && (
             <Link
@@ -143,9 +138,9 @@ export default async function CampaignDetailPage({ params }: Props) {
                 display: "inline-flex",
                 alignItems: "center",
                 alignSelf: "flex-start",
-                padding: "10px 18px",
+                padding: "10px 20px",
                 borderRadius: 10,
-                background: "#166534",
+                background: "#18181b",
                 color: "#fff",
                 textDecoration: "none",
                 fontSize: 14,
@@ -158,7 +153,7 @@ export default async function CampaignDetailPage({ params }: Props) {
         </div>
       )}
 
-      {!isNewlyCreated && hasMetaId && (
+      {!hasNoAds && hasMetaId && (
         <div
           style={{
             padding: "10px 14px",
