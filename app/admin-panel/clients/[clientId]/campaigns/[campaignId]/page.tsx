@@ -38,7 +38,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: adsRows, error: adsError },
     { data: learningRows, error: learningsError },
   ] = await Promise.all([
-    supabase.from("clients").select("id, name").eq("id", clientId).single(),
+    supabase.from("clients").select("id, name, website").eq("id", clientId).single(),
     supabase
       .from("campaigns")
       .select("*")
@@ -167,6 +167,7 @@ export default async function CampaignDetailPage({ params }: Props) {
             <MetaAdForm
               campaignName={campaign.name}
               clientId={clientId}
+              clientWebsite={(client as any).website ?? ""}
               objective={(campaign as any).objective ?? "engagement"}
               existingCreatives={creativeSources}
               onSubmit={inlineMetaAction}
