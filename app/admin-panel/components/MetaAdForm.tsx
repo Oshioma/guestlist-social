@@ -8,6 +8,7 @@ import AiInlineSuggestion from "./AiInlineSuggestion";
 type Props = {
   campaignName: string;
   clientId?: string;
+  clientWebsite?: string;
   objective?: string;
   existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   onSubmit: (data: {
@@ -32,13 +33,13 @@ const CTA_OPTIONS = [
   { value: "get_quote", label: "Get Quote" },
 ];
 
-export default function MetaAdForm({ campaignName, clientId, objective, existingCreatives, onSubmit }: Props) {
+export default function MetaAdForm({ campaignName, clientId, clientWebsite, objective, existingCreatives, onSubmit }: Props) {
   const [name, setName] = useState(`${campaignName} — ad 1`);
   const [imageUrl, setImageUrl] = useState("");
   const [headline, setHeadline] = useState("");
   const [body, setBody] = useState("");
   const [ctaType, setCtaType] = useState("learn_more");
-  const [destinationUrl, setDestinationUrl] = useState("");
+  const [destinationUrl, setDestinationUrl] = useState(clientWebsite ?? "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -432,6 +433,11 @@ export default function MetaAdForm({ campaignName, clientId, objective, existing
 
           <div>
             <label style={labelStyle}>Destination URL</label>
+            {clientWebsite && (
+              <div style={{ fontSize: 11, color: "#71717a", marginBottom: 4, marginTop: -2 }}>
+                Check this is the right landing page for this campaign
+              </div>
+            )}
             <input
               value={destinationUrl}
               onChange={(e) => setDestinationUrl(e.target.value)}

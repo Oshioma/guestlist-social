@@ -29,6 +29,7 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ clientId: string }>;
 }) {
+  try {
   const { clientId } = await params;
   const supabase = await createClient();
   const adsAllowed = await canRunAds();
@@ -641,6 +642,8 @@ export default async function ClientDetailPage({
                             key={i}
                             src={url}
                             alt=""
+                            loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
                             style={{
                               width: 80,
                               height: 80,
@@ -991,6 +994,20 @@ export default async function ClientDetailPage({
       </SectionCard>
     </div>
   );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("ClientDetailPage error:", message, err);
+    return (
+      <div style={{ padding: 40 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#18181b" }}>
+          Something went wrong
+        </h2>
+        <p style={{ fontSize: 13, color: "#991b1b", margin: "8px 0", background: "#fef2f2", padding: "8px 12px", borderRadius: 8, border: "1px solid #fecaca" }}>
+          {message}
+        </p>
+      </div>
+    );
+  }
 }
 
 const miniStatStyle: React.CSSProperties = {

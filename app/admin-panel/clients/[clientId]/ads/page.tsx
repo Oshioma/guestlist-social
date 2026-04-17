@@ -717,8 +717,8 @@ export default async function ClientAdsPage({
                         href={`/app/clients/${clientId}/ads/${ad.id}`}
                         style={{
                           flexShrink: 0,
-                          width: 72,
-                          height: 72,
+                          width: 100,
+                          height: 100,
                           borderRadius: 10,
                           overflow: "hidden",
                           background: "#f4f4f5",
@@ -737,6 +737,18 @@ export default async function ClientAdsPage({
                           <img
                             src={ad.creative_image_url}
                             alt=""
+                            loading="lazy"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              img.style.display = "none";
+                              if (img.parentElement) {
+                                img.parentElement.style.background = "#f4f4f5";
+                                img.parentElement.style.display = "flex";
+                                img.parentElement.style.alignItems = "center";
+                                img.parentElement.style.justifyContent = "center";
+                                img.parentElement.innerHTML = '<span style="font-size:11px;color:#a1a1aa">Sync to refresh</span>';
+                              }
+                            }}
                             style={{
                               width: "100%",
                               height: "100%",
