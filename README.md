@@ -39,12 +39,16 @@ app/
   admin-panel/       operator admin — dashboard, clients, ads, proofer, campaigns
   portal/            read-only client view
   api/               API routes (meta-sync, decisions, publishing, cron jobs)
-  login/             auth
+  (auth)/            sign-in / sign-up / forgot-password / reset-password / accept-invite
+  auth/callback/     Supabase PKCE + OTP return handler
+  sign-out/          POST-only logout
 lib/                 shared: meta client, supabase client, cross-pollinate, patterns
+lib/auth/            auth server actions + permission helpers (getMemberAccess, requireAdsAccess)
 supabase/migrations/ schema migrations (date-ordered SQL files)
-docs/                product-overview.md — detailed doc of all three apps
+docs/                product-overview.md, auth.md
 ```
 
 ## Documentation
 
-See [`docs/product-overview.md`](docs/product-overview.md) for a detailed breakdown of the three apps, the data model, current status, and the MVP punch list.
+- [`docs/product-overview.md`](docs/product-overview.md) — the three apps, data model, current status, MVP punch list.
+- [`docs/auth.md`](docs/auth.md) — how the login / member-admin / ads-access module works and how to port it to another Next.js app.
