@@ -151,18 +151,8 @@ export default async function NewAdPage({ params }: Props) {
           >
             Add ad to {campaign.name}
           </h1>
-
-          <p
-            style={{
-              margin: "10px 0 0",
-              fontSize: 14,
-              color: "#71717a",
-              maxWidth: 720,
-            }}
-          >
-            {hasMetaAdSet
-              ? "Upload a creative, write your copy, and this ad will be created directly in Meta Ads Manager. It starts paused so you can review before going live."
-              : `Add an ad to ${campaign.name} for ${client.name}. This campaign doesn't have a Meta ad set — the ad will be saved locally only.`}
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#71717a" }}>
+            {client.name}
           </p>
         </div>
       </div>
