@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
+import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
 
@@ -111,6 +112,11 @@ export default async function EditClientPage({ params }: Props) {
           notes: client.notes ?? "",
           industry: client.industry ?? "",
         }}
+      />
+
+      <ClientAiInstructions
+        clientId={clientId}
+        initialInstructions={client.ai_instructions ?? ""}
       />
     </div>
   );

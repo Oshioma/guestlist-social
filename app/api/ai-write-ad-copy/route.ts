@@ -62,6 +62,15 @@ export async function POST(req: Request) {
         if (client.notes) context.push(`Notes: ${client.notes}`);
       }
 
+      const { data: clientFull } = await supabase
+        .from("clients")
+        .select("ai_instructions")
+        .eq("id", clientId)
+        .single();
+      if (clientFull?.ai_instructions) {
+        context.push(`\nCLIENT RULES:\n${clientFull.ai_instructions}`);
+      }
+
       const { data: winners } = await supabase
         .from("ads")
         .select("creative_headline, creative_body, creative_cta, ctr, hook_type")

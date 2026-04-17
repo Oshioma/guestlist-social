@@ -61,6 +61,16 @@ export async function POST(req: Request) {
         if (client.notes) context.push(`Notes: ${client.notes}`);
       }
 
+      // Per-client AI instructions
+      const { data: clientFull } = await supabase
+        .from("clients")
+        .select("ai_instructions")
+        .eq("id", clientId)
+        .single();
+      if (clientFull?.ai_instructions) {
+        context.push(`\nCLIENT-SPECIFIC RULES (always follow for this client):\n${clientFull.ai_instructions}`);
+      }
+
       // Winning ads — what worked, with detail
       const { data: winners } = await supabase
         .from("ads")
