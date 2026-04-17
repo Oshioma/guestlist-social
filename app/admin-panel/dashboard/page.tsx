@@ -1,5 +1,6 @@
 import { getDashboardData } from "../lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { canRunAds } from "@/lib/auth/permissions";
 import SectionCard from "../components/SectionCard";
 import StatCard from "../components/StatCard";
 import ClientCard from "../components/ClientCard";
@@ -16,6 +17,7 @@ import TokenExpiryBanner from "../components/TokenExpiryBanner";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const adsAllowed = await canRunAds();
   try {
     const { clients, ads, suggestions } = await getDashboardData();
 
@@ -354,7 +356,7 @@ export default async function DashboardPage() {
             {winningAds.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {winningAds.slice(0, 5).map((ad) => (
-                  <AdRow key={ad.id} ad={ad} />
+                  <AdRow key={ad.id} ad={ad} canEdit={adsAllowed} />
                 ))}
               </div>
             ) : (

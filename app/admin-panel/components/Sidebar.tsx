@@ -6,53 +6,69 @@ import { usePathname } from "next/navigation";
 type NavItem = { label: string; href: string };
 type NavGroup = { heading: string; items: NavItem[] };
 
-const navGroups: NavGroup[] = [
-  {
-    heading: "",
-    items: [
-      { label: "Dashboard", href: "/app/dashboard" },
-      { label: "Clients", href: "/app/clients" },
-    ],
-  },
-  {
-    heading: "Engine",
-    items: [
-      { label: "Meta queue", href: "/app/meta-queue" },
-      { label: "Playbook", href: "/app/whats-working" },
-      { label: "Creative library", href: "/app/creative" },
-      { label: "Reports", href: "/app/reports" },
-      { label: "Memory", href: "/app/memory" },
-    ],
-  },
-  {
-    heading: "Publisher",
-    items: [
-      { label: "Proofer", href: "/app/proofer" },
-      { label: "Publish queue", href: "/app/proofer/publish" },
-      { label: "Ideas", href: "/app/ideas" },
-      { label: "Content", href: "/app/content" },
-    ],
-  },
-  {
-    heading: "Campaigns",
-    items: [
-      { label: "Quick launch", href: "/app/launch" },
-    ],
-  },
-];
+type Props = {
+  isAdmin: boolean;
+  canRunAds: boolean;
+};
 
-const utilityItems: NavItem[] = [
-  { label: "Tasks", href: "/app/tasks" },
-  { label: "Settings", href: "/app/settings" },
-  { label: "Guide", href: "/app/guide" },
-];
+function buildNavGroups(canRunAds: boolean): NavGroup[] {
+  const groups: NavGroup[] = [
+    {
+      heading: "",
+      items: [
+        { label: "Dashboard", href: "/app/dashboard" },
+        { label: "Clients", href: "/app/clients" },
+      ],
+    },
+    {
+      heading: "Engine",
+      items: [
+        { label: "Meta queue", href: "/app/meta-queue" },
+        { label: "Playbook", href: "/app/whats-working" },
+        { label: "Creative library", href: "/app/creative" },
+        { label: "Reports", href: "/app/reports" },
+        { label: "Memory", href: "/app/memory" },
+      ],
+    },
+    {
+      heading: "Publisher",
+      items: [
+        { label: "Proofer", href: "/app/proofer" },
+        { label: "Publish queue", href: "/app/proofer/publish" },
+        { label: "Ideas", href: "/app/ideas" },
+        { label: "Content", href: "/app/content" },
+      ],
+    },
+  ];
+
+  if (canRunAds) {
+    groups.push({
+      heading: "Campaigns",
+      items: [{ label: "Quick launch", href: "/app/launch" }],
+    });
+  }
+
+  return groups;
+}
+
+function buildUtilityItems(isAdmin: boolean): NavItem[] {
+  const items: NavItem[] = [{ label: "Tasks", href: "/app/tasks" }];
+  if (isAdmin) {
+    items.push({ label: "Members", href: "/app/settings/members" });
+  }
+  items.push({ label: "Settings", href: "/app/settings" });
+  items.push({ label: "Guide", href: "/app/guide" });
+  return items;
+}
 
 const externalItems: NavItem[] = [
   { label: "Client view", href: "/portal" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isAdmin, canRunAds }: Props) {
   const pathname = usePathname();
+  const navGroups = buildNavGroups(canRunAds);
+  const utilityItems = buildUtilityItems(isAdmin);
 
   function isActive(href: string): boolean {
     if (href === "/app/dashboard") return pathname === "/app/dashboard";
