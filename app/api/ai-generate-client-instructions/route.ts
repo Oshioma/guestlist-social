@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const context: string[] = [];
     context.push(`Business name: ${client.name}`);
     if (client.industry) context.push(`Industry: ${client.industry}`);
-    if (client.website_url_url) context.push(`Website: ${client.website_url_url}`);
+    if (client.website_url) context.push(`Website: ${client.website_url}`);
     if (client.notes) context.push(`Notes: ${client.notes}`);
 
     // Try to get brand voice from organic posts
