@@ -1776,6 +1776,155 @@ export default function ProoferBoard({
                     </div>
                   </div>
 
+                  {/* Media section — images/video above idea */}
+                  {draft.mediaUrls.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        alignItems: "stretch",
+                      }}
+                    >
+                      {draft.mediaUrls.map((url, idx) => (
+                        <div
+                          key={`${url}-${idx}`}
+                          style={{
+                            width: "100%",
+                            maxWidth: 400,
+                            border: "1px solid #e4e4e7",
+                            borderRadius: 8,
+                            background: "#fafafa",
+                            overflow: "hidden",
+                            display: "flex",
+                            flexDirection: "column",
+                            opacity: isLocked ? 0.7 : 1,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "100%",
+                              background: "#f4f4f5",
+                              position: "relative",
+                            }}
+                          >
+                            {isVideoUrl(url) ? (
+                              <video
+                                src={url}
+                                controls
+                                style={{
+                                  display: "block",
+                                  width: "100%",
+                                  maxHeight: 300,
+                                  objectFit: "contain",
+                                }}
+                              />
+                            ) : (
+                              <img
+                                src={url}
+                                alt={prettyFileName(url)}
+                                style={{
+                                  display: "block",
+                                  width: "100%",
+                                  maxHeight: 300,
+                                  objectFit: "contain",
+                                }}
+                              />
+                            )}
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 4,
+                                left: 4,
+                                background: "rgba(0,0,0,0.6)",
+                                color: "#fff",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: "2px 5px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              {idx + 1}
+                            </div>
+                          </div>
+
+                          {!isLocked && (
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "4px 6px",
+                                gap: 2,
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  moveMedia(dateKey, activePlatform, idx, -1)
+                                }
+                                disabled={idx === 0}
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: idx === 0 ? "#d4d4d8" : "#52525b",
+                                  cursor: idx === 0 ? "default" : "pointer",
+                                  padding: 2,
+                                  fontSize: 12,
+                                }}
+                                aria-label="Move left"
+                              >
+                                ◀
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeMediaAt(dateKey, activePlatform, idx)
+                                }
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "#991b1b",
+                                  cursor: "pointer",
+                                  padding: 2,
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                }}
+                                aria-label="Remove"
+                              >
+                                ×
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  moveMedia(dateKey, activePlatform, idx, 1)
+                                }
+                                disabled={idx === draft.mediaUrls.length - 1}
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  color:
+                                    idx === draft.mediaUrls.length - 1
+                                      ? "#d4d4d8"
+                                      : "#52525b",
+                                  cursor:
+                                    idx === draft.mediaUrls.length - 1
+                                      ? "default"
+                                      : "pointer",
+                                  padding: 2,
+                                  fontSize: 12,
+                                }}
+                                aria-label="Move right"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {(() => {
                     const key = postKey(dateKey, activePlatform);
                     const linkedKey =
@@ -2181,169 +2330,6 @@ export default function ProoferBoard({
                       gap: 8,
                     }}
                   >
-                    {draft.mediaUrls.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          alignItems: "stretch",
-                        }}
-                      >
-                        {draft.mediaUrls.map((url, idx) => (
-                          <div
-                            key={`${url}-${idx}`}
-                            style={{
-                              width: 88,
-                              border: "1px solid #e4e4e7",
-                              borderRadius: 8,
-                              background: "#fafafa",
-                              overflow: "hidden",
-                              display: "flex",
-                              flexDirection: "column",
-                              opacity: isLocked ? 0.7 : 1,
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: "100%",
-                                aspectRatio: "1 / 1",
-                                background: "#f4f4f5",
-                                position: "relative",
-                              }}
-                            >
-                              {isVideoUrl(url) ? (
-                                <video
-                                  src={url}
-                                  style={{
-                                    display: "block",
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                              ) : (
-                                <img
-                                  src={url}
-                                  alt={prettyFileName(url)}
-                                  style={{
-                                    display: "block",
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                              )}
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: 4,
-                                  left: 4,
-                                  background: "rgba(0,0,0,0.6)",
-                                  color: "#fff",
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  padding: "2px 5px",
-                                  borderRadius: 4,
-                                }}
-                              >
-                                {idx + 1}
-                              </div>
-                            </div>
-
-                            {!isLocked && (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  padding: "4px 6px",
-                                  gap: 2,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    moveMedia(
-                                      dateKey,
-                                      activePlatform,
-                                      idx,
-                                      -1
-                                    )
-                                  }
-                                  disabled={idx === 0}
-                                  style={{
-                                    border: "none",
-                                    background: "transparent",
-                                    color: idx === 0 ? "#d4d4d8" : "#52525b",
-                                    cursor: idx === 0 ? "default" : "pointer",
-                                    padding: 2,
-                                    fontSize: 12,
-                                  }}
-                                  aria-label="Move left"
-                                >
-                                  ◀
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeMediaAt(
-                                      dateKey,
-                                      activePlatform,
-                                      idx
-                                    )
-                                  }
-                                  style={{
-                                    border: "none",
-                                    background: "transparent",
-                                    color: "#991b1b",
-                                    cursor: "pointer",
-                                    padding: 2,
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                  }}
-                                  aria-label="Remove"
-                                >
-                                  ×
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    moveMedia(
-                                      dateKey,
-                                      activePlatform,
-                                      idx,
-                                      1
-                                    )
-                                  }
-                                  disabled={
-                                    idx === draft.mediaUrls.length - 1
-                                  }
-                                  style={{
-                                    border: "none",
-                                    background: "transparent",
-                                    color:
-                                      idx === draft.mediaUrls.length - 1
-                                        ? "#d4d4d8"
-                                        : "#52525b",
-                                    cursor:
-                                      idx === draft.mediaUrls.length - 1
-                                        ? "default"
-                                        : "pointer",
-                                    padding: 2,
-                                    fontSize: 12,
-                                  }}
-                                  aria-label="Move right"
-                                >
-                                  ▶
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
                     {!isLocked && (
                       <div
                         style={{
