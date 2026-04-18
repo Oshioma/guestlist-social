@@ -141,16 +141,16 @@ export async function createMetaAd(
     linkData.picture = input.imageUrl;
   }
 
-  // Use the simple creative format that doesn't require object_story_spec
-  // or page_id — avoids the Instagram permission error entirely.
+  // Use object_story_spec with page_id. The page_id was resolved above.
+  const storySpec: Record<string, unknown> = {
+    page_id: pageId,
+    link_data: linkData,
+  };
+
   const creativeParams = new URLSearchParams({
     access_token: token,
     name: `${input.name} — creative`,
-    title: input.headline,
-    body: input.body,
-    link_url: input.destinationUrl || "https://example.com",
-    call_to_action_type: ctaEnum,
-    ...(imageHash ? { image_hash: imageHash } : {}),
+    object_story_spec: JSON.stringify(storySpec),
   });
 
   const creativeStart = Date.now();
