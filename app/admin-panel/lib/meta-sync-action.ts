@@ -218,9 +218,13 @@ export async function syncMetaData(clientId: string) {
 
     log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // 2. Ads — skip entirely for quick sync. Campaign data is enough.
-    // Ads are synced via /api/persist-images or full /api/meta-sync.
-    const metaAds: any[] = [];
+    // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
+    const adsRes = await fetch(
+      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&effective_status=["ACTIVE","PAUSED"]&limit=10&access_token=${token}`,
+      { cache: "no-store" }
+    );
+    const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
+      adsRes.ok ? ((await adsRes.json()).data ?? []) : [];
     log.push(`Fetched ${metaAds.length} ads`);
 
     // Pre-fetch all existing ads for this client in one query
