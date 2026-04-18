@@ -307,7 +307,7 @@ export default function PublishQueueBoard({
     });
   }
 
-  function handlePublishNow(queueId: string) {
+  async function handlePublishNow(queueId: string) {
     if (
       !confirm(
         "Publish this post to Meta right now? It will go live on the connected Facebook Page or Instagram account."
@@ -315,23 +315,23 @@ export default function PublishQueueBoard({
     ) {
       return;
     }
-    startTransition(async () => {
-      try {
-        const result = await publishMetaQueueItem(queueId);
-        if (result.ok) {
-          alert(
-            result.publishUrl
-              ? `Published! ${result.publishUrl}`
-              : "Published to Meta."
-          );
-        } else {
-          alert(`Publish failed: ${result.error}`);
-        }
-        refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not publish");
+    try {
+      const result = await publishMetaQueueItem(queueId);
+      if (result.ok) {
+        alert(
+          result.publishUrl
+            ? `Published! ${result.publishUrl}`
+            : "Published to Meta."
+        );
+      } else {
+        alert(`Publish failed: ${result.error}`);
       }
-    });
+      refresh();
+    } catch (err) {
+      alert(
+        `Publish error: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
   }
 
   function handleConnectMeta() {

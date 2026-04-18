@@ -24,7 +24,15 @@ export async function publishMetaQueueItem(
     return { ok: false, error: "Queue item id is required." };
   }
 
-  const admin = metaServiceClient();
+  let admin;
+  try {
+    admin = metaServiceClient();
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Meta service not configured: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   // 1. Queue item
   const { data: queueItem, error: queueErr } = await admin
