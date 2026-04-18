@@ -7,7 +7,9 @@ import { revalidatePath } from "next/cache";
 import { createMetaAd } from "@/lib/meta-ad-create";
 import { getCreativeSourcesForClient } from "@/lib/creative-sources";
 import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
+import DeleteCampaignButton from "@/app/admin-panel/components/DeleteCampaignButton";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
+import { deleteCampaignAction } from "@/app/admin-panel/lib/campaign-actions";
 
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
@@ -360,6 +362,15 @@ export default async function CampaignDetailPage({ params }: Props) {
               >
                 All ads &amp; actions
               </Link>
+
+              <DeleteCampaignButton
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                onDelete={async () => {
+                  "use server";
+                  await deleteCampaignAction(campaignId, clientId);
+                }}
+              />
 
             </div>
           </div>

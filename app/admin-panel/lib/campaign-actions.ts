@@ -150,3 +150,48 @@ export async function updateCampaignAction(
   revalidatePath("/admin-panel/dashboard");
   redirect(`/app/clients/${clientId}`);
 }
+
+export async function deleteCampaignAction(campaignId: string, clientId: string) {
+  const supabase = await createClient();
+
+  // Delete from Meta if campaign has a meta_id
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("meta_id")
+    .eq("id", campaignId)
+    .single();
+
+  if (campaign?.meta_id) {
+    try {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (token) {
+        await fetch(`https://graph.facebook.com/v25.0/${campaign.meta_id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ access_token: token, status: "DELETED" }),
+        });
+      }
+    } catch { /* Meta deletion is best-effort */ }
+  }
+
+  // Delete ads in this campaign first
+  await supabase
+    .from("ads")
+    .delete()
+    .eq("campaign_id", campaignId)
+    .eq("client_id", clientId);
+
+  const { error } = await supabase
+    .from("campaigns")
+    .delete()
+    .eq("id", campaignId)
+    .eq("client_id", clientId);
+
+  if (error) {
+    console.error("deleteCampaignAction error:", error);
+    throw new Error("Could not delete campaign.");
+  }
+
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+  redirect(`/app/clients/${clientId}`);
+}
