@@ -78,11 +78,11 @@ const STATUS_BUTTONS: {
   },
   {
     value: "approved",
-    label: "Approved",
+    label: "Approved → Publish Queue",
     bg: "#e0f2fe",
     border: "#38bdf8",
     color: "#075985",
-    dot: "#ffffff",
+    dot: "#3b82f6",
   },
 ];
 
@@ -1717,7 +1717,7 @@ export default function ProoferBoard({
                       }}
                     >
                       {/* status buttons */}
-                      {["proofed", "check", "improve", "approved"].map(
+                      {["approved", "proofed", "check", "improve"].map(
                         (statusValue) => {
                           const btn = STATUS_BUTTONS.find(
                             (b) => b.value === statusValue
