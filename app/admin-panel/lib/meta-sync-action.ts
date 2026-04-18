@@ -224,7 +224,6 @@ export async function syncMetaData(clientId: string) {
           campaignMap.set(mc.id, String(newCampaign.id));
           campaignsCreated++;
         }
-      }
       // Owned by another client — check if campaign name matches THIS client
       } else {
         const campNameLower = (mc.name ?? "").toLowerCase();
