@@ -80,7 +80,7 @@ export default async function DashboardPage() {
                 gap: 12,
               }}
             >
-              {clients.map((client) => (
+              {clients.filter((c) => c.status === "active").map((client) => (
                 <ClientCard key={client.id} client={client} />
               ))}
             </div>
