@@ -636,22 +636,11 @@ export default function PublishQueueBoard({
                   borderRadius: 12,
                   padding: 14,
                   background: "#fff",
-                  display: "grid",
-                  gridTemplateColumns: "120px 1fr",
-                  gap: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
                 }}
               >
-                <CarouselPreview
-                  urls={
-                    post.mediaUrls.length > 0
-                      ? post.mediaUrls
-                      : post.imageUrl
-                      ? [post.imageUrl]
-                      : []
-                  }
-                />
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <div
                     style={{
                       display: "flex",
@@ -701,6 +690,16 @@ export default function PublishQueueBoard({
                     {post.caption || "No caption"}
                   </div>
 
+                  <CarouselPreview
+                    urls={
+                      post.mediaUrls.length > 0
+                        ? post.mediaUrls
+                        : post.imageUrl
+                        ? [post.imageUrl]
+                        : []
+                    }
+                  />
+
                   <div
                     style={{
                       display: "flex",
@@ -749,7 +748,6 @@ export default function PublishQueueBoard({
                       Queue both
                     </button>
                   </div>
-                </div>
               </div>
             ))}
           </div>
@@ -776,22 +774,11 @@ export default function PublishQueueBoard({
                     borderRadius: 12,
                     padding: 14,
                     background: "#fff",
-                    display: "grid",
-                    gridTemplateColumns: "100px 1fr",
-                    gap: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
                   }}
                 >
-                  <CarouselPreview
-                    urls={
-                      item.mediaUrls.length > 0
-                        ? item.mediaUrls
-                        : item.imageUrl
-                        ? [item.imageUrl]
-                        : []
-                    }
-                  />
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div
                     style={{
                       display: "flex",
@@ -839,6 +826,16 @@ export default function PublishQueueBoard({
                   >
                     {item.caption || "No caption"}
                   </div>
+
+                  <CarouselPreview
+                    urls={
+                      item.mediaUrls.length > 0
+                        ? item.mediaUrls
+                        : item.imageUrl
+                        ? [item.imageUrl]
+                        : []
+                    }
+                  />
 
                   <div
                     style={{
@@ -908,7 +905,6 @@ export default function PublishQueueBoard({
                       Remove
                     </button>
                   </div>
-                  </div>
                 </div>
               );
             })}
@@ -931,22 +927,11 @@ export default function PublishQueueBoard({
                   borderRadius: 12,
                   padding: 14,
                   background: "#fff",
-                  display: "grid",
-                  gridTemplateColumns: "100px 1fr",
-                  gap: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
                 }}
               >
-                <CarouselPreview
-                  urls={
-                    item.mediaUrls.length > 0
-                      ? item.mediaUrls
-                      : item.imageUrl
-                      ? [item.imageUrl]
-                      : []
-                  }
-                />
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div
                   style={{
                     display: "flex",
@@ -995,6 +980,16 @@ export default function PublishQueueBoard({
                 >
                   {item.caption || "No caption"}
                 </div>
+
+                <CarouselPreview
+                  urls={
+                    item.mediaUrls.length > 0
+                      ? item.mediaUrls
+                      : item.imageUrl
+                      ? [item.imageUrl]
+                      : []
+                  }
+                />
 
                 <div
                   style={{
@@ -1069,7 +1064,6 @@ export default function PublishQueueBoard({
                     Mark failed
                   </button>
                 </div>
-                </div>
               </div>
             ))}
           </div>
@@ -1091,22 +1085,11 @@ export default function PublishQueueBoard({
                   borderRadius: 12,
                   padding: 14,
                   background: "#fff",
-                  display: "grid",
-                  gridTemplateColumns: "100px 1fr",
-                  gap: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
                 }}
               >
-                <CarouselPreview
-                  urls={
-                    item.mediaUrls.length > 0
-                      ? item.mediaUrls
-                      : item.imageUrl
-                      ? [item.imageUrl]
-                      : []
-                  }
-                />
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div>
                   <div
@@ -1170,6 +1153,16 @@ export default function PublishQueueBoard({
                 </div>
                 </div>
 
+                <CarouselPreview
+                  urls={
+                    item.mediaUrls.length > 0
+                      ? item.mediaUrls
+                      : item.imageUrl
+                      ? [item.imageUrl]
+                      : []
+                  }
+                />
+
                 {item.insightsFetchedAt && (
                   <div
                     style={{
@@ -1204,7 +1197,6 @@ export default function PublishQueueBoard({
                     </span>
                   </div>
                 )}
-                </div>
               </div>
             ))}
           </div>
@@ -1231,22 +1223,11 @@ export default function PublishQueueBoard({
                     borderRadius: 12,
                     padding: 14,
                     background: "#fff",
-                    display: "grid",
-                    gridTemplateColumns: "100px 1fr",
-                    gap: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
                   }}
                 >
-                  <CarouselPreview
-                    urls={
-                      item.mediaUrls.length > 0
-                        ? item.mediaUrls
-                        : item.imageUrl
-                        ? [item.imageUrl]
-                        : []
-                    }
-                  />
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div
                     style={{
                       display: "flex",
@@ -1297,6 +1278,16 @@ export default function PublishQueueBoard({
                     </div>
                   )}
 
+                  <CarouselPreview
+                    urls={
+                      item.mediaUrls.length > 0
+                        ? item.mediaUrls
+                        : item.imageUrl
+                        ? [item.imageUrl]
+                        : []
+                    }
+                  />
+
                   <div
                     style={{
                       display: "flex",
@@ -1334,7 +1325,6 @@ export default function PublishQueueBoard({
                     >
                       Remove
                     </button>
-                  </div>
                   </div>
                 </div>
               );
