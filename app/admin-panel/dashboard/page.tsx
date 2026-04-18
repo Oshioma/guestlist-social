@@ -70,9 +70,9 @@ export default async function DashboardPage() {
 
         <div>
           <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
-            Clients ({clients.length})
+            Active clients ({activeClients.length})
           </h2>
-          {clients.length > 0 ? (
+          {activeClients.length > 0 ? (
             <div
               style={{
                 display: "grid",
@@ -80,17 +80,37 @@ export default async function DashboardPage() {
                 gap: 12,
               }}
             >
-              {clients.filter((c) => c.status === "active").map((client) => (
+              {activeClients.map((client) => (
                 <ClientCard key={client.id} client={client} />
               ))}
             </div>
           ) : (
             <EmptyState
-              title="No clients yet"
-              description="Add your first client to get started."
+              title="No active clients"
+              description="Set a client to active to see them here."
             />
           )}
         </div>
+
+        {clients.filter((c) => c.status !== "active").length > 0 && (
+          <div>
+            <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#71717a" }}>
+              Other clients ({clients.filter((c) => c.status !== "active").length})
+            </h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: 12,
+                opacity: 0.7,
+              }}
+            >
+              {clients.filter((c) => c.status !== "active").map((client) => (
+                <ClientCard key={client.id} client={client} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   } catch (error) {

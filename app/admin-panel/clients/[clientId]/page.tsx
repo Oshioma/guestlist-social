@@ -898,10 +898,10 @@ export default async function ClientDetailPage({
         </div>
         {ads.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {ads.slice(0, 4).map((ad) => (
+            {ads.slice(0, 8).map((ad) => (
               <AdRow key={ad.id} ad={ad} canEdit={adsAllowed} />
             ))}
-            {ads.length > 4 && (
+            {ads.length > 8 && (
               <Link
                 href={`/app/clients/${clientId}/ads`}
                 style={{
