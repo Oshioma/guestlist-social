@@ -643,7 +643,6 @@ export default async function ClientDetailPage({
                             src={url}
                             alt=""
                             loading="lazy"
-                            onError={(e) => { e.currentTarget.style.display = "none"; }}
                             style={{
                               width: 80,
                               height: 80,

@@ -738,17 +738,6 @@ export default async function ClientAdsPage({
                             src={ad.creative_image_url}
                             alt=""
                             loading="lazy"
-                            onError={(e) => {
-                              const img = e.currentTarget;
-                              img.style.display = "none";
-                              if (img.parentElement) {
-                                img.parentElement.style.background = "#f4f4f5";
-                                img.parentElement.style.display = "flex";
-                                img.parentElement.style.alignItems = "center";
-                                img.parentElement.style.justifyContent = "center";
-                                img.parentElement.innerHTML = '<span style="font-size:11px;color:#a1a1aa">Sync to refresh</span>';
-                              }
-                            }}
                             style={{
                               width: "100%",
                               height: "100%",
