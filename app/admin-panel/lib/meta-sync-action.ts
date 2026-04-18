@@ -228,8 +228,8 @@ export async function syncMetaData(clientId: string) {
       } else {
         const campNameLower = (mc.name ?? "").toLowerCase();
         const clientNameLower = (client.name ?? "").toLowerCase();
-        const clientWords = clientNameLower.split(/\s+/).filter((w) => w.length > 2);
-        const nameMatches = clientWords.some((w) => campNameLower.includes(w));
+        const clientWords = clientNameLower.split(/\s+/).filter((w: string) => w.length > 2);
+        const nameMatches = clientWords.some((w: string) => campNameLower.includes(w));
 
         if (nameMatches) {
           // Campaign name contains the client name — reassign it
