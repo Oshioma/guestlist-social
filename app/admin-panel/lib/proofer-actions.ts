@@ -690,8 +690,8 @@ export async function queueProoferPostAction(
     throw new Error("Post not found.");
   }
 
-  if (post.status !== "approved") {
-    throw new Error("Only approved posts can be added to the publish queue.");
+  if (post.status !== "proofed" && post.status !== "approved") {
+    throw new Error("Only proofed posts can be added to the publish queue.");
   }
 
   const { error } = await supabase.from("proofer_publish_queue").upsert(

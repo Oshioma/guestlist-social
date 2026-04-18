@@ -70,7 +70,7 @@ const STATUS_BUTTONS: {
   },
   {
     value: "proofed",
-    label: "Proofed",
+    label: "Proofed → Publish Queue",
     bg: "#dcfce7",
     border: "#86efac",
     color: "#166534",
@@ -82,7 +82,7 @@ const STATUS_BUTTONS: {
     bg: "#e0f2fe",
     border: "#38bdf8",
     color: "#075985",
-    dot: "#ffffff",
+    dot: "#3b82f6",
   },
 ];
 
@@ -1145,7 +1145,7 @@ export default function ProoferBoard({
                 ? "check"
                 : "none";
 
-            const isLocked = effectiveStatus === "approved";
+            const isLocked = effectiveStatus === "proofed" || effectiveStatus === "approved";
 
             const variants = platformsByDate.get(dateKey) ?? new Set();
             const previewUrl = draft.mediaUrls[0] ?? "";
@@ -1717,7 +1717,7 @@ export default function ProoferBoard({
                       }}
                     >
                       {/* status buttons */}
-                      {["proofed", "check", "improve", "approved"].map(
+                      {["proofed", "check", "improve"].map(
                         (statusValue) => {
                           const btn = STATUS_BUTTONS.find(
                             (b) => b.value === statusValue
@@ -1725,7 +1725,7 @@ export default function ProoferBoard({
                           const active = effectiveStatus === btn.value;
                           const disableThisButton =
                             isPending ||
-                            (isLocked && btn.value !== "approved");
+                            (isLocked && btn.value !== "proofed");
 
                           return (
                             <button
