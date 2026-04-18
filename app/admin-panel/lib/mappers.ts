@@ -13,8 +13,8 @@ import {
 } from "./performance-truth";
 
 export function mapClientStatus(status: string): Client["status"] {
-  if (status === "growing") return "active";
-  if (status === "needs_attention") return "paused";
+  if (status === "growing" || status === "active") return "active";
+  if (status === "needs_attention" || status === "paused") return "paused";
   return "onboarding";
 }
 
