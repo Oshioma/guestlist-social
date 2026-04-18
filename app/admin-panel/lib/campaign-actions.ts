@@ -80,7 +80,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
               meta_status: status === "testing" || status === "paused" ? "PAUSED" : "ACTIVE",
               meta_ad_account_name: process.env.META_AD_ACCOUNT_ID,
             })
-            .eq("id", inserted.id);
+            .eq("id", insertedId);
         } else {
           console.error("Background Meta creation failed:", result.error);
         }
