@@ -187,7 +187,11 @@ export async function createMetaAd(
   if (creativeData.error || !creativeData.id) {
     // If the error is about Instagram access, retry without object_story_spec
     // and use the simpler ad-level creative format instead
-    const errMsg = creativeData.error?.message ?? "";
+    const errMsg = [
+      creativeData.error?.message ?? "",
+      creativeData.error?.error_user_title ?? "",
+      creativeData.error?.error_user_msg ?? "",
+    ].join(" ");
     if (errMsg.includes("Instagram") || errMsg.includes("instagram")) {
       const retryParams = new URLSearchParams({
         access_token: token,
