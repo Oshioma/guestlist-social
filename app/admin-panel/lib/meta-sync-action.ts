@@ -153,9 +153,22 @@ export async function syncMetaData(clientId: string) {
   try {
     log.push(`Syncing Meta data for "${client.name}"`);
 
-    // 1. Campaigns
-    // Only fetch active + paused campaigns (skip archived/deleted)
-    const metaCampaigns = await getCampaigns(["ACTIVE", "PAUSED"]);
+    // 1. Campaigns — single page, active/paused only
+    const { token, accountId } = (() => {
+      const t = process.env.META_ACCESS_TOKEN;
+      let a = process.env.META_AD_ACCOUNT_ID;
+      if (!t || !a) throw new Error("Missing META env vars");
+      if (!a.startsWith("act_")) a = `act_${a}`;
+      return { token: t, accountId: a };
+    })();
+
+    const campRes = await fetch(
+      `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&effective_status=["ACTIVE","PAUSED"]&limit=50&access_token=${token}`,
+      { cache: "no-store" }
+    );
+    if (!campRes.ok) throw new Error(`Meta campaigns: ${campRes.status}`);
+    const campData = await campRes.json();
+    const metaCampaigns: Array<{ id: string; name: string; status: string; objective: string; daily_budget?: string; lifetime_budget?: string }> = campData.data ?? [];
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
 
     // Pre-fetch all existing campaigns for this client
@@ -205,9 +218,9 @@ export async function syncMetaData(clientId: string) {
 
     log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // 2. Ads (skip ad sets + insights for speed — those can be synced
-    // via the full /api/meta-sync route which has more headroom).
-    const metaAds = await getAdsLight();
+    // 2. Ads — skip entirely for quick sync. Campaign data is enough.
+    // Ads are synced via /api/persist-images or full /api/meta-sync.
+    const metaAds: any[] = [];
     log.push(`Fetched ${metaAds.length} ads`);
 
     // Pre-fetch all existing ads for this client in one query

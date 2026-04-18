@@ -269,14 +269,19 @@ export async function getAds(): Promise<MetaAd[]> {
   });
 }
 
-/** Lightweight ads fetch — just IDs, names, status. For quick sync. */
+/** Lightweight ads fetch — single page, no pagination. For quick sync. */
 export async function getAdsLight(): Promise<MetaAd[]> {
   const { accountId } = getCredentials();
-  return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
-    fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}",
-    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "PENDING_REVIEW", "WITH_ISSUES"]),
-    limit: "50",
-  });
+  // Use metaFetch (single page) not metaFetchAll (paginated) to stay fast
+  const result = await metaFetch<{ data?: MetaAd[] }>(
+    `/${accountId}/ads`,
+    {
+      fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}",
+      effective_status: JSON.stringify(["ACTIVE", "PAUSED"]),
+      limit: "25",
+    }
+  );
+  return result.data ?? [];
 }
 
 /**
