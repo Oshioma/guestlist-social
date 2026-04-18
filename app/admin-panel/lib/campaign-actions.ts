@@ -32,28 +32,33 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   const hasMetaCreds =
     !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID;
 
-  // Save locally FIRST, redirect immediately. Meta creation happens
-  // after via a fire-and-forget API call so the form never hangs.
-  const { data: inserted, error } = await supabase
-    .from("campaigns")
-    .insert({
-      client_id: clientId,
-      name,
-      objective,
-      audience: audience || null,
-      budget,
-      status,
-    })
-    .select("id")
-    .single();
+  // Save locally FIRST, redirect immediately.
+  let insertedId: string;
+  try {
+    const { data: inserted, error } = await supabase
+      .from("campaigns")
+      .insert({
+        client_id: clientId,
+        name,
+        objective,
+        audience: audience || null,
+        budget,
+        status,
+      })
+      .select("id")
+      .single();
 
-  if (error) {
-    console.error("createCampaignAction error:", error);
-    throw new Error("Could not create campaign.");
+    if (error || !inserted) {
+      console.error("createCampaignAction error:", error);
+      throw new Error("Could not create campaign.");
+    }
+    insertedId = String(inserted.id);
+  } catch (err) {
+    if ((err as any)?.digest) throw err; // re-throw Next.js internal errors
+    throw new Error(err instanceof Error ? err.message : "Could not create campaign.");
   }
 
-  // Fire-and-forget: push to Meta in the background. The campaign page
-  // will show "not yet connected to Meta" until this completes.
+  // Fire-and-forget: push to Meta in the background.
   if (hasMetaCreds && budget > 0) {
     createMetaCampaign({
       name,
@@ -86,8 +91,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
-  revalidatePath("/admin-panel/dashboard");
-  redirect(`/app/clients/${clientId}/campaigns/${inserted.id}`);
+  redirect(`/app/clients/${clientId}/campaigns/${insertedId}`);
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {
