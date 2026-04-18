@@ -709,7 +709,7 @@ export async function getProoferPublishQueueData(): Promise<{
     supabase
       .from("proofer_posts")
       .select("*")
-      .eq("status", "approved")
+      .in("status", ["proofed", "approved"])
       .order("post_date", { ascending: true }),
     supabase
       .from("clients")

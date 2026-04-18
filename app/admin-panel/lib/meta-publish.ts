@@ -56,10 +56,10 @@ export async function publishMetaQueueItem(
   if (!post) {
     return { ok: false, error: "Post not found." };
   }
-  if (post.status !== "approved") {
+  if (post.status !== "proofed" && post.status !== "approved") {
     return {
       ok: false,
-      error: "Only approved posts can be published.",
+      error: "Only proofed posts can be published.",
     };
   }
 

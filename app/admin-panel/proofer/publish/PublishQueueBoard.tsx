@@ -395,7 +395,7 @@ export default function PublishQueueBoard({
             maxWidth: 900,
           }}
         >
-          Approved posts move here for delivery. Queue them for Instagram or
+          Proofed posts move here for delivery. Queue them for Instagram or
           Facebook, schedule them, then mark them published or failed.
         </p>
       </div>
@@ -686,7 +686,7 @@ export default function PublishQueueBoard({
                         alignSelf: "flex-start",
                       }}
                     >
-                      Approved
+                      Proofed
                     </div>
                   </div>
 
