@@ -220,7 +220,7 @@ export async function syncMetaData(clientId: string) {
 
     // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
     const adsRes = await fetch(
-      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&effective_status=["ACTIVE","PAUSED"]&limit=10&access_token=${token}`,
+      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&effective_status=["ACTIVE","PAUSED"]&limit=25&access_token=${token}`,
       { cache: "no-store" }
     );
     const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
