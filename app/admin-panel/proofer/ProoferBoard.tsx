@@ -223,6 +223,7 @@ export default function ProoferBoard({
     pillarId: string | null;
     linkedIdeaId: string | null;
     linkedIdeaKind: IdeaKind | null;
+    publishTime: string;
   };
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
@@ -331,6 +332,7 @@ export default function ProoferBoard({
       pillarId: existing?.pillarId ?? null,
       linkedIdeaId: existing?.linkedIdeaId ?? null,
       linkedIdeaKind: existing?.linkedIdeaKind ?? null,
+      publishTime: existing?.publishTime ?? "18:00",
     };
   }
 
@@ -416,7 +418,8 @@ export default function ProoferBoard({
           draft.mediaUrls,
           draft.pillarId,
           draft.linkedIdeaId,
-          draft.linkedIdeaKind
+          draft.linkedIdeaKind,
+          draft.publishTime
         );
         setDrafts((prev) => {
           const next = { ...prev };
@@ -2380,8 +2383,34 @@ export default function ProoferBoard({
                             marginLeft: "auto",
                             display: "flex",
                             gap: 6,
+                            alignItems: "center",
                           }}
                         >
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            <input
+                              type="time"
+                              value={draft.publishTime}
+                              onChange={(e) =>
+                                updateDraft(dateKey, activePlatform, {
+                                  publishTime: e.target.value,
+                                })
+                              }
+                              disabled={isLocked}
+                              style={{
+                                padding: "4px 6px",
+                                borderRadius: 6,
+                                border: "1px solid #e4e4e7",
+                                fontSize: 11,
+                                color: "#18181b",
+                                background: "#fff",
+                                fontFamily: "inherit",
+                                width: 90,
+                              }}
+                            />
+                            <span style={{ fontSize: 9, color: "#a1a1aa" }}>
+                              Publish (GMT)
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={() =>

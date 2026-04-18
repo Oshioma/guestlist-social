@@ -296,6 +296,7 @@ export type ProoferPost = {
   caption: string;
   imageUrl: string;
   mediaUrls: string[];
+  publishTime: string; // "HH:MM" in UTC, default "18:00"
   status: ProoferStatus;
   createdBy: string;
   createdAt: string;
