@@ -171,13 +171,22 @@ export async function syncMetaData(clientId: string) {
     const metaCampaigns: Array<{ id: string; name: string; status: string; objective: string; daily_budget?: string; lifetime_budget?: string }> = campData.data ?? [];
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
 
-    // Pre-fetch all existing campaigns for this client
+    // Pre-fetch existing campaigns FOR THIS CLIENT only
     const { data: existingCampaigns } = await supabase
       .from("campaigns")
       .select("id, meta_id")
       .eq("client_id", clientId);
     const existingCampByMetaId = new Map(
       (existingCampaigns ?? []).map((c) => [String(c.meta_id), String(c.id)])
+    );
+
+    // Also check which meta_ids exist on OTHER clients (to avoid duplicating)
+    const { data: allCampaigns } = await supabase
+      .from("campaigns")
+      .select("meta_id, client_id")
+      .not("client_id", "eq", clientId);
+    const ownedByOther = new Set(
+      (allCampaigns ?? []).map((c) => String(c.meta_id))
     );
 
     const campaignMap = new Map<string, string>();
@@ -196,13 +205,15 @@ export async function syncMetaData(clientId: string) {
       const existingCampId = existingCampByMetaId.get(String(mc.id));
 
       if (existingCampId) {
+        // Already belongs to this client — update
         campaignMap.set(mc.id, existingCampId);
         await supabase
           .from("campaigns")
           .update(campaignData)
           .eq("id", existingCampId);
         campaignsUpdated++;
-      } else {
+      } else if (!ownedByOther.has(String(mc.id))) {
+        // Not owned by anyone — create for this client
         const { data: newCampaign } = await supabase
           .from("campaigns")
           .insert({ client_id: clientId, meta_id: mc.id, ...campaignData })
@@ -212,6 +223,36 @@ export async function syncMetaData(clientId: string) {
         if (newCampaign) {
           campaignMap.set(mc.id, String(newCampaign.id));
           campaignsCreated++;
+        }
+      }
+      // Owned by another client — check if campaign name matches THIS client
+      } else {
+        const campNameLower = (mc.name ?? "").toLowerCase();
+        const clientNameLower = (client.name ?? "").toLowerCase();
+        const clientWords = clientNameLower.split(/\s+/).filter((w) => w.length > 2);
+        const nameMatches = clientWords.some((w) => campNameLower.includes(w));
+
+        if (nameMatches) {
+          // Campaign name contains the client name — reassign it
+          const { data: otherCamp } = await supabase
+            .from("campaigns")
+            .select("id")
+            .eq("meta_id", mc.id)
+            .neq("client_id", clientId)
+            .limit(1)
+            .maybeSingle();
+
+          if (otherCamp) {
+            await supabase
+              .from("campaigns")
+              .update({ client_id: clientId, ...campaignData })
+              .eq("id", otherCamp.id);
+            campaignMap.set(mc.id, String(otherCamp.id));
+            campaignsUpdated++;
+            log.push(`Claimed "${mc.name}" (matched client name)`);
+          }
+        } else {
+          log.push(`Skipped "${mc.name}" (belongs to another client)`);
         }
       }
     }
