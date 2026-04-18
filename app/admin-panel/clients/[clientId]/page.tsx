@@ -17,6 +17,8 @@ import StatCard from "../../components/StatCard";
 import SuggestionCard from "../../components/SuggestionCard";
 import { formatCurrency } from "../../lib/utils";
 import DeleteClientButton from "../../components/DeleteClientButton";
+import DeleteCampaignButton from "../../components/DeleteCampaignButton";
+import { deleteCampaignNoRedirect } from "../../lib/campaign-actions";
 import ScoreAndGenerateButton from "../../components/ScoreAndGenerateButton";
 import GenerateReportsButton from "../../components/GenerateReportsButton";
 import { generateClientReport } from "../../lib/report-actions";
@@ -876,6 +878,15 @@ export default async function ClientDetailPage({
                           >
                             Add ad
                           </Link>
+
+                          <DeleteCampaignButton
+                            campaignId={String(campaign.id)}
+                            campaignName={campaign.name ?? "Untitled"}
+                            onDelete={async () => {
+                              "use server";
+                              await deleteCampaignNoRedirect(String(campaign.id), clientId);
+                            }}
+                          />
                         </>
                       )}
                     </div>
