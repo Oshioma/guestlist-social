@@ -274,7 +274,8 @@ export async function getAdsLight(): Promise<MetaAd[]> {
   const { accountId } = getCredentials();
   return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
     fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}",
-    limit: "200",
+    effective_status: JSON.stringify(["ACTIVE", "PAUSED", "PENDING_REVIEW", "WITH_ISSUES"]),
+    limit: "50",
   });
 }
 

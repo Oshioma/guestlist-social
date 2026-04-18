@@ -154,8 +154,18 @@ export async function syncMetaData(clientId: string) {
     log.push(`Syncing Meta data for "${client.name}"`);
 
     // 1. Campaigns
-    const metaCampaigns = await getCampaigns();
+    // Only fetch active + paused campaigns (skip archived/deleted)
+    const metaCampaigns = await getCampaigns(["ACTIVE", "PAUSED"]);
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
+
+    // Pre-fetch all existing campaigns for this client
+    const { data: existingCampaigns } = await supabase
+      .from("campaigns")
+      .select("id, meta_id")
+      .eq("client_id", clientId);
+    const existingCampByMetaId = new Map(
+      (existingCampaigns ?? []).map((c) => [String(c.meta_id), String(c.id)])
+    );
 
     const campaignMap = new Map<string, string>();
     let campaignsCreated = 0;
@@ -170,19 +180,14 @@ export async function syncMetaData(clientId: string) {
         budget,
       };
 
-      const { data: existing } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("meta_id", mc.id)
-        .limit(1);
+      const existingCampId = existingCampByMetaId.get(String(mc.id));
 
-      if (existing && existing.length > 0) {
-        campaignMap.set(mc.id, String(existing[0].id));
+      if (existingCampId) {
+        campaignMap.set(mc.id, existingCampId);
         await supabase
           .from("campaigns")
           .update(campaignData)
-          .eq("id", existing[0].id);
+          .eq("id", existingCampId);
         campaignsUpdated++;
       } else {
         const { data: newCampaign } = await supabase
@@ -204,6 +209,15 @@ export async function syncMetaData(clientId: string) {
     // via the full /api/meta-sync route which has more headroom).
     const metaAds = await getAdsLight();
     log.push(`Fetched ${metaAds.length} ads`);
+
+    // Pre-fetch all existing ads for this client in one query
+    const { data: existingAds } = await supabase
+      .from("ads")
+      .select("id, meta_id")
+      .eq("client_id", clientId);
+    const existingAdByMetaId = new Map(
+      (existingAds ?? []).map((a) => [String(a.meta_id), String(a.id)])
+    );
 
     let adsCreated = 0;
     let adsUpdated = 0;
@@ -242,18 +256,13 @@ export async function syncMetaData(clientId: string) {
         writable.creative_image_url = creative_image_url;
       }
 
-      const { data: existingAd } = await supabase
-        .from("ads")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("meta_id", metaAd.id)
-        .limit(1);
+      const existingAdId = existingAdByMetaId.get(String(metaAd.id));
 
-      if (existingAd && existingAd.length > 0) {
+      if (existingAdId) {
         await supabase
           .from("ads")
           .update(writable)
-          .eq("id", existingAd[0].id);
+          .eq("id", existingAdId);
         adsUpdated++;
       } else {
         await supabase.from("ads").insert({
