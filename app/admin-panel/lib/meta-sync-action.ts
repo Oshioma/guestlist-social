@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getCampaigns,
-  getAds,
+  getAdsLight,
   getAdAccount,
   getAdInsights,
   getDailyAdInsights,
@@ -202,7 +202,7 @@ export async function syncMetaData(clientId: string) {
 
     // 2. Ads (skip ad sets + insights for speed — those can be synced
     // via the full /api/meta-sync route which has more headroom).
-    const metaAds = await getAds();
+    const metaAds = await getAdsLight();
     log.push(`Fetched ${metaAds.length} ads`);
 
     let adsCreated = 0;
@@ -223,61 +223,24 @@ export async function syncMetaData(clientId: string) {
         followers_gained: 0,
       };
 
-      const audience: string | null = null;
-      const creativeHook = metaAd.creative
-        ? [metaAd.creative.title, metaAd.creative.body]
-            .filter(Boolean)
-            .join(" — ") || null
-        : null;
+      // Quick sync: just basic fields + image URL from creative
+      const creative_image_url =
+        metaAd.creative?.image_url ??
+        metaAd.creative?.thumbnail_url ??
+        null;
 
-      const { creative_video_id, ...creativeData } = creativeToAdRow(metaAd);
-
-      // Resolve the playable video URL via a separate Graph call. We do
-      // this once per ad with a video — never on the hot path of an
-      // insight loop. Failures return null and don't break the sync.
-      const creative_video_url = creative_video_id
-        ? await resolveVideoSource(creative_video_id)
-        : null;
-
-      // Thumbnail fallback chain. The extractor's normal fields cover
-      // most ads, but a meaningful slice of the library — video creatives
-      // built without an explicit image override, plus Instagram-only ads
-      // where everything lives on the source post — comes back with
-      // `creative_image_url = null` and renders as "No preview". Walk
-      // two more Graph endpoints (video poster, then object_story image)
-      // until we have *something* to show.
-      //
-      // Order matters: the video poster is the cheapest fallback (one
-      // call we're often making anyway for the source URL), so we try it
-      // before the object_story walk.
-      let creative_image_url = creativeData.creative_image_url;
-      if (!creative_image_url && creative_video_id) {
-        creative_image_url = await resolveVideoPoster(creative_video_id);
-      }
-      if (!creative_image_url && creativeData.object_story_id) {
-        creative_image_url = await resolveObjectStoryImage(
-          creativeData.object_story_id
-        );
-      }
-
-      // Everything we want to write on every sync (update OR insert).
-      // Spread adData (which contains all the new delivery/funnel/video
-      // columns from insightToAdRow) and then layer on the Meta-truth
-      // status + creative structure fields.
-      const writable = {
+      const writable: Record<string, unknown> = {
         ...adData,
+        name: metaAd.name,
         status: mapMetaStatus(metaAd.status),
-        audience,
-        creative_hook: creativeHook,
         meta_effective_status: metaAd.effective_status ?? null,
-        meta_configured_status: metaAd.configured_status ?? null,
-        // Cached so the meta_execution_queue seeder can attach the
-        // ad set Meta id without having to re-walk the adsets list.
         adset_meta_id: metaAd.adset_id ?? null,
-        ...creativeData,
-        creative_image_url,
-        creative_video_url,
       };
+
+      // Only update image if we got a new one
+      if (creative_image_url) {
+        writable.creative_image_url = creative_image_url;
+      }
 
       const { data: existingAd } = await supabase
         .from("ads")

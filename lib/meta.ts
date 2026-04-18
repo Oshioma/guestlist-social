@@ -261,14 +261,19 @@ export async function getAdSets(): Promise<MetaAdSet[]> {
 export async function getAds(): Promise<MetaAd[]> {
   const { accountId } = getCredentials();
   return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
-    // Note `video_id` in the creative subselect — Meta doesn't expose a
-    // direct video URL on creatives, only the video object id. We resolve
-    // the playable URL via a separate /{video_id}?fields=source call in
-    // resolveVideoSource() below.
     fields:
       "id,name,status,effective_status,configured_status,adset_id,campaign_id,created_time,updated_time," +
       "creative{id,name,body,title,image_url,thumbnail_url,video_id,object_type,call_to_action_type," +
       "link_url,effective_object_story_id,instagram_permalink_url,object_story_spec,asset_feed_spec}",
+    limit: "200",
+  });
+}
+
+/** Lightweight ads fetch — just IDs, names, status. For quick sync. */
+export async function getAdsLight(): Promise<MetaAd[]> {
+  const { accountId } = getCredentials();
+  return metaFetchAll<MetaAd>(`/${accountId}/ads`, {
+    fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}",
     limit: "200",
   });
 }
