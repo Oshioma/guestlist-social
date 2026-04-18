@@ -168,7 +168,7 @@ export async function createMetaAd(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: creativeParams,
   });
-  const creativeData = (await creativeRes.json()) as {
+  let creativeData = (await creativeRes.json()) as {
     id?: string;
     error?: { message?: string; error_user_title?: string; error_user_msg?: string };
   };
@@ -183,6 +183,38 @@ export async function createMetaAd(
     errorMessage: creativeData.error?.message ?? null,
     durationMs: Date.now() - creativeStart,
   });
+
+  if (creativeData.error || !creativeData.id) {
+    // If the error is about Instagram access, retry without object_story_spec
+    // and use the simpler ad-level creative format instead
+    const errMsg = creativeData.error?.message ?? "";
+    if (errMsg.includes("Instagram") || errMsg.includes("instagram")) {
+      const retryParams = new URLSearchParams({
+        access_token: token,
+        name: `${input.name} — creative`,
+        title: input.headline,
+        body: input.body,
+        link_url: input.destinationUrl || "https://example.com",
+        call_to_action_type: ctaEnum,
+        ...(imageHash ? { image_hash: imageHash } : { image_url: input.imageUrl }),
+      });
+
+      const retryRes = await fetch(`${BASE}/${accountId}/adcreatives`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: retryParams,
+      });
+      const retryData = (await retryRes.json()) as {
+        id?: string;
+        error?: { message?: string; error_user_title?: string; error_user_msg?: string };
+      };
+
+      if (retryData.id) {
+        // Retry worked — continue with this creative ID
+        creativeData = retryData as typeof creativeData;
+      }
+    }
+  }
 
   if (creativeData.error || !creativeData.id) {
     const errParts = [
