@@ -35,7 +35,6 @@ export default async function SettingsPage() {
     .from("clients")
     .select("id, name")
     .eq("archived", false)
-    .eq("status", "active")
     .order("name", { ascending: true });
 
   const clientList = clients ?? [];
