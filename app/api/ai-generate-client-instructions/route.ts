@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const context: string[] = [];
     context.push(`Business name: ${client.name}`);
     if (client.industry) context.push(`Industry: ${client.industry}`);
-    if (client.website_url) context.push(`Website: ${client.website_url}`);
+    if (client.website_url_url) context.push(`Website: ${client.website_url_url}`);
     if (client.notes) context.push(`Notes: ${client.notes}`);
 
     // Try to get brand voice from organic posts
@@ -81,9 +81,9 @@ export async function POST(req: Request) {
     }
 
     // Try to scrape website for more context
-    if (client.website) {
+    if (client.website_url) {
       try {
-        const res = await fetch(client.website, {
+        const res = await fetch(client.website_url, {
           headers: { "User-Agent": "GuestlistSocial/1.0" },
           signal: AbortSignal.timeout(5000),
         });
