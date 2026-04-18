@@ -141,25 +141,16 @@ export async function createMetaAd(
     linkData.picture = input.imageUrl;
   }
 
-  // Build object_story_spec — only include page_id, not instagram_actor_id,
-  // to avoid "Ad account does not have access to Instagram account" errors.
-  // Meta will still show the ad on Instagram if placement allows it, but
-  // won't require the ad account to have explicit Instagram access.
-  const storySpec: Record<string, unknown> = {
-    page_id: pageId,
-    link_data: linkData,
-  };
-
+  // Use the simple creative format that doesn't require object_story_spec
+  // or page_id — avoids the Instagram permission error entirely.
   const creativeParams = new URLSearchParams({
     access_token: token,
     name: `${input.name} — creative`,
-    object_story_spec: JSON.stringify(storySpec),
-    // Tell Meta this is a Facebook feed ad — avoids Instagram permission check
-    degrees_of_freedom_spec: JSON.stringify({
-      creative_features_spec: {
-        standard_enhancements: { enroll_status: "OPT_OUT" },
-      },
-    }),
+    title: input.headline,
+    body: input.body,
+    link_url: input.destinationUrl || "https://example.com",
+    call_to_action_type: ctaEnum,
+    ...(imageHash ? { image_hash: imageHash } : {}),
   });
 
   const creativeStart = Date.now();
@@ -183,42 +174,6 @@ export async function createMetaAd(
     errorMessage: creativeData.error?.message ?? null,
     durationMs: Date.now() - creativeStart,
   });
-
-  if (creativeData.error || !creativeData.id) {
-    // If the error is about Instagram access, retry without object_story_spec
-    // and use the simpler ad-level creative format instead
-    const errMsg = [
-      creativeData.error?.message ?? "",
-      creativeData.error?.error_user_title ?? "",
-      creativeData.error?.error_user_msg ?? "",
-    ].join(" ");
-    if (errMsg.includes("Instagram") || errMsg.includes("instagram")) {
-      const retryParams = new URLSearchParams({
-        access_token: token,
-        name: `${input.name} — creative`,
-        title: input.headline,
-        body: input.body,
-        link_url: input.destinationUrl || "https://example.com",
-        call_to_action_type: ctaEnum,
-        ...(imageHash ? { image_hash: imageHash } : { image_url: input.imageUrl }),
-      });
-
-      const retryRes = await fetch(`${BASE}/${accountId}/adcreatives`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: retryParams,
-      });
-      const retryData = (await retryRes.json()) as {
-        id?: string;
-        error?: { message?: string; error_user_title?: string; error_user_msg?: string };
-      };
-
-      if (retryData.id) {
-        // Retry worked — continue with this creative ID
-        creativeData = retryData as typeof creativeData;
-      }
-    }
-  }
 
   if (creativeData.error || !creativeData.id) {
     const errParts = [
