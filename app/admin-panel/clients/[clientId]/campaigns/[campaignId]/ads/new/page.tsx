@@ -26,7 +26,7 @@ export default async function NewAdPage({ params }: Props) {
     { data: memoryRows },
     creativeSources,
   ] = await Promise.all([
-    supabase.from("clients").select("id, name, website").eq("id", clientId).single(),
+    supabase.from("clients").select("id, name, website_url").eq("id", clientId).single(),
     supabase
       .from("campaigns")
       .select("id, name, objective, meta_id, meta_adset_id")

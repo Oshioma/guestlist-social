@@ -39,7 +39,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: adsRows, error: adsError },
     { data: learningRows, error: learningsError },
   ] = await Promise.all([
-    supabase.from("clients").select("id, name, website").eq("id", clientId).single(),
+    supabase.from("clients").select("id, name, website_url").eq("id", clientId).single(),
     supabase
       .from("campaigns")
       .select("*")
