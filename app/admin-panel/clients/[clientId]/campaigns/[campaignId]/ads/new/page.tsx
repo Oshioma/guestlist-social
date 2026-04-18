@@ -163,7 +163,7 @@ export default async function NewAdPage({ params }: Props) {
         <MetaAdForm
           campaignName={campaign.name}
           clientId={clientId}
-          clientWebsite={(client as any).website ?? ""}
+          clientWebsite={(client as any).website_url ?? ""}
           objective={(campaign as any).objective ?? "engagement"}
           existingCreatives={creativeSources}
           onSubmit={metaAction}

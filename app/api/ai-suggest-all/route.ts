@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       // Client profile — name, industry, notes, website
       const { data: client } = await supabase
         .from("clients")
-        .select("name, industry, notes, website, platform")
+        .select("name, industry, notes, website_url, platform")
         .eq("id", clientId)
         .single();
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         context.push(`CLIENT PROFILE:`);
         context.push(`Name: ${client.name}`);
         context.push(`Industry: ${client.industry ?? "not set"}`);
-        if (client.website) context.push(`Website: ${client.website}`);
+        if (client.website_url) context.push(`Website: ${client.website_url}`);
         if (client.notes) context.push(`Notes: ${client.notes}`);
       }
 

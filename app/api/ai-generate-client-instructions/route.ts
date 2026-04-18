@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
     const { data: client } = await supabase
       .from("clients")
-      .select("name, industry, notes, website, platform")
+      .select("name, industry, notes, website_url, platform")
       .eq("id", clientId)
       .single();
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const context: string[] = [];
     context.push(`Business name: ${client.name}`);
     if (client.industry) context.push(`Industry: ${client.industry}`);
-    if (client.website) context.push(`Website: ${client.website}`);
+    if (client.website_url) context.push(`Website: ${client.website_url}`);
     if (client.notes) context.push(`Notes: ${client.notes}`);
 
     // Try to get brand voice from organic posts
