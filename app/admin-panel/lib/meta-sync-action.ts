@@ -246,6 +246,11 @@ export async function syncMetaData(clientId: string) {
               .from("campaigns")
               .update({ client_id: clientId, ...campaignData })
               .eq("id", otherCamp.id);
+            // Also move ads from old client to this client
+            await supabase
+              .from("ads")
+              .update({ client_id: clientId })
+              .eq("campaign_id", otherCamp.id);
             campaignMap.set(mc.id, String(otherCamp.id));
             campaignsUpdated++;
             log.push(`Claimed "${mc.name}" (matched client name)`);
