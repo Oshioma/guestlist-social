@@ -6,6 +6,7 @@ import {
   confidencePalette,
   type Confidence,
 } from "@/app/admin-panel/lib/action-confidence";
+import SaveAsLearningButton from "./SaveAsLearningButton";
 
 type AdAction = {
   id: string;
@@ -369,6 +370,20 @@ export default function AdActionRow({ action }: { action: AdAction }) {
           <MetricDiff label="CPC" before={before.cpc ?? 0} after={after.cpc ?? 0} lowerIsBetter />
           <MetricDiff label="Conversions" before={before.conversions ?? 0} after={after.conversions ?? 0} />
           <MetricDiff label="Score" before={before.performance_score ?? 0} after={after.performance_score ?? 0} />
+        </div>
+      )}
+
+      {/* Save as learning — quick shortcut for completed actions */}
+      {action.status === "completed" && (
+        <div style={{ marginTop: 10 }}>
+          <SaveAsLearningButton
+            actionId={action.id}
+            adId={action.ad_id}
+            problem={action.problem}
+            resultSummary={action.result_summary}
+            outcome={action.outcome}
+            actionText={action.action}
+          />
         </div>
       )}
 

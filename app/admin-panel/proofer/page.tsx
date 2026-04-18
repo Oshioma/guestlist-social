@@ -30,15 +30,17 @@ export default async function ProoferPage({
   const selectedMonth = sp.month ?? defaultMonth;
 
   try {
-    const initial = await getProoferData(sp.client, selectedMonth);
-    const selectedClientId = sp.client ?? initial.clients[0]?.id ?? "";
+    // Resolve the client up front so we only call getProoferData once.
+    let selectedClientId = sp.client ?? "";
+    if (!selectedClientId) {
+      const { clients } = await getProoferData();
+      selectedClientId = clients[0]?.id ?? "";
+    }
 
-    // If no client was specified and we fell back to the first client, load
-    // its posts too so the board has something to show on first render.
-    const data =
-      !sp.client && selectedClientId
-        ? await getProoferData(selectedClientId, selectedMonth)
-        : initial;
+    const data = await getProoferData(
+      selectedClientId || undefined,
+      selectedClientId ? selectedMonth : undefined
+    );
 
     return (
       <ProoferBoard
