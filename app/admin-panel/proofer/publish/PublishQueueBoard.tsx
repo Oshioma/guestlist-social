@@ -163,12 +163,14 @@ export default function PublishQueueBoard({
   defaultScheduleValue,
   clients = [],
   connectedAccounts = [],
+  metaConnectionError = null,
 }: {
   readyPosts: ReadyPost[];
   queueItems: QueueItem[];
   defaultScheduleValue: string;
   clients?: ClientLite[];
   connectedAccounts?: ConnectedAccount[];
+  metaConnectionError?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -478,7 +480,23 @@ export default function PublishQueueBoard({
               Currently connected
             </div>
 
-            {connectedClientIds.length === 0 ? (
+            {metaConnectionError && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#991b1b",
+                  background: "#fee2e2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: 8,
+                  padding: "8px 12px",
+                  marginBottom: 4,
+                }}
+              >
+                Error loading connected accounts: {metaConnectionError}
+              </div>
+            )}
+
+            {connectedClientIds.length === 0 && !metaConnectionError ? (
               <div style={{ fontSize: 13, color: "#71717a" }}>
                 No connected Meta accounts yet. Pick a client above and click
                 Connect Meta.

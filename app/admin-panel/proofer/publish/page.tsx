@@ -30,22 +30,26 @@ export default async function ProoferPublishPage() {
     accountId: string;
     accountName: string;
   }[] = [];
+  let metaConnectionError: string | null = null;
   try {
     const svc = metaServiceClient();
-    const { data } = await svc
+    const { data, error } = await svc
       .from("connected_meta_accounts")
       .select("client_id, platform, account_id, account_name")
       .order("platform", { ascending: true })
       .order("account_name", { ascending: true });
+    if (error) {
+      metaConnectionError = error.message;
+    }
     connectedAccounts = (data ?? []).map((row) => ({
       clientId: String(row.client_id),
       platform: row.platform as "facebook" | "instagram",
       accountId: String(row.account_id),
       accountName: String(row.account_name ?? ""),
     }));
-  } catch {
-    // Missing service-role env vars in local dev — degrade gracefully, the
-    // "Meta connection" card will just show zero connected accounts.
+  } catch (err) {
+    metaConnectionError =
+      err instanceof Error ? err.message : "Could not load connected accounts";
     connectedAccounts = [];
   }
 
@@ -58,6 +62,7 @@ export default async function ProoferPublishPage() {
       defaultScheduleValue=""
       clients={clients}
       connectedAccounts={connectedAccounts}
+      metaConnectionError={metaConnectionError}
     />
     </>
   );
