@@ -717,8 +717,8 @@ export default async function ClientAdsPage({
                         href={`/app/clients/${clientId}/ads/${ad.id}`}
                         style={{
                           flexShrink: 0,
-                          width: 72,
-                          height: 72,
+                          width: 100,
+                          height: 100,
                           borderRadius: 10,
                           overflow: "hidden",
                           background: "#f4f4f5",
@@ -737,6 +737,7 @@ export default async function ClientAdsPage({
                           <img
                             src={ad.creative_image_url}
                             alt=""
+                            loading="lazy"
                             style={{
                               width: "100%",
                               height: "100%",

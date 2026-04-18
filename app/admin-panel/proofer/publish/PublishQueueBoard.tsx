@@ -144,6 +144,19 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
+function getDefault6pmGmt(): string {
+  const now = new Date();
+  const today6pmUtc = new Date(
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0)
+  );
+  if (today6pmUtc.getTime() < now.getTime()) {
+    today6pmUtc.setUTCDate(today6pmUtc.getUTCDate() + 1);
+  }
+  const offsetMs = today6pmUtc.getTimezoneOffset() * 60 * 1000;
+  const local = new Date(today6pmUtc.getTime() - offsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function PublishQueueBoard({
   readyPosts,
   queueItems,
@@ -162,6 +175,8 @@ export default function PublishQueueBoard({
   const [connectClientId, setConnectClientId] = useState<string>(
     clients[0]?.id ?? ""
   );
+
+  const default6pm = useMemo(() => getDefault6pmGmt(), []);
 
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>(
     {}
@@ -751,7 +766,7 @@ export default function PublishQueueBoard({
             {queuedItems.map((item) => {
               const scheduleValue =
                 scheduleDrafts[item.id] ??
-                toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleValue);
+                toDateTimeLocalInputValue(item.scheduledFor, default6pm);
 
               return (
                 <div
@@ -822,17 +837,22 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <input
-                      type="datetime-local"
-                      value={scheduleValue}
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      style={inputStyle}
-                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <input
+                        type="datetime-local"
+                        value={scheduleValue}
+                        onChange={(e) =>
+                          setScheduleDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                      <span style={{ fontSize: 10, color: "#a1a1aa" }}>
+                        Default: 6 PM GMT
+                      </span>
+                    </div>
 
                     <button
                       type="button"
@@ -1164,7 +1184,7 @@ export default function PublishQueueBoard({
             {failedItems.map((item) => {
               const scheduleValue =
                 scheduleDrafts[item.id] ??
-                toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleValue);
+                toDateTimeLocalInputValue(item.scheduledFor, default6pm);
 
               return (
                 <div

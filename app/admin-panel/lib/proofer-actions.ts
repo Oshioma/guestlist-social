@@ -386,7 +386,8 @@ export async function saveProoferPostAction(
   mediaUrls: string[],
   pillarId: string | null,
   linkedIdeaId: string | null = null,
-  linkedIdeaKindRaw: string | null = null
+  linkedIdeaKindRaw: string | null = null,
+  publishTime: string = "18:00"
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
@@ -394,10 +395,9 @@ export async function saveProoferPostAction(
 
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedMedia = normalizeMediaUrls(mediaUrls);
-  // Keep image_url in sync with media_urls[0] for back-compat with consumers
-  // (e.g. PublishQueueBoard) that still read the single-column value.
   const primaryImageUrl = normalizedMedia[0] ?? "";
   const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
+  const normalizedPublishTime = /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
   const normalizedLinkedIdeaKind = normalizeIdeaKind(linkedIdeaKindRaw);
   const normalizedLinkedIdeaId =
     linkedIdeaId && linkedIdeaId.trim() && normalizedLinkedIdeaKind
@@ -432,6 +432,7 @@ export async function saveProoferPostAction(
         image_url: primaryImageUrl,
         media_urls: normalizedMedia,
         pillar_id: normalizedPillarId,
+        publish_time: normalizedPublishTime,
         linked_idea_id: normalizedLinkedIdeaId,
         linked_idea_kind: normalizedLinkedIdeaId
           ? normalizedLinkedIdeaKind
@@ -478,6 +479,7 @@ export async function saveProoferPostAction(
         image_url: primaryImageUrl,
         media_urls: normalizedMedia,
         pillar_id: normalizedPillarId,
+        publish_time: normalizedPublishTime,
         linked_idea_id: normalizedLinkedIdeaId,
         linked_idea_kind: normalizedLinkedIdeaId
           ? normalizedLinkedIdeaKind

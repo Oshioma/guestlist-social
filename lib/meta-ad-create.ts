@@ -103,22 +103,54 @@ export async function createMetaAd(
     };
   }
 
-  // ── 1. Create Ad Creative ─────────────────────────────────────────
+  // ── 1. Upload image to ad account to get a permanent hash ──────────
+  let imageHash: string | null = null;
+  try {
+    const imgParams = new URLSearchParams({
+      access_token: token,
+      url: input.imageUrl,
+    });
+    const imgRes = await fetch(`${BASE}/${accountId}/adimages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: imgParams,
+    });
+    const imgData = await imgRes.json();
+    // Response shape: { images: { <filename>: { hash: "abc123" } } }
+    const images = imgData.images;
+    if (images) {
+      const firstKey = Object.keys(images)[0];
+      if (firstKey) imageHash = images[firstKey].hash;
+    }
+  } catch {
+    // Fall through — try with image_url as fallback
+  }
+
+  // ── 2. Create Ad Creative ─────────────────────────────────────────
   const linkData: Record<string, unknown> = {
     link: input.destinationUrl || "https://example.com",
     message: input.body,
     name: input.headline,
-    image_url: input.imageUrl,
     call_to_action: { type: ctaEnum },
   };
 
+  // Use image_hash if we got one, fall back to picture (external URL)
+  if (imageHash) {
+    linkData.image_hash = imageHash;
+  } else {
+    linkData.picture = input.imageUrl;
+  }
+
+  // Use the simple creative format that doesn't require object_story_spec
+  // or page_id — avoids the Instagram permission error entirely.
   const creativeParams = new URLSearchParams({
     access_token: token,
     name: `${input.name} — creative`,
-    object_story_spec: JSON.stringify({
-      page_id: pageId,
-      link_data: linkData,
-    }),
+    title: input.headline,
+    body: input.body,
+    link_url: input.destinationUrl || "https://example.com",
+    call_to_action_type: ctaEnum,
+    ...(imageHash ? { image_hash: imageHash } : {}),
   });
 
   const creativeStart = Date.now();
@@ -127,7 +159,7 @@ export async function createMetaAd(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: creativeParams,
   });
-  const creativeData = (await creativeRes.json()) as {
+  let creativeData = (await creativeRes.json()) as {
     id?: string;
     error?: { message?: string; error_user_title?: string; error_user_msg?: string };
   };

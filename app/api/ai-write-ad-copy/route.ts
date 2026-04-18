@@ -62,6 +62,15 @@ export async function POST(req: Request) {
         if (client.notes) context.push(`Notes: ${client.notes}`);
       }
 
+      const { data: clientFull } = await supabase
+        .from("clients")
+        .select("ai_instructions")
+        .eq("id", clientId)
+        .single();
+      if (clientFull?.ai_instructions) {
+        context.push(`\nCLIENT RULES:\n${clientFull.ai_instructions}`);
+      }
+
       const { data: winners } = await supabase
         .from("ads")
         .select("creative_headline, creative_body, creative_cta, ctr, hook_type")
@@ -81,6 +90,27 @@ export async function POST(req: Request) {
             w.hook_type ? `hook: ${w.hook_type}` : null,
           ].filter(Boolean);
           context.push(`  - ${parts.join(", ")}`);
+        }
+      }
+
+      // Losing ads — what to avoid
+      const { data: losers } = await supabase
+        .from("ads")
+        .select("creative_headline, creative_body, ctr, performance_reason")
+        .eq("client_id", clientId)
+        .eq("performance_status", "losing")
+        .order("performance_score", { ascending: true })
+        .limit(3);
+
+      if (losers && losers.length > 0) {
+        context.push("AVOID these patterns (they failed):");
+        for (const l of losers) {
+          const parts = [
+            l.creative_headline ? `headline: "${l.creative_headline}"` : null,
+            l.ctr ? `CTR: ${Number(l.ctr).toFixed(2)}%` : null,
+            l.performance_reason ? `reason: ${l.performance_reason}` : null,
+          ].filter(Boolean);
+          context.push(`  ✗ ${parts.join(", ")}`);
         }
       }
 
@@ -155,6 +185,10 @@ export async function POST(req: Request) {
       } catch { /* degrade gracefully */ }
     }
 
+    if (sources.customInstructions) {
+      context.push(`\nAGENCY RULES (always follow):\n${sources.customInstructions}`);
+    }
+
     const contextBlock = context.length > 0
       ? context.join("\n")
       : "No historical data available — use general best practices.";
@@ -167,16 +201,20 @@ ${imageDescription ? `Image being used: ${imageDescription}` : ""}
 
 ${contextBlock}
 
-Write ad copy for this campaign. Return EXACTLY this JSON format (no markdown, no code fences):
-{"headline":"your headline here (max 40 chars)","body":"your body text here (max 125 chars for primary line)","cta":"one of: learn_more, shop_now, sign_up, contact_us, book_now, apply_now, watch_more, download, get_quote","reasoning":"2 sentences explaining your choices"}
+Write ad copy for this campaign. You are a senior copywriter who writes ads that CONVERT, not just sound nice.
 
-Rules:
-- The headline should be punchy and under 40 characters
-- The body should hook attention in the first line, under 125 characters
-- Match the client's brand voice if organic captions are available
-- Reference what's worked (winning headlines, hook types) and what competitors are doing
-- Pick the CTA that best matches the campaign objective
-- Be specific to this client, not generic`;
+Return EXACTLY this JSON format (no markdown, no code fences):
+{"headline":"your headline here (max 40 chars)","body":"your body text here (max 125 chars for primary line)","cta":"one of: learn_more, shop_now, sign_up, contact_us, book_now, apply_now, watch_more, download, get_quote","reasoning":"2 sentences explaining your choices, referencing specific data"}
+
+RULES:
+- Headline: punchy, under 40 chars, mention the actual product/service by name
+- Body: hook attention in first line, under 125 chars, use the brand voice from their organic posts
+- If winning ads had certain headlines/hooks that got high CTR, use similar patterns
+- If losing ads had certain copy that failed, avoid those patterns
+- CTA must match the objective: traffic→Learn More, conversions→Shop Now, leads→Sign Up
+- Reference what competitors are running and differentiate
+- NO generic marketing fluff like "Elevate your experience" — be specific to THIS business
+- Write like a human, not a marketing textbook`;
 
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({

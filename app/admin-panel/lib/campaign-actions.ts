@@ -32,28 +32,33 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   const hasMetaCreds =
     !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID;
 
-  // Save locally FIRST, redirect immediately. Meta creation happens
-  // after via a fire-and-forget API call so the form never hangs.
-  const { data: inserted, error } = await supabase
-    .from("campaigns")
-    .insert({
-      client_id: clientId,
-      name,
-      objective,
-      audience: audience || null,
-      budget,
-      status,
-    })
-    .select("id")
-    .single();
+  // Save locally FIRST, redirect immediately.
+  let insertedId: string;
+  try {
+    const { data: inserted, error } = await supabase
+      .from("campaigns")
+      .insert({
+        client_id: clientId,
+        name,
+        objective,
+        audience: audience || null,
+        budget,
+        status,
+      })
+      .select("id")
+      .single();
 
-  if (error) {
-    console.error("createCampaignAction error:", error);
-    throw new Error("Could not create campaign.");
+    if (error || !inserted) {
+      console.error("createCampaignAction error:", error);
+      throw new Error("Could not create campaign.");
+    }
+    insertedId = String(inserted.id);
+  } catch (err) {
+    if ((err as any)?.digest) throw err; // re-throw Next.js internal errors
+    throw new Error(err instanceof Error ? err.message : "Could not create campaign.");
   }
 
-  // Fire-and-forget: push to Meta in the background. The campaign page
-  // will show "not yet connected to Meta" until this completes.
+  // Fire-and-forget: push to Meta in the background.
   if (hasMetaCreds && budget > 0) {
     createMetaCampaign({
       name,
@@ -75,7 +80,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
               meta_status: status === "testing" || status === "paused" ? "PAUSED" : "ACTIVE",
               meta_ad_account_name: process.env.META_AD_ACCOUNT_ID,
             })
-            .eq("id", inserted.id);
+            .eq("id", insertedId);
         } else {
           console.error("Background Meta creation failed:", result.error);
         }
@@ -86,8 +91,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
-  revalidatePath("/admin-panel/dashboard");
-  redirect(`/app/clients/${clientId}/campaigns/${inserted.id}`);
+  redirect(`/app/clients/${clientId}/campaigns/${insertedId}`);
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {
@@ -144,5 +148,50 @@ export async function updateCampaignAction(
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
   revalidatePath("/admin-panel/dashboard");
+  redirect(`/app/clients/${clientId}`);
+}
+
+export async function deleteCampaignAction(campaignId: string, clientId: string) {
+  const supabase = await createClient();
+
+  // Delete from Meta if campaign has a meta_id
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("meta_id")
+    .eq("id", campaignId)
+    .single();
+
+  if (campaign?.meta_id) {
+    try {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (token) {
+        await fetch(`https://graph.facebook.com/v25.0/${campaign.meta_id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ access_token: token, status: "DELETED" }),
+        });
+      }
+    } catch { /* Meta deletion is best-effort */ }
+  }
+
+  // Delete ads in this campaign first
+  await supabase
+    .from("ads")
+    .delete()
+    .eq("campaign_id", campaignId)
+    .eq("client_id", clientId);
+
+  const { error } = await supabase
+    .from("campaigns")
+    .delete()
+    .eq("id", campaignId)
+    .eq("client_id", clientId);
+
+  if (error) {
+    console.error("deleteCampaignAction error:", error);
+    throw new Error("Could not delete campaign.");
+  }
+
+  revalidatePath(`/admin-panel/clients/${clientId}`);
   redirect(`/app/clients/${clientId}`);
 }

@@ -115,7 +115,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const target = new URL("/app/proofer/publish", req.url);
+    const target = new URL("/admin-panel/proofer/publish", req.url);
     target.searchParams.set("meta", "connected");
     target.searchParams.set("fb", String(fbCount));
     target.searchParams.set("ig", String(igCount));
@@ -128,7 +128,7 @@ export async function GET(req: Request) {
 }
 
 function redirectWithError(req: Request, message: string) {
-  const target = new URL("/app/proofer/publish", req.url);
+  const target = new URL("/admin-panel/proofer/publish", req.url);
   target.searchParams.set("meta_error", message);
   return NextResponse.redirect(target);
 }

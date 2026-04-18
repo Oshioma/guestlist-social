@@ -22,6 +22,7 @@ export type AiSourceSettings = {
   clientWebsite: boolean;
   clientWebsiteUrl: string;
   imageGeneration: boolean;
+  customInstructions: string;
 };
 
 export const DEFAULT_AI_SOURCES: AiSourceSettings = {
@@ -30,6 +31,7 @@ export const DEFAULT_AI_SOURCES: AiSourceSettings = {
   clientWebsite: false,
   clientWebsiteUrl: "",
   imageGeneration: false,
+  customInstructions: "",
 };
 
 const AI_SOURCES_KEY = "ai_suggestion_sources";
@@ -51,6 +53,7 @@ export async function getAiSourceSettings(
     clientWebsite: raw.clientWebsite === true,
     clientWebsiteUrl: typeof raw.clientWebsiteUrl === "string" ? raw.clientWebsiteUrl : "",
     imageGeneration: raw.imageGeneration === true,
+    customInstructions: typeof raw.customInstructions === "string" ? raw.customInstructions : "",
   };
 }
 

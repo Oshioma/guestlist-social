@@ -9,6 +9,7 @@ type Props = {
     clientWebsite: boolean;
     clientWebsiteUrl: string;
     imageGeneration: boolean;
+    customInstructions: string;
   };
   hasOpenAiKey: boolean;
   onSave: (values: Props["initial"]) => Promise<void>;
@@ -52,7 +53,8 @@ export default function AiSourcesForm({ initial, hasOpenAiKey, onSave }: Props) 
     values.metaAdLibrary !== initial.metaAdLibrary ||
     values.clientWebsite !== initial.clientWebsite ||
     values.clientWebsiteUrl !== initial.clientWebsiteUrl ||
-    values.imageGeneration !== initial.imageGeneration;
+    values.imageGeneration !== initial.imageGeneration ||
+    values.customInstructions !== initial.customInstructions;
 
   function handleSave() {
     setSaved(false);
@@ -151,6 +153,35 @@ export default function AiSourcesForm({ initial, hasOpenAiKey, onSave }: Props) 
           Add it in Vercel → Settings → Environment Variables to enable image generation.
         </div>
       )}
+
+      <div>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#18181b", marginBottom: 6 }}>
+          Custom instructions for AI
+        </label>
+        <p style={{ fontSize: 12, color: "#71717a", margin: "0 0 8px", lineHeight: 1.5 }}>
+          These instructions are added to every AI prompt. Use them to set brand rules,
+          tone of voice, things to always mention or avoid.
+        </p>
+        <textarea
+          value={values.customInstructions}
+          onChange={(e) => setValues((v) => ({ ...v, customInstructions: e.target.value }))}
+          placeholder={"Examples:\n• Always mention we offer free delivery\n• Never use emojis in ad copy\n• Our tone is casual and friendly, not corporate\n• Focus on our cocktail menu, not food\n• Target young professionals, not students"}
+          style={{
+            width: "100%",
+            minHeight: 120,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #e4e4e7",
+            fontSize: 13,
+            fontFamily: "inherit",
+            color: "#18181b",
+            background: "#fff",
+            resize: "vertical",
+            boxSizing: "border-box",
+            lineHeight: 1.6,
+          }}
+        />
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button

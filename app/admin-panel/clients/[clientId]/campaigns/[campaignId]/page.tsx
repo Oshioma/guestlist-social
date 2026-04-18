@@ -3,7 +3,13 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canRunAds } from "@/lib/auth/permissions";
 import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
+import { revalidatePath } from "next/cache";
+import { createMetaAd } from "@/lib/meta-ad-create";
+import { getCreativeSourcesForClient } from "@/lib/creative-sources";
+import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
+import DeleteCampaignButton from "@/app/admin-panel/components/DeleteCampaignButton";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
+import { deleteCampaignAction } from "@/app/admin-panel/lib/campaign-actions";
 
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
@@ -21,6 +27,7 @@ type Props = {
 export const dynamic = "force-dynamic";
 
 export default async function CampaignDetailPage({ params }: Props) {
+  try {
   const { clientId, campaignId } = await params;
   const supabase = await createClient();
   const adsAllowed = await canRunAds();
@@ -34,7 +41,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: adsRows, error: adsError },
     { data: learningRows, error: learningsError },
   ] = await Promise.all([
-    supabase.from("clients").select("id, name").eq("id", clientId).single(),
+    supabase.from("clients").select("id, name, website_url").eq("id", clientId).single(),
     supabase
       .from("campaigns")
       .select("*")
@@ -65,6 +72,10 @@ export default async function CampaignDetailPage({ params }: Props) {
   }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
+  let creativeSources: Awaited<ReturnType<typeof getCreativeSourcesForClient>> = [];
+  try {
+    creativeSources = await getCreativeSourcesForClient(clientId);
+  } catch { /* degrade gracefully */ }
 
   const winners = ads.filter((ad) => ad.status === "active" && ad.ctr >= 2.5);
   const paused = ads.filter((ad) => ad.status === "paused");
@@ -108,57 +119,70 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   const hasMetaId = !!(campaign as any).meta_id;
   const hasMetaAdsetId = !!(campaign as any).meta_adset_id;
-  const isNewlyCreated = hasMetaId && ads.length === 0;
+  const hasNoAds = ads.length === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {isNewlyCreated && (
-        <div
-          style={{
-            padding: "16px 20px",
-            borderRadius: 14,
-            background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
-            border: "1px solid #bbf7d0",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#166534" }}>
-            Campaign created in Meta
-          </div>
-          <div style={{ fontSize: 14, color: "#15803d", lineHeight: 1.5 }}>
-            <strong>{campaign.name}</strong> is set up in your Meta ad account
-            with a {campaign.budget ? `£${Number(campaign.budget).toFixed(0)}/day` : ""} budget.
-            It&rsquo;s currently <strong>{campaignStatus === "testing" || campaignStatus === "paused" ? "paused" : campaignStatus}</strong> and
-            won&rsquo;t spend until you add an ad and activate it.
-          </div>
-          <div style={{ fontSize: 13, color: "#166534", fontWeight: 600 }}>
-            Next step: add an ad with creative (image + copy) so Meta has something to show people.
-          </div>
-          {adsAllowed && (
-            <Link
-              href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/new`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                alignSelf: "flex-start",
-                padding: "10px 18px",
-                borderRadius: 10,
-                background: "#166534",
-                color: "#fff",
-                textDecoration: "none",
-                fontSize: 14,
-                fontWeight: 700,
-              }}
-            >
-              Add your first ad
-            </Link>
-          )}
-        </div>
-      )}
+      {hasNoAds && hasMetaAdsetId && adsAllowed && (() => {
+        async function inlineMetaAction(data: {
+          name: string;
+          imageUrl: string;
+          headline: string;
+          body: string;
+          ctaType: string;
+          destinationUrl: string;
+        }): Promise<{ error?: string }> {
+          "use server";
+          const adsetMetaId = (campaign as any).meta_adset_id as string;
+          const result = await createMetaAd({
+            adsetMetaId,
+            name: data.name,
+            imageUrl: data.imageUrl,
+            headline: data.headline,
+            body: data.body,
+            ctaType: data.ctaType,
+            destinationUrl: data.destinationUrl,
+          });
+          if (!result.ok) {
+            return { error: `Meta ${result.step}: ${result.error}` };
+          }
+          const supabaseInner = await createClient();
+          await supabaseInner.from("ads").insert({
+            client_id: clientId,
+            campaign_id: campaignId,
+            meta_id: result.adId,
+            name: data.name,
+            status: "testing",
+            creative_image_url: data.imageUrl,
+            creative_headline: data.headline,
+            creative_body: data.body,
+            creative_cta: data.ctaType,
+          });
+          revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+          return {};
+        }
 
-      {!isNewlyCreated && hasMetaId && (
+        return (
+          <div>
+            <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+              Add your first ad
+            </h2>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
+              Upload an image, write your copy, and the ad will be created in Meta. Starts paused so you can review.
+            </p>
+            <MetaAdForm
+              campaignName={campaign.name}
+              clientId={clientId}
+              clientWebsite={(client as any).website_url ?? ""}
+              objective={(campaign as any).objective ?? "engagement"}
+              existingCreatives={creativeSources}
+              onSubmit={inlineMetaAction}
+            />
+          </div>
+        );
+      })()}
+
+      {!hasNoAds && hasMetaId && (
         <div
           style={{
             padding: "10px 14px",
@@ -338,6 +362,15 @@ export default async function CampaignDetailPage({ params }: Props) {
               >
                 All ads &amp; actions
               </Link>
+
+              <DeleteCampaignButton
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                onDelete={async () => {
+                  "use server";
+                  await deleteCampaignAction(campaignId, clientId);
+                }}
+              />
 
             </div>
           </div>
@@ -554,5 +587,26 @@ export default async function CampaignDetailPage({ params }: Props) {
       </SectionCard>
     </div>
   );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("CampaignDetailPage error:", message, err);
+    const { clientId: cid } = await params;
+    return (
+      <div style={{ padding: 40 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#18181b" }}>
+          Something went wrong loading this campaign
+        </h2>
+        <p style={{ fontSize: 13, color: "#991b1b", margin: "8px 0", background: "#fef2f2", padding: "8px 12px", borderRadius: 8, border: "1px solid #fecaca" }}>
+          {message}
+        </p>
+        <Link
+          href={`/app/clients/${cid}`}
+          style={{ fontSize: 14, color: "#4338ca", textDecoration: "underline" }}
+        >
+          Back to client
+        </Link>
+      </div>
+    );
+  }
 }
 

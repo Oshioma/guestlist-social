@@ -64,72 +64,39 @@ export default function CampaignCreator({
     suggestions.winners.length > 0;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 360px)",
-        gap: 20,
-        alignItems: "flex-start",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <CampaignForm
-          key={formKey}
-          clientId={clientId}
-          title={title}
-          submitLabel={submitLabel}
-          action={action}
-          initialValues={prefill}
-        />
-      </div>
+    <div>
+      <CampaignForm
+        key={formKey}
+        clientId={clientId}
+        title={title}
+        submitLabel={submitLabel}
+        action={action}
+        initialValues={prefill}
+      />
 
-      <aside
+      {hasAny && (
+      <details
         style={{
-          background: "#fff",
+          marginTop: 16,
+          background: "#fafafa",
           border: "1px solid #e4e4e7",
-          borderRadius: 16,
-          padding: 18,
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          position: "sticky",
-          top: 20,
+          borderRadius: 12,
+          maxWidth: 720,
         }}
       >
-        <div>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 15,
-              fontWeight: 700,
-              color: "#18181b",
-            }}
-          >
-            What&rsquo;s worked before
-          </h2>
-          <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-            Click <strong>Apply</strong> to pre-fill the form.
-          </p>
-        </div>
-
-        {!hasAny && (
-          <div
-            style={{
-              fontSize: 12,
-              color: "#71717a",
-              padding: "10px 12px",
-              background: "#fafafa",
-              border: "1px dashed #e4e4e7",
-              borderRadius: 10,
-              lineHeight: 1.5,
-            }}
-          >
-            No patterns yet. Once this client has completed actions, or the
-            agency playbook has been generated, suggestions will appear here
-            automatically.
-          </div>
-        )}
-
+        <summary
+          style={{
+            padding: "12px 16px",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#52525b",
+            cursor: "pointer",
+            listStyle: "none",
+          }}
+        >
+          What&rsquo;s worked before — click to expand
+        </summary>
+        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
         <Section
           label="From this client's playbook"
           items={suggestions.playbook}
@@ -148,7 +115,9 @@ export default function CampaignCreator({
           appliedId={appliedId}
           onApply={applySuggestion}
         />
-      </aside>
+        </div>
+      </details>
+      )}
     </div>
   );
 }

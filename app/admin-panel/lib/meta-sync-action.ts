@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getCampaigns,
-  getAds,
+  getAdsLight,
   getAdAccount,
   getAdInsights,
   getDailyAdInsights,
@@ -153,9 +153,41 @@ export async function syncMetaData(clientId: string) {
   try {
     log.push(`Syncing Meta data for "${client.name}"`);
 
-    // 1. Campaigns
-    const metaCampaigns = await getCampaigns();
+    // 1. Campaigns — single page, active/paused only
+    const { token, accountId } = (() => {
+      const t = process.env.META_ACCESS_TOKEN;
+      let a = process.env.META_AD_ACCOUNT_ID;
+      if (!t || !a) throw new Error("Missing META env vars");
+      if (!a.startsWith("act_")) a = `act_${a}`;
+      return { token: t, accountId: a };
+    })();
+
+    const campRes = await fetch(
+      `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&effective_status=["ACTIVE","PAUSED"]&limit=50&access_token=${token}`,
+      { cache: "no-store" }
+    );
+    if (!campRes.ok) throw new Error(`Meta campaigns: ${campRes.status}`);
+    const campData = await campRes.json();
+    const metaCampaigns: Array<{ id: string; name: string; status: string; objective: string; daily_budget?: string; lifetime_budget?: string }> = campData.data ?? [];
     log.push(`Fetched ${metaCampaigns.length} campaigns from Meta`);
+
+    // Pre-fetch existing campaigns FOR THIS CLIENT only
+    const { data: existingCampaigns } = await supabase
+      .from("campaigns")
+      .select("id, meta_id")
+      .eq("client_id", clientId);
+    const existingCampByMetaId = new Map(
+      (existingCampaigns ?? []).map((c) => [String(c.meta_id), String(c.id)])
+    );
+
+    // Also check which meta_ids exist on OTHER clients (to avoid duplicating)
+    const { data: allCampaigns } = await supabase
+      .from("campaigns")
+      .select("meta_id, client_id")
+      .not("client_id", "eq", clientId);
+    const ownedByOther = new Set(
+      (allCampaigns ?? []).map((c) => String(c.meta_id))
+    );
 
     const campaignMap = new Map<string, string>();
     let campaignsCreated = 0;
@@ -170,21 +202,18 @@ export async function syncMetaData(clientId: string) {
         budget,
       };
 
-      const { data: existing } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("meta_id", mc.id)
-        .limit(1);
+      const existingCampId = existingCampByMetaId.get(String(mc.id));
 
-      if (existing && existing.length > 0) {
-        campaignMap.set(mc.id, String(existing[0].id));
+      if (existingCampId) {
+        // Already belongs to this client — update
+        campaignMap.set(mc.id, existingCampId);
         await supabase
           .from("campaigns")
           .update(campaignData)
-          .eq("id", existing[0].id);
+          .eq("id", existingCampId);
         campaignsUpdated++;
-      } else {
+      } else if (!ownedByOther.has(String(mc.id))) {
+        // Not owned by anyone — create for this client
         const { data: newCampaign } = await supabase
           .from("campaigns")
           .insert({ client_id: clientId, meta_id: mc.id, ...campaignData })
@@ -195,15 +224,62 @@ export async function syncMetaData(clientId: string) {
           campaignMap.set(mc.id, String(newCampaign.id));
           campaignsCreated++;
         }
+      // Owned by another client — check if campaign name matches THIS client
+      } else {
+        const campNameLower = (mc.name ?? "").toLowerCase();
+        const clientNameLower = (client.name ?? "").toLowerCase();
+        const clientWords = clientNameLower.split(/\s+/).filter((w: string) => w.length > 2);
+        const nameMatches = clientWords.some((w: string) => campNameLower.includes(w));
+
+        if (nameMatches) {
+          // Campaign name contains the client name — reassign it
+          const { data: otherCamp } = await supabase
+            .from("campaigns")
+            .select("id")
+            .eq("meta_id", mc.id)
+            .neq("client_id", clientId)
+            .limit(1)
+            .maybeSingle();
+
+          if (otherCamp) {
+            await supabase
+              .from("campaigns")
+              .update({ client_id: clientId, ...campaignData })
+              .eq("id", otherCamp.id);
+            // Also move ads from old client to this client
+            await supabase
+              .from("ads")
+              .update({ client_id: clientId })
+              .eq("campaign_id", otherCamp.id);
+            campaignMap.set(mc.id, String(otherCamp.id));
+            campaignsUpdated++;
+            log.push(`Claimed "${mc.name}" (matched client name)`);
+          }
+        } else {
+          log.push(`Skipped "${mc.name}" (belongs to another client)`);
+        }
       }
     }
 
     log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // 2. Ads (skip ad sets + insights for speed — those can be synced
-    // via the full /api/meta-sync route which has more headroom).
-    const metaAds = await getAds();
+    // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
+    const adsRes = await fetch(
+      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&effective_status=["ACTIVE","PAUSED"]&limit=25&access_token=${token}`,
+      { cache: "no-store" }
+    );
+    const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
+      adsRes.ok ? ((await adsRes.json()).data ?? []) : [];
     log.push(`Fetched ${metaAds.length} ads`);
+
+    // Pre-fetch all existing ads for this client in one query
+    const { data: existingAds } = await supabase
+      .from("ads")
+      .select("id, meta_id")
+      .eq("client_id", clientId);
+    const existingAdByMetaId = new Map(
+      (existingAds ?? []).map((a) => [String(a.meta_id), String(a.id)])
+    );
 
     let adsCreated = 0;
     let adsUpdated = 0;
@@ -223,74 +299,32 @@ export async function syncMetaData(clientId: string) {
         followers_gained: 0,
       };
 
-      const audience: string | null = null;
-      const creativeHook = metaAd.creative
-        ? [metaAd.creative.title, metaAd.creative.body]
-            .filter(Boolean)
-            .join(" — ") || null
-        : null;
+      // Quick sync: just basic fields + image URL from creative
+      const creative_image_url =
+        metaAd.creative?.image_url ??
+        metaAd.creative?.thumbnail_url ??
+        null;
 
-      const { creative_video_id, ...creativeData } = creativeToAdRow(metaAd);
-
-      // Resolve the playable video URL via a separate Graph call. We do
-      // this once per ad with a video — never on the hot path of an
-      // insight loop. Failures return null and don't break the sync.
-      const creative_video_url = creative_video_id
-        ? await resolveVideoSource(creative_video_id)
-        : null;
-
-      // Thumbnail fallback chain. The extractor's normal fields cover
-      // most ads, but a meaningful slice of the library — video creatives
-      // built without an explicit image override, plus Instagram-only ads
-      // where everything lives on the source post — comes back with
-      // `creative_image_url = null` and renders as "No preview". Walk
-      // two more Graph endpoints (video poster, then object_story image)
-      // until we have *something* to show.
-      //
-      // Order matters: the video poster is the cheapest fallback (one
-      // call we're often making anyway for the source URL), so we try it
-      // before the object_story walk.
-      let creative_image_url = creativeData.creative_image_url;
-      if (!creative_image_url && creative_video_id) {
-        creative_image_url = await resolveVideoPoster(creative_video_id);
-      }
-      if (!creative_image_url && creativeData.object_story_id) {
-        creative_image_url = await resolveObjectStoryImage(
-          creativeData.object_story_id
-        );
-      }
-
-      // Everything we want to write on every sync (update OR insert).
-      // Spread adData (which contains all the new delivery/funnel/video
-      // columns from insightToAdRow) and then layer on the Meta-truth
-      // status + creative structure fields.
-      const writable = {
+      const writable: Record<string, unknown> = {
         ...adData,
+        name: metaAd.name,
         status: mapMetaStatus(metaAd.status),
-        audience,
-        creative_hook: creativeHook,
         meta_effective_status: metaAd.effective_status ?? null,
-        meta_configured_status: metaAd.configured_status ?? null,
-        // Cached so the meta_execution_queue seeder can attach the
-        // ad set Meta id without having to re-walk the adsets list.
         adset_meta_id: metaAd.adset_id ?? null,
-        ...creativeData,
-        creative_image_url,
-        creative_video_url,
       };
 
-      const { data: existingAd } = await supabase
-        .from("ads")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("meta_id", metaAd.id)
-        .limit(1);
+      // Only update image if we got a new one
+      if (creative_image_url) {
+        writable.creative_image_url = creative_image_url;
+      }
 
-      if (existingAd && existingAd.length > 0) {
+      const existingAdId = existingAdByMetaId.get(String(metaAd.id));
+
+      if (existingAdId) {
         await supabase
           .from("ads")
           .update(writable)
-          .eq("id", existingAd[0].id);
+          .eq("id", existingAdId);
         adsUpdated++;
       } else {
         await supabase.from("ads").insert({
