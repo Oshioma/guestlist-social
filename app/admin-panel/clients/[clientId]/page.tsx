@@ -644,9 +644,9 @@ export default async function ClientDetailPage({
                             alt=""
                             loading="lazy"
                             style={{
-                              width: 80,
-                              height: 80,
-                              borderRadius: 10,
+                              width: 140,
+                              height: 140,
+                              borderRadius: 12,
                               objectFit: "cover",
                               border: "1px solid #e4e4e7",
                               flexShrink: 0,
@@ -656,9 +656,9 @@ export default async function ClientDetailPage({
                         {campaignAdsRaw.length > 5 && (
                           <span
                             style={{
-                              width: 80,
-                              height: 80,
-                              borderRadius: 10,
+                              width: 140,
+                              height: 140,
+                              borderRadius: 12,
                               background: "#f4f4f5",
                               border: "1px solid #e4e4e7",
                               display: "flex",
