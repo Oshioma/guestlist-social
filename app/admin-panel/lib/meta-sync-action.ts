@@ -205,8 +205,8 @@ export async function syncMetaData(clientId: string) {
 
     log.push(`Campaigns: ${campaignsCreated} created, ${campaignsUpdated} updated`);
 
-    // 2. Ads (skip ad sets + insights for speed — those can be synced
-    // via the full /api/meta-sync route which has more headroom).
+    // 2. Ads — fetch only 20 most recent to stay within timeout.
+    // Use a single non-paginated call instead of metaFetchAll.
     const metaAds = await getAdsLight();
     log.push(`Fetched ${metaAds.length} ads`);
 
