@@ -759,6 +759,7 @@ export async function getProoferPublishQueueData(): Promise<{
       caption: row.caption ?? "",
       imageUrl: row.image_url ?? "",
       mediaUrls,
+      publishTime: row.publish_time ?? "18:00",
       status: (row.status ?? "none") as ProoferStatus,
       createdBy: row.created_by ?? "",
       createdAt: row.created_at ?? "",
