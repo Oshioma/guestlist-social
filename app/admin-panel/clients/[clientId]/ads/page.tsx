@@ -681,11 +681,43 @@ export default async function ClientAdsPage({
         }
         adsPanel={
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            {/* ── ALL ADS ── */}
+            {/* ── ALL ADS grouped by campaign ── */}
       <SectionCard title={`All ads · last 6 months (${ads.length})`}>
         {ads.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {ads.map((ad) => {
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {(() => {
+              const groups = new Map<string, typeof ads>();
+              for (const ad of ads) {
+                const key = ad._campaignName;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(ad);
+              }
+              return Array.from(groups.entries()).map(([campaignName, campaignAds]) => (
+                <div key={campaignName}>
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 5,
+                      padding: "8px 14px",
+                      background: "#f9fafb",
+                      border: "1px solid #e4e4e7",
+                      borderRadius: 10,
+                      marginBottom: 10,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#27272a" }}>
+                      {campaignName}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#71717a" }}>
+                      {campaignAds.length} ad{campaignAds.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {campaignAds.map((ad) => {
               const colors = perfColors[ad._perfStatus] ?? perfColors.testing;
 
               return (
@@ -1014,6 +1046,10 @@ export default async function ClientAdsPage({
                 </div>
               );
             })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         ) : (
           <EmptyState

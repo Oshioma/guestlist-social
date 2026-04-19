@@ -44,11 +44,12 @@ export async function getDashboardData(): Promise<{
       .select("*")
       .eq("archived", false)
       .order("created_at", { ascending: false }),
-    supabase.from("ads").select("*").order("created_at", { ascending: false }),
+    supabase.from("ads").select("*").order("created_at", { ascending: false }).limit(500),
     supabase
       .from("suggestions")
       .select("*")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);

@@ -152,6 +152,15 @@ export async function updateCampaignAction(
 }
 
 export async function deleteCampaignAction(campaignId: string, clientId: string) {
+  await deleteCampaignCore(campaignId, clientId);
+  redirect(`/app/clients/${clientId}`);
+}
+
+export async function deleteCampaignNoRedirect(campaignId: string, clientId: string) {
+  await deleteCampaignCore(campaignId, clientId);
+}
+
+async function deleteCampaignCore(campaignId: string, clientId: string) {
   const supabase = await createClient();
 
   // Delete from Meta if campaign has a meta_id
@@ -193,5 +202,4 @@ export async function deleteCampaignAction(campaignId: string, clientId: string)
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
-  redirect(`/app/clients/${clientId}`);
 }

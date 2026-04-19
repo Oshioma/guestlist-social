@@ -123,7 +123,7 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {hasNoAds && hasMetaAdsetId && adsAllowed && (() => {
+      {hasNoAds && adsAllowed && (() => {
         async function inlineMetaAction(data: {
           name: string;
           imageUrl: string;
@@ -133,31 +133,47 @@ export default async function CampaignDetailPage({ params }: Props) {
           destinationUrl: string;
         }): Promise<{ error?: string }> {
           "use server";
-          const adsetMetaId = (campaign as any).meta_adset_id as string;
-          const result = await createMetaAd({
-            adsetMetaId,
-            name: data.name,
-            imageUrl: data.imageUrl,
-            headline: data.headline,
-            body: data.body,
-            ctaType: data.ctaType,
-            destinationUrl: data.destinationUrl,
-          });
-          if (!result.ok) {
-            return { error: `Meta ${result.step}: ${result.error}` };
+          const adsetMetaId = (campaign as any).meta_adset_id as string | null;
+
+          if (adsetMetaId) {
+            const result = await createMetaAd({
+              adsetMetaId,
+              name: data.name,
+              imageUrl: data.imageUrl,
+              headline: data.headline,
+              body: data.body,
+              ctaType: data.ctaType,
+              destinationUrl: data.destinationUrl,
+            });
+            if (!result.ok) {
+              return { error: `Meta ${result.step}: ${result.error}` };
+            }
+            const supabaseInner = await createClient();
+            await supabaseInner.from("ads").insert({
+              client_id: clientId,
+              campaign_id: campaignId,
+              meta_id: result.adId,
+              name: data.name,
+              status: "testing",
+              creative_image_url: data.imageUrl,
+              creative_headline: data.headline,
+              creative_body: data.body,
+              creative_cta: data.ctaType,
+            });
+          } else {
+            const supabaseInner = await createClient();
+            await supabaseInner.from("ads").insert({
+              client_id: clientId,
+              campaign_id: campaignId,
+              name: data.name,
+              status: "testing",
+              creative_image_url: data.imageUrl,
+              creative_headline: data.headline,
+              creative_body: data.body,
+              creative_cta: data.ctaType,
+            });
           }
-          const supabaseInner = await createClient();
-          await supabaseInner.from("ads").insert({
-            client_id: clientId,
-            campaign_id: campaignId,
-            meta_id: result.adId,
-            name: data.name,
-            status: "testing",
-            creative_image_url: data.imageUrl,
-            creative_headline: data.headline,
-            creative_body: data.body,
-            creative_cta: data.ctaType,
-          });
+
           revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
           return {};
         }
@@ -168,7 +184,7 @@ export default async function CampaignDetailPage({ params }: Props) {
               Add your first ad
             </h2>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
-              Upload an image, write your copy, and the ad will be created in Meta. Starts paused so you can review.
+              Upload an image, write your copy, and create your ad.{hasMetaAdsetId ? " It will be pushed to Meta (starts paused)." : " Meta not connected yet — ad saved locally."}
             </p>
             <MetaAdForm
               campaignName={campaign.name}
