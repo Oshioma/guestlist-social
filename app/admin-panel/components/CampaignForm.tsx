@@ -38,9 +38,9 @@ export default function CampaignForm({
     headline: { suggestion: null, reasoning: null },
   });
   const [aiLoading, setAiLoading] = useState(false);
-  const [nextLoading, setNextLoading] = useState(false);
+  const [nextLoadingField, setNextLoadingField] = useState<string | null>(null);
 
-  function fetchSuggestions() {
+  function fetchSuggestions(onlyField?: "headline" | "budget" | "audience") {
     if (!clientId) return;
     return fetch("/api/ai-suggest-all", {
       method: "POST",
@@ -50,11 +50,18 @@ export default function CampaignForm({
       .then((r) => r.json())
       .then((data) => {
         if (data.ok && data.suggestions) {
-          setAi({
-            audience: data.suggestions.audience ?? { suggestion: null, reasoning: null },
-            budget: data.suggestions.budget ?? { suggestion: null, reasoning: null },
-            headline: data.suggestions.headline ?? { suggestion: null, reasoning: null },
-          });
+          if (onlyField) {
+            setAi((prev) => ({
+              ...prev,
+              [onlyField]: data.suggestions[onlyField] ?? { suggestion: null, reasoning: null },
+            }));
+          } else {
+            setAi({
+              audience: data.suggestions.audience ?? { suggestion: null, reasoning: null },
+              budget: data.suggestions.budget ?? { suggestion: null, reasoning: null },
+              headline: data.suggestions.headline ?? { suggestion: null, reasoning: null },
+            });
+          }
         }
       })
       .catch(() => {});
@@ -66,9 +73,9 @@ export default function CampaignForm({
     fetchSuggestions()?.finally(() => setAiLoading(false));
   }, [clientId]);
 
-  function handleNextIdea() {
-    setNextLoading(true);
-    fetchSuggestions()?.finally(() => setNextLoading(false));
+  function handleNextForField(field: "headline" | "budget" | "audience") {
+    setNextLoadingField(field);
+    fetchSuggestions(field)?.finally(() => setNextLoadingField(null));
   }
 
   return (
@@ -105,8 +112,8 @@ export default function CampaignForm({
                 suggestion={ai.headline.suggestion}
                 reasoning={ai.headline.reasoning}
                 loading={aiLoading}
-                onNextIdea={handleNextIdea}
-                nextLoading={nextLoading}
+                onNextIdea={() => handleNextForField("headline")}
+                nextLoading={nextLoadingField === "headline"}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='name']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -142,8 +149,8 @@ export default function CampaignForm({
                 suggestion={ai.budget.suggestion}
                 reasoning={ai.budget.reasoning}
                 loading={aiLoading}
-                onNextIdea={handleNextIdea}
-                nextLoading={nextLoading}
+                onNextIdea={() => handleNextForField("budget")}
+                nextLoading={nextLoadingField === "budget"}
                 onApply={(v) => {
                   const match = v.match(/(\d+(?:\.\d+)?)/);
                   const num = match ? parseFloat(match[1]) : NaN;
@@ -171,8 +178,8 @@ export default function CampaignForm({
                 suggestion={ai.audience.suggestion}
                 reasoning={ai.audience.reasoning}
                 loading={aiLoading}
-                onNextIdea={handleNextIdea}
-                nextLoading={nextLoading}
+                onNextIdea={() => handleNextForField("audience")}
+                nextLoading={nextLoadingField === "audience"}
                 onApply={(v) => {
                   const input = document.querySelector<HTMLInputElement>("input[name='audience']");
                   if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }

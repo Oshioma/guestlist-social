@@ -49,9 +49,10 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
     body: { suggestion: null, reasoning: null },
   });
   const [aiLoading, setAiLoading] = useState(false);
-  const [nextLoading, setNextLoading] = useState(false);
+  const [nextHeadlineLoading, setNextHeadlineLoading] = useState(false);
+  const [nextBodyLoading, setNextBodyLoading] = useState(false);
 
-  function fetchAdCopy() {
+  function fetchAdCopy(onlyField?: "headline" | "body") {
     if (!clientId) return;
     return fetch("/api/ai-write-ad-copy", {
       method: "POST",
@@ -61,10 +62,22 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
-          setAi({
-            headline: { suggestion: data.headline, reasoning: data.reasoning },
-            body: { suggestion: data.body, reasoning: data.reasoning },
-          });
+          if (onlyField === "headline") {
+            setAi((prev) => ({
+              ...prev,
+              headline: { suggestion: data.headline, reasoning: data.reasoning },
+            }));
+          } else if (onlyField === "body") {
+            setAi((prev) => ({
+              ...prev,
+              body: { suggestion: data.body, reasoning: data.reasoning },
+            }));
+          } else {
+            setAi({
+              headline: { suggestion: data.headline, reasoning: data.reasoning },
+              body: { suggestion: data.body, reasoning: data.reasoning },
+            });
+          }
         }
       })
       .catch(() => {});
@@ -76,9 +89,14 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
     fetchAdCopy()?.finally(() => setAiLoading(false));
   }, [clientId]);
 
-  function handleNextIdea() {
-    setNextLoading(true);
-    fetchAdCopy()?.finally(() => setNextLoading(false));
+  function handleNextHeadline() {
+    setNextHeadlineLoading(true);
+    fetchAdCopy("headline")?.finally(() => setNextHeadlineLoading(false));
+  }
+
+  function handleNextBody() {
+    setNextBodyLoading(true);
+    fetchAdCopy("body")?.finally(() => setNextBodyLoading(false));
   }
   const [creativeLoading, setCreativeLoading] = useState(false);
   const [creativeBrief, setCreativeBrief] = useState<{
@@ -371,8 +389,8 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
                 suggestion={ai.headline.suggestion}
                 reasoning={ai.headline.reasoning}
                 loading={aiLoading}
-                onNextIdea={handleNextIdea}
-                nextLoading={nextLoading}
+                onNextIdea={handleNextHeadline}
+                nextLoading={nextHeadlineLoading}
                 onApply={(v) => setHeadline(v)}
               />
             )}
@@ -397,8 +415,8 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
                 suggestion={ai.body.suggestion}
                 reasoning={ai.body.reasoning}
                 loading={aiLoading}
-                onNextIdea={handleNextIdea}
-                nextLoading={nextLoading}
+                onNextIdea={handleNextBody}
+                nextLoading={nextBodyLoading}
                 onApply={(v) => setBody(v)}
               />
             )}
