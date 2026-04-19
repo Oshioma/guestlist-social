@@ -4,25 +4,37 @@ import { usePathname } from "next/navigation";
 
 const titles: Record<string, string> = {
   "/app/dashboard": "Dashboard",
+  "/app/content": "Content Dashboard",
   "/app/clients": "Clients",
-  "/app/content": "Content",
+  "/app/meta-queue": "Meta Queue",
+  "/app/whats-working": "Playbook",
+  "/app/creative": "Creative Library",
+  "/app/reports": "Reports",
+  "/app/memory": "Memory",
+  "/app/proofer": "Proofer",
+  "/app/proofer/publish": "Publish Queue",
+  "/app/ideas": "Ideas",
+  "/app/tasks": "Tasks",
+  "/app/launch": "Quick Launch",
+  "/app/settings": "Settings",
+  "/app/settings/members": "Members",
+  "/app/guide": "Guide",
   "/app/video-ideas": "Video Ideas",
   "/app/carousel-ideas": "Carousel Ideas",
   "/app/story-ideas": "Story Ideas",
-  "/app/proofer": "Proofer",
-  "/app/tasks": "Tasks",
-  "/app/launch": "Launch",
-  "/app/reports": "Reports",
-  "/app/memory": "Memory",
-  "/app/settings": "Settings",
 };
+
+function resolveTitle(pathname: string): string {
+  if (titles[pathname]) return titles[pathname];
+  if (pathname.startsWith("/app/clients/")) return "Client";
+  if (pathname.startsWith("/app/proofer/")) return "Proofer";
+  if (pathname.startsWith("/app/settings/")) return "Settings";
+  return "Admin";
+}
 
 export default function Topbar() {
   const pathname = usePathname();
-
-  const title =
-    titles[pathname] ??
-    (pathname.startsWith("/app/clients/") ? "Client" : "Admin");
+  const title = resolveTitle(pathname);
 
   return (
     <header
@@ -37,7 +49,16 @@ export default function Topbar() {
         flexShrink: 0,
       }}
     >
-      <h1 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{title}</h1>
+      <h1
+        style={{
+          fontSize: 16,
+          fontWeight: 600,
+          margin: 0,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {title}
+      </h1>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <form action="/sign-out" method="post" style={{ margin: 0 }}>
           <button
@@ -50,6 +71,7 @@ export default function Topbar() {
               fontSize: 12,
               color: "#52525b",
               cursor: "pointer",
+              transition: "background 120ms ease, color 120ms ease",
             }}
           >
             Sign out

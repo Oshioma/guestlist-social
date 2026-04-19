@@ -14,6 +14,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { capitalizeFirst } from "@/app/admin-panel/lib/utils";
 import CreativeLibrary, { type CreativeCard } from "./CreativeLibrary";
+import EngineNav from "@/app/admin-panel/components/EngineNav";
 
 export const dynamic = "force-dynamic";
 
@@ -264,6 +265,7 @@ export default async function CreativePage() {
         gap: 24,
       }}
     >
+      <EngineNav />
       <div>
         <div
           style={{

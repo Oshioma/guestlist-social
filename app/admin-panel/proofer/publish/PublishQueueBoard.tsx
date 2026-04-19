@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SectionCard from "../../components/SectionCard";
 import CarouselPreview from "../../components/CarouselPreview";
@@ -377,6 +378,18 @@ export default function PublishQueueBoard({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div>
+        <Link
+          href="/app/proofer"
+          style={{
+            fontSize: 13,
+            color: "#71717a",
+            textDecoration: "none",
+            display: "inline-block",
+            marginBottom: 8,
+          }}
+        >
+          &larr; Back to Proofer
+        </Link>
         <h1
           style={{
             margin: 0,

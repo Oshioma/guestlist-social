@@ -4,6 +4,7 @@ import SectionCard from "@/app/admin-panel/components/SectionCard";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import GenerateReportsButton from "@/app/admin-panel/components/GenerateReportsButton";
 import { formatCurrency, formatDate } from "@/app/admin-panel/lib/utils";
+import EngineNav from "@/app/admin-panel/components/EngineNav";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function ReportsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <EngineNav />
       <div
         style={{
           display: "flex",

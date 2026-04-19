@@ -5,6 +5,7 @@ import SectionCard from "@/app/admin-panel/components/SectionCard";
 import RefreshEverythingButton from "@/app/admin-panel/components/RefreshEverythingButton";
 import GenerateGlobalLearningsButton from "@/app/admin-panel/components/GenerateGlobalLearningsButton";
 import UnretirePatternButton from "@/app/admin-panel/components/UnretirePatternButton";
+import EngineNav from "@/app/admin-panel/components/EngineNav";
 
 export const dynamic = "force-dynamic";
 
@@ -545,6 +546,7 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <EngineNav />
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
           What&rsquo;s working right now

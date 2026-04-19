@@ -13,6 +13,7 @@ import MetaQueueRow, {
   type MetaQueueRowData,
 } from "@/app/admin-panel/components/MetaQueueRow";
 import CrossPollinateButton from "@/app/admin-panel/components/CrossPollinateButton";
+import EngineNav from "@/app/admin-panel/components/EngineNav";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ export default async function MetaQueuePage() {
   if (error) {
     return (
       <div style={{ padding: 24 }}>
+        <EngineNav />
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Meta queue</h1>
         <p style={{ color: "#991b1b", marginTop: 12 }}>
           Failed to load queue: {error.message}
@@ -148,6 +150,7 @@ export default async function MetaQueuePage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 1100 }}>
+      <EngineNav />
       {/* Header */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Action queue</h1>
