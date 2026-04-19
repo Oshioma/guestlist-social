@@ -7,12 +7,14 @@ type Props = {
   campaignId: string;
   campaignName: string;
   onDelete: () => Promise<void>;
+  redirectTo?: string;
 };
 
 export default function DeleteCampaignButton({
   campaignId,
   campaignName,
   onDelete,
+  redirectTo,
 }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -50,7 +52,11 @@ export default function DeleteCampaignButton({
         onClick={() => {
           startTransition(async () => {
             await onDelete();
-            router.refresh();
+            if (redirectTo) {
+              router.push(redirectTo);
+            } else {
+              router.refresh();
+            }
           });
         }}
         style={{

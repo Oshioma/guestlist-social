@@ -9,7 +9,7 @@ import { getCreativeSourcesForClient } from "@/lib/creative-sources";
 import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
 import DeleteCampaignButton from "@/app/admin-panel/components/DeleteCampaignButton";
 import { generateSuggestionsFromLearnings } from "@/app/admin-panel/lib/learning-suggestions";
-import { deleteCampaignAction } from "@/app/admin-panel/lib/campaign-actions";
+import { deleteCampaignNoRedirect } from "@/app/admin-panel/lib/campaign-actions";
 
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import StatCard from "@/app/admin-panel/components/StatCard";
@@ -381,9 +381,10 @@ export default async function CampaignDetailPage({ params }: Props) {
               <DeleteCampaignButton
                 campaignId={campaignId}
                 campaignName={campaign.name}
+                redirectTo={`/app/clients/${clientId}`}
                 onDelete={async () => {
                   "use server";
-                  await deleteCampaignAction(campaignId, clientId);
+                  await deleteCampaignNoRedirect(campaignId, clientId);
                 }}
               />
 
