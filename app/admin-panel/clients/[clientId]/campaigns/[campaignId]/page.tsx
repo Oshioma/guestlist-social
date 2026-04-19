@@ -123,7 +123,7 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {hasNoAds && adsAllowed && (() => {
+      {adsAllowed && (() => {
         async function inlineMetaAction(data: {
           name: string;
           imageUrl: string;
@@ -174,14 +174,13 @@ export default async function CampaignDetailPage({ params }: Props) {
             });
           }
 
-          revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
           return {};
         }
 
         return (
           <div>
             <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
-              Add your first ad
+              {hasNoAds ? "Add your first ad" : "Add another ad"}
             </h2>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
               Upload an image, write your copy, and create your ad.{hasMetaAdsetId ? " It will be pushed to Meta (starts paused)." : " Meta not connected yet — ad saved locally."}
