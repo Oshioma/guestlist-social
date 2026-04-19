@@ -2,14 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 type NavItem = { label: string; href: string };
-type NavGroup = { heading: string; items: NavItem[] };
+type NavGroup = {
+  heading: string;
+  items: NavItem[];
+  collapsible?: boolean;
+};
 
 type Props = {
   isAdmin: boolean;
   canRunAds: boolean;
 };
+
+const ENGINE_ITEMS: NavItem[] = [
+  { label: "Meta queue", href: "/app/meta-queue" },
+  { label: "Playbook", href: "/app/whats-working" },
+  { label: "Creative library", href: "/app/creative" },
+  { label: "Reports", href: "/app/reports" },
+  { label: "Memory", href: "/app/memory" },
+];
+
+const PUBLISHER_ITEMS: NavItem[] = [
+  { label: "Proofer", href: "/app/proofer" },
+  { label: "Ideas", href: "/app/ideas" },
+  { label: "Tasks", href: "/app/tasks" },
+];
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [
@@ -17,28 +36,12 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
       heading: "",
       items: [
         { label: "Dashboard", href: "/app/dashboard" },
+        { label: "Content Dashboard", href: "/app/content" },
         { label: "Clients", href: "/app/clients" },
       ],
     },
-    {
-      heading: "Engine",
-      items: [
-        { label: "Meta queue", href: "/app/meta-queue" },
-        { label: "Playbook", href: "/app/whats-working" },
-        { label: "Creative library", href: "/app/creative" },
-        { label: "Reports", href: "/app/reports" },
-        { label: "Memory", href: "/app/memory" },
-      ],
-    },
-    {
-      heading: "Publisher",
-      items: [
-        { label: "Proofer", href: "/app/proofer" },
-        { label: "Publish queue", href: "/app/proofer/publish" },
-        { label: "Ideas", href: "/app/ideas" },
-        { label: "Content", href: "/app/content" },
-      ],
-    },
+    { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
+    { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
   ];
 
   if (canRunAds) {
@@ -52,7 +55,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
 }
 
 function buildUtilityItems(isAdmin: boolean): NavItem[] {
-  const items: NavItem[] = [{ label: "Tasks", href: "/app/tasks" }];
+  const items: NavItem[] = [];
   if (isAdmin) {
     items.push({ label: "Members", href: "/app/settings/members" });
   }
@@ -61,9 +64,7 @@ function buildUtilityItems(isAdmin: boolean): NavItem[] {
   return items;
 }
 
-const externalItems: NavItem[] = [
-  { label: "Client view", href: "/portal" },
-];
+const externalItems: NavItem[] = [{ label: "Client view", href: "/portal" }];
 
 export default function Sidebar({ isAdmin, canRunAds }: Props) {
   const pathname = usePathname();
@@ -72,75 +73,52 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
 
   function isActive(href: string): boolean {
     if (href === "/app/dashboard") return pathname === "/app/dashboard";
+    if (href === "/app/content") {
+      return pathname === "/app/content" || pathname.startsWith("/app/content/");
+    }
     return pathname === href || pathname.startsWith(href + "/");
+  }
+
+  function groupHasActive(items: NavItem[]): boolean {
+    return items.some((i) => isActive(i.href));
   }
 
   return (
     <aside className="app-sidebar">
-      <div
-        className="app-sidebar-brand"
-        style={{
-          padding: "0 20px 20px",
-          fontSize: 14,
-          fontWeight: 600,
-          letterSpacing: "0.04em",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
-          marginBottom: 12,
-        }}
-      >
-        Guestlist Social
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 400,
-            color: "#a1a1aa",
-            marginTop: 2,
-          }}
-        >
-          Ad Ops
-        </div>
+      <div className="app-sidebar-brand">
+        <div className="app-sidebar-brand-title">Guestlist Social</div>
+        <div className="app-sidebar-brand-subtitle">Ad Ops</div>
       </div>
 
       <nav className="app-sidebar-nav">
         {navGroups.map((group, gi) => (
-          <div key={gi}>
-            {group.heading && (
-              <div style={groupHeadingStyle}>{group.heading}</div>
-            )}
-            {group.items.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                active={isActive(item.href)}
-              />
-            ))}
-          </div>
-        ))}
-
-        <div style={groupHeadingStyle}>Utility</div>
-        {utilityItems.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            active={isActive(item.href)}
+          <NavSection
+            key={gi}
+            group={group}
+            isActive={isActive}
+            defaultOpen={
+              !group.collapsible ||
+              group.heading === "Campaigns" ||
+              groupHasActive(group.items)
+            }
           />
         ))}
 
-        <div style={groupHeadingStyle}>Other views</div>
-        {externalItems.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            active={isActive(item.href)}
-          />
-        ))}
+        <NavSection
+          group={{ heading: "Utility", items: utilityItems }}
+          isActive={isActive}
+          defaultOpen
+        />
+
+        <NavSection
+          group={{ heading: "Other views", items: externalItems }}
+          isActive={isActive}
+          defaultOpen
+        />
       </nav>
 
-      <div className="app-sidebar-footer" style={{ padding: "16px 20px" }}>
-        <Link
-          href="/"
-          style={{ fontSize: 12, color: "#71717a", textDecoration: "none" }}
-        >
+      <div className="app-sidebar-footer">
+        <Link href="/" className="app-sidebar-backlink">
           &larr; Back to site
         </Link>
       </div>
@@ -148,33 +126,67 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
   );
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavSection({
+  group,
+  isActive,
+  defaultOpen,
+}: {
+  group: NavGroup;
+  isActive: (href: string) => boolean;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const collapsible = !!group.collapsible;
+
+  return (
+    <div className="app-sidebar-section">
+      {group.heading &&
+        (collapsible ? (
+          <button
+            type="button"
+            className="app-sidebar-heading app-sidebar-heading-button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+          >
+            <span>{group.heading}</span>
+            <span
+              className="app-sidebar-chevron"
+              style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+            >
+              ›
+            </span>
+          </button>
+        ) : (
+          <div className="app-sidebar-heading">{group.heading}</div>
+        ))}
+      {(!collapsible || open) &&
+        group.items.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            indented={collapsible}
+          />
+        ))}
+    </div>
+  );
+}
+
+function NavLink({
+  item,
+  active,
+  indented,
+}: {
+  item: NavItem;
+  active: boolean;
+  indented?: boolean;
+}) {
   return (
     <Link
       href={item.href}
-      style={{
-        display: "block",
-        padding: "8px 12px",
-        borderRadius: 6,
-        fontSize: 14,
-        color: active ? "#fff" : "#a1a1aa",
-        background: active ? "rgba(255,255,255,0.1)" : "transparent",
-        textDecoration: "none",
-        whiteSpace: "nowrap",
-      }}
+      className={`app-sidebar-link${active ? " app-sidebar-link-active" : ""}${indented ? " app-sidebar-link-indented" : ""}`}
     >
       {item.label}
     </Link>
   );
 }
-
-const groupHeadingStyle: React.CSSProperties = {
-  margin: "14px 8px 4px",
-  paddingTop: 10,
-  borderTop: "1px solid rgba(255,255,255,0.08)",
-  fontSize: 10,
-  color: "#71717a",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  fontWeight: 600,
-};

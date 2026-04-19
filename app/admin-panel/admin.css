@@ -14,20 +14,139 @@
 
 .app-sidebar {
   width: 240px;
-  background: #18181b;
+  background: #0b0b0f;
   color: #fff;
-  padding: 24px 0;
+  padding: 20px 0 16px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.app-sidebar-brand {
+  padding: 0 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.app-sidebar-brand-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.app-sidebar-brand-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: #a1a1aa;
+  margin-top: 2px;
 }
 
 .app-sidebar-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 8px;
+  padding: 0 10px;
   flex: 1;
+  overflow-y: auto;
+}
+
+.app-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 2px;
+}
+
+.app-sidebar-section + .app-sidebar-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.app-sidebar-heading {
+  margin: 2px 4px 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.app-sidebar-heading-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 8px);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  text-transform: uppercase;
+  border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.app-sidebar-heading-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+}
+
+.app-sidebar-chevron {
+  display: inline-block;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 140ms ease;
+  color: #52525b;
+}
+
+.app-sidebar-link {
+  display: block;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a1a1aa;
+  background: transparent;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.app-sidebar-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-sidebar-link-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app-sidebar-link-indented {
+  margin-left: 8px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 6px 6px 0;
+}
+
+.app-sidebar-footer {
+  padding: 14px 20px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 8px;
+}
+
+.app-sidebar-backlink {
+  font-size: 12px;
+  color: #71717a;
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.app-sidebar-backlink:hover {
+  color: #d4d4d8;
 }
 
 .app-main {
@@ -36,6 +155,44 @@
   flex-direction: column;
   overflow: auto;
   min-width: 0;
+  background: #f4f4f5;
+}
+
+/* Sub-nav used on Engine pages */
+.app-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.app-subnav-link {
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #52525b;
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.app-subnav-link:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.app-subnav-link-active {
+  background: #18181b;
+  color: #fff;
+}
+
+.app-subnav-link-active:hover {
+  background: #18181b;
+  color: #fff;
 }
 
 /* Responsive: sidebar on top when narrow */
@@ -48,6 +205,8 @@
     width: 100%;
     padding: 12px 0;
     flex-direction: column;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .app-sidebar-nav {
@@ -58,13 +217,25 @@
     overflow-x: auto;
   }
 
+  .app-sidebar-section + .app-sidebar-section {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
   .app-sidebar-brand {
     padding: 0 16px 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     margin-bottom: 8px;
   }
 
   .app-sidebar-footer {
     display: none;
+  }
+
+  .app-sidebar-link-indented {
+    margin-left: 0;
+    padding-left: 12px;
+    border-left: none;
   }
 }
