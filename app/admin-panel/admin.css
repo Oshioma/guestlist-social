@@ -24,9 +24,21 @@
 }
 
 .app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 0 20px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 10px;
+}
+
+.app-sidebar-brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: #fff;
 }
 
 .app-sidebar-brand-title {
@@ -37,9 +49,10 @@
 
 .app-sidebar-brand-subtitle {
   font-size: 11px;
-  font-weight: 400;
-  color: #a1a1aa;
+  font-weight: 500;
+  color: #fbbf24;
   margin-top: 2px;
+  letter-spacing: 0.02em;
 }
 
 .app-sidebar-nav {
@@ -93,6 +106,29 @@
 .app-sidebar-heading-button:hover {
   background: rgba(255, 255, 255, 0.04);
   color: #d4d4d8;
+}
+
+.app-sidebar-heading-link {
+  display: block;
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+  border-radius: 6px;
+  width: calc(100% - 8px);
+}
+
+.app-sidebar-heading-link:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+}
+
+.app-sidebar-heading-link-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.app-sidebar-heading-link-active:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .app-sidebar-chevron {

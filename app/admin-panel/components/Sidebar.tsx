@@ -9,6 +9,7 @@ type NavGroup = {
   heading: string;
   items: NavItem[];
   collapsible?: boolean;
+  headingHref?: string;
 };
 
 type Props = {
@@ -27,7 +28,6 @@ const ENGINE_ITEMS: NavItem[] = [
 const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
-  { label: "Tasks", href: "/app/tasks" },
 ];
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
@@ -42,6 +42,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
     },
     { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
+    { heading: "Tasks", items: [], headingHref: "/app/tasks" },
   ];
 
   if (canRunAds) {
@@ -86,8 +87,17 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar-brand">
-        <div className="app-sidebar-brand-title">Guestlist Social</div>
-        <div className="app-sidebar-brand-subtitle">Ad Ops</div>
+        <img
+          src="/gslogo.jpg"
+          alt="Guestlist Social"
+          className="app-sidebar-brand-logo"
+          width={32}
+          height={32}
+        />
+        <div>
+          <div className="app-sidebar-brand-title">Guestlist Social</div>
+          <div className="app-sidebar-brand-subtitle">Vibing!</div>
+        </div>
       </div>
 
       <nav className="app-sidebar-nav">
@@ -137,6 +147,7 @@ function NavSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const collapsible = !!group.collapsible;
+  const headingHref = group.headingHref;
 
   return (
     <div className="app-sidebar-section">
@@ -156,6 +167,15 @@ function NavSection({
               ›
             </span>
           </button>
+        ) : headingHref ? (
+          <Link
+            href={headingHref}
+            className={`app-sidebar-heading app-sidebar-heading-link${
+              isActive(headingHref) ? " app-sidebar-heading-link-active" : ""
+            }`}
+          >
+            {group.heading}
+          </Link>
         ) : (
           <div className="app-sidebar-heading">{group.heading}</div>
         ))}
