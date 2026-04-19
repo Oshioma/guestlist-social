@@ -33,9 +33,9 @@
 }
 
 .app-sidebar-brand-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   flex-shrink: 0;
   object-fit: cover;
   background: #fff;
@@ -95,9 +95,12 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  color: inherit;
+  color: #71717a;
   text-align: left;
-  font: inherit;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border-radius: 6px;
   transition: background 120ms ease, color 120ms ease;

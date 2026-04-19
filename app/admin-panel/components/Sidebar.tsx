@@ -91,8 +91,8 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
           src="/gslogo.jpg"
           alt="Guestlist Social"
           className="app-sidebar-brand-logo"
-          width={32}
-          height={32}
+          width={22}
+          height={22}
         />
         <div>
           <div className="app-sidebar-brand-title">Guestlist Social</div>
