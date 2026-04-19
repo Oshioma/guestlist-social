@@ -17,6 +17,7 @@ import AdRow from "@/app/admin-panel/components/AdRow";
 import AdQuickActions from "@/app/admin-panel/components/AdQuickActions";
 import InlineBudgetEdit from "@/app/admin-panel/components/InlineBudgetEdit";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
+import AdPreviewCard from "@/app/admin-panel/components/AdPreviewCard";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
@@ -72,6 +73,10 @@ export default async function CampaignDetailPage({ params }: Props) {
   }
 
   const ads = (adsRows ?? []).map(mapDbAdToUiAd);
+  const rawAdById = new Map<string, any>();
+  for (const row of adsRows ?? []) {
+    rawAdById.set(String(row.id), row);
+  }
   let creativeSources: Awaited<ReturnType<typeof getCreativeSourcesForClient>> = [];
   try {
     creativeSources = await getCreativeSourcesForClient(clientId);
@@ -550,49 +555,65 @@ export default async function CampaignDetailPage({ params }: Props) {
         }
       >
         {ads.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {ads.map((ad) => (
-              <div key={ad.id}>
-                <AdRow ad={ad} canEdit={adsAllowed} />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginTop: 8,
-                    marginBottom: 12,
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  <AdQuickActions
-                    adId={Number(ad.id)}
-                    adName={ad.name}
-                    currentStatus={ad.status}
-                    hasMetaId={!!ad.metaId}
-                    hasAdsetMetaId={!!ad.adsetMetaId}
-                    hasCreative={!!ad.creativeImageUrl}
-                  />
-                  <Link
-                    href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {ads.map((ad) => {
+              const raw = rawAdById.get(String(ad.id));
+              return (
+              <div key={ad.id} style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <AdPreviewCard
+                  adId={Number(ad.id)}
+                  adName={ad.name}
+                  imageUrl={ad.creativeImageUrl}
+                  headline={raw?.creative_headline ?? null}
+                  body={raw?.creative_body ?? null}
+                  cta={raw?.creative_cta ?? null}
+                  destinationUrl={raw?.creative_destination_url ?? null}
+                  metaId={ad.metaId}
+                  adsetMetaId={(campaign as any).meta_adset_id ?? null}
+                  status={ad.status}
+                />
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <AdRow ad={ad} canEdit={adsAllowed} />
+                  <div
                     style={{
-                      display: "inline-flex",
+                      display: "flex",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      padding: "7px 11px",
-                      borderRadius: 9,
-                      border: "1px solid #e4e4e7",
-                      background: "#fff",
-                      color: "#18181b",
-                      textDecoration: "none",
-                      fontSize: 12,
-                      fontWeight: 600,
+                      marginTop: 8,
+                      flexWrap: "wrap",
+                      gap: 8,
                     }}
                   >
-                    Edit ad
-                  </Link>
+                    <AdQuickActions
+                      adId={Number(ad.id)}
+                      adName={ad.name}
+                      currentStatus={ad.status}
+                      hasMetaId={!!ad.metaId}
+                      hasAdsetMetaId={!!ad.adsetMetaId}
+                      hasCreative={!!ad.creativeImageUrl}
+                    />
+                    <Link
+                      href={`/app/clients/${clientId}/campaigns/${campaignId}/ads/${ad.id}/edit`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "7px 11px",
+                        borderRadius: 9,
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        color: "#18181b",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Edit ad
+                    </Link>
+                  </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <EmptyState
