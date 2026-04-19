@@ -33,15 +33,27 @@ export async function createClientAction(formData: FormData) {
       ? "needs_attention"
       : "testing";
 
-  const { error } = await supabase.from("clients").insert({
+  const insertPayload: Record<string, unknown> = {
     name,
     platform,
     monthly_budget: monthlyBudget,
     status: dbStatus,
     website_url: websiteUrl || null,
     notes: notes || null,
-    industry: industry || null,
-  });
+  };
+
+  if (industry) {
+    insertPayload.industry = industry;
+  }
+
+  let { error } = await supabase.from("clients").insert(insertPayload);
+
+  // If industry column doesn't exist, retry without it
+  if (error && insertPayload.industry !== undefined) {
+    delete insertPayload.industry;
+    const retry = await supabase.from("clients").insert(insertPayload);
+    error = retry.error;
+  }
 
   if (error) {
     console.error("createClientAction error:", error);
@@ -79,18 +91,33 @@ export async function updateClientAction(clientId: string, formData: FormData) {
       ? "needs_attention"
       : "testing";
 
-  const { error } = await supabase
+  const updatePayload: Record<string, unknown> = {
+    name,
+    platform,
+    monthly_budget: monthlyBudget,
+    status: dbStatus,
+    website_url: websiteUrl || null,
+    notes: notes || null,
+  };
+
+  if (industry) {
+    updatePayload.industry = industry;
+  }
+
+  let { error } = await supabase
     .from("clients")
-    .update({
-      name,
-      platform,
-      monthly_budget: monthlyBudget,
-      status: dbStatus,
-      website_url: websiteUrl || null,
-      notes: notes || null,
-      industry: industry || null,
-    })
+    .update(updatePayload)
     .eq("id", clientId);
+
+  // If industry column doesn't exist, retry without it
+  if (error && updatePayload.industry !== undefined) {
+    delete updatePayload.industry;
+    const retry = await supabase
+      .from("clients")
+      .update(updatePayload)
+      .eq("id", clientId);
+    error = retry.error;
+  }
 
   if (error) {
     console.error("updateClientAction error:", error);

@@ -54,9 +54,6 @@ export async function getDashboardData(): Promise<{
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
   if (adsRes.error) throw new Error(`ads: ${adsRes.error.message}`);
-  if (suggestionsRes.error) {
-    throw new Error(`suggestions: ${suggestionsRes.error.message}`);
-  }
 
   const ads = (adsRes.data ?? []).map(mapDbAdToUiAd);
 
@@ -71,9 +68,9 @@ export async function getDashboardData(): Promise<{
     return mapDbClientToUiClient(row, adCount);
   });
 
-  const suggestions = (suggestionsRes.data ?? []).map(
-    mapDbSuggestionToUiSuggestion
-  );
+  const suggestions = suggestionsRes.error
+    ? []
+    : (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
 
   return { clients, ads, suggestions };
 }
