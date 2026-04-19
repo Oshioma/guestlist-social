@@ -115,10 +115,12 @@ export default async function DashboardPage() {
     );
   } catch (error) {
     console.error("Dashboard page error:", error);
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
     return (
       <EmptyState
         title="Dashboard failed to load"
-        description="Something went wrong while loading data."
+        description={message}
       />
     );
   }
