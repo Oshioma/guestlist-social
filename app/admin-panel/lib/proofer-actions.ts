@@ -438,6 +438,7 @@ export async function saveProoferPostAction(
           ? normalizedLinkedIdeaKind
           : null,
         status: nextStatus,
+        updated_by: authorEmail,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
@@ -536,6 +537,7 @@ export async function updateProoferStatusAction(
       .from("proofer_posts")
       .update({
         status: normalized,
+        updated_by: authorEmail,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id);

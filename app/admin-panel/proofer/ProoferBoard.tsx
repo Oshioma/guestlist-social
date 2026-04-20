@@ -262,6 +262,7 @@ export default function ProoferBoard({
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
   const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
+  const [previewIdxMap, setPreviewIdxMap] = useState<Record<string, number>>({});
   const [imgSuggestions, setImgSuggestions] = useState<Record<string, { id: number; thumb: string; full: string; photographer: string; pexelsUrl: string }[]>>({});
   const [imgSearching, setImgSearching] = useState<Record<string, boolean>>({});
 
@@ -1374,17 +1375,18 @@ export default function ProoferBoard({
                   </div>
 
                   {post?.createdBy && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 11,
-                        color: "#71717a",
-                      }}
-                    >
-                      First saved by{" "}
-                      <strong style={{ color: "#52525b" }}>
-                        {post.createdBy}
-                      </strong>
+                    <div style={{ marginTop: 6, fontSize: 11, color: "#71717a" }}>
+                      Created by <strong style={{ color: "#52525b" }}>{post.createdBy.split("@")[0]}</strong>
+                    </div>
+                  )}
+                  {post?.updatedBy && post.updatedBy !== post.createdBy && (
+                    <div style={{ marginTop: 2, fontSize: 11, color: "#71717a" }}>
+                      Edited by <strong style={{ color: "#52525b" }}>{post.updatedBy.split("@")[0]}</strong>
+                    </div>
+                  )}
+                  {post?.status === "approved" && post.updatedBy && (
+                    <div style={{ marginTop: 2, fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                      Approved by {post.updatedBy.split("@")[0]}
                     </div>
                   )}
 
@@ -1681,7 +1683,7 @@ export default function ProoferBoard({
                       }
                       placeholder="Write a caption..."
                       disabled={isLocked}
-                      rows={8}
+                      rows={10}
                       style={{
                         ...inputStyle,
                         flex: 1,
@@ -1763,8 +1765,9 @@ export default function ProoferBoard({
 
                   {draft.caption.trim() && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {(["shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
+                      {(["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
                         const labels: Record<string, string> = {
+                          new_hook: "↺ Hook",
                           shorter: "Shorter",
                           more_playful: "More playful",
                           more_premium: "More premium",
@@ -1799,8 +1802,8 @@ export default function ProoferBoard({
                     </div>
                   )}
 
-                  {/* Media section — images/video above idea */}
-                  {draft.mediaUrls.length > 0 && (
+                  {/* Media section — REMOVED (images shown in preview below) */}
+                  {false && draft.mediaUrls.length > 0 && (
                     <div
                       style={{
                         display: "flex",
@@ -2072,7 +2075,12 @@ export default function ProoferBoard({
                     )}
                   </div>
 
-                  {previewUrl && (
+                  {(() => {
+                    const previewIdx = previewIdxMap[key] ?? 0;
+                    const safeIdx = Math.min(previewIdx, Math.max(0, draft.mediaUrls.length - 1));
+                    const activeUrl = draft.mediaUrls[safeIdx] ?? "";
+                    const setPreviewIdx = (n: number) => setPreviewIdxMap((prev) => ({ ...prev, [key]: n }));
+                    return (
                     <div
                       style={{
                         width: "100%",
@@ -2176,73 +2184,55 @@ export default function ProoferBoard({
                         style={{
                           width: "100%",
                           aspectRatio: "1 / 1",
-                          background: "#fafafa",
+                          background: "#f4f4f5",
                           overflow: "hidden",
                           position: "relative",
                         }}
                       >
-                        {isVideoUrl(previewUrl) ? (
-                          <video
-                            src={previewUrl}
-                            controls
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
+                        {activeUrl ? (
+                          isVideoUrl(activeUrl) ? (
+                            <video src={activeUrl} controls style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <img src={activeUrl} alt="Preview" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                          )
                         ) : (
-                          <img
-                            src={previewUrl}
-                            alt="Preview"
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                            onError={(e) => {
-                              (
-                                e.currentTarget as HTMLImageElement
-                              ).style.display = "none";
-                            }}
-                          />
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#a1a1aa", fontSize: 13 }}>
+                            No image yet
+                          </div>
                         )}
+
+                        {/* Carousel nav */}
                         {draft.mediaUrls.length > 1 && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: 10,
-                              right: 10,
-                              background: "rgba(0,0,0,0.65)",
-                              color: "#fff",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                            }}
-                          >
-                            1/{draft.mediaUrls.length}
+                          <>
+                            <button type="button" onClick={() => setPreviewIdx(Math.max(0, safeIdx - 1))} disabled={safeIdx === 0}
+                              style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === 0 ? 0.3 : 1 }}>‹</button>
+                            <button type="button" onClick={() => setPreviewIdx(Math.min(draft.mediaUrls.length - 1, safeIdx + 1))} disabled={safeIdx === draft.mediaUrls.length - 1}
+                              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === draft.mediaUrls.length - 1 ? 0.3 : 1 }}>›</button>
+                            <div style={{ position: "absolute", top: 8, right: 10, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 7px", borderRadius: 99 }}>{safeIdx + 1}/{draft.mediaUrls.length}</div>
+                          </>
+                        )}
+
+                        {/* Per-image controls */}
+                        {activeUrl && !isLocked && (
+                          <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
+                            <button type="button" onClick={() => moveMedia(dateKey, activePlatform, safeIdx, -1)} disabled={safeIdx === 0}
+                              style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, cursor: "pointer", opacity: safeIdx === 0 ? 0.4 : 1 }}>◀</button>
+                            <button type="button" onClick={() => moveMedia(dateKey, activePlatform, safeIdx, 1)} disabled={safeIdx === draft.mediaUrls.length - 1}
+                              style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, cursor: "pointer", opacity: safeIdx === draft.mediaUrls.length - 1 ? 0.4 : 1 }}>▶</button>
+                            <button type="button" onClick={() => removeMediaAt(dateKey, activePlatform, safeIdx)}
+                              style={{ padding: "3px 8px", borderRadius: 6, border: "none", background: "rgba(180,0,0,0.75)", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Remove</button>
                           </div>
                         )}
                       </div>
 
                       {draft.caption.trim() && (
-                        <div
-                          style={{
-                            padding: "10px 12px 12px",
-                            fontSize: 13,
-                            color: "#18181b",
-                            whiteSpace: "pre-wrap",
-                            lineHeight: 1.4,
-                          }}
-                        >
+                        <div style={{ padding: "10px 12px 12px", fontSize: 13, color: "#18181b", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
                           {draft.caption}
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   <div
                     style={{

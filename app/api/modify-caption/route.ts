@@ -12,9 +12,9 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
 
-type Modifier = "shorter" | "stronger_cta" | "more_premium" | "more_playful" | "regenerate";
+type Modifier = "shorter" | "stronger_cta" | "more_premium" | "more_playful" | "regenerate" | "new_hook";
 
-const VALID_MODIFIERS: Modifier[] = ["shorter", "stronger_cta", "more_premium", "more_playful", "regenerate"];
+const VALID_MODIFIERS: Modifier[] = ["shorter", "stronger_cta", "more_premium", "more_playful", "regenerate", "new_hook"];
 
 const MODIFIER_INSTRUCTIONS: Record<Modifier, string> = {
   shorter: "Rewrite this to be shorter and punchier. Keep the same core message but cut unnecessary words.",
@@ -22,6 +22,7 @@ const MODIFIER_INSTRUCTIONS: Record<Modifier, string> = {
   more_premium: "Rewrite this to feel more premium, aspirational, and high-end. Elevate the language. No casual slang.",
   more_playful: "Rewrite this to be more playful, fun, and light. Add personality. Use conversational language.",
   regenerate: "Write a completely fresh version. Different angle, different opening, different approach.",
+  new_hook: "Rewrite ONLY the opening line (first sentence) to be a stronger scroll-stopping hook. Keep the rest of the caption exactly the same.",
 };
 
 function getSupabase() {

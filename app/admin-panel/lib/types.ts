@@ -301,6 +301,7 @@ export type ProoferPost = {
   publishTime: string; // "HH:MM" in UTC, default "18:00"
   status: ProoferStatus;
   createdBy: string;
+  updatedBy: string | null;
   createdAt: string;
   updatedAt: string;
   comments?: ProoferComment[];

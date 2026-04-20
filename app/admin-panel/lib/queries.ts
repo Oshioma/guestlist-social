@@ -622,6 +622,7 @@ export async function getProoferData(
       publishTime: row.publish_time ?? "18:00",
       status: (row.status ?? "none") as ProoferStatus,
       createdBy: row.created_by ?? "",
+      updatedBy: row.updated_by ?? null,
       createdAt: row.created_at ?? "",
       updatedAt: row.updated_at ?? "",
     };
@@ -878,6 +879,7 @@ export async function getProoferPublishQueueData(): Promise<{
       publishTime: row.publish_time ?? "18:00",
       status: (row.status ?? "none") as ProoferStatus,
       createdBy: row.created_by ?? "",
+      updatedBy: row.updated_by ?? null,
       createdAt: row.created_at ?? "",
       updatedAt: row.updated_at ?? "",
     };
