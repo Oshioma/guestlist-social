@@ -202,9 +202,9 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   }
 
   return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: 24, alignItems: "start" }}>
     <div
       style={{
-        maxWidth: 760,
         background: "#fff",
         border: "1px solid #e4e4e7",
         borderRadius: 18,
@@ -511,6 +511,73 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
           {isPending ? "Creating ad in Meta..." : "Create ad"}
         </button>
       </div>
+    </div>
+
+    {/* Live preview */}
+    <div style={{ position: "sticky", top: 80 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#71717a", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+        Preview
+      </div>
+      <div
+        style={{
+          border: "1px solid #dbdbdb",
+          borderRadius: 8,
+          background: "#fff",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 700 }}>
+            {(campaignName ?? "?")[0].toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#262626" }}>{name || "Ad name"}</div>
+            <div style={{ fontSize: 11, color: "#8e8e8e" }}>Sponsored</div>
+          </div>
+        </div>
+
+        {body.trim() && (
+          <div style={{ padding: "4px 14px 8px", fontSize: 13, color: "#262626", lineHeight: 1.5 }}>
+            {body}
+          </div>
+        )}
+
+        {imageUrl ? (
+          <img src={imageUrl} alt="" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block", background: "#fafafa" }} />
+        ) : (
+          <div style={{ width: "100%", aspectRatio: "1/1", background: "#f4f4f5", display: "flex", alignItems: "center", justifyContent: "center", color: "#c7c7c7", fontSize: 13 }}>
+            No image yet
+          </div>
+        )}
+
+        <div style={{ padding: "10px 14px 4px", display: "flex", gap: 16 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </div>
+
+        <div style={{ padding: "4px 14px", fontSize: 13, color: "#262626", lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 600 }}>{name || "Ad name"}</span>{" "}
+          {headline.trim() || "Your headline here"}
+        </div>
+
+        <div style={{ padding: "8px 14px", background: "#f9fafb", borderTop: "1px solid #f4f4f5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {destinationUrl && (
+              <div style={{ fontSize: 11, color: "#a1a1aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {destinationUrl.replace(/^https?:\/\//, "").split("/")[0]}
+              </div>
+            )}
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>
+              {headline.trim() || "Headline"}
+            </div>
+          </div>
+          <div style={{ padding: "5px 12px", borderRadius: 6, background: "#e4e4e7", color: "#18181b", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
+            {CTA_OPTIONS.find((o) => o.value === ctaType)?.label ?? "Learn More"}
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
   );
 }
