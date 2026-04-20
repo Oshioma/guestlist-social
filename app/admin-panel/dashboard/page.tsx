@@ -185,26 +185,6 @@ export default async function DashboardPage() {
             />
           )}
         </div>
-
-        {stats.clients.filter((c) => c.status !== "active").length > 0 && (
-          <div>
-            <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#71717a" }}>
-              Other clients ({stats.clients.filter((c) => c.status !== "active").length})
-            </h2>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 12,
-                opacity: 0.7,
-              }}
-            >
-              {stats.clients.filter((c) => c.status !== "active").map((client) => (
-                <ClientCard key={client.id} client={client} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     );
   } catch (error) {
