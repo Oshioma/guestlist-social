@@ -262,6 +262,8 @@ export default function ProoferBoard({
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
   const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
+  const [imgSuggestions, setImgSuggestions] = useState<Record<string, { id: number; thumb: string; full: string; photographer: string; pexelsUrl: string }[]>>({});
+  const [imgSearching, setImgSearching] = useState<Record<string, boolean>>({});
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -742,6 +744,19 @@ export default function ProoferBoard({
       alert("Network error.");
     } finally {
       setCaptionModifying((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    }
+  }
+
+  async function handleSearchImages(ideaId: string, imageIdea: string) {
+    setImgSearching((prev) => ({ ...prev, [ideaId]: true }));
+    try {
+      const res = await fetch(`/api/suggest-images?q=${encodeURIComponent(imageIdea)}&per_page=4`);
+      const data = await res.json();
+      if (data.ok) setImgSuggestions((prev) => ({ ...prev, [ideaId]: data.photos }));
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setImgSearching((prev) => { const n = { ...prev }; delete n[ideaId]; return n; });
     }
   }
 
@@ -2493,46 +2508,106 @@ export default function ProoferBoard({
               </div>
 
               {/* AI image concept hints */}
-              {slotIdeas.filter((i) => i.imageIdea).map((idea, idx) => (
+              {slotIdeas.filter((i) => i.imageIdea).map((idea, idx) => {
+                const photos = imgSuggestions[idea.id] ?? [];
+                const searching = imgSearching[idea.id] ?? false;
+                const hintCount = slotIdeas.filter((i) => i.imageIdea).length;
+                return (
                 <div
                   key={idea.id}
                   style={{
-                    padding: "8px 14px",
                     borderLeft: "1px solid #e0f2fe",
                     borderRight: "1px solid #e0f2fe",
-                    borderBottom: idx === slotIdeas.filter((i) => i.imageIdea).length - 1 ? "1px solid #e0f2fe" : undefined,
+                    borderBottom: idx === hintCount - 1 ? "1px solid #e0f2fe" : undefined,
                     borderTop: idx === 0 ? "1px solid #e0f2fe" : "1px solid #e4e4e7",
-                    borderRadius: idx === slotIdeas.filter((i) => i.imageIdea).length - 1 ? "0 0 12px 12px" : undefined,
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 8,
+                    borderRadius: idx === hintCount - 1 ? "0 0 12px 12px" : undefined,
                     background: "#f0f9ff",
                   }}
                 >
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0, paddingTop: 1 }}>📷</span>
-                  <span style={{ fontSize: 12, color: "#374151", flex: 1, lineHeight: 1.5 }}>{idea.imageIdea}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRejectIdea(idea.id)}
-                    style={{
-                      flexShrink: 0,
-                      padding: "0 5px",
-                      border: "none",
-                      background: "transparent",
-                      color: "#94a3b8",
-                      fontSize: 14,
-                      lineHeight: 1,
-                      cursor: "pointer",
-                    }}
-                    title="Dismiss"
-                  >
-                    ×
-                  </button>
+                  {/* Concept row */}
+                  <div style={{ padding: "8px 14px", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0, paddingTop: 1 }}>📷</span>
+                    <span style={{ fontSize: 12, color: "#374151", flex: 1, lineHeight: 1.5 }}>{idea.imageIdea}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSearchImages(idea.id, idea.imageIdea ?? "")}
+                      disabled={searching}
+                      style={{
+                        flexShrink: 0,
+                        padding: "2px 8px",
+                        border: "1px solid #bae6fd",
+                        borderRadius: 6,
+                        background: "#e0f2fe",
+                        color: "#0369a1",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: searching ? "wait" : "pointer",
+                      }}
+                    >
+                      {searching ? "Searching…" : photos.length > 0 ? "Refresh" : "Find photos"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRejectIdea(idea.id)}
+                      style={{
+                        flexShrink: 0,
+                        padding: "0 5px",
+                        border: "none",
+                        background: "transparent",
+                        color: "#94a3b8",
+                        fontSize: 14,
+                        lineHeight: 1,
+                        cursor: "pointer",
+                      }}
+                      title="Dismiss"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {/* Pexels photo suggestions */}
+                  {photos.length > 0 && (
+                    <div style={{ padding: "6px 14px 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {photos.map((photo) => (
+                        <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}>
+                          <img
+                            src={photo.thumb}
+                            alt={photo.photographer}
+                            style={{ width: 120, height: 80, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => addMediaUrl(dateKey, activePlatform, photo.full)}
+                            style={{
+                              position: "absolute",
+                              bottom: 4,
+                              right: 4,
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                              border: "none",
+                              background: "rgba(0,0,0,0.65)",
+                              color: "#fff",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            Use
+                          </button>
+                        </div>
+                      ))}
+                      <div style={{ width: "100%", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+                        Photos from{" "}
+                        <a href="https://www.pexels.com" target="_blank" rel="noreferrer" style={{ color: "#94a3b8" }}>
+                          Pexels
+                        </a>{" "}
+                        · free to use commercially
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-              </div>
-            );
-          })}
+                );
+              })}
         </div>
       )}
 
