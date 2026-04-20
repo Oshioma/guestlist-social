@@ -97,7 +97,7 @@ export default async function DashboardPage() {
           {cards.map((c) => {
             const inner = (
               <>
-                <div style={{ fontSize: 12, color: "#71717a", marginBottom: 6 }}>{c.label}</div>
+                <div style={{ fontSize: 12, color: c.href ? "#18181b" : "#71717a", fontWeight: c.href ? 600 : 400, marginBottom: 6 }}>{c.label}</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: c.color ?? "#18181b", letterSpacing: "-0.02em" }}>
                   {c.value}
                 </div>
