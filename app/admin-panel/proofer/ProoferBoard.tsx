@@ -26,6 +26,7 @@ import {
   createIdeaFromProoferAction,
   updateIdeaFromProoferAction,
   rejectPostIdeaAction,
+  clearPostIdeasAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -853,6 +854,34 @@ export default function ProoferBoard({
     });
   }
 
+  async function handleClearIdeas() {
+    if (!clientId || !month) return;
+    if (!confirm("Clear all AI ideas for this month and platform? This cannot be undone.")) return;
+    startTransition(async () => {
+      try {
+        await clearPostIdeasAction(clientId, month, genPlatform);
+        setPostIdeas((prev) => prev.filter(
+          (i) => !(i.platform === genPlatform && i.postSlotDate.startsWith(month))
+        ));
+        // Clear unsaved caption drafts that came from AI
+        setDrafts((prev) => {
+          const next = { ...prev };
+          for (const key of Object.keys(next)) {
+            if (key.endsWith(`:${genPlatform}`)) {
+              const dateStr = key.split(":")[0];
+              if (dateStr.startsWith(month) && !postsByKey.has(key)) {
+                delete next[key];
+              }
+            }
+          }
+          return next;
+        });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not clear ideas.");
+      }
+    });
+  }
+
   const visibleDays = useMemo(() => {
     if (!hideEmpty) return days;
     return days.filter((d) => {
@@ -1271,115 +1300,86 @@ export default function ProoferBoard({
             background: "linear-gradient(135deg, #f0f9ff 0%, #e8f0fe 100%)",
             border: "1px solid #bfdbfe",
             borderRadius: 14,
-            padding: 20,
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
           }}
         >
-          <div
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1e3a5f", flexShrink: 0 }}>
+            ✦ Generate ideas
+          </span>
+
+          <select
+            value={genPlatform}
+            onChange={(e) => setGenPlatform(e.target.value as ProoferPlatform)}
+            style={{ ...inputStyle, fontSize: 12, flexShrink: 0, width: "auto" }}
+          >
+            {PROOFER_PLATFORMS.map((p) => (
+              <option key={p} value={p}>{PROOFER_PLATFORM_LABELS[p]}</option>
+            ))}
+          </select>
+
+          <input
+            type="text"
+            value={genPrompt}
+            onChange={(e) => setGenPrompt(e.target.value)}
+            placeholder="Direction prompt (optional)"
+            style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 180 }}
+          />
+
+          <button
+            type="button"
+            onClick={handleGenerateIdeas}
+            disabled={genLoading || !clientId || !month}
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-              marginBottom: 14,
+              padding: "7px 16px",
+              borderRadius: 9,
+              border: "none",
+              background: genLoading
+                ? "#93c5fd"
+                : "linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: genLoading ? "wait" : "pointer",
+              flexShrink: 0,
             }}
           >
-            <div>
-              <div
-                style={{ fontSize: 14, fontWeight: 700, color: "#1e3a5f" }}
-              >
-                ✦ Generate Month Ideas
-              </div>
-              <div style={{ fontSize: 12, color: "#3b6ea5", marginTop: 3 }}>
-                AI reads your brand context, pillars, and existing posts, then fills
-                every empty slot with a structured idea.
-              </div>
-            </div>
-          </div>
+            {genLoading ? "Generating..." : "Generate"}
+          </button>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 10,
-              marginBottom: 12,
-            }}
-          >
-            <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <span style={{ ...labelStyle, color: "#1e3a5f" }}>Platform</span>
-              <select
-                value={genPlatform}
-                onChange={(e) =>
-                  setGenPlatform(e.target.value as ProoferPlatform)
-                }
-                style={{ ...inputStyle, fontSize: 12 }}
-              >
-                {PROOFER_PLATFORMS.map((p) => (
-                  <option key={p} value={p}>
-                    {PROOFER_PLATFORM_LABELS[p]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
-            <span style={{ ...labelStyle, color: "#1e3a5f" }}>
-              Direction prompt (optional)
+          {genResult && (
+            <span style={{ fontSize: 12, color: "#166534", fontWeight: 600, flexShrink: 0 }}>
+              {genResult.count} idea{genResult.count !== 1 ? "s" : ""} generated
             </span>
-            <textarea
-              value={genPrompt}
-              onChange={(e) => setGenPrompt(e.target.value)}
-              placeholder={
-                'e.g. "Keep it premium, natural, beachside. Push breakfast, smoothies, sunset content. Mix engagement, educational, and soft-sell posts."'
-              }
-              rows={2}
-              style={{
-                ...inputStyle,
-                resize: "vertical",
-                lineHeight: 1.5,
-                fontSize: 13,
-                background: "#fff",
-              }}
-            />
-          </label>
+          )}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {genError && (
+            <span style={{ fontSize: 12, color: "#991b1b", flexShrink: 0 }}>{genError}</span>
+          )}
+
+          {postIdeas.filter((i) => i.platform === genPlatform && i.postSlotDate.startsWith(month)).length > 0 && (
             <button
               type="button"
-              onClick={handleGenerateIdeas}
-              disabled={genLoading || !clientId || !month}
+              onClick={handleClearIdeas}
+              disabled={isPending}
               style={{
-                padding: "9px 18px",
+                padding: "7px 12px",
                 borderRadius: 9,
-                border: "none",
-                background: genLoading
-                  ? "#93c5fd"
-                  : "linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%)",
-                color: "#fff",
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: genLoading ? "wait" : "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
+                border: "1px solid #fca5a5",
+                background: "#fff",
+                color: "#991b1b",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
               }}
             >
-              {genLoading ? "Generating..." : "✦ Generate ideas for " + month}
+              Clear AI
             </button>
-
-            {genResult && (
-              <span style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
-                {genResult.count} idea{genResult.count !== 1 ? "s" : ""} generated
-                across {genResult.emptySlots} empty slot
-                {genResult.emptySlots !== 1 ? "s" : ""}
-              </span>
-            )}
-
-            {genError && (
-              <span style={{ fontSize: 12, color: "#991b1b" }}>{genError}</span>
-            )}
-          </div>
+          )}
         </div>
       )}
 

@@ -913,6 +913,26 @@ export async function markIdeaWeakAction(ideaId: string, isWeak: boolean) {
   revalidateProoferPaths();
 }
 
+export async function clearPostIdeasAction(clientId: string, month: string, platform: string) {
+  if (!clientId || !month) throw new Error("clientId and month required.");
+  const supabase = await createClient();
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const m = Number(monthStr);
+  const start = `${yearStr}-${monthStr}-01`;
+  const nextMonth = new Date(year, m, 1);
+  const end = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+  const { error } = await supabase
+    .from("post_ideas")
+    .delete()
+    .eq("client_id", clientId)
+    .eq("platform", platform)
+    .gte("post_slot_date", start)
+    .lt("post_slot_date", end);
+  if (error) throw new Error("Could not clear ideas.");
+  revalidateProoferPaths();
+}
+
 export async function updatePostIdeaFieldAction(
   ideaId: string,
   field: "caption_idea" | "image_idea" | "cta" | "first_line" | "hashtags" | "title",
