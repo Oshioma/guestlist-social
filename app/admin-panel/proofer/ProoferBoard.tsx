@@ -754,7 +754,14 @@ export default function ProoferBoard({
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        paddingRight: 52,
+      }}
+    >
       <DayScrubber days={days} postsByKey={postsByKey} />
       <div
         style={{
@@ -3137,12 +3144,27 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
   );
 }
 
+function findScrollContainer(el: HTMLElement): HTMLElement | null {
+  // Walk up looking for an ancestor that actually scrolls. If none
+  // does, the window is the scroll container.
+  let node: HTMLElement | null = el.parentElement;
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    const canScroll =
+      (overflowY === "auto" ||
+        overflowY === "scroll" ||
+        overflowY === "overlay") &&
+      node.scrollHeight > node.clientHeight + 1;
+    if (canScroll) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
 function smoothScrollDayInto(dateKey: string) {
   const el = document.getElementById(`day-${dateKey}`);
   if (!el) return;
-  // .app-main is the scroll container (the sidebar sits outside it).
-  const container =
-    (document.querySelector(".app-main") as HTMLElement | null) ?? null;
 
   const easeInOutCubic = (t: number) =>
     t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -3150,13 +3172,15 @@ function smoothScrollDayInto(dateKey: string) {
   const duration = 650;
   const topOffset = 72;
   const start = performance.now();
+  const container = findScrollContainer(el);
 
   if (container) {
     const startTop = container.scrollTop;
     const rect = el.getBoundingClientRect();
     const cRect = container.getBoundingClientRect();
-    const target = startTop + rect.top - cRect.top - topOffset;
+    const target = startTop + (rect.top - cRect.top) - topOffset;
     const distance = target - startTop;
+    if (Math.abs(distance) < 1) return;
     const step = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
       container.scrollTop = startTop + distance * easeInOutCubic(t);
@@ -3166,13 +3190,17 @@ function smoothScrollDayInto(dateKey: string) {
     return;
   }
 
-  const startTop = window.scrollY;
-  const target =
-    el.getBoundingClientRect().top + window.scrollY - topOffset;
+  const startTop =
+    window.scrollY ||
+    document.documentElement.scrollTop ||
+    document.body.scrollTop;
+  const target = el.getBoundingClientRect().top + startTop - topOffset;
   const distance = target - startTop;
+  if (Math.abs(distance) < 1) return;
   const step = (now: number) => {
     const t = Math.min((now - start) / duration, 1);
-    window.scrollTo(0, startTop + distance * easeInOutCubic(t));
+    const y = startTop + distance * easeInOutCubic(t);
+    window.scrollTo(0, y);
     if (t < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
