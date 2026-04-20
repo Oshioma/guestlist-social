@@ -75,6 +75,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const industry = String(formData.get("industry") ?? "").trim();
+  const metaAdAccountId = String(formData.get("metaAdAccountId") ?? "").trim();
 
   if (!clientId) {
     throw new Error("Missing client id.");
@@ -98,6 +99,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     status: dbStatus,
     website_url: websiteUrl || null,
     notes: notes || null,
+    meta_ad_account_id: metaAdAccountId || null,
   };
 
   if (industry) {

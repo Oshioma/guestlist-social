@@ -140,7 +140,7 @@ export async function syncMetaData(clientId: string) {
   // Verify client exists
   const { data: client, error: clientError } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, meta_ad_account_id")
     .eq("id", clientId)
     .single();
 
@@ -153,14 +153,15 @@ export async function syncMetaData(clientId: string) {
   try {
     log.push(`Syncing Meta data for "${client.name}"`);
 
-    // 1. Campaigns — single page, active/paused only
+    // 1. Campaigns — single page, active/paused/completed
     const { token, accountId } = (() => {
       const t = process.env.META_ACCESS_TOKEN;
-      let a = process.env.META_AD_ACCOUNT_ID;
+      let a = (client as any).meta_ad_account_id || process.env.META_AD_ACCOUNT_ID;
       if (!t || !a) throw new Error("Missing META env vars");
       if (!a.startsWith("act_")) a = `act_${a}`;
       return { token: t, accountId: a };
     })();
+    log.push(`Using ad account: ${accountId}`);
 
     const campRes = await fetch(
       `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&effective_status=["ACTIVE","PAUSED","CAMPAIGN_PAUSED","ADSET_PAUSED","COMPLETED"]&limit=50&access_token=${token}`,

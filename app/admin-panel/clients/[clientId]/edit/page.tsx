@@ -111,6 +111,7 @@ export default async function EditClientPage({ params }: Props) {
           websiteUrl: client.website_url ?? "",
           notes: client.notes ?? "",
           industry: client.industry ?? "",
+          metaAdAccountId: client.meta_ad_account_id ?? "",
         }}
       />
 

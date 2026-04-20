@@ -10,6 +10,7 @@ type ClientFormValues = {
   websiteUrl?: string;
   notes?: string;
   industry?: string;
+  metaAdAccountId?: string;
 };
 
 type Props = {
@@ -128,6 +129,19 @@ export default function ClientForm({
               <option value="Health" />
               <option value="Education" />
             </datalist>
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Meta Ad Account ID</label>
+          <input
+            name="metaAdAccountId"
+            defaultValue={initialValues?.metaAdAccountId ?? ""}
+            style={inputStyle}
+            placeholder="act_123456789 (leave blank to use default)"
+          />
+          <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
+            Per-client ad account. Found in Meta Ads Manager URL. Leave blank to use the global account.
           </div>
         </div>
 
