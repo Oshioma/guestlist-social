@@ -163,7 +163,7 @@ export async function syncMetaData(clientId: string) {
     })();
 
     const campRes = await fetch(
-      `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&effective_status=["ACTIVE","PAUSED"]&limit=50&access_token=${token}`,
+      `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&effective_status=["ACTIVE","PAUSED","CAMPAIGN_PAUSED","ADSET_PAUSED","COMPLETED"]&limit=50&access_token=${token}`,
       { cache: "no-store" }
     );
     if (!campRes.ok) throw new Error(`Meta campaigns: ${campRes.status}`);
