@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDashboardData } from "../lib/queries";
 import { canRunAds } from "@/lib/auth/permissions";
 import ClientCard from "../components/ClientCard";
@@ -8,6 +9,38 @@ import DecisionAccuracy from "../components/DecisionAccuracy";
 import TokenExpiryBanner from "../components/TokenExpiryBanner";
 
 export const dynamic = "force-dynamic";
+
+const ENGINE_TOOLS: {
+  label: string;
+  href: string;
+  blurb: string;
+}[] = [
+  {
+    label: "Meta queue",
+    href: "/app/meta-queue",
+    blurb: "Approve engine changes before they hit Meta",
+  },
+  {
+    label: "Playbook",
+    href: "/app/whats-working",
+    blurb: "Patterns that are working across every client",
+  },
+  {
+    label: "Creative library",
+    href: "/app/creative",
+    blurb: "Every ad, paired with outcome and next move",
+  },
+  {
+    label: "Reports",
+    href: "/app/reports",
+    blurb: "Auto-generated client performance reports",
+  },
+  {
+    label: "Memory",
+    href: "/app/memory",
+    blurb: "Notes and preferences the engine remembers",
+  },
+];
 
 export default async function DashboardPage() {
   const adsAllowed = await canRunAds();
@@ -40,6 +73,38 @@ export default async function DashboardPage() {
         </div>
 
         <TokenExpiryBanner />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {ENGINE_TOOLS.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              style={{
+                padding: "14px 16px",
+                borderRadius: 12,
+                background: "#fff",
+                border: "1px solid #e4e4e7",
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+                transition: "border-color 120ms ease, transform 120ms ease",
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>
+                {tool.label}
+              </div>
+              <div style={{ fontSize: 12, color: "#71717a", marginTop: 4 }}>
+                {tool.blurb}
+              </div>
+            </Link>
+          ))}
+        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {stats.map((s) => (

@@ -20,11 +20,6 @@ type Props = {
 const ADS_ITEMS: NavItem[] = [
   { label: "Clients", href: "/app/clients" },
   { label: "Engine Dashboard", href: "/app/engine" },
-  { label: "Meta queue", href: "/app/meta-queue" },
-  { label: "Playbook", href: "/app/whats-working" },
-  { label: "Creative library", href: "/app/creative" },
-  { label: "Reports", href: "/app/reports" },
-  { label: "Memory", href: "/app/memory" },
   { label: "Client view", href: "/portal" },
 ];
 
