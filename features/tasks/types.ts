@@ -13,7 +13,9 @@ export type TaskCategory =
   | "story"
   | "carousel"
   | "design"
-  | "general";
+  | "general"
+  | "social"
+  | "one_day";
 
 export type Task = {
   id: string;
