@@ -625,55 +625,68 @@ export default async function ClientDetailPage({
                   </div>
 
                   {(() => {
-                    const thumbs = campaignAdsRaw
-                      .map((ad) => ad.creative_image_url as string | null)
-                      .filter((url): url is string => !!url)
-                      .slice(0, 5);
-                    if (thumbs.length === 0) return null;
+                    const adsWithCreative = campaignAdsRaw.filter(
+                      (ad) => ad.creative_image_url || ad.creative_headline || ad.creative_body
+                    ).slice(0, 3);
+                    if (adsWithCreative.length === 0) return null;
                     return (
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 6,
-                          marginTop: 12,
-                          overflowX: "auto",
-                        }}
-                      >
-                        {thumbs.map((url, i) => (
-                          <img
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+                        {adsWithCreative.map((ad, i) => (
+                          <div
                             key={i}
-                            src={url}
-                            alt=""
-                            loading="lazy"
                             style={{
-                              width: 220,
-                              height: 220,
-                              borderRadius: 12,
-                              objectFit: "cover",
-                              border: "1px solid #e4e4e7",
-                              flexShrink: 0,
-                            }}
-                          />
-                        ))}
-                        {campaignAdsRaw.length > 5 && (
-                          <span
-                            style={{
-                              width: 220,
-                              height: 220,
-                              borderRadius: 12,
-                              background: "#f4f4f5",
-                              border: "1px solid #e4e4e7",
                               display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 12,
-                              color: "#71717a",
-                              fontWeight: 600,
-                              flexShrink: 0,
+                              gap: 14,
+                              alignItems: "flex-start",
+                              padding: 10,
+                              borderRadius: 12,
+                              border: "1px solid #f4f4f5",
+                              background: "#fafafa",
                             }}
                           >
-                            +{campaignAdsRaw.length - 5}
-                          </span>
+                            {ad.creative_image_url && (
+                              <img
+                                src={ad.creative_image_url as string}
+                                alt=""
+                                loading="lazy"
+                                style={{
+                                  width: 180,
+                                  height: 180,
+                                  borderRadius: 10,
+                                  objectFit: "cover",
+                                  border: "1px solid #e4e4e7",
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: "#18181b", marginBottom: 4 }}>
+                                {(ad.creative_headline as string) || ad.name}
+                              </div>
+                              {ad.creative_body && (
+                                <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
+                                  {(ad.creative_body as string).slice(0, 200)}
+                                </div>
+                              )}
+                              {ad.creative_cta && (
+                                <div style={{ marginTop: 8 }}>
+                                  <span style={{ padding: "4px 10px", borderRadius: 6, background: "#e4e4e7", color: "#18181b", fontSize: 11, fontWeight: 600 }}>
+                                    {(ad.creative_cta as string).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ marginTop: 6, display: "flex", gap: 10, fontSize: 11, color: "#a1a1aa" }}>
+                                <span>{ad.status ?? "testing"}</span>
+                                {Number(ad.spend ?? 0) > 0 && <span>£{Number(ad.spend).toFixed(0)} spent</span>}
+                                {Number(ad.ctr ?? 0) > 0 && <span>{Number(ad.ctr).toFixed(1)}% CTR</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {campaignAdsRaw.length > 3 && (
+                          <div style={{ fontSize: 12, color: "#71717a" }}>
+                            +{campaignAdsRaw.length - 3} more ad{campaignAdsRaw.length - 3 === 1 ? "" : "s"}
+                          </div>
                         )}
                       </div>
                     );
