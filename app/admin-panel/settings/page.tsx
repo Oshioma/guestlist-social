@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { type PatternCandidate } from "@/lib/pattern-phrases";
@@ -100,6 +101,38 @@ export default async function SettingsPage() {
           Admin configuration and preferences.
         </p>
       </div>
+
+      <SectionCard title="Members">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Invite team members, set roles, and manage who can access the app.
+          </p>
+          <Link
+            href="/app/settings/members"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Manage members →
+          </Link>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Account">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

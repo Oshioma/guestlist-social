@@ -18,13 +18,14 @@ type Props = {
 };
 
 const ADS_ITEMS: NavItem[] = [
-  { label: "Client view", href: "/portal" },
+  { label: "Clients", href: "/app/clients" },
   { label: "Engine Dashboard", href: "/app/engine" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
   { label: "Reports", href: "/app/reports" },
   { label: "Memory", href: "/app/memory" },
+  { label: "Client view", href: "/portal" },
 ];
 
 const PUBLISHER_ITEMS: NavItem[] = [
@@ -44,17 +45,11 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   return groups;
 }
 
-function buildUtilityItems(isAdmin: boolean): NavItem[] {
-  const items: NavItem[] = [];
-  if (isAdmin) {
-    items.push({ label: "Members", href: "/app/settings/members" });
-  }
-  items.push({ label: "Settings", href: "/app/settings" });
-  items.push({ label: "Guide", href: "/app/guide" });
-  if (isAdmin) {
-    items.push({ label: "Clients", href: "/app/clients" });
-  }
-  return items;
+function buildUtilityItems(_isAdmin: boolean): NavItem[] {
+  return [
+    { label: "Settings", href: "/app/settings" },
+    { label: "Guide", href: "/app/guide" },
+  ];
 }
 
 export default function Sidebar({ isAdmin, canRunAds }: Props) {
