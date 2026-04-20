@@ -755,6 +755,7 @@ export default function ProoferBoard({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <DayScrubber days={days} postsByKey={postsByKey} />
       <div
         style={{
           display: "flex",
@@ -1171,6 +1172,7 @@ export default function ProoferBoard({
                   border: "1px solid #e4e4e7",
                   borderRadius: 12,
                   padding: 16,
+                  scrollMarginTop: 80,
                   display: "grid",
                   gridTemplateColumns: "200px 1fr",
                   gap: 16,
@@ -3132,5 +3134,75 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
         Cancel
       </button>
     </div>
+  );
+}
+
+function DayScrubber({
+  days,
+  postsByKey,
+}: {
+  days: Date[];
+  postsByKey: Map<string, ProoferPost>;
+}) {
+  return (
+    <aside
+      aria-label="Jump to day"
+      style={{
+        position: "fixed",
+        right: 12,
+        top: "50%",
+        transform: "translateY(-50%)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+        padding: 8,
+        background: "#fff",
+        border: "1px solid #e4e4e7",
+        borderRadius: 10,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        zIndex: 20,
+        maxHeight: "85vh",
+        overflowY: "auto",
+      }}
+    >
+      {days.map((d) => {
+        const dateKey = toDateKey(d);
+        const isDone = PROOFER_PLATFORMS.some((p) => {
+          const post = postsByKey.get(postKey(dateKey, p));
+          return (
+            post && (post.status === "proofed" || post.status === "approved")
+          );
+        });
+        return (
+          <a
+            key={dateKey}
+            href={`#day-${dateKey}`}
+            title={formatDayLong(d)}
+            style={{
+              width: 30,
+              height: 18,
+              borderRadius: 4,
+              background: isDone ? "#22c55e" : "#e4e4e7",
+              color: isDone ? "#fff" : "#52525b",
+              fontSize: 10,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textDecoration: "none",
+              transition: "transform 120ms ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1.15)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+            }}
+          >
+            {d.getDate()}
+          </a>
+        );
+      })}
+    </aside>
   );
 }
