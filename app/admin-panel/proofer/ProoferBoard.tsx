@@ -3149,7 +3149,7 @@ function DayScrubber({
       aria-label="Jump to day"
       style={{
         position: "fixed",
-        right: 12,
+        right: 0,
         top: "50%",
         transform: "translateY(-50%)",
         display: "flex",
@@ -3158,7 +3158,8 @@ function DayScrubber({
         padding: 0,
         background: "#fff",
         border: "1px solid #d4d4d8",
-        borderRadius: 10,
+        borderRight: "none",
+        borderRadius: "10px 0 0 10px",
         boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
         zIndex: 20,
         maxHeight: "90vh",
