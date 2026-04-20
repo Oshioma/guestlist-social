@@ -2,6 +2,10 @@
 
 import { usePathname } from "next/navigation";
 
+const subtitles: Record<string, string> = {
+  "/app/dashboard": "Activity across all apps · last 30 days",
+};
+
 const titles: Record<string, string> = {
   "/app/dashboard": "Dashboard",
   "/app/content": "Content Dashboard",
@@ -35,6 +39,7 @@ function resolveTitle(pathname: string): string {
 export default function Topbar() {
   const pathname = usePathname();
   const title = resolveTitle(pathname);
+  const subtitle = subtitles[pathname] ?? null;
 
   return (
     <header
@@ -49,16 +54,21 @@ export default function Topbar() {
         flexShrink: 0,
       }}
     >
-      <h1
-        style={{
-          fontSize: 16,
-          fontWeight: 600,
-          margin: 0,
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {title}
-      </h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <h1
+          style={{
+            fontSize: 16,
+            fontWeight: 600,
+            margin: 0,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {title}
+        </h1>
+        {subtitle && (
+          <span style={{ fontSize: 12, color: "#a1a1aa" }}>{subtitle}</span>
+        )}
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <form action="/sign-out" method="post" style={{ margin: 0 }}>
           <button

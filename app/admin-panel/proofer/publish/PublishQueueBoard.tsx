@@ -530,26 +530,42 @@ export default function PublishQueueBoard({
               No connected accounts. Pick a client and click Connect Meta.
             </div>
           ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {connectedClientIds.map((cid) => {
                 const accs = accountsByClient[cid] ?? [];
+                const fb = accs.filter((a) => a.platform === "facebook");
+                const ig = accs.filter((a) => a.platform === "instagram");
                 const count = accs.length;
                 return (
-                  <span
-                    key={cid}
-                    title={accs.map((a) => `${a.platform}: ${a.accountName}`).join(", ")}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: "#f0fdf4",
-                      border: "1px solid #bbf7d0",
-                      color: "#166534",
-                    }}
-                  >
-                    {clientNameById[cid] ?? `Client ${cid}`} · {count} account{count === 1 ? "" : "s"}
-                  </span>
+                  <details key={cid} style={{ fontSize: 12 }}>
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        padding: "4px 0",
+                        fontWeight: 600,
+                        color: "#166534",
+                        listStyle: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 10, color: "#a1a1aa" }}>&#9654;</span>
+                      {clientNameById[cid] ?? `Client ${cid}`} · {count} account{count === 1 ? "" : "s"}
+                    </summary>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 0 2px 16px" }}>
+                      {fb.map((a) => (
+                        <span key={`fb-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#e7f0fe", border: "1px solid #93c5fd", color: "#1d4ed8" }}>
+                          FB · {a.accountName || a.accountId}
+                        </span>
+                      ))}
+                      {ig.map((a) => (
+                        <span key={`ig-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#fdf2f8", border: "1px solid #f9a8d4", color: "#be185d" }}>
+                          IG · @{a.accountName || a.accountId}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
                 );
               })}
             </div>
