@@ -419,17 +419,33 @@ export async function syncMetaData(clientId: string) {
           totals.set(key, curr);
         }
 
-        // Also parse conversions from the insights actions field
+        // Parse conversions from the insights actions field
+        const RESULT_ACTION_TYPES = new Set([
+          "lead", "onsite_conversion.lead_grouped",
+          "offsite_conversion.fb_pixel_lead",
+          "onsite_conversion.messaging_first_reply",
+          "onsite_conversion.messaging_conversation_started_7d",
+          "purchase", "complete_registration",
+          "offsite_conversion.fb_pixel_purchase",
+          "offsite_conversion.fb_pixel_complete_registration",
+          "submit_application", "contact_total",
+        ]);
+
         const conversionsByMetaAdId = new Map<string, { conversions: number; costPerResult: number }>();
+        const seenActionTypes = new Set<string>();
+
         for (const day of dailyInsights) {
           if (!day.ad_id) continue;
           const actions = day.actions ?? [];
           const costActions = day.cost_per_action_type ?? [];
+
+          for (const a of actions) {
+            seenActionTypes.add(a.action_type);
+          }
+
           let totalResults = 0;
           for (const a of actions) {
-            if (a.action_type === "lead" || a.action_type === "onsite_conversion.lead_grouped" ||
-                a.action_type === "purchase" || a.action_type === "complete_registration" ||
-                a.action_type === "offsite_conversion.fb_pixel_lead") {
+            if (RESULT_ACTION_TYPES.has(a.action_type)) {
               totalResults += Number(a.value ?? 0);
             }
           }
@@ -437,13 +453,16 @@ export async function syncMetaData(clientId: string) {
             const existing = conversionsByMetaAdId.get(day.ad_id) ?? { conversions: 0, costPerResult: 0 };
             existing.conversions += totalResults;
             for (const c of costActions) {
-              if (c.action_type === "lead" || c.action_type === "onsite_conversion.lead_grouped" ||
-                  c.action_type === "purchase" || c.action_type === "offsite_conversion.fb_pixel_lead") {
+              if (RESULT_ACTION_TYPES.has(c.action_type)) {
                 existing.costPerResult = Number(c.value ?? 0);
               }
             }
             conversionsByMetaAdId.set(day.ad_id, existing);
           }
+        }
+
+        if (seenActionTypes.size > 0) {
+          log.push(`Action types seen: ${Array.from(seenActionTypes).join(", ")}`);
         }
 
         for (const [adId, t] of totals) {
