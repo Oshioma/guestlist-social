@@ -138,10 +138,10 @@ export default function ClientForm({
             name="metaAdAccountId"
             defaultValue={initialValues?.metaAdAccountId ?? ""}
             style={inputStyle}
-            placeholder="act_123456789 (leave blank to use default)"
+            placeholder="123456789 (we'll add act_ for you)"
           />
           <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
-            Per-client ad account. Found in Meta Ads Manager URL. Leave blank to use the global account.
+            Paste just the number from Meta Ads Manager. Leave blank to use the global account.
           </div>
         </div>
 
