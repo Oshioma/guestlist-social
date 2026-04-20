@@ -3228,7 +3228,7 @@ function DayScrubber({
             : color === "green"
             ? "#22c55e"
             : "#e4e4e7";
-        const fg = color === "grey" ? "#3f3f46" : "#fff";
+        const fg = color === "grey" ? "#52525b" : "#fff";
 
         return (
           <a
