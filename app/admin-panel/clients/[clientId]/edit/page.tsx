@@ -4,8 +4,10 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
+import ClientBrandContext from "../../../components/ClientBrandContext";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
+import type { BrandContext } from "../../../lib/types";
 
 type Props = {
   params: Promise<{ clientId: string }>;
@@ -118,6 +120,20 @@ export default async function EditClientPage({ params }: Props) {
       <ClientAiInstructions
         clientId={clientId}
         initialInstructions={client.ai_instructions ?? ""}
+      />
+
+      <ClientBrandContext
+        clientId={clientId}
+        initialContext={{
+          toneOfVoice: (client.brand_context as BrandContext | null)?.toneOfVoice ?? "",
+          targetAudience: (client.brand_context as BrandContext | null)?.targetAudience ?? "",
+          offers: (client.brand_context as BrandContext | null)?.offers ?? "",
+          bannedWords: (client.brand_context as BrandContext | null)?.bannedWords ?? "",
+          ctaStyle: (client.brand_context as BrandContext | null)?.ctaStyle ?? "",
+          visualStyle: (client.brand_context as BrandContext | null)?.visualStyle ?? "",
+          hashtagsPolicy: (client.brand_context as BrandContext | null)?.hashtagsPolicy ?? "",
+          platformRules: (client.brand_context as BrandContext | null)?.platformRules ?? "",
+        }}
       />
     </div>
   );

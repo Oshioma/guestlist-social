@@ -304,3 +304,52 @@ export type ProoferPost = {
   comments?: ProoferComment[];
   publishQueue?: ProoferPublishQueueItem[];
 };
+
+// ── AI post suggestions ──────────────────────────────────────────────────────
+
+export type PostIdeaStatus = "idea" | "promoted" | "rejected" | "weak";
+
+export type PostIdea = {
+  id: string;
+  clientId: string;
+  postSlotDate: string; // "YYYY-MM-DD"
+  platform: ProoferPlatform;
+  generationRunId: string | null;
+  promptUsed: string | null;
+  title: string | null;
+  captionIdea: string | null;
+  imageIdea: string | null;
+  cta: string | null;
+  format: string | null;
+  hashtags: string | null;
+  firstLine: string | null;
+  contentPillarId: string | null;
+  status: PostIdeaStatus;
+  isWeak: boolean;
+  generatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GenerationRun = {
+  id: string;
+  clientId: string;
+  month: string;
+  platform: string;
+  prompt: string | null;
+  numberOfIdeas: number;
+  emptySlotsFound: number;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type BrandContext = {
+  toneOfVoice: string;
+  targetAudience: string;
+  offers: string;
+  bannedWords: string;
+  ctaStyle: string;
+  visualStyle: string;
+  hashtagsPolicy: string;
+  platformRules: string;
+};

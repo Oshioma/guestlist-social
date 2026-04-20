@@ -59,6 +59,7 @@ export default async function ProoferPage({
         initialPosts={data.posts}
         initialPillars={data.pillars}
         initialIdeas={data.ideas}
+        initialPostIdeas={data.postIdeas}
       />
     );
   } catch (err) {

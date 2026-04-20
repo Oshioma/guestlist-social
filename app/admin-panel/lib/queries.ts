@@ -24,6 +24,9 @@ import type {
   PublishQueueStatus,
   PublishQueuePlatform,
   ContentPillar,
+  PostIdea,
+  PostIdeaStatus,
+  BrandContext,
 } from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
@@ -437,6 +440,7 @@ export async function getProoferData(
   posts: ProoferPost[];
   pillars: ContentPillar[];
   ideas: ProoferIdeaLite[];
+  postIdeas: PostIdea[];
 }> {
   const supabase = await createClient();
 
@@ -456,7 +460,7 @@ export async function getProoferData(
     }));
 
   if (!clientId || !month) {
-    return { clients, posts: [], pillars: [], ideas: [] };
+    return { clients, posts: [], pillars: [], ideas: [], postIdeas: [] };
   }
 
   const [yearStr, monthStr] = month.split("-");
@@ -464,7 +468,7 @@ export async function getProoferData(
   const m = Number(monthStr);
 
   if (!year || !m) {
-    return { clients, posts: [], pillars: [], ideas: [] };
+    return { clients, posts: [], pillars: [], ideas: [], postIdeas: [] };
   }
 
   const [pillarsRes, videoIdeasRes, carouselIdeasRes, storyIdeasRes] =
@@ -684,7 +688,105 @@ export async function getProoferData(
     publishQueue: publishQueueMap.get(post.id) ?? [],
   }));
 
-  return { clients, posts: postsWithRelations, pillars, ideas };
+  const postIdeasRes = await supabase
+    .from("post_ideas")
+    .select("*")
+    .eq("client_id", clientId)
+    .gte("post_slot_date", start)
+    .lt("post_slot_date", end)
+    .not("status", "eq", "rejected")
+    .order("created_at", { ascending: true });
+
+  const postIdeas: PostIdea[] = (postIdeasRes.data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    postSlotDate: row.post_slot_date ?? "",
+    platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+    generationRunId: row.generation_run_id ? String(row.generation_run_id) : null,
+    promptUsed: row.prompt_used ?? null,
+    title: row.title ?? null,
+    captionIdea: row.caption_idea ?? null,
+    imageIdea: row.image_idea ?? null,
+    cta: row.cta ?? null,
+    format: row.format ?? null,
+    hashtags: row.hashtags ?? null,
+    firstLine: row.first_line ?? null,
+    contentPillarId: row.content_pillar_id ? String(row.content_pillar_id) : null,
+    status: (row.status ?? "idea") as PostIdeaStatus,
+    isWeak: Boolean(row.is_weak),
+    generatedBy: row.generated_by ?? null,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+
+  return { clients, posts: postsWithRelations, pillars, ideas, postIdeas };
+}
+
+export async function getPostIdeas(
+  clientId: string,
+  month: string
+): Promise<PostIdea[]> {
+  const supabase = await createClient();
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const m = Number(monthStr);
+  if (!year || !m) return [];
+
+  const start = `${yearStr}-${monthStr}-01`;
+  const nextMonthDate = new Date(year, m, 1);
+  const end = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+
+  const { data } = await supabase
+    .from("post_ideas")
+    .select("*")
+    .eq("client_id", clientId)
+    .gte("post_slot_date", start)
+    .lt("post_slot_date", end)
+    .not("status", "eq", "rejected")
+    .order("created_at", { ascending: true });
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    clientId: String(row.client_id),
+    postSlotDate: row.post_slot_date ?? "",
+    platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+    generationRunId: row.generation_run_id ? String(row.generation_run_id) : null,
+    promptUsed: row.prompt_used ?? null,
+    title: row.title ?? null,
+    captionIdea: row.caption_idea ?? null,
+    imageIdea: row.image_idea ?? null,
+    cta: row.cta ?? null,
+    format: row.format ?? null,
+    hashtags: row.hashtags ?? null,
+    firstLine: row.first_line ?? null,
+    contentPillarId: row.content_pillar_id ? String(row.content_pillar_id) : null,
+    status: (row.status ?? "idea") as PostIdeaStatus,
+    isWeak: Boolean(row.is_weak),
+    generatedBy: row.generated_by ?? null,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  }));
+}
+
+export async function getClientBrandContext(clientId: string): Promise<BrandContext> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clients")
+    .select("brand_context")
+    .eq("id", clientId)
+    .single();
+
+  const raw = data?.brand_context ?? {};
+  return {
+    toneOfVoice: raw.toneOfVoice ?? "",
+    targetAudience: raw.targetAudience ?? "",
+    offers: raw.offers ?? "",
+    bannedWords: raw.bannedWords ?? "",
+    ctaStyle: raw.ctaStyle ?? "",
+    visualStyle: raw.visualStyle ?? "",
+    hashtagsPolicy: raw.hashtagsPolicy ?? "",
+    platformRules: raw.platformRules ?? "",
+  };
 }
 
 export async function getProoferPublishQueueData(): Promise<{

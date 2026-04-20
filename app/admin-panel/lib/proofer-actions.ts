@@ -888,3 +888,42 @@ export async function deleteProoferPostByIdAction(postId: string) {
 
   revalidateProoferPaths();
 }
+
+// ── Post ideas (AI suggestions) ──────────────────────────────────────────────
+
+export async function rejectPostIdeaAction(ideaId: string) {
+  if (!ideaId) throw new Error("Idea ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_ideas")
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("id", ideaId);
+  if (error) throw new Error("Could not reject idea.");
+  revalidateProoferPaths();
+}
+
+export async function markIdeaWeakAction(ideaId: string, isWeak: boolean) {
+  if (!ideaId) throw new Error("Idea ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_ideas")
+    .update({ is_weak: isWeak, updated_at: new Date().toISOString() })
+    .eq("id", ideaId);
+  if (error) throw new Error("Could not update idea.");
+  revalidateProoferPaths();
+}
+
+export async function updatePostIdeaFieldAction(
+  ideaId: string,
+  field: "caption_idea" | "image_idea" | "cta" | "first_line" | "hashtags" | "title",
+  value: string
+) {
+  if (!ideaId) throw new Error("Idea ID is required.");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_ideas")
+    .update({ [field]: value, updated_at: new Date().toISOString() })
+    .eq("id", ideaId);
+  if (error) throw new Error("Could not update idea field.");
+  revalidateProoferPaths();
+}
