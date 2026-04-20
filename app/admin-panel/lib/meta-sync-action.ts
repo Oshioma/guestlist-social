@@ -415,12 +415,53 @@ export async function syncMetaData(clientId: string) {
           curr.clicks += Number(row.clicks ?? 0);
           totals.set(key, curr);
         }
+
+        // Also parse conversions from the insights actions field
+        const conversionsByMetaAdId = new Map<string, { conversions: number; costPerResult: number }>();
+        for (const day of dailyInsights) {
+          if (!day.ad_id) continue;
+          const actions = day.actions ?? [];
+          const costActions = day.cost_per_action_type ?? [];
+          let totalResults = 0;
+          for (const a of actions) {
+            if (a.action_type === "lead" || a.action_type === "onsite_conversion.lead_grouped" ||
+                a.action_type === "purchase" || a.action_type === "complete_registration" ||
+                a.action_type === "offsite_conversion.fb_pixel_lead") {
+              totalResults += Number(a.value ?? 0);
+            }
+          }
+          if (totalResults > 0) {
+            const existing = conversionsByMetaAdId.get(day.ad_id) ?? { conversions: 0, costPerResult: 0 };
+            existing.conversions += totalResults;
+            for (const c of costActions) {
+              if (c.action_type === "lead" || c.action_type === "onsite_conversion.lead_grouped" ||
+                  c.action_type === "purchase" || c.action_type === "offsite_conversion.fb_pixel_lead") {
+                existing.costPerResult = Number(c.value ?? 0);
+              }
+            }
+            conversionsByMetaAdId.set(day.ad_id, existing);
+          }
+        }
+
         for (const [adId, t] of totals) {
           const ctr = t.impressions > 0 ? Number(((t.clicks / t.impressions) * 100).toFixed(2)) : 0;
           const cpc = t.clicks > 0 ? Number((t.spend / t.clicks).toFixed(4)) : 0;
+
+          const adRow = (allAds ?? []).find((a) => String(a.id) === adId);
+          const metaAdId = adRow?.meta_id;
+          const conv = metaAdId ? conversionsByMetaAdId.get(metaAdId) : null;
+
           await supabase
             .from("ads")
-            .update({ spend: t.spend, impressions: t.impressions, clicks: t.clicks, ctr, cpc })
+            .update({
+              spend: t.spend,
+              impressions: t.impressions,
+              clicks: t.clicks,
+              ctr,
+              cpc,
+              conversions: conv?.conversions ?? 0,
+              cost_per_result: conv?.costPerResult ?? 0,
+            })
             .eq("id", adId);
         }
       }
