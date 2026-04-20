@@ -86,7 +86,7 @@ export default async function DashboardPage() {
       { label: "Ideas Created", value: String(stats.ideasCreated), sub: "video + carousel + story" },
       { label: "Campaigns Live", value: String(stats.liveCampaigns), sub: "active right now", color: stats.liveCampaigns > 0 ? "#166534" : undefined },
       { label: "Decisions", value: String(stats.decisionsGenerated), sub: "generated this month" },
-      { label: "Tasks Outstanding", value: String(stats.tasksOutstanding), sub: "to do + in progress", color: stats.tasksOutstanding > 0 ? "#b45309" : undefined },
+      { label: "Tasks Outstanding", value: String(stats.tasksOutstanding), sub: "to do + in progress", color: stats.tasksOutstanding > 0 ? "#b45309" : undefined, href: "/app/tasks" },
     ];
 
     return (
