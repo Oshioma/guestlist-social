@@ -3154,49 +3154,64 @@ function DayScrubber({
         transform: "translateY(-50%)",
         display: "flex",
         flexDirection: "column",
-        gap: 3,
-        padding: 8,
+        gap: 0,
+        padding: 0,
         background: "#fff",
-        border: "1px solid #e4e4e7",
+        border: "1px solid #d4d4d8",
         borderRadius: 10,
         boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
         zIndex: 20,
-        maxHeight: "85vh",
-        overflowY: "auto",
+        maxHeight: "90vh",
+        overflow: "hidden",
       }}
     >
-      {days.map((d) => {
+      {days.map((d, i) => {
         const dateKey = toDateKey(d);
-        const isDone = PROOFER_PLATFORMS.some((p) => {
+        let color: "red" | "green" | "grey" = "grey";
+        for (const p of PROOFER_PLATFORMS) {
           const post = postsByKey.get(postKey(dateKey, p));
-          return (
-            post && (post.status === "proofed" || post.status === "approved")
-          );
-        });
+          if (!post) continue;
+          if (post.status === "improve") {
+            color = "red";
+            break;
+          }
+          if (post.status === "proofed" || post.status === "approved") {
+            color = "green";
+          }
+        }
+
+        const bg =
+          color === "red"
+            ? "#ef4444"
+            : color === "green"
+            ? "#22c55e"
+            : "#e4e4e7";
+        const fg = color === "grey" ? "#3f3f46" : "#fff";
+
         return (
           <a
             key={dateKey}
             href={`#day-${dateKey}`}
             title={formatDayLong(d)}
             style={{
-              width: 30,
-              height: 18,
-              borderRadius: 4,
-              background: isDone ? "#22c55e" : "#e4e4e7",
-              color: isDone ? "#fff" : "#52525b",
-              fontSize: 10,
+              width: 40,
+              height: 28,
+              background: bg,
+              color: fg,
+              fontSize: 12,
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               textDecoration: "none",
-              transition: "transform 120ms ease",
+              borderTop: i === 0 ? "none" : "1px solid #d4d4d8",
+              transition: "filter 120ms ease",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = "scale(1.15)";
+              (e.currentTarget as HTMLElement).style.filter = "brightness(0.92)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+              (e.currentTarget as HTMLElement).style.filter = "none";
             }}
           >
             {d.getDate()}
