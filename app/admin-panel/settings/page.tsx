@@ -30,7 +30,7 @@ export default async function SettingsPage() {
 
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name, status")
+    .select("id, name, status, meta_ad_account_id")
     .eq("archived", false)
     .order("name", { ascending: true });
 
@@ -380,7 +380,11 @@ export default async function SettingsPage() {
                       {client.name}
                     </div>
                     <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
-                      Client ID: {client.id}
+                      {(client as any).meta_ad_account_id
+                        ? (client as any).meta_ad_account_id
+                        : process.env.META_AD_ACCOUNT_ID
+                        ? `${process.env.META_AD_ACCOUNT_ID} (global)`
+                        : "No ad account set"}
                     </div>
                   </div>
 
