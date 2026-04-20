@@ -200,8 +200,31 @@ export default async function SettingsPage() {
       </SectionCard>
 
       {accounts.length > 0 && (
-        <SectionCard title={`Connected Meta Accounts (${accounts.length})`}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <details
+          style={{
+            border: "1px solid #e4e4e7",
+            borderRadius: 14,
+            background: "#fff",
+            overflow: "hidden",
+          }}
+        >
+          <summary
+            style={{
+              padding: "14px 18px",
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#18181b",
+              listStyle: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 11, color: "#71717a" }}>&#9654;</span>
+            Connected Meta Accounts ({accounts.length})
+          </summary>
+          <div style={{ padding: "0 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
             {accounts.map((acc) => {
               const clientName = clientList.find((c) => String(c.id) === String(acc.client_id))?.name ?? `Client ${acc.client_id}`;
               const expires = acc.token_expires_at ? new Date(acc.token_expires_at) : null;
@@ -246,7 +269,7 @@ export default async function SettingsPage() {
               );
             })}
           </div>
-        </SectionCard>
+        </details>
       )}
 
       <SectionCard title="Engine Scoring Thresholds">
