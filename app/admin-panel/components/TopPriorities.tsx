@@ -77,7 +77,7 @@ export default async function TopPriorities() {
 
   // ── Fetch pending actions + decisions across all active clients ─────────
   const [clientsRes, actionsRes, decisionsRes] = await Promise.all([
-    supabase.from("clients").select("id, name").eq("archived", false),
+    supabase.from("clients").select("id, name, status").eq("archived", false),
     supabase
       .from("ad_actions")
       .select("*, ads!inner(id, name, client_id)")
@@ -92,6 +92,8 @@ export default async function TopPriorities() {
 
   const clientMap = new Map<number, string>();
   for (const c of clientsRes.data ?? []) {
+    const st = (c as any).status;
+    if (st === "needs_attention" || st === "paused") continue;
     clientMap.set((c as any).id, (c as any).name);
   }
 
