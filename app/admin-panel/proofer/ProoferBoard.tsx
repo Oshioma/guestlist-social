@@ -1844,64 +1844,34 @@ export default function ProoferBoard({
                           </span>
                         </div>
 
-                        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-                          {draft.pillarId && pillarsById.get(draft.pillarId) && (
+                        {draft.pillarId && pillarsById.get(draft.pillarId) && (
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "4px 10px",
+                              borderRadius: 999,
+                              background: `${pillarsById.get(draft.pillarId)!.color}15`,
+                              border: `1px solid ${pillarsById.get(draft.pillarId)!.color}`,
+                              color: pillarsById.get(draft.pillarId)!.color,
+                              fontSize: 11,
+                              fontWeight: 700,
+                            }}
+                          >
                             <span
                               style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                                padding: "4px 10px",
-                                borderRadius: 999,
-                                background: `${pillarsById.get(draft.pillarId)!.color}15`,
-                                border: `1px solid ${pillarsById.get(draft.pillarId)!.color}`,
-                                color: pillarsById.get(draft.pillarId)!.color,
-                                fontSize: 11,
-                                fontWeight: 700,
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                background: pillarsById.get(draft.pillarId)!.color,
+                                display: "inline-block",
                               }}
-                            >
-                              <span
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: "50%",
-                                  background: pillarsById.get(draft.pillarId)!.color,
-                                  display: "inline-block",
-                                }}
-                              />
-                              {pillarsById.get(draft.pillarId)!.name}
-                            </span>
-                          )}
-                          {["improve", "check", "proofed"].map((statusValue) => {
-                            const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
-                            const active = effectiveStatus === btn.value;
-                            const disableThisButton = isPending || (isLocked && btn.value !== "proofed");
-                            return (
-                              <button
-                                key={btn.value}
-                                type="button"
-                                title={btn.label}
-                                aria-label={btn.label}
-                                onClick={() => handleStatus(dateKey, activePlatform, btn.value)}
-                                disabled={disableThisButton}
-                                style={{
-                                  width: 16,
-                                  height: 16,
-                                  padding: 0,
-                                  borderRadius: "50%",
-                                  border: "1px solid #e4e4e7",
-                                  background: btn.dot,
-                                  cursor: disableThisButton ? "not-allowed" : "pointer",
-                                  boxShadow: "none",
-                                  opacity: disableThisButton ? 0.35 : active ? 1 : 0.35,
-                                  transition: "opacity 120ms ease",
-                                }}
-                                onMouseEnter={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.75"; }}
-                                onMouseLeave={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.35"; }}
-                              />
-                            );
-                          })}
-                        </div>
+                            />
+                            {pillarsById.get(draft.pillarId)!.name}
+                          </span>
+                        )}
                       </div>
 
                       {/* Image */}
@@ -1950,17 +1920,17 @@ export default function ProoferBoard({
                         )}
                       </div>
 
-                      {/* Editable caption */}
-                      <div style={{ padding: "10px 12px 4px", borderTop: "1px solid #f4f4f5" }}>
+                      {/* Editable caption + status dots */}
+                      <div style={{ display: "flex", alignItems: "stretch", borderTop: "1px solid #f4f4f5" }}>
                         <textarea
                           value={draft.caption}
                           onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
                           placeholder="Write a caption..."
                           disabled={isLocked}
-                          rows={8}
+                          rows={10}
                           style={{
-                            display: "block",
-                            width: "100%",
+                            flex: 1,
+                            padding: "10px 12px",
                             border: "none",
                             outline: "none",
                             resize: "none",
@@ -1974,6 +1944,38 @@ export default function ProoferBoard({
                             boxSizing: "border-box",
                           }}
                         />
+                        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 7, padding: "0 10px", borderLeft: "1px solid #f4f4f5" }}>
+                          {["proofed", "check", "improve"].map((statusValue) => {
+                            const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
+                            const active = effectiveStatus === btn.value;
+                            const disableThisButton = isPending || (isLocked && btn.value !== "proofed");
+                            return (
+                              <button
+                                key={btn.value}
+                                type="button"
+                                title={btn.label}
+                                aria-label={btn.label}
+                                onClick={() => handleStatus(dateKey, activePlatform, btn.value)}
+                                disabled={disableThisButton}
+                                style={{
+                                  width: 16,
+                                  height: 16,
+                                  padding: 0,
+                                  borderRadius: "50%",
+                                  border: "1px solid #e4e4e7",
+                                  background: btn.dot,
+                                  cursor: disableThisButton ? "not-allowed" : "pointer",
+                                  boxShadow: "none",
+                                  opacity: disableThisButton ? 0.35 : active ? 1 : 0.35,
+                                  transition: "opacity 120ms ease",
+                                  flexShrink: 0,
+                                }}
+                                onMouseEnter={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.75"; }}
+                                onMouseLeave={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.35"; }}
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Modifier buttons */}
