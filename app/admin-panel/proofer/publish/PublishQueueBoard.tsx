@@ -19,6 +19,7 @@ import {
   markProoferQueueItemPublishedAction,
   markProoferQueueItemFailedAction,
   removeProoferQueueItemAction,
+  deleteProoferPostByIdAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
 
@@ -370,6 +371,21 @@ export default function PublishQueueBoard({
       } catch (err) {
         alert(
           err instanceof Error ? err.message : "Could not remove queue item"
+        );
+      }
+    });
+  }
+
+  function handleDeletePost(postId: string) {
+    if (!confirm("Delete this post? This cannot be undone.")) return;
+
+    startTransition(async () => {
+      try {
+        await deleteProoferPostByIdAction(postId);
+        refresh();
+      } catch (err) {
+        alert(
+          err instanceof Error ? err.message : "Could not delete post"
         );
       }
     });
@@ -777,6 +793,18 @@ export default function PublishQueueBoard({
                       style={buttonBase}
                     >
                       Queue both
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={isPending}
+                      style={{
+                        ...buttonBase,
+                        color: "#991b1b",
+                        borderColor: "#fecaca",
+                      }}
+                    >
+                      Delete
                     </button>
                   </div>
               </div>

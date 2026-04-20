@@ -858,3 +858,33 @@ export async function updateProoferQueueItemStatusAction(
 
   revalidateProoferPaths();
 }
+
+export async function deleteProoferPostByIdAction(postId: string) {
+  if (!postId) {
+    throw new Error("Post ID is required.");
+  }
+
+  const supabase = await createClient();
+
+  await supabase
+    .from("proofer_publish_queue")
+    .delete()
+    .eq("post_id", postId);
+
+  await supabase
+    .from("proofer_comments")
+    .delete()
+    .eq("post_id", postId);
+
+  const { error } = await supabase
+    .from("proofer_posts")
+    .delete()
+    .eq("id", postId);
+
+  if (error) {
+    console.error("deleteProoferPostByIdAction error:", error);
+    throw new Error("Could not delete post.");
+  }
+
+  revalidateProoferPaths();
+}
