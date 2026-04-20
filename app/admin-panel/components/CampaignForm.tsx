@@ -16,14 +16,78 @@ type CampaignFormValues = {
 
 type Props = {
   clientId?: string;
+  clientIndustry?: string;
   title?: string;
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
   initialValues?: CampaignFormValues;
 };
 
+function getAudiencePresets(industry?: string): { label: string; value: string }[] {
+  const i = (industry ?? "").toLowerCase();
+  if (i.includes("hotel") || i.includes("villa") || i.includes("travel") || i.includes("hospitality") || i.includes("accommodation")) {
+    return [
+      { label: "Luxury travellers", value: "Ages 30-60, interests: luxury travel, boutique hotels, travel" },
+      { label: "Couples getaway", value: "Ages 25-45, couples, interests: romantic getaways, honeymoon" },
+      { label: "Family holidays", value: "Ages 30-55, parents, interests: family travel, holiday resorts" },
+      { label: "Adventure seekers", value: "Ages 22-40, interests: adventure travel, eco tourism, diving" },
+      { label: "International", value: "Ages 25-60, UK + Europe + US, interests: travel, holidays abroad" },
+      { label: "Broad", value: "Ages 18-65, worldwide, interests: travel" },
+    ];
+  }
+  if (i.includes("restaurant") || i.includes("food") || i.includes("cafe") || i.includes("dining")) {
+    return [
+      { label: "Local foodies", value: "Ages 22-45, 10mi radius, interests: food, dining out, restaurants" },
+      { label: "Date night", value: "Ages 25-45, couples, 15mi radius, interests: fine dining, date night" },
+      { label: "Families", value: "Ages 28-50, parents, 10mi radius, interests: family restaurants" },
+      { label: "Health conscious", value: "Ages 25-45, interests: healthy eating, organic food, wellness" },
+      { label: "Local 5mi", value: "Ages 18-55, 5mi radius, local area" },
+      { label: "Broad local", value: "Ages 18-65, 25mi radius" },
+    ];
+  }
+  if (i.includes("fitness") || i.includes("gym") || i.includes("health") || i.includes("wellness")) {
+    return [
+      { label: "Gym goers", value: "Ages 18-40, interests: gym, weight training, fitness" },
+      { label: "Weight loss", value: "Ages 25-55, interests: weight loss, healthy lifestyle, diet" },
+      { label: "Yoga & mindfulness", value: "Ages 22-50, interests: yoga, meditation, wellness" },
+      { label: "Local 5mi", value: "Ages 18-55, 5mi radius, local area" },
+      { label: "Parents", value: "Ages 28-50, parents, interests: family fitness, health" },
+      { label: "Professionals", value: "Ages 25-45, interests: work-life balance, wellness" },
+    ];
+  }
+  if (i.includes("beauty") || i.includes("salon") || i.includes("spa")) {
+    return [
+      { label: "Beauty enthusiasts", value: "Ages 18-40, interests: beauty, skincare, makeup" },
+      { label: "Bridal", value: "Ages 22-38, interests: weddings, bridal beauty, makeup" },
+      { label: "Self-care", value: "Ages 25-50, interests: self-care, spa treatments, wellness" },
+      { label: "Local 5mi", value: "Ages 18-55, 5mi radius, local area" },
+      { label: "Professionals", value: "Ages 25-45, women, interests: professional appearance" },
+      { label: "Broad local", value: "Ages 18-65, 15mi radius" },
+    ];
+  }
+  if (i.includes("retail") || i.includes("ecommerce") || i.includes("e-commerce") || i.includes("shop")) {
+    return [
+      { label: "Online shoppers", value: "Ages 18-45, interests: online shopping, deals, fashion" },
+      { label: "Gift buyers", value: "Ages 25-55, interests: gifts, presents, special occasions" },
+      { label: "Young adults", value: "Ages 18-30, interests: trending products, lifestyle" },
+      { label: "Parents", value: "Ages 28-50, parents, interests: family shopping" },
+      { label: "Broad UK", value: "Ages 18-65, United Kingdom" },
+      { label: "Broad intl", value: "Ages 18-65, worldwide" },
+    ];
+  }
+  return [
+    { label: "Local 5mi", value: "Ages 25-55, 5mi radius, local area" },
+    { label: "Local 10mi", value: "Ages 25-55, 10mi radius, surrounding area" },
+    { label: "Young adults", value: "Ages 18-34, interests relevant to business" },
+    { label: "Parents", value: "Ages 28-50, parents with children, family activities" },
+    { label: "Professionals", value: "Ages 25-45, interests: business, career, networking" },
+    { label: "Broad UK", value: "Ages 18-65, United Kingdom" },
+  ];
+}
+
 export default function CampaignForm({
   clientId,
+  clientIndustry,
   title = "New Campaign",
   submitLabel = "Create campaign",
   action,
@@ -194,15 +258,7 @@ export default function CampaignForm({
             placeholder="18-35, London, interests: nightlife"
           />
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            {[
-              { label: "Local 5mi", value: "Ages 25-55, 5mi radius, local area" },
-              { label: "Local 10mi", value: "Ages 25-55, 10mi radius, surrounding area" },
-              { label: "Young foodies", value: "Ages 18-34, interests: food, dining out, restaurants" },
-              { label: "Health conscious", value: "Ages 25-45, interests: fitness, wellness, healthy eating" },
-              { label: "Parents", value: "Ages 28-50, parents with children, family activities" },
-              { label: "Professionals", value: "Ages 25-45, interests: business, career, networking" },
-              { label: "Broad UK", value: "Ages 18-65, United Kingdom" },
-            ].map((preset) => (
+            {getAudiencePresets(clientIndustry).map((preset) => (
               <button
                 key={preset.label}
                 type="button"

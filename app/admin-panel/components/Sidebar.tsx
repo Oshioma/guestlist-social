@@ -34,12 +34,7 @@ const PUBLISHER_ITEMS: NavItem[] = [
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [
-    {
-      heading: "",
-      items: [
-        { label: "Dashboard", href: "/app/dashboard" },
-      ],
-    },
+    { heading: "Dashboard", items: [], headingHref: "/app/dashboard" },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
     { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
     { heading: "Tasks", items: [], headingHref: "/app/tasks" },
@@ -55,6 +50,9 @@ function buildUtilityItems(isAdmin: boolean): NavItem[] {
   }
   items.push({ label: "Settings", href: "/app/settings" });
   items.push({ label: "Guide", href: "/app/guide" });
+  if (isAdmin) {
+    items.push({ label: "Clients", href: "/app/clients" });
+  }
   return items;
 }
 

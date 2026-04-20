@@ -334,6 +334,24 @@ export default async function ClientsPage() {
                     >
                       Edit
                     </Link>
+
+                    <Link
+                      href={`/app/clients/${client.id}/campaigns/new`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        color: "#18181b",
+                        textDecoration: "none",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      New campaign
+                    </Link>
                   </div>
                 </div>
 

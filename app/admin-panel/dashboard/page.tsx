@@ -125,44 +125,50 @@ export default async function DashboardPage() {
           <Link
             href="/app/proofer"
             style={{
-              padding: "16px 18px",
+              padding: "18px 20px",
               borderRadius: 14,
               background: "#fdf2f8",
               border: "1px solid #f9a8d4",
               textDecoration: "none",
               color: "#18181b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Social Publisher</div>
-            <div style={{ fontSize: 12, color: "#9d174d" }}>Schedule and proof content for Instagram & Facebook</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Social Publisher</div>
           </Link>
           <Link
             href="/app/content"
             style={{
-              padding: "16px 18px",
+              padding: "18px 20px",
               borderRadius: 14,
               background: "#ecfdf5",
               border: "1px solid #a7f3d0",
               textDecoration: "none",
               color: "#18181b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Content Dashboard</div>
-            <div style={{ fontSize: 12, color: "#065f46" }}>Track content progress across all clients</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Content Dashboard</div>
           </Link>
           <Link
             href="/app/engine"
             style={{
-              padding: "16px 18px",
+              padding: "18px 20px",
               borderRadius: 14,
               background: "#eef2ff",
               border: "1px solid #c7d2fe",
               textDecoration: "none",
               color: "#18181b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Engine Dashboard</div>
-            <div style={{ fontSize: 12, color: "#4338ca" }}>Ad performance, top priorities, spend analysis</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>Engine Dashboard</div>
           </Link>
         </div>
 

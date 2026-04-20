@@ -19,7 +19,7 @@ export default async function NewCampaignPage({ params }: Props) {
 
   const [{ data: client, error }, { data: memoryRows }, suggestions] =
     await Promise.all([
-      supabase.from("clients").select("name").eq("id", clientId).single(),
+      supabase.from("clients").select("name, industry").eq("id", clientId).single(),
       supabase
         .from("memories")
         .select("id, note, tag")
@@ -110,7 +110,7 @@ export default async function NewCampaignPage({ params }: Props) {
         </div>
       </div>
 
-      <CampaignCreator clientId={clientId} action={action} suggestions={suggestions} />
+      <CampaignCreator clientId={clientId} clientIndustry={(client as any).industry ?? ""} action={action} suggestions={suggestions} />
     </div>
   );
 }

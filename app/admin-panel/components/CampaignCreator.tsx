@@ -6,6 +6,7 @@ import type { CampaignSuggestionBundle, CampaignSuggestion } from "../lib/campai
 
 type Props = {
   clientId: string;
+  clientIndustry?: string;
   title?: string;
   submitLabel?: string;
   action: (
@@ -21,6 +22,7 @@ type Props = {
 // untouched and continues to work for the edit page.
 export default function CampaignCreator({
   clientId,
+  clientIndustry,
   title,
   submitLabel,
   action,
@@ -68,6 +70,7 @@ export default function CampaignCreator({
       <CampaignForm
         key={formKey}
         clientId={clientId}
+        clientIndustry={clientIndustry}
         title={title}
         submitLabel={submitLabel}
         action={action}
