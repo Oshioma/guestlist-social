@@ -158,7 +158,13 @@ export default async function SettingsPage() {
       </SectionCard>
 
       <SectionCard title="API Keys">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
           {[
             { label: "Meta Access Token", ok: hasMetaToken, env: "META_ACCESS_TOKEN" },
             { label: "Meta Ad Account ID", ok: hasMetaAccount, env: "META_AD_ACCOUNT_ID" },
@@ -169,31 +175,31 @@ export default async function SettingsPage() {
           ].map((item) => (
             <div
               key={item.env}
+              title={item.ok ? `${item.env} configured` : `Missing ${item.env}`}
               style={{
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: 10,
-                padding: "8px 12px",
-                borderRadius: 8,
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
                 background: item.ok ? "#ecfdf5" : "#fef2f2",
                 border: `1px solid ${item.ok ? "#bbf7d0" : "#fecaca"}`,
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#18181b",
+                whiteSpace: "nowrap",
               }}
             >
               <span
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 7,
+                  height: 7,
                   borderRadius: "50%",
                   background: item.ok ? "#22c55e" : "#ef4444",
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 13, fontWeight: 500, color: "#18181b" }}>
-                {item.label}
-              </span>
-              <span style={{ fontSize: 11, color: "#71717a", marginLeft: "auto" }}>
-                {item.ok ? "Configured" : `Missing ${item.env}`}
-              </span>
+              {item.label}
             </div>
           ))}
         </div>
