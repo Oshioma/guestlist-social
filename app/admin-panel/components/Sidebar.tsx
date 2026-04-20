@@ -38,7 +38,6 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
       heading: "",
       items: [
         { label: "Dashboard", href: "/app/dashboard" },
-        { label: "Clients", href: "/app/clients" },
       ],
     },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },

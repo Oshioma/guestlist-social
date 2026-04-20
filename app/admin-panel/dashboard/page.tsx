@@ -81,7 +81,7 @@ export default async function DashboardPage() {
     const activeClients = stats.clients.filter((c) => c.status === "active");
 
     const cards = [
-      { label: "Ad Actions", value: String(stats.totalActions), sub: `${stats.completedActions} completed`, color: stats.completedActions > 0 ? "#166534" : undefined },
+      { label: "Clients", value: String(activeClients.length), sub: `${stats.clients.length} total`, href: "/app/clients" },
       { label: "Posts Proofed", value: String(stats.postsProofed), sub: `${stats.postsPublished} published`, color: stats.postsPublished > 0 ? "#166534" : undefined },
       { label: "Ideas Created", value: String(stats.ideasCreated), sub: "video + carousel + story" },
       { label: "Campaigns Live", value: String(stats.liveCampaigns), sub: "active right now", color: stats.liveCampaigns > 0 ? "#166534" : undefined },
@@ -94,23 +94,31 @@ export default async function DashboardPage() {
         <TokenExpiryBanner />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {cards.map((c) => (
-            <div
-              key={c.label}
-              style={{
-                padding: "16px 18px",
-                borderRadius: 14,
-                background: "#fff",
-                border: "1px solid #e4e4e7",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "#71717a", marginBottom: 6 }}>{c.label}</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: c.color ?? "#18181b", letterSpacing: "-0.02em" }}>
-                {c.value}
-              </div>
-              <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{c.sub}</div>
-            </div>
-          ))}
+          {cards.map((c) => {
+            const inner = (
+              <>
+                <div style={{ fontSize: 12, color: "#71717a", marginBottom: 6 }}>{c.label}</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: c.color ?? "#18181b", letterSpacing: "-0.02em" }}>
+                  {c.value}
+                </div>
+                <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{c.sub}</div>
+              </>
+            );
+            const style = {
+              padding: "16px 18px",
+              borderRadius: 14,
+              background: "#fff",
+              border: "1px solid #e4e4e7",
+              textDecoration: "none" as const,
+              color: "inherit" as const,
+              display: "block" as const,
+            };
+            return c.href ? (
+              <Link key={c.label} href={c.href} style={style}>{inner}</Link>
+            ) : (
+              <div key={c.label} style={style}>{inner}</div>
+            );
+          })}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
