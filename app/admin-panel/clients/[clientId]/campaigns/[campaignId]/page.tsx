@@ -43,7 +43,7 @@ export default async function CampaignDetailPage({ params }: Props) {
     { data: adsRows, error: adsError },
     { data: learningRows, error: learningsError },
   ] = await Promise.all([
-    supabase.from("clients").select("id, name, website_url").eq("id", clientId).single(),
+    supabase.from("clients").select("id, name, website_url, meta_ad_account_id").eq("id", clientId).single(),
     supabase
       .from("campaigns")
       .select("*")
@@ -196,11 +196,30 @@ export default async function CampaignDetailPage({ params }: Props) {
           return {};
         }
 
+        const adAccountId = (client as any).meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || null;
+
         return (
           <div>
-            <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
-              {hasNoAds ? "Add your first ad" : "Add another ad"}
-            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+                {hasNoAds ? "Add your first ad" : "Add another ad"}
+              </h2>
+              {adAccountId && (
+                <span
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: "#eef2ff",
+                    border: "1px solid #c7d2fe",
+                    color: "#4338ca",
+                  }}
+                >
+                  Ad account: {adAccountId}
+                </span>
+              )}
+            </div>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
               Upload an image, write your copy, and create your ad. It starts paused so you can review first.
             </p>
