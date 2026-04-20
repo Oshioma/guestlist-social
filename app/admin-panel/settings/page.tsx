@@ -34,11 +34,13 @@ export default async function SettingsPage() {
 
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, status")
     .eq("archived", false)
     .order("name", { ascending: true });
 
-  const clientList = clients ?? [];
+  const clientList = (clients ?? []).filter(
+    (c) => c.status === "growing" || c.status === "active"
+  );
 
   const adminClient = createAdminClient();
 
