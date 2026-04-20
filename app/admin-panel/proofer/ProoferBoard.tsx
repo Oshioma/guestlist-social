@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SectionCard from "../components/SectionCard";
 import ImageUpload from "../components/ImageUpload";
@@ -730,6 +730,17 @@ export default function ProoferBoard({
     });
   }, [days, drafts, postsByKey, hideEmpty]);
 
+  const scrolledRef = useRef(false);
+  useEffect(() => {
+    if (scrolledRef.current) return;
+    scrolledRef.current = true;
+    const todayKey = toDateKey(new Date());
+    const el = document.getElementById(`day-${todayKey}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }, []);
+
   const totalWithContent = useMemo(
     () =>
       days.filter((d) => {
@@ -1154,6 +1165,7 @@ export default function ProoferBoard({
             return (
               <div
                 key={dateKey}
+                id={`day-${dateKey}`}
                 style={{
                   background: "#fff",
                   border: "1px solid #e4e4e7",
