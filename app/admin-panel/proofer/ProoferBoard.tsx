@@ -3191,19 +3191,16 @@ function DayScrubber({
       style={{
         position: "fixed",
         right: 0,
-        top: "50%",
-        transform: "translateY(-50%)",
+        top: 0,
+        bottom: 0,
         display: "flex",
         flexDirection: "column",
         gap: 0,
         padding: 0,
         background: "#fff",
-        border: "1px solid #d4d4d8",
-        borderRight: "none",
-        borderRadius: "10px 0 0 10px",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        borderLeft: "1px solid #d4d4d8",
+        boxShadow: "-2px 0 12px rgba(0,0,0,0.05)",
         zIndex: 20,
-        maxHeight: "90vh",
         overflow: "hidden",
       }}
     >
@@ -3243,11 +3240,12 @@ function DayScrubber({
               }
             }}
             style={{
-              width: 40,
-              height: 28,
+              width: 52,
+              flex: "1 1 0",
+              minHeight: 24,
               background: bg,
               color: fg,
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
