@@ -266,7 +266,7 @@ export async function syncMetaData(clientId: string) {
 
     // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
     const adsRes = await fetch(
-      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&limit=50&access_token=${token}`,
+      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url,object_story_spec}&limit=50&access_token=${token}`,
       { cache: "no-store" }
     );
     const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
@@ -300,9 +300,12 @@ export async function syncMetaData(clientId: string) {
         followers_gained: 0,
       };
 
-      // Quick sync: just basic fields + image URL from creative
+      // Prefer full-size image_url, then try object_story_spec, fallback to thumbnail
+      const storySpec = (metaAd.creative as any)?.object_story_spec;
+      const storyImage = storySpec?.link_data?.picture ?? storySpec?.link_data?.image_url ?? storySpec?.photo_data?.url ?? null;
       const creative_image_url =
         metaAd.creative?.image_url ??
+        storyImage ??
         metaAd.creative?.thumbnail_url ??
         null;
 
