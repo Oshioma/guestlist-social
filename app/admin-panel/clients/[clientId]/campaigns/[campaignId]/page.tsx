@@ -128,6 +128,17 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Link
+          href={`/app/clients/${clientId}`}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "#71717a", textDecoration: "none" }}
+        >
+          &larr; {client.name}
+        </Link>
+        <span style={{ color: "#d4d4d8" }}>/</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>{campaign.name}</span>
+      </div>
+
       {adsAllowed && (() => {
         async function inlineMetaAction(data: {
           name: string;
