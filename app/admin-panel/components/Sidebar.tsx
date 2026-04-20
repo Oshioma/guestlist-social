@@ -29,6 +29,7 @@ const ENGINE_ITEMS: NavItem[] = [
 const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
+  { label: "Content Dashboard", href: "/app/content" },
 ];
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
@@ -37,7 +38,6 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
       heading: "",
       items: [
         { label: "Dashboard", href: "/app/dashboard" },
-        { label: "Content Dashboard", href: "/app/content" },
         { label: "Clients", href: "/app/clients" },
       ],
     },
