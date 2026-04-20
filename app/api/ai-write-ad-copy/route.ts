@@ -193,40 +193,27 @@ export async function POST(req: Request) {
       ? context.join("\n")
       : "No historical data available — use general best practices.";
 
-    const prompt = `You are an expert Facebook/Instagram ad copywriter for a social media agency.
+    const prompt = `You are an expert Facebook/Instagram ad copywriter. Write ads that CONVERT.
 
 Campaign: "${campaignName || "New campaign"}"
 Objective: ${objective}
-${imageDescription ? `Image being used: ${imageDescription}` : ""}
+${imageDescription ? `Image: ${imageDescription}` : ""}
 
 ${contextBlock}
 
-Write ad copy for this campaign. You are a senior copywriter who writes ads that CONVERT, not just sound nice.
+Write THREE different ad copy variations. Each should take a different angle.
 
-Return EXACTLY this JSON format (no markdown, no code fences):
-{"headline":"your headline here (max 40 chars)","body":"your body text here (max 125 chars for primary line)","cta":"one of: learn_more, shop_now, sign_up, contact_us, book_now, apply_now, watch_more, download, get_quote","reasoning":"2 sentences explaining your choices, referencing specific data"}
+Return EXACTLY this JSON (no markdown, no code fences):
+{"variations":[{"headline":"max 40 chars","body":"max 125 chars","cta":"learn_more","reasoning":"why"},{"headline":"max 40 chars","body":"max 125 chars","cta":"learn_more","reasoning":"why"},{"headline":"max 40 chars","body":"max 125 chars","cta":"learn_more","reasoning":"why"}]}
 
-RULES:
-- Headline: punchy, under 40 chars, mention the actual product/service by name
-- Body: hook attention in first line, under 125 chars, use the brand voice from their organic posts
-- If winning ads had certain headlines/hooks that got high CTR, use similar patterns
-- If losing ads had certain copy that failed, avoid those patterns
-- CTA must match the objective: traffic→Learn More, conversions→Shop Now, leads→Sign Up
-- Reference what competitors are running and differentiate
-- NO generic marketing fluff like "Elevate your experience" — be specific to THIS business
-- Write like a human, not a marketing textbook`;
-
-    const batchPrompt = prompt.replace(
-      /Return EXACTLY this JSON format[\s\S]*?reasoning":".*?"\}/,
-      `Return EXACTLY this JSON with THREE variations (no markdown, no code fences):
-{"variations":[{"headline":"headline 1","body":"body 1","cta":"cta_value","reasoning":"why"},{"headline":"headline 2","body":"body 2","cta":"cta_value","reasoning":"why"},{"headline":"headline 3","body":"body 3","cta":"cta_value","reasoning":"why"}]}`
-    );
+CTA must be one of: learn_more, shop_now, sign_up, contact_us, book_now, apply_now, watch_more, download, get_quote
+Be SPECIFIC to this business. No generic fluff. Use real product/service names.`;
 
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 800,
-      messages: [{ role: "user", content: batchPrompt }],
+      messages: [{ role: "user", content: prompt }],
     });
 
     const raw = message.content
