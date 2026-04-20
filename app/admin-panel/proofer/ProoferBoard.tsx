@@ -3213,6 +3213,9 @@ function DayScrubber({
   days: Date[];
   postsByKey: Map<string, ProoferPost>;
 }) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   return (
     <aside
       aria-label="Jump to day"
@@ -3247,13 +3250,21 @@ function DayScrubber({
           }
         }
 
+        const isElapsed = d.getTime() < todayStart.getTime();
         const bg =
           color === "red"
             ? "#ef4444"
             : color === "green"
             ? "#22c55e"
+            : isElapsed
+            ? "#a1a1aa"
             : "#e4e4e7";
-        const fg = color === "grey" ? "#a1a1aa" : "#fff";
+        const fg =
+          color === "grey" && !isElapsed
+            ? "#a1a1aa"
+            : color === "grey" && isElapsed
+            ? "#f4f4f5"
+            : "#fff";
 
         return (
           <a
