@@ -40,18 +40,10 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
         { label: "Clients", href: "/app/clients" },
       ],
     },
-    { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
+    { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
     { heading: "Tasks", items: [], headingHref: "/app/tasks" },
   ];
-
-  if (canRunAds) {
-    groups.push({
-      heading: "Campaigns",
-      items: [{ label: "Quick launch", href: "/app/launch" }],
-      collapsible: true,
-    });
-  }
 
   return groups;
 }

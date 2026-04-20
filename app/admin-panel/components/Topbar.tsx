@@ -15,7 +15,6 @@ const titles: Record<string, string> = {
   "/app/proofer/publish": "Publish Queue",
   "/app/ideas": "Ideas",
   "/app/tasks": "Tasks",
-  "/app/launch": "Quick Launch",
   "/app/settings": "Settings",
   "/app/settings/members": "Members",
   "/app/guide": "Guide",

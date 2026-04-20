@@ -40,7 +40,6 @@ export default function GuidePage() {
           <li><strong>Workspace</strong> &mdash; Dashboard and Clients (your daily starting points)</li>
           <li><strong>Engine</strong> &mdash; Meta queue, Playbook, Creative library, Reports, Memory</li>
           <li><strong>Publisher</strong> &mdash; Proofer (calendar), Publish queue, Ideas, Content</li>
-          <li><strong>Campaigns</strong> &mdash; Quick launch</li>
           <li><strong>Utility</strong> &mdash; Tasks, Settings, Guide</li>
         </ul>
       </section>

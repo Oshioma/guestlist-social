@@ -193,6 +193,41 @@ export default function CampaignForm({
             style={inputStyle}
             placeholder="18-35, London, interests: nightlife"
           />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {[
+              { label: "Local 5mi", value: "Ages 25-55, 5mi radius, local area" },
+              { label: "Local 10mi", value: "Ages 25-55, 10mi radius, surrounding area" },
+              { label: "Young foodies", value: "Ages 18-34, interests: food, dining out, restaurants" },
+              { label: "Health conscious", value: "Ages 25-45, interests: fitness, wellness, healthy eating" },
+              { label: "Parents", value: "Ages 28-50, parents with children, family activities" },
+              { label: "Professionals", value: "Ages 25-45, interests: business, career, networking" },
+              { label: "Broad UK", value: "Ages 18-65, United Kingdom" },
+            ].map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => {
+                  const input = document.querySelector<HTMLInputElement>("input[name='audience']");
+                  if (input) {
+                    input.value = preset.value;
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                  }
+                }}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #e4e4e7",
+                  background: "#fafafa",
+                  color: "#52525b",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <DurationPicker
