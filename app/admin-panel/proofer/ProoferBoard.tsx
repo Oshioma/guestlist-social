@@ -3162,6 +3162,45 @@ function findScrollContainer(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function smoothScrollToTop() {
+  const easeInOutCubic = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const duration = 650;
+  const start = performance.now();
+
+  // Find whichever ancestor is actually scrolled.
+  let container: HTMLElement | null = null;
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
+    if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 1) {
+      container = el;
+      break;
+    }
+  }
+
+  if (container) {
+    const startTop = container.scrollTop;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      container!.scrollTop = startTop * (1 - easeInOutCubic(t));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return;
+  }
+
+  const startTop =
+    window.scrollY ||
+    document.documentElement.scrollTop ||
+    document.body.scrollTop;
+  if (startTop < 1) return;
+  const step = (now: number) => {
+    const t = Math.min((now - start) / duration, 1);
+    window.scrollTo(0, startTop * (1 - easeInOutCubic(t)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function smoothScrollDayInto(dateKey: string) {
   const el = document.getElementById(`day-${dateKey}`);
   if (!el) return;
@@ -3221,15 +3260,16 @@ function DayScrubber({
       aria-label="Jump to day"
       style={{
         position: "fixed",
-        right: 0,
-        top: 0,
+        right: 16,
+        top: 56,
         bottom: 0,
         display: "flex",
         flexDirection: "column",
         gap: 0,
         padding: 0,
         background: "#fff",
-        borderLeft: "1px solid #d4d4d8",
+        border: "1px solid #d4d4d8",
+        borderRadius: "8px 0 0 0",
         boxShadow: "-2px 0 12px rgba(0,0,0,0.05)",
         zIndex: 20,
         overflow: "hidden",
@@ -3265,7 +3305,7 @@ function DayScrubber({
             : color === "grey" && !isElapsed
             ? "#a1a1aa"
             : color === "grey" && isElapsed
-            ? "#71717a"
+            ? "#52525b"
             : "#fff";
 
         return (
@@ -3275,7 +3315,11 @@ function DayScrubber({
             title={formatDayLong(d)}
             onClick={(e) => {
               e.preventDefault();
-              smoothScrollDayInto(dateKey);
+              if (i === 0) {
+                smoothScrollToTop();
+              } else {
+                smoothScrollDayInto(dateKey);
+              }
               if (typeof window !== "undefined" && window.history.replaceState) {
                 window.history.replaceState(null, "", `#day-${dateKey}`);
               }
