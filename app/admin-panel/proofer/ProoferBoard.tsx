@@ -1282,7 +1282,7 @@ export default function ProoferBoard({
           </div>
         </SectionCard>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {visibleDays.length === 0 && (
             <SectionCard title="Nothing to show">
               <div style={{ fontSize: 13, color: "#71717a" }}>
@@ -1668,10 +1668,10 @@ export default function ProoferBoard({
                       }
                       placeholder="Write a caption..."
                       disabled={isLocked}
+                      rows={8}
                       style={{
                         ...inputStyle,
                         flex: 1,
-                        minHeight: 70,
                         resize: "vertical",
                         fontFamily: "inherit",
                         opacity: isLocked ? 0.7 : 1,
@@ -1747,6 +1747,41 @@ export default function ProoferBoard({
                       )}
                     </div>
                   </div>
+
+                  {draft.caption.trim() && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(["shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
+                        const labels: Record<string, string> = {
+                          shorter: "Shorter",
+                          more_playful: "More playful",
+                          more_premium: "More premium",
+                          stronger_cta: "Stronger CTA",
+                          regenerate: "Regenerate",
+                        };
+                        const isModifying = captionModifying[postKey(dateKey, activePlatform)];
+                        return (
+                          <button
+                            key={mod}
+                            type="button"
+                            disabled={!!isModifying || isLocked}
+                            onClick={() => handleModifyCaption(dateKey, activePlatform, mod)}
+                            style={{
+                              padding: "3px 9px",
+                              borderRadius: 99,
+                              border: "1px solid #e4e4e7",
+                              background: isModifying ? "#f4f4f5" : "#fff",
+                              color: "#52525b",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: isModifying || isLocked ? "wait" : "pointer",
+                            }}
+                          >
+                            {isModifying ? "…" : labels[mod]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Media section — images/video above idea */}
                   {draft.mediaUrls.length > 0 && (
@@ -1897,403 +1932,6 @@ export default function ProoferBoard({
                     </div>
                   )}
 
-                  {(() => {
-                    const key = postKey(dateKey, activePlatform);
-                    const linkedKey =
-                      draft.linkedIdeaId && draft.linkedIdeaKind
-                        ? `${draft.linkedIdeaKind}:${draft.linkedIdeaId}`
-                        : null;
-                    const linkedIdea = linkedKey
-                      ? ideasById.get(linkedKey) ?? null
-                      : null;
-
-                    if (linkedIdea) {
-                      const isEditingThis =
-                        editingLinkedIdea?.id === linkedIdea.id &&
-                        editingLinkedIdea?.kind === linkedIdea.kind;
-                      const notesKey = `${linkedIdea.kind}:${linkedIdea.id}`;
-                      // Default expanded — user explicitly collapsing sets
-                      // the key to false.
-                      const isExpanded =
-                        isEditingThis || expandedNoteKeys[notesKey] !== false;
-                      const hasNotes = Boolean(linkedIdea.notes.trim());
-
-                      return (
-                        <div
-                          style={{
-                            background: "#fafafa",
-                            border: "1px solid #e4e4e7",
-                            borderRadius: 8,
-                            display: "flex",
-                            flexDirection: "column",
-                            minWidth: 0,
-                            maxWidth: "100%",
-                            overflow: "hidden",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              padding: "8px 10px",
-                              minWidth: 0,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isEditingThis) return;
-                                setExpandedNoteKeys((prev) => ({
-                                  ...prev,
-                                  [notesKey]: !isExpanded,
-                                }));
-                              }}
-                              aria-expanded={isExpanded}
-                              style={{
-                                flex: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                padding: 0,
-                                background: "transparent",
-                                border: "none",
-                                cursor: isEditingThis ? "default" : "pointer",
-                                font: "inherit",
-                                textAlign: "left",
-                                minWidth: 0,
-                                overflow: "hidden",
-                              }}
-                            >
-                              <span
-                                aria-hidden
-                                style={{
-                                  display: "inline-block",
-                                  width: 10,
-                                  fontSize: 10,
-                                  color: "#a1a1aa",
-                                  transform: isExpanded
-                                    ? "rotate(90deg)"
-                                    : "rotate(0deg)",
-                                  transition: "transform 0.15s ease",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                ▶
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  color: "#71717a",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.04em",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {isEditingThis ? "Edit idea" : "Idea notes"}
-                              </span>
-                              {!isEditingThis && !isExpanded && hasNotes && (
-                                <span
-                                  style={{
-                                    flex: 1,
-                                    fontSize: 12,
-                                    color: "#71717a",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    minWidth: 0,
-                                    display: "block",
-                                  }}
-                                >
-                                  {linkedIdea.notes.replace(/\s+/g, " ")}
-                                </span>
-                              )}
-                            </button>
-                            {isEditingThis && editingLinkedIdea ? (
-                              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                                <button
-                                  type="button"
-                                  onClick={handleSaveLinkedIdeaEdit}
-                                  disabled={
-                                    isPending ||
-                                    !editingLinkedIdea.draft.idea.trim()
-                                  }
-                                  style={{
-                                    padding: "4px 10px",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    border: "1px solid #166534",
-                                    borderRadius: 6,
-                                    background: "#dcfce7",
-                                    color: "#166534",
-                                    cursor:
-                                      isPending ||
-                                      !editingLinkedIdea.draft.idea.trim()
-                                        ? "not-allowed"
-                                        : "pointer",
-                                    opacity:
-                                      isPending ||
-                                      !editingLinkedIdea.draft.idea.trim()
-                                        ? 0.5
-                                        : 1,
-                                  }}
-                                >
-                                  {isPending ? "Saving..." : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingLinkedIdea(null)}
-                                  style={{
-                                    padding: "4px 10px",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    border: "1px solid #e4e4e7",
-                                    borderRadius: 6,
-                                    background: "#fff",
-                                    color: "#3f3f46",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={isLocked}
-                                onClick={() =>
-                                  setEditingLinkedIdea({
-                                    id: linkedIdea.id,
-                                    kind: linkedIdea.kind,
-                                    draft: {
-                                      idea: linkedIdea.text,
-                                      notes: linkedIdea.notes,
-                                      pillarId: linkedIdea.pillarId,
-                                    },
-                                  })
-                                }
-                                style={{
-                                  padding: "4px 10px",
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  border: "1px solid #e4e4e7",
-                                  borderRadius: 6,
-                                  background: "#fff",
-                                  color: "#3f3f46",
-                                  cursor: isLocked ? "not-allowed" : "pointer",
-                                  opacity: isLocked ? 0.5 : 1,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                Edit idea
-                              </button>
-                            )}
-                          </div>
-
-                          {isExpanded && (
-                            <div
-                              style={{
-                                padding: "0 10px 10px",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 6,
-                              }}
-                            >
-                              {isEditingThis && editingLinkedIdea ? (
-                                <>
-                                  <input
-                                    value={editingLinkedIdea.draft.idea}
-                                    onChange={(e) =>
-                                      setEditingLinkedIdea({
-                                        ...editingLinkedIdea,
-                                        draft: {
-                                          ...editingLinkedIdea.draft,
-                                          idea: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Idea..."
-                                    style={{
-                                      ...inputStyle,
-                                      padding: "6px 8px",
-                                      fontSize: 12,
-                                    }}
-                                  />
-                                  <textarea
-                                    value={editingLinkedIdea.draft.notes}
-                                    onChange={(e) =>
-                                      setEditingLinkedIdea({
-                                        ...editingLinkedIdea,
-                                        draft: {
-                                          ...editingLinkedIdea.draft,
-                                          notes: e.target.value,
-                                        },
-                                      })
-                                    }
-                                    placeholder="Notes (optional)"
-                                    rows={4}
-                                    style={{
-                                      ...inputStyle,
-                                      padding: "6px 8px",
-                                      fontSize: 12,
-                                      resize: "vertical",
-                                      fontFamily: "inherit",
-                                      lineHeight: 1.4,
-                                    }}
-                                  />
-                                  <select
-                                    value={editingLinkedIdea.draft.pillarId ?? ""}
-                                    onChange={(e) =>
-                                      setEditingLinkedIdea({
-                                        ...editingLinkedIdea,
-                                        draft: {
-                                          ...editingLinkedIdea.draft,
-                                          pillarId: e.target.value || null,
-                                        },
-                                      })
-                                    }
-                                    style={{
-                                      ...inputStyle,
-                                      padding: "6px 8px",
-                                      fontSize: 12,
-                                    }}
-                                  >
-                                    <option value="">No pillar</option>
-                                    {initialPillars.map((p) => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </>
-                              ) : hasNotes ? (
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#52525b",
-                                    whiteSpace: "pre-wrap",
-                                    lineHeight: 1.5,
-                                  }}
-                                >
-                                  {linkedIdea.notes}
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    fontSize: 11,
-                                    color: "#a1a1aa",
-                                    fontStyle: "italic",
-                                  }}
-                                >
-                                  No notes yet. Click &quot;Edit idea&quot; to
-                                  add some.
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // No idea selected → inline add-idea form.
-                    const ideaDraft = getIdeaDraft(key);
-                    return (
-                      <div
-                        style={{
-                          padding: "8px 10px",
-                          background: "#fafafa",
-                          border: "1px dashed #e4e4e7",
-                          borderRadius: 8,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 6,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color: "#71717a",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.04em",
-                          }}
-                        >
-                          Add idea
-                        </div>
-                        <input
-                          value={ideaDraft.idea}
-                          onChange={(e) =>
-                            updateIdeaDraft(key, { idea: e.target.value })
-                          }
-                          placeholder="Idea..."
-                          disabled={isLocked}
-                          style={{
-                            ...inputStyle,
-                            padding: "6px 8px",
-                            fontSize: 12,
-                          }}
-                        />
-                        <textarea
-                          value={ideaDraft.notes}
-                          onChange={(e) =>
-                            updateIdeaDraft(key, { notes: e.target.value })
-                          }
-                          placeholder="Notes (optional)"
-                          rows={4}
-                          disabled={isLocked}
-                          style={{
-                            ...inputStyle,
-                            padding: "6px 8px",
-                            fontSize: 12,
-                            resize: "vertical",
-                            fontFamily: "inherit",
-                            lineHeight: 1.4,
-                          }}
-                        />
-                        <button
-                          type="button"
-                          disabled={
-                            isLocked ||
-                            isPending ||
-                            !ideaDraft.idea.trim()
-                          }
-                          onClick={() =>
-                            setPillarModal({
-                              postKey: key,
-                              dateKey,
-                              platform: activePlatform,
-                              kind: deriveIdeaKind(activePlatform),
-                            })
-                          }
-                          style={{
-                            alignSelf: "flex-start",
-                            padding: "6px 12px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            border: "none",
-                            borderRadius: 6,
-                            background: "#18181b",
-                            color: "#fff",
-                            cursor:
-                              isLocked ||
-                              isPending ||
-                              !ideaDraft.idea.trim()
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity:
-                              isLocked ||
-                              isPending ||
-                              !ideaDraft.idea.trim()
-                                ? 0.5
-                                : 1,
-                          }}
-                        >
-                          Save to pillar…
-                        </button>
-                      </div>
-                    );
-                  })()}
 
                   <div
                     style={{
@@ -2897,138 +2535,6 @@ export default function ProoferBoard({
         </div>
       )}
 
-      {pillarModal && (
-        <div
-          onClick={() => setPillarModal(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
-            padding: 16,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%",
-              maxWidth: 380,
-              background: "#fff",
-              borderRadius: 12,
-              padding: 20,
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#18181b",
-              }}
-            >
-              Save idea to pillar
-            </div>
-            <div style={{ fontSize: 12, color: "#71717a" }}>
-              Pick a pillar to save this new {pillarModal.kind} idea into. It
-              will be attached to this post.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                maxHeight: 260,
-                overflowY: "auto",
-              }}
-            >
-              {initialPillars.length === 0 && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#a1a1aa",
-                    padding: 10,
-                    textAlign: "center",
-                  }}
-                >
-                  No pillars yet for this client. Create one first.
-                </div>
-              )}
-              {initialPillars.map((pillar) => (
-                <button
-                  key={pillar.id}
-                  type="button"
-                  onClick={() => handleCreateIdea(pillar.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "10px 12px",
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 8,
-                    background: "#fff",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#18181b",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: "50%",
-                      background: pillar.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ flex: 1 }}>{pillar.name}</span>
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => setPillarModal(null)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #e4e4e7",
-                  background: "#fff",
-                  color: "#3f3f46",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleCreateIdea(null)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #e4e4e7",
-                  background: "#f4f4f5",
-                  color: "#3f3f46",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Save without pillar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
