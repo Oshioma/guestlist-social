@@ -141,7 +141,8 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   revalidatePath("/admin-panel/clients");
   revalidatePath("/admin-panel/dashboard");
   revalidatePath(`/admin-panel/clients/${clientId}`);
-  redirect("/app/clients");
+  revalidatePath(`/admin-panel/clients/${clientId}/edit`);
+  redirect(`/app/clients/${clientId}`);
 }
 
 export async function archiveClientAction(clientId: string) {

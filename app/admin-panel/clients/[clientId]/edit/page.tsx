@@ -50,55 +50,33 @@ export default async function EditClientPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link
+            href={`/app/clients/${clientId}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "#71717a", textDecoration: "none" }}
+          >
+            &larr; {client.name}
+          </Link>
+          <span style={{ color: "#d4d4d8" }}>/</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>Edit</span>
+        </div>
         <Link
           href={`/app/clients/${clientId}`}
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: 6,
-            fontSize: 13,
-            color: "#71717a",
+            padding: "8px 14px",
+            borderRadius: 10,
+            background: "#18181b",
+            color: "#fff",
             textDecoration: "none",
-            marginBottom: 14,
+            fontSize: 13,
+            fontWeight: 600,
           }}
         >
-          &larr; Back to {client.name}
+          View client
         </Link>
-
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e4e4e7",
-            borderRadius: 16,
-            padding: 20,
-          }}
-        >
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 28,
-              fontWeight: 700,
-              color: "#18181b",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Edit client
-          </h1>
-
-          <p
-            style={{
-              marginTop: 10,
-              fontSize: 14,
-              color: "#71717a",
-            }}
-          >
-            Update details for{" "}
-            <strong style={{ color: "#18181b" }}>
-              {client.name}
-            </strong>
-          </p>
-        </div>
       </div>
 
       <ClientForm
