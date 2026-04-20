@@ -127,6 +127,25 @@ export default async function CampaignDetailPage({ params }: Props) {
   const hasMetaAdsetId = !!(campaign as any).meta_adset_id;
   const hasNoAds = ads.length === 0;
 
+  let adAccountId = (client as any).meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || null;
+  if (adAccountId && !adAccountId.startsWith("act_")) adAccountId = `act_${adAccountId}`;
+  let adAccountName: string | null = null;
+  if (adAccountId) {
+    try {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (token) {
+        const res = await fetch(
+          `https://graph.facebook.com/v25.0/${adAccountId}?fields=name&access_token=${token}`,
+          { cache: "no-store" }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          adAccountName = data.name ?? null;
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -196,8 +215,6 @@ export default async function CampaignDetailPage({ params }: Props) {
           return {};
         }
 
-        const adAccountId = (client as any).meta_ad_account_id || process.env.META_AD_ACCOUNT_ID || null;
-
         return (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
@@ -215,8 +232,9 @@ export default async function CampaignDetailPage({ params }: Props) {
                     border: "1px solid #c7d2fe",
                     color: "#4338ca",
                   }}
+                  title={adAccountId}
                 >
-                  Ad account: {adAccountId}
+                  {adAccountName ?? adAccountId}
                 </span>
               )}
             </div>
