@@ -674,85 +674,140 @@ export default function PublishQueueBoard({
             No approved posts waiting to be queued.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {readyPosts.map((post) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 20 }}>
+            {readyPosts.map((post) => {
+              const images = post.mediaUrls.length > 0
+                ? post.mediaUrls
+                : post.imageUrl
+                ? [post.imageUrl]
+                : [];
+
+              return (
               <div
                 key={post.id}
                 style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 12,
-                  padding: 14,
+                  border: "1px solid #dbdbdb",
+                  borderRadius: 8,
                   background: "#fff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
+                  overflow: "hidden",
+                  maxWidth: 470,
                 }}
               >
+                  {/* Header — like Instagram */}
                   <div
                     style={{
                       display: "flex",
+                      alignItems: "center",
                       justifyContent: "space-between",
-                      gap: 12,
-                      flexWrap: "wrap",
+                      padding: "10px 14px",
                     }}
                   >
-                    <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div
                         style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: "50%",
+                          background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#fff",
                           fontSize: 14,
-                          fontWeight: 800,
-                          color: "#18181b",
+                          fontWeight: 700,
+                          flexShrink: 0,
                         }}
                       >
-                        {post.clientName}
+                        {(post.clientName ?? "?")[0].toUpperCase()}
                       </div>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        {formatDate(post.postDate)}
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#262626" }}>
+                          {post.clientName}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#8e8e8e" }}>
+                          {formatDate(post.postDate)}
+                        </div>
                       </div>
                     </div>
                     <div
                       style={{
-                        padding: "4px 10px",
-                        borderRadius: 999,
+                        padding: "3px 8px",
+                        borderRadius: 4,
                         background: "#e0f2fe",
-                        border: "1px solid #38bdf8",
                         color: "#075985",
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: 700,
-                        alignSelf: "flex-start",
                       }}
                     >
                       Proofed
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#27272a",
-                      lineHeight: 1.45,
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {post.caption || "No caption"}
+                  {/* Image — full width like Instagram */}
+                  {images.length > 0 ? (
+                    images.length === 1 ? (
+                      <img
+                        src={images[0]}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          aspectRatio: "1/1",
+                          objectFit: "cover",
+                          display: "block",
+                          background: "#fafafa",
+                        }}
+                      />
+                    ) : (
+                      <div style={{ position: "relative" }}>
+                        <CarouselPreview urls={images} />
+                      </div>
+                    )
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        aspectRatio: "1/1",
+                        background: "#fafafa",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#c7c7c7",
+                        fontSize: 14,
+                      }}
+                    >
+                      No image
+                    </div>
+                  )}
+
+                  {/* Engagement icons row */}
+                  <div style={{ padding: "10px 14px 4px", display: "flex", gap: 16 }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                   </div>
 
-                  <CarouselPreview
-                    urls={
-                      post.mediaUrls.length > 0
-                        ? post.mediaUrls
-                        : post.imageUrl
-                        ? [post.imageUrl]
-                        : []
-                    }
-                  />
+                  {/* Caption */}
+                  <div style={{ padding: "4px 14px 14px" }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#262626",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{post.clientName}</span>{" "}
+                      <span style={{ whiteSpace: "pre-wrap" }}>{post.caption || "No caption"}</span>
+                    </div>
+                  </div>
 
+                  {/* Action bar */}
                   <div
                     style={{
                       display: "flex",
-                      gap: 8,
+                      gap: 6,
                       flexWrap: "wrap",
-                      marginTop: 4,
+                      padding: "8px 14px 12px",
+                      borderTop: "1px solid #efefef",
                     }}
                   >
                     <button
@@ -808,7 +863,8 @@ export default function PublishQueueBoard({
                     </button>
                   </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </SectionCard>
