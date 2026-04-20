@@ -261,7 +261,7 @@ export default function ProoferBoard({
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
-  const [captionModifying, setCaptionModifying] = useState<Record<string, boolean>>({});
+  const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -728,7 +728,7 @@ export default function ProoferBoard({
     const key = postKey(dateKey, platform);
     const currentCaption = getDraftFor(dateKey, platform).caption;
     if (!currentCaption.trim()) return;
-    setCaptionModifying((prev) => ({ ...prev, [key]: true }));
+    setCaptionModifying((prev) => ({ ...prev, [key]: modifier }));
     try {
       const res = await fetch("/api/modify-caption", {
         method: "POST",
@@ -758,8 +758,8 @@ export default function ProoferBoard({
         setDrafts((prev) => {
           const next = { ...prev };
           for (const key of Object.keys(next)) {
-            if (key.endsWith(`:${genPlatform}`)) {
-              const dateStr = key.split(":")[0];
+            if (key.endsWith(`|${genPlatform}`)) {
+              const dateStr = key.split("|")[0];
               const existingPost = postsByKey.get(key);
               if (dateStr.startsWith(month) && !existingPost) {
                 delete next[key];
@@ -1756,25 +1756,28 @@ export default function ProoferBoard({
                           stronger_cta: "Stronger CTA",
                           regenerate: "Regenerate",
                         };
-                        const isModifying = captionModifying[postKey(dateKey, activePlatform)];
+                        const activeModifier = captionModifying[postKey(dateKey, activePlatform)];
+                        const isThisOne = activeModifier === mod;
+                        const anyRunning = !!activeModifier;
                         return (
                           <button
                             key={mod}
                             type="button"
-                            disabled={!!isModifying || isLocked}
+                            disabled={anyRunning || isLocked}
                             onClick={() => handleModifyCaption(dateKey, activePlatform, mod)}
                             style={{
                               padding: "3px 9px",
                               borderRadius: 99,
                               border: "1px solid #e4e4e7",
-                              background: isModifying ? "#f4f4f5" : "#fff",
-                              color: "#52525b",
+                              background: isThisOne ? "#e0f2fe" : "#fff",
+                              color: isThisOne ? "#0369a1" : "#52525b",
                               fontSize: 11,
                               fontWeight: 600,
-                              cursor: isModifying || isLocked ? "wait" : "pointer",
+                              cursor: anyRunning || isLocked ? "wait" : "pointer",
+                              opacity: anyRunning && !isThisOne ? 0.45 : 1,
                             }}
                           >
-                            {isModifying ? "…" : labels[mod]}
+                            {isThisOne ? "…" : labels[mod]}
                           </button>
                         );
                       })}
