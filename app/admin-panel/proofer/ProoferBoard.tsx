@@ -3240,12 +3240,12 @@ function DayScrubber({
               }
             }}
             style={{
-              width: 52,
+              width: 36,
               flex: "1 1 0",
               minHeight: 24,
               background: bg,
               color: fg,
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
