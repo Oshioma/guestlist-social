@@ -17,7 +17,8 @@ type Props = {
   canRunAds: boolean;
 };
 
-const ENGINE_ITEMS: NavItem[] = [
+const ADS_ITEMS: NavItem[] = [
+  { label: "Client view", href: "/portal" },
   { label: "Engine Dashboard", href: "/app/engine" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
@@ -36,7 +37,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { heading: "Dashboard", items: [], headingHref: "/app/dashboard" },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
-    { heading: "Engine", items: ENGINE_ITEMS, collapsible: true },
+    { heading: "ADS", items: ADS_ITEMS, collapsible: true },
     { heading: "Tasks", items: [], headingHref: "/app/tasks" },
   ];
 
@@ -55,8 +56,6 @@ function buildUtilityItems(isAdmin: boolean): NavItem[] {
   }
   return items;
 }
-
-const externalItems: NavItem[] = [{ label: "Client view", href: "/portal" }];
 
 export default function Sidebar({ isAdmin, canRunAds }: Props) {
   const pathname = usePathname();
@@ -107,12 +106,6 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
 
         <NavSection
           group={{ heading: "Utility", items: utilityItems }}
-          isActive={isActive}
-          defaultOpen
-        />
-
-        <NavSection
-          group={{ heading: "Other views", items: externalItems }}
           isActive={isActive}
           defaultOpen
         />
