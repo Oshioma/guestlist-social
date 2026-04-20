@@ -748,10 +748,13 @@ export default function ProoferBoard({
     setGenLoading(true);
     setGenError(null);
     setGenResult(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
     try {
       const res = await fetch("/api/generate-post-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           clientId,
           month,
@@ -767,9 +770,14 @@ export default function ProoferBoard({
       }
       setGenResult({ count: data.ideas?.length ?? 0, emptySlots: data.emptySlotsFound ?? 0 });
       router.refresh();
-    } catch {
-      setGenError("Network error.");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setGenError("Timed out — try a shorter month or fewer slots.");
+      } else {
+        setGenError("Network error — please try again.");
+      }
     } finally {
+      clearTimeout(timeout);
       setGenLoading(false);
     }
   }

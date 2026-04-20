@@ -136,7 +136,8 @@ export async function POST(req: Request) {
     }
 
     const allDays = daysInMonth(year, m);
-    const emptySlots = allDays.filter((d) => !filledSlots.has(d));
+    // Cap at 15 slots per request to stay well within timeout limits
+    const emptySlots = allDays.filter((d) => !filledSlots.has(d)).slice(0, 15);
 
     if (emptySlots.length === 0) {
       return NextResponse.json({
@@ -250,8 +251,8 @@ Generate ${emptySlots.length * ideasPerSlot} ideas total (${ideasPerSlot} per sl
 
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: Math.min(8000, emptySlots.length * ideasPerSlot * 500 + 500),
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: Math.min(6000, emptySlots.length * ideasPerSlot * 400 + 500),
       messages: [
         { role: "user", content: systemPrompt + "\n\n" + userMessage },
       ],
