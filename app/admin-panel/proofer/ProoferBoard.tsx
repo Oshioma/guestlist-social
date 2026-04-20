@@ -1877,7 +1877,7 @@ export default function ProoferBoard({
                           onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
                           placeholder="Write a caption..."
                           disabled={isLocked}
-                          rows={10}
+                          rows={12}
                           style={{
                             flex: 1,
                             padding: "10px 12px",
