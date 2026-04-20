@@ -13,6 +13,8 @@ const VALID_CATEGORIES: TaskCategory[] = [
   "carousel",
   "design",
   "general",
+  "social",
+  "one_day",
 ];
 const VALID_STATUSES: TaskStatus[] = ["open", "in_progress", "completed"];
 const VALID_RECURRENCES: TaskRecurrence[] = ["none", "weekly", "monthly"];

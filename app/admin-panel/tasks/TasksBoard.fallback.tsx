@@ -16,6 +16,8 @@ const CATEGORIES: { value: TaskCategory; label: string; color: string }[] = [
   { value: "story", label: "Story", color: "#eab308" },
   { value: "design", label: "Design", color: "#a855f7" },
   { value: "general", label: "General", color: "#71717a" },
+  { value: "social", label: "Social", color: "#ec4899" },
+  { value: "one_day", label: "One Day", color: "#f97316" },
 ];
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
