@@ -26,6 +26,8 @@ async function getActivityStats() {
     storyIdeasRes,
     campaignsRes,
     decisionsRes,
+    tasksRes,
+    liveCampaignsRes,
   ] = await Promise.all([
     supabase.from("clients").select("*").eq("archived", false).order("created_at", { ascending: false }),
     supabase.from("ads").select("id, client_id, spend, clicks, impressions, ctr, status").order("created_at", { ascending: false }).limit(500),
@@ -38,6 +40,8 @@ async function getActivityStats() {
     supabase.from("story_ideas").select("id").gte("created_at", thirtyDaysAgo),
     supabase.from("campaigns").select("id, status, created_at").gte("created_at", thirtyDaysAgo),
     supabase.from("ad_decisions").select("id, status, created_at").gte("created_at", thirtyDaysAgo),
+    supabase.from("tasks").select("id, status").in("status", ["todo", "in_progress"]),
+    supabase.from("campaigns").select("id").in("status", ["live", "testing"]),
   ]);
 
   const clients = (clientsRes.data ?? []).map((row) => {
@@ -54,7 +58,8 @@ async function getActivityStats() {
     + (storyIdeasRes.data?.length ?? 0);
   const campaignsCreated = campaignsRes.data?.length ?? 0;
   const decisionsGenerated = decisionsRes.data?.length ?? 0;
-  const totalSpend = (adsRes.data ?? []).reduce((sum, a) => sum + Number(a.spend ?? 0), 0);
+  const tasksOutstanding = tasksRes.error ? 0 : (tasksRes.data?.length ?? 0);
+  const liveCampaigns = liveCampaignsRes.error ? 0 : (liveCampaignsRes.data?.length ?? 0);
 
   return {
     clients,
@@ -65,8 +70,8 @@ async function getActivityStats() {
     ideasCreated,
     campaignsCreated,
     decisionsGenerated,
-    totalSpend,
-    totalAds: adsRes.data?.length ?? 0,
+    tasksOutstanding,
+    liveCampaigns,
   };
 }
 
@@ -79,9 +84,9 @@ export default async function DashboardPage() {
       { label: "Ad Actions", value: String(stats.totalActions), sub: `${stats.completedActions} completed`, color: stats.completedActions > 0 ? "#166534" : undefined },
       { label: "Posts Proofed", value: String(stats.postsProofed), sub: `${stats.postsPublished} published`, color: stats.postsPublished > 0 ? "#166534" : undefined },
       { label: "Ideas Created", value: String(stats.ideasCreated), sub: "video + carousel + story" },
-      { label: "Campaigns", value: String(stats.campaignsCreated), sub: "created this month" },
+      { label: "Campaigns Live", value: String(stats.liveCampaigns), sub: "active right now", color: stats.liveCampaigns > 0 ? "#166534" : undefined },
       { label: "Decisions", value: String(stats.decisionsGenerated), sub: "generated this month" },
-      { label: "Total Spend", value: `£${stats.totalSpend.toFixed(0)}`, sub: `${stats.totalAds} ads tracked` },
+      { label: "Tasks Outstanding", value: String(stats.tasksOutstanding), sub: "to do + in progress", color: stats.tasksOutstanding > 0 ? "#b45309" : undefined },
     ];
 
     return (
