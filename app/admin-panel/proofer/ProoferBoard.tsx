@@ -1667,289 +1667,6 @@ export default function ProoferBoard({
                     gap: 10,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <textarea
-                      value={draft.caption}
-                      onChange={(e) =>
-                        updateDraft(dateKey, activePlatform, {
-                          caption: e.target.value,
-                        })
-                      }
-                      placeholder="Write a caption..."
-                      disabled={isLocked}
-                      rows={10}
-                      style={{
-                        ...inputStyle,
-                        flex: 1,
-                        resize: "vertical",
-                        fontFamily: "inherit",
-                        opacity: isLocked ? 0.7 : 1,
-                        cursor: isLocked ? "not-allowed" : "text",
-                      }}
-                    />
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                        justifyContent: "center",
-                        alignItems: "center",
-                        padding: "0 8px",
-                      }}
-                    >
-                      {/* status buttons */}
-                      {["proofed", "check", "improve"].map(
-                        (statusValue) => {
-                          const btn = STATUS_BUTTONS.find(
-                            (b) => b.value === statusValue
-                          )!;
-                          const active = effectiveStatus === btn.value;
-                          const disableThisButton =
-                            isPending ||
-                            (isLocked && btn.value !== "proofed");
-
-                          return (
-                            <button
-                              key={btn.value}
-                              type="button"
-                              title={btn.label}
-                              aria-label={btn.label}
-                              onClick={() =>
-                                handleStatus(
-                                  dateKey,
-                                  activePlatform,
-                                  btn.value
-                                )
-                              }
-                              disabled={disableThisButton}
-                              style={{
-                                width: 16,
-                                height: 16,
-                                padding: 0,
-                                borderRadius: "50%",
-                                border: "1px solid #e4e4e7",
-                                background: btn.dot,
-                                cursor: disableThisButton
-                                  ? "not-allowed"
-                                  : "pointer",
-                                boxShadow: "none",
-                                opacity: disableThisButton
-                                  ? 0.35
-                                  : active
-                                  ? 1
-                                  : 0.35,
-                                transition: "opacity 120ms ease",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!disableThisButton && !active) {
-                                  e.currentTarget.style.opacity = "0.75";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!disableThisButton && !active) {
-                                  e.currentTarget.style.opacity = "0.35";
-                                }
-                              }}
-                            />
-                          );
-                        }
-                      )}
-                    </div>
-                  </div>
-
-                  {draft.caption.trim() && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {(["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
-                        const labels: Record<string, string> = {
-                          new_hook: "↺ Hook",
-                          shorter: "Shorter",
-                          more_playful: "More playful",
-                          more_premium: "More premium",
-                          stronger_cta: "Stronger CTA",
-                          regenerate: "Regenerate",
-                        };
-                        const activeModifier = captionModifying[postKey(dateKey, activePlatform)];
-                        const isThisOne = activeModifier === mod;
-                        const anyRunning = !!activeModifier;
-                        return (
-                          <button
-                            key={mod}
-                            type="button"
-                            disabled={anyRunning || isLocked}
-                            onClick={() => handleModifyCaption(dateKey, activePlatform, mod)}
-                            style={{
-                              padding: "3px 9px",
-                              borderRadius: 99,
-                              border: "1px solid #e4e4e7",
-                              background: isThisOne ? "#e0f2fe" : "#fff",
-                              color: isThisOne ? "#0369a1" : "#52525b",
-                              fontSize: 11,
-                              fontWeight: 600,
-                              cursor: anyRunning || isLocked ? "wait" : "pointer",
-                              opacity: anyRunning && !isThisOne ? 0.45 : 1,
-                            }}
-                          >
-                            {isThisOne ? "…" : labels[mod]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Media section — REMOVED (images shown in preview below) */}
-                  {false && draft.mediaUrls.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        alignItems: "stretch",
-                      }}
-                    >
-                      {draft.mediaUrls.map((url, idx) => (
-                        <div
-                          key={`${url}-${idx}`}
-                          style={{
-                            width: "100%",
-                            maxWidth: 400,
-                            border: "1px solid #e4e4e7",
-                            borderRadius: 8,
-                            background: "#fafafa",
-                            overflow: "hidden",
-                            display: "flex",
-                            flexDirection: "column",
-                            opacity: isLocked ? 0.7 : 1,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: "100%",
-                              background: "#f4f4f5",
-                              position: "relative",
-                            }}
-                          >
-                            {isVideoUrl(url) ? (
-                              <video
-                                src={url}
-                                controls
-                                style={{
-                                  display: "block",
-                                  width: "100%",
-                                  maxHeight: 300,
-                                  objectFit: "contain",
-                                }}
-                              />
-                            ) : (
-                              <img
-                                src={url}
-                                alt={prettyFileName(url)}
-                                style={{
-                                  display: "block",
-                                  width: "100%",
-                                  maxHeight: 300,
-                                  objectFit: "contain",
-                                }}
-                              />
-                            )}
-                            <div
-                              style={{
-                                position: "absolute",
-                                top: 4,
-                                left: 4,
-                                background: "rgba(0,0,0,0.6)",
-                                color: "#fff",
-                                fontSize: 10,
-                                fontWeight: 700,
-                                padding: "2px 5px",
-                                borderRadius: 4,
-                              }}
-                            >
-                              {idx + 1}
-                            </div>
-                          </div>
-
-                          {!isLocked && (
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "4px 6px",
-                                gap: 2,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  moveMedia(dateKey, activePlatform, idx, -1)
-                                }
-                                disabled={idx === 0}
-                                style={{
-                                  border: "none",
-                                  background: "transparent",
-                                  color: idx === 0 ? "#d4d4d8" : "#52525b",
-                                  cursor: idx === 0 ? "default" : "pointer",
-                                  padding: 2,
-                                  fontSize: 12,
-                                }}
-                                aria-label="Move left"
-                              >
-                                ◀
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeMediaAt(dateKey, activePlatform, idx)
-                                }
-                                style={{
-                                  border: "none",
-                                  background: "transparent",
-                                  color: "#991b1b",
-                                  cursor: "pointer",
-                                  padding: 2,
-                                  fontSize: 12,
-                                  fontWeight: 700,
-                                }}
-                                aria-label="Remove"
-                              >
-                                ×
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  moveMedia(dateKey, activePlatform, idx, 1)
-                                }
-                                disabled={idx === draft.mediaUrls.length - 1}
-                                style={{
-                                  border: "none",
-                                  background: "transparent",
-                                  color:
-                                    idx === draft.mediaUrls.length - 1
-                                      ? "#d4d4d8"
-                                      : "#52525b",
-                                  cursor:
-                                    idx === draft.mediaUrls.length - 1
-                                      ? "default"
-                                      : "pointer",
-                                  padding: 2,
-                                  fontSize: 12,
-                                }}
-                                aria-label="Move right"
-                              >
-                                ▶
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
 
                   <div
@@ -2092,6 +1809,7 @@ export default function ProoferBoard({
                         boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                       }}
                     >
+                      {/* Header */}
                       <div
                         style={{
                           display: "flex",
@@ -2114,52 +1832,29 @@ export default function ProoferBoard({
                             color: "#71717a",
                           }}
                         >
-                          {(
-                            clients.find((c) => c.id === clientId)?.name ?? "?"
-                          )
-                            .charAt(0)
-                            .toUpperCase()}
+                          {(clients.find((c) => c.id === clientId)?.name ?? "?").charAt(0).toUpperCase()}
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: "#18181b",
-                              lineHeight: 1.2,
-                            }}
-                          >
-                            {clients.find((c) => c.id === clientId)?.name ??
-                              "Client"}
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#18181b", lineHeight: 1.2 }}>
+                            {clients.find((c) => c.id === clientId)?.name ?? "Client"}
                           </span>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: "#71717a",
-                              lineHeight: 1.2,
-                            }}
-                          >
+                          <span style={{ fontSize: 11, color: "#71717a", lineHeight: 1.2 }}>
                             {formatDayLong(d)}
                           </span>
                         </div>
 
-                        {draft.pillarId &&
-                          pillarsById.get(draft.pillarId) && (
+                        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                          {draft.pillarId && pillarsById.get(draft.pillarId) && (
                             <span
                               style={{
-                                marginLeft: "auto",
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: 6,
                                 padding: "4px 10px",
                                 borderRadius: 999,
-                                background: `${
-                                  pillarsById.get(draft.pillarId)!.color
-                                }15`,
-                                border: `1px solid ${
-                                  pillarsById.get(draft.pillarId)!.color
-                                }`,
+                                background: `${pillarsById.get(draft.pillarId)!.color}15`,
+                                border: `1px solid ${pillarsById.get(draft.pillarId)!.color}`,
                                 color: pillarsById.get(draft.pillarId)!.color,
                                 fontSize: 11,
                                 fontWeight: 700,
@@ -2170,16 +1865,46 @@ export default function ProoferBoard({
                                   width: 8,
                                   height: 8,
                                   borderRadius: "50%",
-                                  background: pillarsById.get(draft.pillarId)!
-                                    .color,
+                                  background: pillarsById.get(draft.pillarId)!.color,
                                   display: "inline-block",
                                 }}
                               />
                               {pillarsById.get(draft.pillarId)!.name}
                             </span>
                           )}
+                          {["improve", "check", "proofed"].map((statusValue) => {
+                            const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
+                            const active = effectiveStatus === btn.value;
+                            const disableThisButton = isPending || (isLocked && btn.value !== "proofed");
+                            return (
+                              <button
+                                key={btn.value}
+                                type="button"
+                                title={btn.label}
+                                aria-label={btn.label}
+                                onClick={() => handleStatus(dateKey, activePlatform, btn.value)}
+                                disabled={disableThisButton}
+                                style={{
+                                  width: 16,
+                                  height: 16,
+                                  padding: 0,
+                                  borderRadius: "50%",
+                                  border: "1px solid #e4e4e7",
+                                  background: btn.dot,
+                                  cursor: disableThisButton ? "not-allowed" : "pointer",
+                                  boxShadow: "none",
+                                  opacity: disableThisButton ? 0.35 : active ? 1 : 0.35,
+                                  transition: "opacity 120ms ease",
+                                }}
+                                onMouseEnter={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.75"; }}
+                                onMouseLeave={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.35"; }}
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
 
+                      {/* Image */}
                       <div
                         style={{
                           width: "100%",
@@ -2225,9 +1950,69 @@ export default function ProoferBoard({
                         )}
                       </div>
 
+                      {/* Editable caption */}
+                      <div style={{ padding: "10px 12px 4px", borderTop: "1px solid #f4f4f5" }}>
+                        <textarea
+                          value={draft.caption}
+                          onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
+                          placeholder="Write a caption..."
+                          disabled={isLocked}
+                          rows={8}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            border: "none",
+                            outline: "none",
+                            resize: "none",
+                            fontSize: 13,
+                            color: "#18181b",
+                            lineHeight: 1.4,
+                            fontFamily: "inherit",
+                            background: "transparent",
+                            opacity: isLocked ? 0.7 : 1,
+                            cursor: isLocked ? "not-allowed" : "text",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      {/* Modifier buttons */}
                       {draft.caption.trim() && (
-                        <div style={{ padding: "10px 12px 12px", fontSize: 13, color: "#18181b", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
-                          {draft.caption}
+                        <div style={{ padding: "0 12px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {(["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
+                            const labels: Record<string, string> = {
+                              new_hook: "↺ Hook",
+                              shorter: "Shorter",
+                              more_playful: "More playful",
+                              more_premium: "More premium",
+                              stronger_cta: "Stronger CTA",
+                              regenerate: "Regenerate",
+                            };
+                            const activeModifier = captionModifying[postKey(dateKey, activePlatform)];
+                            const isThisOne = activeModifier === mod;
+                            const anyRunning = !!activeModifier;
+                            return (
+                              <button
+                                key={mod}
+                                type="button"
+                                disabled={anyRunning || isLocked}
+                                onClick={() => handleModifyCaption(dateKey, activePlatform, mod)}
+                                style={{
+                                  padding: "3px 9px",
+                                  borderRadius: 99,
+                                  border: "1px solid #e4e4e7",
+                                  background: isThisOne ? "#e0f2fe" : "#fff",
+                                  color: isThisOne ? "#0369a1" : "#52525b",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: anyRunning || isLocked ? "wait" : "pointer",
+                                  opacity: anyRunning && !isThisOne ? 0.45 : 1,
+                                }}
+                              >
+                                {isThisOne ? "…" : labels[mod]}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
