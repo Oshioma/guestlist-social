@@ -674,8 +674,52 @@ export default function PublishQueueBoard({
             No approved posts waiting to be queued.
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 20 }}>
-            {readyPosts.map((post) => {
+          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+            {(() => {
+              const grouped = new Map<string, typeof readyPosts>();
+              for (const post of readyPosts) {
+                const key = post.clientName;
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key)!.push(post);
+              }
+              return Array.from(grouped.entries()).map(([clientName, posts]) => (
+                <div key={clientName}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginBottom: 12,
+                      paddingBottom: 8,
+                      borderBottom: "1px solid #e4e4e7",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {clientName[0].toUpperCase()}
+                    </div>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "#18181b" }}>
+                      {clientName}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#a1a1aa" }}>
+                      {posts.length} post{posts.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {posts.map((post) => {
               const images = post.mediaUrls.length > 0
                 ? post.mediaUrls
                 : post.imageUrl
@@ -865,6 +909,10 @@ export default function PublishQueueBoard({
               </div>
               );
             })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         )}
       </SectionCard>
