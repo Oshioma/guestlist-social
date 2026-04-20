@@ -397,6 +397,7 @@ export default function ProoferBoard({
 
   function handleSelectClient(id: string) {
     setClientId(id);
+    document.cookie = `proofer_last_client=${id};path=/;max-age=${60 * 60 * 24 * 365}`;
     navigate(id, month);
   }
 

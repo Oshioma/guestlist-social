@@ -1,8 +1,11 @@
+import { cookies } from "next/headers";
 import { getProoferData } from "../lib/queries";
 import ProoferBoard from "./ProoferBoard";
 import EmptyState from "../components/EmptyState";
 
 export const dynamic = "force-dynamic";
+
+const COOKIE_NAME = "proofer_last_client";
 
 function getNextSixMonths(): { value: string; label: string }[] {
   const now = new Date();
@@ -29,9 +32,14 @@ export default async function ProoferPage({
   const defaultMonth = months[0]?.value ?? "";
   const selectedMonth = sp.month ?? defaultMonth;
 
+  const cookieStore = await cookies();
+  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+
   try {
-    // Resolve the client up front so we only call getProoferData once.
     let selectedClientId = sp.client ?? "";
+    if (!selectedClientId && lastClient) {
+      selectedClientId = lastClient;
+    }
     if (!selectedClientId) {
       const { clients } = await getProoferData();
       selectedClientId = clients[0]?.id ?? "";
