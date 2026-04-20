@@ -1,4 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient } from "../../../lib/supabase/admin";
 import { supabaseTasksAdapter } from "./tasks/supabase-adapter";
 import {
   mapDbAdToUiAd,
@@ -222,16 +223,31 @@ export async function getTasksData(): Promise<{
   });
 
   const supabase = await createClient();
-  const [videoRes, carouselRes, storyRes] = await Promise.all([
-    supabase.from("video_ideas").select("created_by"),
-    supabase.from("carousel_ideas").select("created_by"),
-    supabase.from("story_ideas").select("created_by"),
-  ]);
+  const admin = createAdminClient();
+
+  const [videoRes, carouselRes, storyRes, usersResp, linkRows] =
+    await Promise.all([
+      supabase.from("video_ideas").select("created_by"),
+      supabase.from("carousel_ideas").select("created_by"),
+      supabase.from("story_ideas").select("created_by"),
+      admin.auth.admin.listUsers({ perPage: 200 }),
+      admin.from("client_user_links").select("auth_user_id"),
+    ]);
 
   [videoRes.data, carouselRes.data, storyRes.data].forEach((rows) => {
     (rows ?? []).forEach((r: { created_by?: string | null }) => {
       if (r.created_by) userSet.add(r.created_by);
     });
+  });
+
+  // Add every admin-panel team member (exclude client/portal users).
+  const clientUserIds = new Set(
+    ((linkRows.data as { auth_user_id: string }[] | null) ?? []).map(
+      (r) => r.auth_user_id
+    )
+  );
+  (usersResp.data?.users ?? []).forEach((u) => {
+    if (!clientUserIds.has(u.id) && u.email) userSet.add(u.email);
   });
 
   const knownUsers = Array.from(userSet)
