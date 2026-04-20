@@ -11,7 +11,6 @@ import type {
   ContentPillar,
   IdeaKind,
   PostIdea,
-  PostIdeaStatus,
 } from "../lib/types";
 import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
 import type { ProoferIdeaLite } from "../lib/queries";
@@ -27,8 +26,6 @@ import {
   createIdeaFromProoferAction,
   updateIdeaFromProoferAction,
   rejectPostIdeaAction,
-  markIdeaWeakAction,
-  updatePostIdeaFieldAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -287,10 +284,6 @@ export default function ProoferBoard({
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
-  const [expandedIdeaId, setExpandedIdeaId] = useState<string | null>(null);
-  const [ideaRegenLoading, setIdeaRegenLoading] = useState<Record<string, boolean>>({});
-  const [ideaFieldEdits, setIdeaFieldEdits] = useState<Record<string, Record<string, string>>>({});
-  const [promotingIdeaId, setPromotingIdeaId] = useState<string | null>(null);
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -791,10 +784,38 @@ export default function ProoferBoard({
             } else if (msg.type === "idea") {
               const idea = msg.idea as PostIdea;
               setPostIdeas((prev) => {
-                // avoid duplicates if refresh also loads the idea
                 if (prev.some((i) => i.id === idea.id)) return prev;
                 return [...prev, idea];
               });
+
+              // Auto-fill the caption textarea for this slot if it's empty
+              const slotKey = postKey(
+                idea.postSlotDate.slice(0, 10),
+                idea.platform as ProoferPlatform
+              );
+              setDrafts((prev) => {
+                if (prev[slotKey]) return prev; // don't overwrite existing draft
+                const composed = [
+                  idea.firstLine,
+                  idea.captionIdea,
+                  idea.cta,
+                  idea.hashtags,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n");
+                return {
+                  ...prev,
+                  [slotKey]: {
+                    caption: composed,
+                    mediaUrls: [],
+                    pillarId: idea.contentPillarId ?? null,
+                    linkedIdeaId: null,
+                    linkedIdeaKind: null,
+                    publishTime: "18:00",
+                  },
+                };
+              });
+
               totalCount++;
               setGenResult({ count: totalCount, emptySlots });
 
@@ -821,136 +842,15 @@ export default function ProoferBoard({
     }
   }
 
-  async function handlePromoteIdea(ideaId: string) {
-    setPromotingIdeaId(ideaId);
-    try {
-      const res = await fetch("/api/promote-post-idea", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ideaId }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        alert(data.error ?? "Could not promote idea.");
-        return;
-      }
-      // Update idea status locally
-      setPostIdeas((prev) =>
-        prev.map((i) => (i.id === ideaId ? { ...i, status: "promoted" as PostIdeaStatus } : i))
-      );
-      router.refresh();
-    } catch {
-      alert("Network error.");
-    } finally {
-      setPromotingIdeaId(null);
-    }
-  }
-
   async function handleRejectIdea(ideaId: string) {
     startTransition(async () => {
       try {
         await rejectPostIdeaAction(ideaId);
         setPostIdeas((prev) => prev.filter((i) => i.id !== ideaId));
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not reject idea.");
+        alert(err instanceof Error ? err.message : "Could not dismiss idea.");
       }
     });
-  }
-
-  async function handleToggleWeak(ideaId: string, current: boolean) {
-    startTransition(async () => {
-      try {
-        await markIdeaWeakAction(ideaId, !current);
-        setPostIdeas((prev) =>
-          prev.map((i) => (i.id === ideaId ? { ...i, isWeak: !current } : i))
-        );
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not update idea.");
-      }
-    });
-  }
-
-  async function handleRegenField(
-    ideaId: string,
-    field: "caption_idea" | "image_idea" | "cta" | "first_line" | "hashtags",
-    modifier: string
-  ) {
-    setIdeaRegenLoading((prev) => ({ ...prev, [`${ideaId}:${field}`]: true }));
-    try {
-      const res = await fetch("/api/regenerate-post-idea-field", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ideaId, field, modifier }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        alert(data.error ?? "Regeneration failed.");
-        return;
-      }
-      // Save to DB
-      await updatePostIdeaFieldAction(ideaId, field, data.value);
-      // Update local state
-      setPostIdeas((prev) =>
-        prev.map((i) => {
-          if (i.id !== ideaId) return i;
-          const fieldMap: Record<string, keyof PostIdea> = {
-            caption_idea: "captionIdea",
-            image_idea: "imageIdea",
-            cta: "cta",
-            first_line: "firstLine",
-            hashtags: "hashtags",
-          };
-          return { ...i, [fieldMap[field]]: data.value };
-        })
-      );
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIdeaRegenLoading((prev) => {
-        const next = { ...prev };
-        delete next[`${ideaId}:${field}`];
-        return next;
-      });
-    }
-  }
-
-  function getIdeaFieldEdit(ideaId: string, field: string, fallback: string): string {
-    return ideaFieldEdits[ideaId]?.[field] ?? fallback;
-  }
-
-  function setIdeaFieldEdit(ideaId: string, field: string, value: string) {
-    setIdeaFieldEdits((prev) => ({
-      ...prev,
-      [ideaId]: { ...(prev[ideaId] ?? {}), [field]: value },
-    }));
-  }
-
-  async function handleSaveIdeaFieldEdit(
-    ideaId: string,
-    field: "caption_idea" | "image_idea" | "cta" | "first_line" | "hashtags",
-  ) {
-    const value = ideaFieldEdits[ideaId]?.[field];
-    if (value === undefined) return;
-    try {
-      await updatePostIdeaFieldAction(ideaId, field, value);
-      const fieldMap: Record<string, keyof PostIdea> = {
-        caption_idea: "captionIdea",
-        image_idea: "imageIdea",
-        cta: "cta",
-        first_line: "firstLine",
-        hashtags: "hashtags",
-      };
-      setPostIdeas((prev) =>
-        prev.map((i) => (i.id === ideaId ? { ...i, [fieldMap[field]]: value } : i))
-      );
-      setIdeaFieldEdits((prev) => {
-        const next = { ...prev };
-        if (next[ideaId]) delete next[ideaId][field];
-        return next;
-      });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not save.");
-    }
   }
 
   const visibleDays = useMemo(() => {
@@ -1850,218 +1750,6 @@ export default function ProoferBoard({
                       );
                     })()}
 
-                    {(() => {
-                      const selectedPillar = draft.pillarId
-                        ? pillarsById.get(draft.pillarId) ?? null
-                        : null;
-                      if (!selectedPillar) return null;
-
-                      const pickerKey = postKey(dateKey, activePlatform);
-                      const isOpen = openIdeaPickerKey === pickerKey;
-                      const pillarIdeas = initialIdeas.filter(
-                        (idea) => idea.pillarId === selectedPillar.id
-                      );
-                      // Always allow the currently-selected idea to stay
-                      // visible, even if it's marked used elsewhere.
-                      const currentKey = draft.linkedIdeaId && draft.linkedIdeaKind
-                        ? `${draft.linkedIdeaKind}:${draft.linkedIdeaId}`
-                        : null;
-                      const selectableIdeas = pillarIdeas.filter(
-                        (idea) =>
-                          !idea.usedInPostId ||
-                          `${idea.kind}:${idea.id}` === currentKey
-                      );
-                      const selectedIdea = currentKey
-                        ? ideasById.get(currentKey) ?? null
-                        : null;
-
-                      return (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 4,
-                            position: "relative",
-                          }}
-                        >
-                          <span style={labelStyle}>Idea</span>
-                          <button
-                            type="button"
-                            disabled={isLocked}
-                            onClick={() =>
-                              setOpenIdeaPickerKey(isOpen ? null : pickerKey)
-                            }
-                            style={{
-                              ...inputStyle,
-                              padding: "6px 8px",
-                              fontSize: 12,
-                              fontWeight: 600,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              textAlign: "left",
-                              cursor: isLocked ? "not-allowed" : "pointer",
-                              opacity: isLocked ? 0.7 : 1,
-                              background: "#fff",
-                            }}
-                          >
-                            <span
-                              style={{
-                                flex: 1,
-                                color: selectedIdea ? "#18181b" : "#a1a1aa",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {selectedIdea
-                                ? selectedIdea.text
-                                : `Pick an idea (${selectableIdeas.length})`}
-                            </span>
-                            <span
-                              style={{ color: "#a1a1aa", fontSize: 10 }}
-                              aria-hidden
-                            >
-                              ▾
-                            </span>
-                          </button>
-                          {isOpen && (
-                            <>
-                              <div
-                                onClick={() => setOpenIdeaPickerKey(null)}
-                                style={{
-                                  position: "fixed",
-                                  inset: 0,
-                                  zIndex: 20,
-                                }}
-                              />
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: "100%",
-                                  left: 0,
-                                  right: 0,
-                                  marginTop: 4,
-                                  background: "#fff",
-                                  border: "1px solid #e4e4e7",
-                                  borderRadius: 8,
-                                  boxShadow:
-                                    "0 6px 16px rgba(0,0,0,0.08)",
-                                  zIndex: 21,
-                                  maxHeight: 260,
-                                  overflowY: "auto",
-                                  padding: 4,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateDraft(dateKey, activePlatform, {
-                                      linkedIdeaId: null,
-                                      linkedIdeaKind: null,
-                                    });
-                                    setOpenIdeaPickerKey(null);
-                                  }}
-                                  style={{
-                                    width: "100%",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "6px 8px",
-                                    border: "none",
-                                    background:
-                                      draft.linkedIdeaId === null
-                                        ? "#f4f4f5"
-                                        : "transparent",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    color: "#71717a",
-                                    textAlign: "left",
-                                  }}
-                                >
-                                  None
-                                </button>
-                                {selectableIdeas.length === 0 ? (
-                                  <div
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: 11,
-                                      color: "#a1a1aa",
-                                    }}
-                                  >
-                                    No available ideas in this pillar.
-                                  </div>
-                                ) : (
-                                  selectableIdeas.map((idea) => {
-                                    const key = `${idea.kind}:${idea.id}`;
-                                    const isSelected = key === currentKey;
-                                    return (
-                                      <button
-                                        key={key}
-                                        type="button"
-                                        onClick={() => {
-                                          updateDraft(dateKey, activePlatform, {
-                                            linkedIdeaId: idea.id,
-                                            linkedIdeaKind: idea.kind,
-                                          });
-                                          setOpenIdeaPickerKey(null);
-                                        }}
-                                        title={idea.text}
-                                        style={{
-                                          width: "100%",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          padding: "6px 8px",
-                                          border: "none",
-                                          background: isSelected
-                                            ? "#f4f4f5"
-                                            : "transparent",
-                                          borderRadius: 6,
-                                          cursor: "pointer",
-                                          fontSize: 12,
-                                          fontWeight: 500,
-                                          color: "#18181b",
-                                          textAlign: "left",
-                                        }}
-                                      >
-                                        <span
-                                          style={{
-                                            fontSize: 9,
-                                            fontWeight: 700,
-                                            padding: "1px 6px",
-                                            borderRadius: 999,
-                                            background: "#f4f4f5",
-                                            color: "#71717a",
-                                            textTransform: "uppercase",
-                                            letterSpacing: "0.04em",
-                                            flexShrink: 0,
-                                          }}
-                                        >
-                                          {idea.kind}
-                                        </span>
-                                        <span
-                                          style={{
-                                            flex: 1,
-                                            overflow: "hidden",
-                                            textOverflow: "ellipsis",
-                                            whiteSpace: "nowrap",
-                                          }}
-                                        >
-                                          {idea.text}
-                                        </span>
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })()}
                   </div>
                 </div>
 
@@ -3273,479 +2961,44 @@ export default function ProoferBoard({
                 </div>
               </div>
 
-              {/* AI idea cards for this slot */}
-              {slotIdeas.length > 0 && (
+              {/* AI image concept hints */}
+              {slotIdeas.filter((i) => i.imageIdea).map((idea, idx) => (
                 <div
+                  key={idea.id}
                   style={{
-                    borderLeft: "1px solid #e4e4e7",
-                    borderRight: "1px solid #e4e4e7",
-                    borderBottom: "1px solid #e4e4e7",
-                    borderRadius: "0 0 12px 12px",
-                    overflow: "hidden",
+                    padding: "8px 14px",
+                    borderLeft: "1px solid #e0f2fe",
+                    borderRight: "1px solid #e0f2fe",
+                    borderBottom: idx === slotIdeas.filter((i) => i.imageIdea).length - 1 ? "1px solid #e0f2fe" : undefined,
+                    borderTop: idx === 0 ? "1px solid #e0f2fe" : "1px solid #e4e4e7",
+                    borderRadius: idx === slotIdeas.filter((i) => i.imageIdea).length - 1 ? "0 0 12px 12px" : undefined,
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                    background: "#f0f9ff",
                   }}
                 >
-                  <div
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0, paddingTop: 1 }}>📷</span>
+                  <span style={{ fontSize: 12, color: "#374151", flex: 1, lineHeight: 1.5 }}>{idea.imageIdea}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRejectIdea(idea.id)}
                     style={{
-                      padding: "8px 16px",
-                      background: "#f0f9ff",
-                      borderBottom: "1px solid #e0f2fe",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#0369a1",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
+                      flexShrink: 0,
+                      padding: "0 5px",
+                      border: "none",
+                      background: "transparent",
+                      color: "#94a3b8",
+                      fontSize: 14,
+                      lineHeight: 1,
+                      cursor: "pointer",
                     }}
+                    title="Dismiss"
                   >
-                    ✦ AI Ideas ({slotIdeas.length})
-                  </div>
-                  {slotIdeas.map((idea, ideaIndex) => {
-                    const isExpanded = expandedIdeaId === idea.id;
-                    const isPromoting = promotingIdeaId === idea.id;
-                    const pillar = idea.contentPillarId
-                      ? pillarsById.get(idea.contentPillarId)
-                      : null;
-                    return (
-                      <div
-                        key={idea.id}
-                        style={{
-                          borderTop: ideaIndex > 0 ? "1px solid #e4e4e7" : undefined,
-                          background: idea.status === "promoted"
-                            ? "#f0fdf4"
-                            : idea.isWeak
-                            ? "#fffbeb"
-                            : "#fff",
-                          padding: "12px 16px",
-                        }}
-                      >
-                        {/* Header row */}
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            flexWrap: "wrap",
-                            marginBottom: isExpanded ? 12 : 0,
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontSize: 13,
-                                fontWeight: 700,
-                                color: "#18181b",
-                                marginBottom: 2,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              {idea.title ?? "AI Idea"}
-                              {idea.status === "promoted" && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    background: "#dcfce7",
-                                    color: "#166534",
-                                    padding: "2px 6px",
-                                    borderRadius: 99,
-                                    border: "1px solid #86efac",
-                                  }}
-                                >
-                                  Promoted
-                                </span>
-                              )}
-                              {idea.isWeak && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    background: "#fef9c3",
-                                    color: "#854d0e",
-                                    padding: "2px 6px",
-                                    borderRadius: 99,
-                                    border: "1px solid #fde047",
-                                  }}
-                                >
-                                  Weak
-                                </span>
-                              )}
-                              {pillar && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    background: "#fafafa",
-                                    color: "#52525b",
-                                    padding: "2px 6px",
-                                    borderRadius: 99,
-                                    border: "1px solid #e4e4e7",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      width: 6,
-                                      height: 6,
-                                      borderRadius: "50%",
-                                      background: pillar.color,
-                                      display: "inline-block",
-                                    }}
-                                  />
-                                  {pillar.name}
-                                </span>
-                              )}
-                              {idea.format && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    color: "#71717a",
-                                    padding: "2px 6px",
-                                    borderRadius: 99,
-                                    border: "1px solid #e4e4e7",
-                                  }}
-                                >
-                                  {idea.format}
-                                </span>
-                              )}
-                            </div>
-                            {!isExpanded && idea.firstLine && (
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  color: "#52525b",
-                                  whiteSpace: "nowrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  maxWidth: 480,
-                                  marginTop: 2,
-                                }}
-                              >
-                                {idea.firstLine}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action buttons */}
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedIdeaId(isExpanded ? null : idea.id)
-                              }
-                              style={{
-                                padding: "5px 10px",
-                                borderRadius: 6,
-                                border: "1px solid #e4e4e7",
-                                background: "#fff",
-                                color: "#52525b",
-                                fontSize: 11,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {isExpanded ? "Collapse" : "Expand"}
-                            </button>
-
-                            {idea.status !== "promoted" && (
-                              <button
-                                type="button"
-                                onClick={() => handlePromoteIdea(idea.id)}
-                                disabled={isPromoting}
-                                style={{
-                                  padding: "5px 10px",
-                                  borderRadius: 6,
-                                  border: "none",
-                                  background: isPromoting
-                                    ? "#bbf7d0"
-                                    : "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
-                                  color: "#fff",
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  cursor: isPromoting ? "wait" : "pointer",
-                                }}
-                              >
-                                {isPromoting ? "Promoting..." : "Promote →"}
-                              </button>
-                            )}
-
-                            <label
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 4,
-                                fontSize: 11,
-                                color: "#71717a",
-                                cursor: "pointer",
-                              }}
-                              title="Mark as weak — helps you track ideas that need improvement"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={idea.isWeak}
-                                onChange={() =>
-                                  handleToggleWeak(idea.id, idea.isWeak)
-                                }
-                                style={{ cursor: "pointer" }}
-                              />
-                              Weak
-                            </label>
-
-                            <button
-                              type="button"
-                              onClick={() => handleRejectIdea(idea.id)}
-                              disabled={isPending}
-                              style={{
-                                padding: "5px 8px",
-                                borderRadius: 6,
-                                border: "1px solid #fca5a5",
-                                background: "#fff",
-                                color: "#991b1b",
-                                fontSize: 11,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                              title="Dismiss this idea"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Expanded content */}
-                        {isExpanded && (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 12,
-                            }}
-                          >
-                            {(
-                              [
-                                {
-                                  field: "caption_idea" as const,
-                                  label: "Caption",
-                                  value: idea.captionIdea,
-                                },
-                                {
-                                  field: "first_line" as const,
-                                  label: "Opening hook",
-                                  value: idea.firstLine,
-                                },
-                                {
-                                  field: "image_idea" as const,
-                                  label: "Image / visual concept",
-                                  value: idea.imageIdea,
-                                },
-                                {
-                                  field: "cta" as const,
-                                  label: "CTA",
-                                  value: idea.cta,
-                                },
-                                {
-                                  field: "hashtags" as const,
-                                  label: "Hashtags",
-                                  value: idea.hashtags,
-                                },
-                              ] as {
-                                field:
-                                  | "caption_idea"
-                                  | "image_idea"
-                                  | "cta"
-                                  | "first_line"
-                                  | "hashtags";
-                                label: string;
-                                value: string | null;
-                              }[]
-                            )
-                              .filter((f) => f.value)
-                              .map(({ field, label, value }) => {
-                                const editKey = `${idea.id}:${field}`;
-                                const editVal =
-                                  ideaFieldEdits[idea.id]?.[field];
-                                const isRegenning =
-                                  ideaRegenLoading[editKey] ?? false;
-                                const MODIFIERS = [
-                                  {
-                                    key: "shorter",
-                                    label: "Make shorter",
-                                  },
-                                  {
-                                    key: "stronger_cta",
-                                    label: "Stronger CTA",
-                                  },
-                                  {
-                                    key: "more_premium",
-                                    label: "More premium",
-                                  },
-                                  {
-                                    key: "more_playful",
-                                    label: "More playful",
-                                  },
-                                  {
-                                    key: "regenerate",
-                                    label: "Regenerate",
-                                  },
-                                ];
-                                return (
-                                  <div key={field}>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "space-between",
-                                        gap: 8,
-                                        marginBottom: 4,
-                                        flexWrap: "wrap",
-                                      }}
-                                    >
-                                      <span style={labelStyle}>{label}</span>
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 4,
-                                          flexWrap: "wrap",
-                                        }}
-                                      >
-                                        {MODIFIERS.map((m) => (
-                                          <button
-                                            key={m.key}
-                                            type="button"
-                                            disabled={isRegenning}
-                                            onClick={() =>
-                                              handleRegenField(
-                                                idea.id,
-                                                field,
-                                                m.key
-                                              )
-                                            }
-                                            style={{
-                                              padding: "3px 8px",
-                                              borderRadius: 6,
-                                              border: "1px solid #e4e4e7",
-                                              background: isRegenning
-                                                ? "#f4f4f5"
-                                                : "#fff",
-                                              color: "#52525b",
-                                              fontSize: 10,
-                                              fontWeight: 600,
-                                              cursor: isRegenning
-                                                ? "wait"
-                                                : "pointer",
-                                            }}
-                                          >
-                                            {isRegenning ? "..." : m.label}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <textarea
-                                      value={
-                                        editVal !== undefined
-                                          ? editVal
-                                          : (value ?? "")
-                                      }
-                                      onChange={(e) =>
-                                        setIdeaFieldEdit(
-                                          idea.id,
-                                          field,
-                                          e.target.value
-                                        )
-                                      }
-                                      rows={field === "caption_idea" ? 4 : 2}
-                                      style={{
-                                        ...inputStyle,
-                                        width: "100%",
-                                        resize: "vertical",
-                                        fontFamily: "inherit",
-                                        lineHeight: 1.5,
-                                        boxSizing: "border-box",
-                                        background: editVal !== undefined
-                                          ? "#fffbeb"
-                                          : "#fafafa",
-                                        fontSize: 13,
-                                      }}
-                                    />
-                                    {editVal !== undefined && (
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          gap: 6,
-                                          marginTop: 4,
-                                        }}
-                                      >
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleSaveIdeaFieldEdit(
-                                              idea.id,
-                                              field
-                                            )
-                                          }
-                                          style={{
-                                            padding: "4px 10px",
-                                            borderRadius: 6,
-                                            border: "none",
-                                            background: "#18181b",
-                                            color: "#fff",
-                                            fontSize: 11,
-                                            fontWeight: 700,
-                                            cursor: "pointer",
-                                          }}
-                                        >
-                                          Save edit
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setIdeaFieldEdits((prev) => {
-                                              const next = { ...prev };
-                                              if (next[idea.id])
-                                                delete next[idea.id][field];
-                                              return next;
-                                            });
-                                          }}
-                                          style={{
-                                            padding: "4px 10px",
-                                            borderRadius: 6,
-                                            border: "1px solid #e4e4e7",
-                                            background: "#fff",
-                                            color: "#52525b",
-                                            fontSize: 11,
-                                            fontWeight: 600,
-                                            cursor: "pointer",
-                                          }}
-                                        >
-                                          Discard
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                    ×
+                  </button>
                 </div>
-              )}
+              ))}
               </div>
             );
           })}

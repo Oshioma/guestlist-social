@@ -122,7 +122,8 @@ export async function POST(req: Request) {
         }
 
         const allDays    = daysInMonth(year, m);
-        const emptySlots = allDays.filter((d) => !filledSlots.has(d));
+        const todayStr   = new Date().toISOString().slice(0, 10);
+        const emptySlots = allDays.filter((d) => !filledSlots.has(d) && d >= todayStr);
 
         if (emptySlots.length === 0) {
           send(controller, encoder, { type: "status", emptySlotsFound: 0 });
