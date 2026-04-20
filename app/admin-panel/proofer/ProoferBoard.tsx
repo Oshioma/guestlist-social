@@ -3257,7 +3257,7 @@ function DayScrubber({
             : color === "green"
             ? "#22c55e"
             : isElapsed
-            ? "#a1a1aa"
+            ? "#d4d4d8"
             : "#e4e4e7";
         const fg =
           color === "red"
@@ -3265,7 +3265,7 @@ function DayScrubber({
             : color === "grey" && !isElapsed
             ? "#a1a1aa"
             : color === "grey" && isElapsed
-            ? "#f4f4f5"
+            ? "#71717a"
             : "#fff";
 
         return (
