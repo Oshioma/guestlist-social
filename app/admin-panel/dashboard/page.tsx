@@ -119,20 +119,6 @@ export default async function DashboardPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           <Link
-            href="/app/engine"
-            style={{
-              padding: "16px 18px",
-              borderRadius: 14,
-              background: "#eef2ff",
-              border: "1px solid #c7d2fe",
-              textDecoration: "none",
-              color: "#18181b",
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Engine Dashboard</div>
-            <div style={{ fontSize: 12, color: "#4338ca" }}>Ad performance, top priorities, spend analysis</div>
-          </Link>
-          <Link
             href="/app/proofer"
             style={{
               padding: "16px 18px",
@@ -159,6 +145,20 @@ export default async function DashboardPage() {
           >
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Content Dashboard</div>
             <div style={{ fontSize: 12, color: "#065f46" }}>Track content progress across all clients</div>
+          </Link>
+          <Link
+            href="/app/engine"
+            style={{
+              padding: "16px 18px",
+              borderRadius: 14,
+              background: "#eef2ff",
+              border: "1px solid #c7d2fe",
+              textDecoration: "none",
+              color: "#18181b",
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Engine Dashboard</div>
+            <div style={{ fontSize: 12, color: "#4338ca" }}>Ad performance, top priorities, spend analysis</div>
           </Link>
         </div>
 

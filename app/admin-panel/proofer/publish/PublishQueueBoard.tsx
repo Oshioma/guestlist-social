@@ -431,29 +431,51 @@ export default function PublishQueueBoard({
         </p>
       </div>
 
-      <SectionCard title="Meta connection">
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: 14 }}
+      <details
+        style={{
+          border: "1px solid #e4e4e7",
+          borderRadius: 14,
+          background: "#fff",
+          padding: 0,
+          overflow: "hidden",
+        }}
+      >
+        <summary
+          style={{
+            padding: "12px 18px",
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#18181b",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            listStyle: "none",
+          }}
         >
+          <span style={{ fontSize: 11, color: "#71717a" }}>&#9654;</span>
+          Meta connection
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#71717a", marginLeft: 4 }}>
+            {connectedClientIds.length > 0
+              ? `${connectedAccounts.length} accounts connected`
+              : "Not connected"}
+          </span>
+        </summary>
+        <div style={{ padding: "0 18px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
           <div
             style={{
               display: "flex",
-              gap: 10,
+              gap: 8,
               alignItems: "center",
               flexWrap: "wrap",
             }}
           >
-            <span style={{ fontSize: 13, color: "#52525b" }}>
-              Connect a Facebook Page (and the linked Instagram professional
-              account) so approved posts can be published straight from the
-              queue.
-            </span>
             <select
               value={connectClientId}
               onChange={(e) => setConnectClientId(e.target.value)}
               disabled={clients.length === 0}
               style={{
-                padding: "8px 10px",
+                padding: "6px 10px",
                 borderRadius: 8,
                 border: "1px solid #e4e4e7",
                 background: "#fff",
@@ -474,7 +496,7 @@ export default function PublishQueueBoard({
               onClick={handleConnectMeta}
               disabled={!connectClientId}
               style={{
-                padding: "8px 14px",
+                padding: "6px 12px",
                 borderRadius: 8,
                 background: connectClientId ? "#1877f2" : "#e4e4e7",
                 color: connectClientId ? "#fff" : "#a1a1aa",
@@ -488,135 +510,52 @@ export default function PublishQueueBoard({
             </button>
           </div>
 
-          <div
-            style={{
-              borderTop: "1px solid #f4f4f5",
-              paddingTop: 12,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
+          {metaConnectionError && (
             <div
               style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-                color: "#71717a",
-                fontWeight: 700,
+                fontSize: 12,
+                color: "#991b1b",
+                background: "#fee2e2",
+                border: "1px solid #fca5a5",
+                borderRadius: 8,
+                padding: "6px 10px",
               }}
             >
-              Currently connected
+              {metaConnectionError}
             </div>
+          )}
 
-            {metaConnectionError && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#991b1b",
-                  background: "#fee2e2",
-                  border: "1px solid #fca5a5",
-                  borderRadius: 8,
-                  padding: "8px 12px",
-                  marginBottom: 4,
-                }}
-              >
-                Error loading connected accounts: {metaConnectionError}
-              </div>
-            )}
-
-            {connectedClientIds.length === 0 && !metaConnectionError ? (
-              <div style={{ fontSize: 13, color: "#71717a" }}>
-                No connected Meta accounts yet. Pick a client above and click
-                Connect Meta.
-              </div>
-            ) : (
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 10 }}
-              >
-                {connectedClientIds.map((cid) => {
-                  const accs = accountsByClient[cid] ?? [];
-                  const fb = accs.filter((a) => a.platform === "facebook");
-                  const ig = accs.filter((a) => a.platform === "instagram");
-                  return (
-                    <div
-                      key={cid}
-                      style={{
-                        border: "1px solid #e4e4e7",
-                        borderRadius: 10,
-                        padding: "10px 12px",
-                        background: "#fafafa",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 800,
-                          color: "#18181b",
-                        }}
-                      >
-                        {clientNameById[cid] ?? `Client ${cid}`}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 6,
-                        }}
-                      >
-                        {fb.map((a) => (
-                          <span
-                            key={`fb-${a.accountId}`}
-                            title={`Facebook Page ${a.accountId}`}
-                            style={{
-                              padding: "3px 9px",
-                              borderRadius: 999,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              background: "#e7f0fe",
-                              border: "1px solid #1877f2",
-                              color: "#1d4ed8",
-                            }}
-                          >
-                            FB · {a.accountName || a.accountId}
-                          </span>
-                        ))}
-                        {ig.map((a) => (
-                          <span
-                            key={`ig-${a.accountId}`}
-                            title={`Instagram ${a.accountId}`}
-                            style={{
-                              padding: "3px 9px",
-                              borderRadius: 999,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              background: "#fdf2f8",
-                              border: "1px solid #ec4899",
-                              color: "#be185d",
-                            }}
-                          >
-                            IG · @{a.accountName || a.accountId}
-                          </span>
-                        ))}
-                        {fb.length === 0 && ig.length === 0 && (
-                          <span
-                            style={{ fontSize: 12, color: "#71717a" }}
-                          >
-                            No Pages or IG accounts
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {connectedClientIds.length === 0 && !metaConnectionError ? (
+            <div style={{ fontSize: 12, color: "#71717a" }}>
+              No connected accounts. Pick a client and click Connect Meta.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {connectedClientIds.map((cid) => {
+                const accs = accountsByClient[cid] ?? [];
+                const count = accs.length;
+                return (
+                  <span
+                    key={cid}
+                    title={accs.map((a) => `${a.platform}: ${a.accountName}`).join(", ")}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      color: "#166534",
+                    }}
+                  >
+                    {clientNameById[cid] ?? `Client ${cid}`} · {count} account{count === 1 ? "" : "s"}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
-      </SectionCard>
+      </details>
 
       <SectionCard title="Overview">
         <div
