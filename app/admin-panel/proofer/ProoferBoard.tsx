@@ -1658,6 +1658,21 @@ export default function ProoferBoard({
                     })()}
 
                   </div>
+
+                  {!isLocked && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      <ImageUpload
+                        bucket="postimages"
+                        folder={`proofer/${clientId}/${month}`}
+                        onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                        label={draft.mediaUrls.length > 0 ? "Add another" : "Upload media"}
+                        accept="image/*,video/*"
+                      />
+                      <PasteLinkInput
+                        onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -1669,128 +1684,63 @@ export default function ProoferBoard({
                 >
 
 
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    {!isLocked && (
-                      <div
+                  {!isLocked && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                        <input
+                          type="time"
+                          value={draft.publishTime}
+                          onChange={(e) =>
+                            updateDraft(dateKey, activePlatform, { publishTime: e.target.value })
+                          }
+                          disabled={isLocked}
+                          style={{
+                            padding: "4px 6px",
+                            borderRadius: 6,
+                            border: "1px solid #e4e4e7",
+                            fontSize: 11,
+                            color: "#18181b",
+                            background: "#fff",
+                            fontFamily: "inherit",
+                            width: 90,
+                          }}
+                        />
+                        <span style={{ fontSize: 9, color: "#a1a1aa" }}>Publish (GMT)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSave(dateKey, activePlatform)}
+                        disabled={isPending || !hasDraft || isLocked}
                         style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "center",
-                          flexWrap: "wrap",
+                          padding: "8px 14px",
+                          borderRadius: 8,
+                          background: hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
+                          color: hasDraft && !isLocked ? "#fff" : "#a1a1aa",
+                          border: "none",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: hasDraft && !isLocked ? "pointer" : "not-allowed",
                         }}
                       >
-                        <ImageUpload
-                          bucket="postimages"
-                          folder={`proofer/${clientId}/${month}`}
-                          onUploaded={(url) =>
-                            addMediaUrl(dateKey, activePlatform, url)
-                          }
-                          label={
-                            draft.mediaUrls.length > 0
-                              ? "Add another"
-                              : "Upload media"
-                          }
-                          accept="image/*,video/*"
-                        />
-                        <PasteLinkInput
-                          onSubmit={(url) =>
-                            addMediaUrl(dateKey, activePlatform, url)
-                          }
-                        />
-                        {draft.mediaUrls.length > 0 && (
-                          <span style={{ fontSize: 11, color: "#a1a1aa" }}>
-                            {`${draft.mediaUrls.length} item${
-                              draft.mediaUrls.length === 1 ? "" : "s"
-                            } · drag order with ◀ ▶`}
-                          </span>
-                        )}
-                        <div
+                        Save
+                      </button>
+                      {(post || hasDraft) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(dateKey, activePlatform)}
+                          disabled={isPending || isLocked}
                           style={{
-                            marginLeft: "auto",
-                            display: "flex",
-                            gap: 6,
-                            alignItems: "center",
+                            ...secondaryButtonStyle,
+                            color: "#991b1b",
+                            opacity: isLocked ? 0.6 : 1,
+                            cursor: isPending || isLocked ? "not-allowed" : "pointer",
                           }}
                         >
-                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <input
-                              type="time"
-                              value={draft.publishTime}
-                              onChange={(e) =>
-                                updateDraft(dateKey, activePlatform, {
-                                  publishTime: e.target.value,
-                                })
-                              }
-                              disabled={isLocked}
-                              style={{
-                                padding: "4px 6px",
-                                borderRadius: 6,
-                                border: "1px solid #e4e4e7",
-                                fontSize: 11,
-                                color: "#18181b",
-                                background: "#fff",
-                                fontFamily: "inherit",
-                                width: 90,
-                              }}
-                            />
-                            <span style={{ fontSize: 9, color: "#a1a1aa" }}>
-                              Publish (GMT)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleSave(dateKey, activePlatform)
-                            }
-                            disabled={isPending || !hasDraft || isLocked}
-                            style={{
-                              padding: "8px 14px",
-                              borderRadius: 8,
-                              background:
-                                hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
-                              color:
-                                hasDraft && !isLocked ? "#fff" : "#a1a1aa",
-                              border: "none",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor:
-                                hasDraft && !isLocked
-                                  ? "pointer"
-                                  : "not-allowed",
-                            }}
-                          >
-                            Save
-                          </button>
-                          {(post || hasDraft) && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(dateKey, activePlatform)
-                              }
-                              disabled={isPending || isLocked}
-                              style={{
-                                ...secondaryButtonStyle,
-                                color: "#991b1b",
-                                opacity: isLocked ? 0.6 : 1,
-                                cursor:
-                                  isPending || isLocked
-                                    ? "not-allowed"
-                                    : "pointer",
-                              }}
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {(() => {
                     const previewIdx = previewIdxMap[key] ?? 0;
@@ -1900,9 +1850,9 @@ export default function ProoferBoard({
                         {draft.mediaUrls.length > 1 && (
                           <>
                             <button type="button" onClick={() => setPreviewIdx(Math.max(0, safeIdx - 1))} disabled={safeIdx === 0}
-                              style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === 0 ? 0.3 : 1 }}>‹</button>
+                              style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.45)", border: "none", color: "#fff", borderRadius: "50%", width: 48, height: 48, cursor: "pointer", fontSize: 30, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === 0 ? 0.25 : 1 }}>‹</button>
                             <button type="button" onClick={() => setPreviewIdx(Math.min(draft.mediaUrls.length - 1, safeIdx + 1))} disabled={safeIdx === draft.mediaUrls.length - 1}
-                              style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === draft.mediaUrls.length - 1 ? 0.3 : 1 }}>›</button>
+                              style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.45)", border: "none", color: "#fff", borderRadius: "50%", width: 48, height: 48, cursor: "pointer", fontSize: 30, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", opacity: safeIdx === draft.mediaUrls.length - 1 ? 0.25 : 1 }}>›</button>
                             <div style={{ position: "absolute", top: 8, right: 10, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 7px", borderRadius: 99 }}>{safeIdx + 1}/{draft.mediaUrls.length}</div>
                           </>
                         )}
