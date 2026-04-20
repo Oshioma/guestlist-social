@@ -18,6 +18,7 @@ type Props = {
 };
 
 const ENGINE_ITEMS: NavItem[] = [
+  { label: "Engine Dashboard", href: "/app/engine" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
