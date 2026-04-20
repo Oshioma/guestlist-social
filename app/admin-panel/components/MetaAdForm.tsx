@@ -158,27 +158,45 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
           &ldquo;{name}&rdquo; has been saved. It starts paused — review it
           on the ads page, then switch it to active when ready.
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            setSuccess(false);
-            setName(`${campaignName} — ad ${Date.now() % 100}`);
-            setImageUrl("");
-            setHeadline("");
-            setBody("");
-            setDestinationUrl("");
-          }}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 8,
-            border: "1px solid #e4e4e7",
-            background: "#fff",
-            fontSize: 14,
-            cursor: "pointer",
-          }}
-        >
-          Add another ad
-        </button>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setSuccess(false);
+              setName(`${campaignName} — ad ${Date.now() % 100}`);
+              setImageUrl("");
+              setHeadline("");
+              setBody("");
+              setDestinationUrl("");
+            }}
+            style={{
+              padding: "8px 20px",
+              borderRadius: 8,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            Add another ad
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "8px 20px",
+              borderRadius: 8,
+              border: "none",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            View campaign
+          </button>
+        </div>
       </div>
     );
   }
