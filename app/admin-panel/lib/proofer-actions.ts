@@ -928,7 +928,8 @@ export async function clearPostIdeasAction(clientId: string, month: string, plat
     .eq("client_id", clientId)
     .eq("platform", platform)
     .gte("post_slot_date", start)
-    .lt("post_slot_date", end);
+    .lt("post_slot_date", end)
+    .neq("status", "promoted"); // never delete ideas already linked to a real post
   if (error) throw new Error("Could not clear ideas.");
   revalidateProoferPaths();
 }

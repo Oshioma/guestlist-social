@@ -869,7 +869,8 @@ export default function ProoferBoard({
           for (const key of Object.keys(next)) {
             if (key.endsWith(`:${genPlatform}`)) {
               const dateStr = key.split(":")[0];
-              if (dateStr.startsWith(month) && !postsByKey.has(key)) {
+              const existingPost = postsByKey.get(key);
+              if (dateStr.startsWith(month) && (!existingPost || existingPost.status !== "approved")) {
                 delete next[key];
               }
             }
