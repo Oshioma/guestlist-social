@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canRunAds } from "@/lib/auth/permissions";
 import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
+import { persistImageToStorage } from "@/lib/persist-image";
 import { revalidatePath } from "next/cache";
 import { createMetaAd } from "@/lib/meta-ad-create";
 import { getCreativeSourcesForClient } from "@/lib/creative-sources";
@@ -151,6 +152,8 @@ export default async function CampaignDetailPage({ params }: Props) {
           "use server";
           const adsetMetaId = (campaign as any).meta_adset_id as string | null;
 
+          const persistedUrl = await persistImageToStorage(data.imageUrl, `ad-creatives/${clientId}`) ?? data.imageUrl;
+
           if (adsetMetaId) {
             const result = await createMetaAd({
               adsetMetaId,
@@ -171,7 +174,7 @@ export default async function CampaignDetailPage({ params }: Props) {
               meta_id: result.adId,
               name: data.name,
               status: "testing",
-              creative_image_url: data.imageUrl,
+              creative_image_url: persistedUrl,
               creative_headline: data.headline,
               creative_body: data.body,
               creative_cta: data.ctaType,
@@ -183,7 +186,7 @@ export default async function CampaignDetailPage({ params }: Props) {
               campaign_id: campaignId,
               name: data.name,
               status: "testing",
-              creative_image_url: data.imageUrl,
+              creative_image_url: persistedUrl,
               creative_headline: data.headline,
               creative_body: data.body,
               creative_cta: data.ctaType,
@@ -199,7 +202,7 @@ export default async function CampaignDetailPage({ params }: Props) {
               {hasNoAds ? "Add your first ad" : "Add another ad"}
             </h2>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
-              Upload an image, write your copy, and create your ad.{hasMetaAdsetId ? " It will be pushed to Meta (starts paused)." : " Meta not connected yet — ad saved locally."}
+              Upload an image, write your copy, and create your ad. It starts paused so you can review first.
             </p>
             <MetaAdForm
               campaignName={campaign.name}

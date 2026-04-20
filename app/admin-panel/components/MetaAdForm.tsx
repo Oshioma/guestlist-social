@@ -152,11 +152,11 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, color: "#166534" }}>
-          Ad created in Meta
+          Ad created
         </div>
         <p style={{ fontSize: 14, color: "#52525b", margin: "8px 0 16px" }}>
-          &ldquo;{name}&rdquo; is now in your ad account. It starts paused — review it
-          in Ads Manager or on the ads page, then switch it to active when ready.
+          &ldquo;{name}&rdquo; has been saved. It starts paused — review it
+          on the ads page, then switch it to active when ready.
         </p>
         <button
           type="button"
