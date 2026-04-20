@@ -266,7 +266,7 @@ export async function syncMetaData(clientId: string) {
 
     // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
     const adsRes = await fetch(
-      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&effective_status=["ACTIVE","PAUSED"]&limit=25&access_token=${token}`,
+      `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url}&limit=50&access_token=${token}`,
       { cache: "no-store" }
     );
     const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
@@ -343,7 +343,7 @@ export async function syncMetaData(clientId: string) {
     // 4. Daily snapshots (last 30 days)
     let snapshotsCreated = 0;
     try {
-      const dailyInsights = await getDailyAdInsights({ datePreset: "last_30d" });
+      const dailyInsights = await getDailyAdInsights({ datePreset: "last_30d", accountId });
 
       const { data: allAds } = await supabase
         .from("ads")
@@ -417,8 +417,8 @@ export async function syncMetaData(clientId: string) {
       }
 
       const [placementRows, demoRows] = await Promise.all([
-        getAdPlacementInsights({ datePreset: "last_30d" }),
-        getAdDemographicInsights({ datePreset: "last_30d" }),
+        getAdPlacementInsights({ datePreset: "last_30d", accountId }),
+        getAdDemographicInsights({ datePreset: "last_30d", accountId }),
       ]);
 
       // Clear the last 30d window for this client's ads so we don't

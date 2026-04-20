@@ -450,8 +450,10 @@ export async function getAdPlacementInsights(opts?: {
   since?: string;
   until?: string;
   datePreset?: string;
+  accountId?: string;
 }): Promise<MetaBreakdownInsight[]> {
-  const { accountId } = getCredentials();
+  const creds = getCredentials();
+  const accountId = opts?.accountId ?? creds.accountId;
   const params: Record<string, string> = {
     fields:
       "ad_id,ad_name,impressions,clicks,spend,ctr,cpm,actions,cost_per_action_type",
@@ -474,8 +476,10 @@ export async function getAdDemographicInsights(opts?: {
   since?: string;
   until?: string;
   datePreset?: string;
+  accountId?: string;
 }): Promise<MetaBreakdownInsight[]> {
-  const { accountId } = getCredentials();
+  const creds = getCredentials();
+  const accountId = opts?.accountId ?? creds.accountId;
   const params: Record<string, string> = {
     fields: "ad_id,ad_name,impressions,clicks,spend,ctr,actions",
     level: "ad",
@@ -530,8 +534,10 @@ export async function getDailyAdInsights(opts?: {
   since?: string;
   until?: string;
   datePreset?: string;
+  accountId?: string;
 }): Promise<MetaInsight[]> {
-  const { accountId } = getCredentials();
+  const creds = getCredentials();
+  const acctId = opts?.accountId ?? creds.accountId;
   const params: Record<string, string> = {
     fields:
       "campaign_id,ad_id,ad_name,impressions,clicks,spend,ctr,actions",
@@ -549,7 +555,7 @@ export async function getDailyAdInsights(opts?: {
     params.date_preset = opts?.datePreset ?? "last_30d";
   }
 
-  return metaFetchAll<MetaInsight>(`/${accountId}/insights`, params);
+  return metaFetchAll<MetaInsight>(`/${acctId}/insights`, params);
 }
 
 // ---------------------------------------------------------------------------
