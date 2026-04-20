@@ -114,9 +114,17 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     .update(updatePayload)
     .eq("id", clientId);
 
-  // If industry column doesn't exist, retry without it
+  // If industry or meta_ad_account_id columns don't exist, retry without them
   if (error && updatePayload.industry !== undefined) {
     delete updatePayload.industry;
+    delete updatePayload.meta_ad_account_id;
+    const retry = await supabase
+      .from("clients")
+      .update(updatePayload)
+      .eq("id", clientId);
+    error = retry.error;
+  } else if (error && updatePayload.meta_ad_account_id !== undefined) {
+    delete updatePayload.meta_ad_account_id;
     const retry = await supabase
       .from("clients")
       .update(updatePayload)
