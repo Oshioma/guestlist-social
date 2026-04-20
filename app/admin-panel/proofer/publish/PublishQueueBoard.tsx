@@ -854,45 +854,49 @@ export default function PublishQueueBoard({
                       borderTop: "1px solid #efefef",
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => handleQueue(post.id, "instagram")}
-                      disabled={isPending}
-                      style={darkButton}
-                    >
-                      Queue for Instagram
-                    </button>
+                    {images.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleQueue(post.id, "instagram")}
+                        disabled={isPending}
+                        style={darkButton}
+                      >
+                        Queue for Instagram
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleQueue(post.id, "facebook")}
                       disabled={isPending}
-                      style={buttonBase}
+                      style={images.length > 0 ? buttonBase : darkButton}
                     >
                       Queue for Facebook
                     </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (isPending) return;
-                        startTransition(async () => {
-                          try {
-                            await queueProoferPostAction(post.id, "instagram");
-                            await queueProoferPostAction(post.id, "facebook");
-                            refresh();
-                          } catch (err) {
-                            alert(
-                              err instanceof Error
-                                ? err.message
-                                : "Could not queue both platforms"
-                            );
-                          }
-                        });
-                      }}
-                      disabled={isPending}
-                      style={buttonBase}
-                    >
-                      Queue both
-                    </button>
+                    {images.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (isPending) return;
+                          startTransition(async () => {
+                            try {
+                              await queueProoferPostAction(post.id, "instagram");
+                              await queueProoferPostAction(post.id, "facebook");
+                              refresh();
+                            } catch (err) {
+                              alert(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Could not queue both platforms"
+                              );
+                            }
+                          });
+                        }}
+                        disabled={isPending}
+                        style={buttonBase}
+                      >
+                        Queue both
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDeletePost(post.id)}
