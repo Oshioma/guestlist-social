@@ -454,22 +454,32 @@ export async function syncMetaData(clientId: string) {
           const metaAdId = adRow?.meta_id;
           const conv = metaAdId ? conversionsByMetaAdId.get(metaAdId) : null;
 
-          await supabase
+          const updateData: Record<string, unknown> = {
+            spend: t.spend,
+            impressions: t.impressions,
+            clicks: t.clicks,
+            conversions: conv?.conversions ?? 0,
+            cost_per_result: conv?.costPerResult ?? 0,
+          };
+          let { error: updateErr } = await supabase
             .from("ads")
-            .update({
-              spend: t.spend,
-              impressions: t.impressions,
-              clicks: t.clicks,
-              ctr,
-              cpc,
-              conversions: conv?.conversions ?? 0,
-              cost_per_result: conv?.costPerResult ?? 0,
-            })
+            .update(updateData)
             .eq("id", adId);
+          if (updateErr) {
+            // Remove columns that might not exist and retry
+            delete updateData.conversions;
+            delete updateData.cost_per_result;
+            const retry = await supabase.from("ads").update(updateData).eq("id", adId);
+            updateErr = retry.error;
+          }
+          if (updateErr) {
+            log.push(`Failed to update ad ${adId}: ${updateErr.message}`);
+          }
         }
+        log.push(`Rolled up spend for ${totals.size} ads`);
       }
-    } catch {
-      log.push("Snapshots skipped (ad_snapshots table may not exist)");
+    } catch (err) {
+      log.push(`Snapshots error: ${err instanceof Error ? err.message : "unknown"}`);
     }
 
     // 5. Placement + demographic breakdowns (last 30d).
