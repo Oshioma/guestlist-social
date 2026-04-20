@@ -216,11 +216,17 @@ RULES:
 - NO generic marketing fluff like "Elevate your experience" — be specific to THIS business
 - Write like a human, not a marketing textbook`;
 
+    const batchPrompt = prompt.replace(
+      /Return EXACTLY this JSON format[\s\S]*?reasoning":".*?"\}/,
+      `Return EXACTLY this JSON with THREE variations (no markdown, no code fences):
+{"variations":[{"headline":"headline 1","body":"body 1","cta":"cta_value","reasoning":"why"},{"headline":"headline 2","body":"body 2","cta":"cta_value","reasoning":"why"},{"headline":"headline 3","body":"body 3","cta":"cta_value","reasoning":"why"}]}`
+    );
+
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 300,
-      messages: [{ role: "user", content: prompt }],
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 800,
+      messages: [{ role: "user", content: batchPrompt }],
     });
 
     const raw = message.content
@@ -228,25 +234,21 @@ RULES:
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
-    // Parse JSON from Claude's response
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return NextResponse.json({ ok: false, error: "AI returned unexpected format" }, { status: 500 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      headline: string;
-      body: string;
-      cta: string;
-      reasoning: string;
-    };
+    const parsed = JSON.parse(jsonMatch[0]);
+    const variations = Array.isArray(parsed.variations) ? parsed.variations : [parsed];
 
     return NextResponse.json({
       ok: true,
-      headline: parsed.headline,
-      body: parsed.body,
-      cta: parsed.cta,
-      reasoning: parsed.reasoning,
+      headline: variations[0]?.headline ?? "",
+      body: variations[0]?.body ?? "",
+      cta: variations[0]?.cta ?? "learn_more",
+      reasoning: variations[0]?.reasoning ?? "",
+      variations,
     });
   } catch (err) {
     return NextResponse.json(

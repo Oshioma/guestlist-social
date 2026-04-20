@@ -96,15 +96,27 @@ export default function CampaignForm({
   const [state, formAction, pending] = useActionState(action, { error: null });
 
   type Sug = { suggestion: string | null; reasoning: string | null };
-  const [ai, setAi] = useState<{ audience: Sug; budget: Sug; headline: Sug }>({
-    audience: { suggestion: null, reasoning: null },
-    budget: { suggestion: null, reasoning: null },
-    headline: { suggestion: null, reasoning: null },
+  type SugList = Sug[];
+  const [aiAll, setAiAll] = useState<{ audience: SugList; budget: SugList; headline: SugList }>({
+    audience: [],
+    budget: [],
+    headline: [],
+  });
+  const [aiIndex, setAiIndex] = useState<{ audience: number; budget: number; headline: number }>({
+    audience: 0,
+    budget: 0,
+    headline: 0,
   });
   const [aiLoading, setAiLoading] = useState(false);
   const [nextLoadingField, setNextLoadingField] = useState<string | null>(null);
 
-  function fetchSuggestions(onlyField?: "headline" | "budget" | "audience") {
+  const ai = {
+    audience: aiAll.audience[aiIndex.audience] ?? { suggestion: null, reasoning: null },
+    budget: aiAll.budget[aiIndex.budget] ?? { suggestion: null, reasoning: null },
+    headline: aiAll.headline[aiIndex.headline] ?? { suggestion: null, reasoning: null },
+  };
+
+  function fetchSuggestions() {
     if (!clientId) return;
     return fetch("/api/ai-suggest-all", {
       method: "POST",
@@ -114,18 +126,17 @@ export default function CampaignForm({
       .then((r) => r.json())
       .then((data) => {
         if (data.ok && data.suggestions) {
-          if (onlyField) {
-            setAi((prev) => ({
-              ...prev,
-              [onlyField]: data.suggestions[onlyField] ?? { suggestion: null, reasoning: null },
-            }));
-          } else {
-            setAi({
-              audience: data.suggestions.audience ?? { suggestion: null, reasoning: null },
-              budget: data.suggestions.budget ?? { suggestion: null, reasoning: null },
-              headline: data.suggestions.headline ?? { suggestion: null, reasoning: null },
-            });
-          }
+          const norm = (v: unknown): SugList => {
+            if (Array.isArray(v)) return v;
+            if (v && typeof v === "object" && "suggestion" in v) return [v as Sug];
+            return [];
+          };
+          setAiAll({
+            audience: norm(data.suggestions.audience),
+            budget: norm(data.suggestions.budget),
+            headline: norm(data.suggestions.headline),
+          });
+          setAiIndex({ audience: 0, budget: 0, headline: 0 });
         }
       })
       .catch(() => {});
@@ -138,8 +149,14 @@ export default function CampaignForm({
   }, [clientId]);
 
   function handleNextForField(field: "headline" | "budget" | "audience") {
+    const list = aiAll[field];
+    const currentIdx = aiIndex[field];
+    if (list.length > 1 && currentIdx < list.length - 1) {
+      setAiIndex((prev) => ({ ...prev, [field]: currentIdx + 1 }));
+      return;
+    }
     setNextLoadingField(field);
-    fetchSuggestions(field)?.finally(() => setNextLoadingField(null));
+    fetchSuggestions()?.finally(() => setNextLoadingField(null));
   }
 
   return (

@@ -218,36 +218,28 @@ export async function POST(req: Request) {
 
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1200,
       messages: [{
         role: "user",
-        content: `You are a senior paid social strategist at a performance marketing agency. You've managed millions in ad spend across Facebook and Instagram. You give specific, actionable advice — never generic marketing fluff.
+        content: `You are a senior paid social strategist. Give specific, actionable advice — never generic marketing fluff.
 
 A colleague is setting up a new ${objective} campaign for this client:
 
 ${contextBlock}
 
-Based on everything above, suggest:
-
-1. CAMPAIGN NAME: A specific campaign name using the client's actual business name. Never use "[Brand]" or placeholders — use their real name.
-
-2. BUDGET: A specific daily budget in £. Factor in: what spend levels produced winners for this client, minimum to get meaningful data for ${objective} campaigns, and what competitors are likely spending.
-
-3. AUDIENCE: A specific target audience with age range, location, interests. Reference what audiences worked in winning ads and avoid what failed in losing ads.
+Based on everything above, suggest THREE variations for each field (so they can pick or cycle through):
 
 Return EXACTLY this JSON (no markdown, no code fences):
-{"audience":{"suggestion":"specific audience description","reasoning":"why this audience, referencing the data"},"budget":{"suggestion":"£X/day","reasoning":"why this amount"},"headline":{"suggestion":"specific campaign name","reasoning":"why this name"}}
+{"audience":[{"suggestion":"specific audience 1","reasoning":"why"},{"suggestion":"specific audience 2","reasoning":"why"},{"suggestion":"specific audience 3","reasoning":"why"}],"budget":[{"suggestion":"£X/day","reasoning":"why"},{"suggestion":"£Y/day","reasoning":"why"},{"suggestion":"£Z/day","reasoning":"why"}],"headline":[{"suggestion":"campaign name 1","reasoning":"why"},{"suggestion":"campaign name 2","reasoning":"why"},{"suggestion":"campaign name 3","reasoning":"why"}]}
 
 RULES:
 - Be SPECIFIC to this client. Reference their actual products, services, winning patterns.
-- If winners used certain audiences/hooks that worked, lean into those.
-- If losers failed with certain approaches, explicitly avoid them.
-- Match the brand voice from their organic posts.
-- Campaign name: max 50 chars, use the real business name
-- Audience: max 80 chars, be specific with age + location + interests
+- Each variation should be meaningfully different (different angle, audience, or approach)
+- Campaign name: max 50 chars, use the real business name, never "[Brand]"
+- Audience: max 80 chars, specific age + location + interests
 - Budget: single number like "£15/day", not a range
-- Never use placeholder text like "[Brand]" or "[Product]" — use real names`
+- Never use placeholder text`
       }],
     });
 
@@ -262,7 +254,21 @@ RULES:
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    return NextResponse.json({ ok: true, suggestions: parsed });
+
+    // Normalize: if arrays, return all variations. If old format (single objects), wrap.
+    function normalize(field: unknown): { suggestion: string; reasoning: string }[] {
+      if (Array.isArray(field)) return field;
+      if (field && typeof field === "object" && "suggestion" in field) return [field as any];
+      return [];
+    }
+
+    const suggestions = {
+      audience: normalize(parsed.audience),
+      budget: normalize(parsed.budget),
+      headline: normalize(parsed.headline),
+    };
+
+    return NextResponse.json({ ok: true, suggestions });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Unknown error" },

@@ -44,15 +44,24 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   type Sug = { suggestion: string | null; reasoning: string | null };
-  const [ai, setAi] = useState<{ headline: Sug; body: Sug }>({
-    headline: { suggestion: null, reasoning: null },
-    body: { suggestion: null, reasoning: null },
-  });
+  type Variation = { headline: string; body: string; cta: string; reasoning: string };
+  const [variations, setVariations] = useState<Variation[]>([]);
+  const [headlineIdx, setHeadlineIdx] = useState(0);
+  const [bodyIdx, setBodyIdx] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [nextHeadlineLoading, setNextHeadlineLoading] = useState(false);
   const [nextBodyLoading, setNextBodyLoading] = useState(false);
 
-  function fetchAdCopy(onlyField?: "headline" | "body") {
+  const ai = {
+    headline: variations[headlineIdx]
+      ? { suggestion: variations[headlineIdx].headline, reasoning: variations[headlineIdx].reasoning }
+      : { suggestion: null, reasoning: null },
+    body: variations[bodyIdx]
+      ? { suggestion: variations[bodyIdx].body, reasoning: variations[bodyIdx].reasoning }
+      : { suggestion: null, reasoning: null },
+  };
+
+  function fetchAdCopy() {
     if (!clientId) return;
     return fetch("/api/ai-write-ad-copy", {
       method: "POST",
@@ -61,23 +70,14 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
     })
       .then((r) => r.json())
       .then((data) => {
-        if (data.ok) {
-          if (onlyField === "headline") {
-            setAi((prev) => ({
-              ...prev,
-              headline: { suggestion: data.headline, reasoning: data.reasoning },
-            }));
-          } else if (onlyField === "body") {
-            setAi((prev) => ({
-              ...prev,
-              body: { suggestion: data.body, reasoning: data.reasoning },
-            }));
-          } else {
-            setAi({
-              headline: { suggestion: data.headline, reasoning: data.reasoning },
-              body: { suggestion: data.body, reasoning: data.reasoning },
-            });
-          }
+        if (data.ok && data.variations) {
+          setVariations(data.variations);
+          setHeadlineIdx(0);
+          setBodyIdx(0);
+        } else if (data.ok) {
+          setVariations([{ headline: data.headline, body: data.body, cta: data.cta, reasoning: data.reasoning }]);
+          setHeadlineIdx(0);
+          setBodyIdx(0);
         }
       })
       .catch(() => {});
@@ -90,13 +90,21 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   }, [clientId]);
 
   function handleNextHeadline() {
+    if (variations.length > 1 && headlineIdx < variations.length - 1) {
+      setHeadlineIdx((i) => i + 1);
+      return;
+    }
     setNextHeadlineLoading(true);
-    fetchAdCopy("headline")?.finally(() => setNextHeadlineLoading(false));
+    fetchAdCopy()?.finally(() => setNextHeadlineLoading(false));
   }
 
   function handleNextBody() {
+    if (variations.length > 1 && bodyIdx < variations.length - 1) {
+      setBodyIdx((i) => i + 1);
+      return;
+    }
     setNextBodyLoading(true);
-    fetchAdCopy("body")?.finally(() => setNextBodyLoading(false));
+    fetchAdCopy()?.finally(() => setNextBodyLoading(false));
   }
   const [creativeLoading, setCreativeLoading] = useState(false);
   const [creativeBrief, setCreativeBrief] = useState<{
