@@ -3304,7 +3304,7 @@ function DayScrubber({
             : color === "grey" && !isElapsed
             ? "#a1a1aa"
             : color === "grey" && isElapsed
-            ? "#3f3f46"
+            ? "#a1a1aa"
             : "#fff";
 
         return (
