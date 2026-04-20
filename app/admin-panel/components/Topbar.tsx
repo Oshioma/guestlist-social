@@ -40,6 +40,9 @@ export default function Topbar() {
   const pathname = usePathname();
   const title = resolveTitle(pathname);
   const subtitle = subtitles[pathname] ?? null;
+  // Proofer page pins a day scrubber to the right edge — pull the
+  // topbar's right-side controls inward so they sit clear of it.
+  const paddingRight = pathname === "/app/proofer" ? 80 : 24;
 
   return (
     <header
@@ -49,7 +52,7 @@ export default function Topbar() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 24px",
+        padding: `0 ${paddingRight}px 0 24px`,
         background: "#fff",
         flexShrink: 0,
       }}

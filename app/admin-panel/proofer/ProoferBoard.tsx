@@ -3261,7 +3261,7 @@ function DayScrubber({
       style={{
         position: "fixed",
         right: 16,
-        top: 56,
+        top: 0,
         bottom: 0,
         display: "flex",
         flexDirection: "column",
@@ -3269,9 +3269,8 @@ function DayScrubber({
         padding: 0,
         background: "#fff",
         border: "1px solid #d4d4d8",
-        borderRadius: "8px 0 0 0",
         boxShadow: "-2px 0 12px rgba(0,0,0,0.05)",
-        zIndex: 20,
+        zIndex: 30,
         overflow: "hidden",
       }}
     >
