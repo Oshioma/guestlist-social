@@ -23,8 +23,6 @@ import {
   createContentPillarAction,
   updateContentPillarAction,
   archiveContentPillarAction,
-  createIdeaFromProoferAction,
-  updateIdeaFromProoferAction,
   rejectPostIdeaAction,
   clearPostIdeasAction,
 } from "../lib/proofer-actions";
@@ -255,28 +253,6 @@ export default function ProoferBoard({
   const [openIdeaPickerKey, setOpenIdeaPickerKey] = useState<string | null>(
     null
   );
-  type IdeaDraft = { idea: string; notes: string };
-  const [ideaDrafts, setIdeaDrafts] = useState<Record<string, IdeaDraft>>({});
-  const [expandedNoteKeys, setExpandedNoteKeys] = useState<Record<string, boolean>>({});
-  const [pillarModal, setPillarModal] = useState<
-    | {
-        postKey: string;
-        dateKey: string;
-        platform: ProoferPlatform;
-        kind: IdeaKind;
-      }
-    | null
-  >(null);
-  type LinkedIdeaEditDraft = {
-    idea: string;
-    notes: string;
-    pillarId: string | null;
-  };
-  const [editingLinkedIdea, setEditingLinkedIdea] = useState<{
-    id: string;
-    kind: IdeaKind;
-    draft: LinkedIdeaEditDraft;
-  } | null>(null);
 
   // ── AI post ideas ──────────────────────────────────────────────────────────
   const [postIdeas, setPostIdeas] = useState<PostIdea[]>(initialPostIdeas);
@@ -285,18 +261,13 @@ export default function ProoferBoard({
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
+  const [captionModifying, setCaptionModifying] = useState<Record<string, boolean>>({});
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
     initialPillars.forEach((p) => map.set(p.id, p));
     return map;
   }, [initialPillars]);
-
-  const ideasById = useMemo(() => {
-    const map = new Map<string, ProoferIdeaLite>();
-    initialIdeas.forEach((i) => map.set(`${i.kind}:${i.id}`, i));
-    return map;
-  }, [initialIdeas]);
 
   const postsByKey = useMemo(() => {
     const map = new Map<string, ProoferPost>();
@@ -551,107 +522,6 @@ export default function ProoferBoard({
     });
   }
 
-  function getIdeaDraft(key: string): IdeaDraft {
-    return ideaDrafts[key] ?? { idea: "", notes: "" };
-  }
-
-  function updateIdeaDraft(key: string, patch: Partial<IdeaDraft>) {
-    setIdeaDrafts((prev) => ({
-      ...prev,
-      [key]: { ...getIdeaDraft(key), ...patch },
-    }));
-  }
-
-  function deriveIdeaKind(platform: ProoferPlatform): IdeaKind {
-    if (platform === "instagram_story") return "story";
-    if (platform === "instagram_reel") return "video";
-    return "video";
-  }
-
-  function handleCreateIdea(pillarId: string | null) {
-    if (!pillarModal) return;
-    const key = pillarModal.postKey;
-    const draft = getIdeaDraft(key);
-    if (!draft.idea.trim()) {
-      alert("Write an idea first.");
-      return;
-    }
-
-    const { dateKey, platform, kind } = pillarModal;
-    // Close the modal synchronously so the click feels instant instead of
-    // waiting on the startTransition lane to finish the network round-trip.
-    setPillarModal(null);
-    startTransition(async () => {
-      try {
-        const { id, kind: createdKind } = await createIdeaFromProoferAction(
-          clientId,
-          kind,
-          pillarId,
-          draft.idea,
-          draft.notes
-        );
-        // Attach the new idea to the post draft and save.
-        const current = getDraftFor(dateKey, platform);
-        const nextDraft: Draft = {
-          ...current,
-          pillarId: pillarId ?? current.pillarId,
-          linkedIdeaId: id,
-          linkedIdeaKind: createdKind,
-        };
-        updateDraft(dateKey, platform, nextDraft);
-        await saveProoferPostAction(
-          clientId,
-          dateKey,
-          platform,
-          nextDraft.caption,
-          nextDraft.mediaUrls,
-          nextDraft.pillarId,
-          nextDraft.linkedIdeaId,
-          nextDraft.linkedIdeaKind
-        );
-        setIdeaDrafts((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        setDrafts((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        router.refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not create idea");
-      }
-    });
-  }
-
-  function handleSaveLinkedIdeaEdit() {
-    if (!editingLinkedIdea) return;
-    const { id, kind, draft } = editingLinkedIdea;
-    if (!draft.idea.trim()) {
-      alert("Idea text is required.");
-      return;
-    }
-    // Close the edit UI synchronously so the save click feels instant —
-    // the network round-trip then runs in the background transition.
-    setEditingLinkedIdea(null);
-    startTransition(async () => {
-      try {
-        await updateIdeaFromProoferAction(
-          id,
-          kind,
-          draft.idea,
-          draft.notes,
-          draft.pillarId
-        );
-        router.refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not update idea");
-      }
-    });
-  }
-
   function handleCreatePillar() {
     const name = newPillarName.trim();
     if (!name) {
@@ -852,6 +722,27 @@ export default function ProoferBoard({
         alert(err instanceof Error ? err.message : "Could not dismiss idea.");
       }
     });
+  }
+
+  async function handleModifyCaption(dateKey: string, platform: ProoferPlatform, modifier: string) {
+    const key = postKey(dateKey, platform);
+    const currentCaption = drafts[key]?.caption ?? "";
+    if (!currentCaption.trim()) return;
+    setCaptionModifying((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await fetch("/api/modify-caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, text: currentCaption, modifier }),
+      });
+      const data = await res.json();
+      if (!data.ok) { alert(data.error ?? "Failed."); return; }
+      updateDraft(dateKey, platform, { caption: data.value });
+    } catch {
+      alert("Network error.");
+    } finally {
+      setCaptionModifying((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    }
   }
 
   async function handleClearIdeas() {
