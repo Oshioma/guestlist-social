@@ -748,31 +748,70 @@ export default function ProoferBoard({
     setGenLoading(true);
     setGenError(null);
     setGenResult(null);
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+
     try {
       const res = await fetch("/api/generate-post-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({
-          clientId,
-          month,
-          platform: genPlatform,
-          prompt: genPrompt,
-          ideasPerSlot: 1,
-        }),
+        body: JSON.stringify({ clientId, month, platform: genPlatform, prompt: genPrompt }),
       });
-      const data = await res.json();
-      if (!data.ok) {
-        setGenError(data.error ?? "Generation failed.");
+
+      if (!res.body) {
+        setGenError("No response from server.");
         return;
       }
-      setGenResult({ count: data.ideas?.length ?? 0, emptySlots: data.emptySlotsFound ?? 0 });
-      router.refresh();
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let totalCount = 0;
+      let emptySlots = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const msg = JSON.parse(line) as { type: string; [k: string]: unknown };
+
+            if (msg.type === "status") {
+              emptySlots = Number(msg.emptySlotsFound ?? 0);
+              setGenResult({ count: 0, emptySlots });
+
+            } else if (msg.type === "idea") {
+              const idea = msg.idea as PostIdea;
+              setPostIdeas((prev) => {
+                // avoid duplicates if refresh also loads the idea
+                if (prev.some((i) => i.id === idea.id)) return prev;
+                return [...prev, idea];
+              });
+              totalCount++;
+              setGenResult({ count: totalCount, emptySlots });
+
+            } else if (msg.type === "done") {
+              setGenResult({ count: totalCount, emptySlots });
+
+            } else if (msg.type === "error") {
+              setGenError(String(msg.error ?? "Generation failed."));
+            }
+          } catch {
+            // malformed line — skip
+          }
+        }
+      }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        setGenError("Timed out — try a shorter month or fewer slots.");
+        setGenError("Timed out — try again.");
       } else {
         setGenError("Network error — please try again.");
       }
