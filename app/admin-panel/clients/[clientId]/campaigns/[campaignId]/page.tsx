@@ -202,7 +202,8 @@ export default async function CampaignDetailPage({ params }: Props) {
         );
       })()}
 
-      {!hasNoAds && hasMetaId && (
+      {!hasNoAds && (<>
+      {hasMetaId && (
         <div
           style={{
             padding: "10px 14px",
@@ -622,6 +623,7 @@ export default async function CampaignDetailPage({ params }: Props) {
           />
         )}
       </SectionCard>
+      </>)}
     </div>
   );
   } catch (err) {
