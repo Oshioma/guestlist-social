@@ -398,6 +398,32 @@ export async function syncMetaData(clientId: string) {
       }
 
       log.push(`Snapshots: ${snapshotsCreated} created`);
+
+      // Roll up snapshot totals into the ads table
+      const { data: adTotals } = await supabase
+        .from("ad_snapshots")
+        .select("ad_id, spend, impressions, clicks")
+        .eq("client_id", clientId);
+
+      if (adTotals && adTotals.length > 0) {
+        const totals = new Map<string, { spend: number; impressions: number; clicks: number }>();
+        for (const row of adTotals) {
+          const key = String(row.ad_id);
+          const curr = totals.get(key) ?? { spend: 0, impressions: 0, clicks: 0 };
+          curr.spend += Number(row.spend ?? 0);
+          curr.impressions += Number(row.impressions ?? 0);
+          curr.clicks += Number(row.clicks ?? 0);
+          totals.set(key, curr);
+        }
+        for (const [adId, t] of totals) {
+          const ctr = t.impressions > 0 ? Number(((t.clicks / t.impressions) * 100).toFixed(2)) : 0;
+          const cpc = t.clicks > 0 ? Number((t.spend / t.clicks).toFixed(4)) : 0;
+          await supabase
+            .from("ads")
+            .update({ spend: t.spend, impressions: t.impressions, clicks: t.clicks, ctr, cpc })
+            .eq("id", adId);
+        }
+      }
     } catch {
       log.push("Snapshots skipped (ad_snapshots table may not exist)");
     }

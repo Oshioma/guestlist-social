@@ -646,8 +646,8 @@ export default async function ClientDetailPage({
                             alt=""
                             loading="lazy"
                             style={{
-                              width: 140,
-                              height: 140,
+                              width: 220,
+                              height: 220,
                               borderRadius: 12,
                               objectFit: "cover",
                               border: "1px solid #e4e4e7",
@@ -658,8 +658,8 @@ export default async function ClientDetailPage({
                         {campaignAdsRaw.length > 5 && (
                           <span
                             style={{
-                              width: 140,
-                              height: 140,
+                              width: 220,
+                              height: 220,
                               borderRadius: 12,
                               background: "#f4f4f5",
                               border: "1px solid #e4e4e7",
@@ -887,6 +887,28 @@ export default async function ClientDetailPage({
                               await deleteCampaignNoRedirect(String(campaign.id), clientId);
                             }}
                           />
+
+                          {campaign.meta_id && (
+                            <a
+                              href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${(campaign.meta_ad_account_name ?? "").replace("act_", "")}&campaign_ids=${campaign.meta_id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "8px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #c7d2fe",
+                                background: "#eef2ff",
+                                color: "#4338ca",
+                                textDecoration: "none",
+                                fontSize: 13,
+                                fontWeight: 600,
+                              }}
+                            >
+                              View in Meta
+                            </a>
+                          )}
                         </>
                       )}
                     </div>
