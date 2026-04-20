@@ -2598,6 +2598,9 @@ export default function ProoferBoard({
                 </div>
                 );
               })}
+            </div>
+          );
+        })}
         </div>
       )}
 
