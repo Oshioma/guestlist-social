@@ -3137,6 +3137,47 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
   );
 }
 
+function smoothScrollDayInto(dateKey: string) {
+  const el = document.getElementById(`day-${dateKey}`);
+  if (!el) return;
+  // .app-main is the scroll container (the sidebar sits outside it).
+  const container =
+    (document.querySelector(".app-main") as HTMLElement | null) ?? null;
+
+  const easeInOutCubic = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const duration = 650;
+  const topOffset = 72;
+  const start = performance.now();
+
+  if (container) {
+    const startTop = container.scrollTop;
+    const rect = el.getBoundingClientRect();
+    const cRect = container.getBoundingClientRect();
+    const target = startTop + rect.top - cRect.top - topOffset;
+    const distance = target - startTop;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      container.scrollTop = startTop + distance * easeInOutCubic(t);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return;
+  }
+
+  const startTop = window.scrollY;
+  const target =
+    el.getBoundingClientRect().top + window.scrollY - topOffset;
+  const distance = target - startTop;
+  const step = (now: number) => {
+    const t = Math.min((now - start) / duration, 1);
+    window.scrollTo(0, startTop + distance * easeInOutCubic(t));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function DayScrubber({
   days,
   postsByKey,
@@ -3194,6 +3235,13 @@ function DayScrubber({
             key={dateKey}
             href={`#day-${dateKey}`}
             title={formatDayLong(d)}
+            onClick={(e) => {
+              e.preventDefault();
+              smoothScrollDayInto(dateKey);
+              if (typeof window !== "undefined" && window.history.replaceState) {
+                window.history.replaceState(null, "", `#day-${dateKey}`);
+              }
+            }}
             style={{
               width: 40,
               height: 28,
@@ -3207,6 +3255,7 @@ function DayScrubber({
               textDecoration: "none",
               borderTop: i === 0 ? "none" : "1px solid #d4d4d8",
               transition: "filter 120ms ease",
+              cursor: "pointer",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.filter = "brightness(0.92)";
