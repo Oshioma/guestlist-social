@@ -87,21 +87,30 @@
   font-weight: 600;
 }
 
+/* Primary section headings (Engine, Publisher, Tasks, Campaigns)
+   sit between nav items in visual weight — bigger, not uppercase,
+   so they read as top-level destinations instead of tiny labels. */
+.app-sidebar-heading-button,
+.app-sidebar-heading-link {
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #e4e4e7;
+  font-weight: 600;
+  padding: 7px 12px;
+  margin: 2px 0;
+}
+
 .app-sidebar-heading-button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: calc(100% - 8px);
+  width: 100%;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #71717a;
   text-align: left;
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   border-radius: 6px;
   transition: background 120ms ease, color 120ms ease;
 }
@@ -116,7 +125,7 @@
   text-decoration: none;
   transition: background 120ms ease, color 120ms ease;
   border-radius: 6px;
-  width: calc(100% - 8px);
+  width: 100%;
 }
 
 .app-sidebar-heading-link:hover {

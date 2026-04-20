@@ -49,6 +49,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
     groups.push({
       heading: "Campaigns",
       items: [{ label: "Quick launch", href: "/app/launch" }],
+      collapsible: true,
     });
   }
 
