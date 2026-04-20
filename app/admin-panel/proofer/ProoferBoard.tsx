@@ -726,7 +726,7 @@ export default function ProoferBoard({
 
   async function handleModifyCaption(dateKey: string, platform: ProoferPlatform, modifier: string) {
     const key = postKey(dateKey, platform);
-    const currentCaption = drafts[key]?.caption ?? "";
+    const currentCaption = getDraftFor(dateKey, platform).caption;
     if (!currentCaption.trim()) return;
     setCaptionModifying((prev) => ({ ...prev, [key]: true }));
     try {
@@ -761,7 +761,7 @@ export default function ProoferBoard({
             if (key.endsWith(`:${genPlatform}`)) {
               const dateStr = key.split(":")[0];
               const existingPost = postsByKey.get(key);
-              if (dateStr.startsWith(month) && (!existingPost || existingPost.status !== "approved")) {
+              if (dateStr.startsWith(month) && !existingPost) {
                 delete next[key];
               }
             }
@@ -1314,8 +1314,6 @@ export default function ProoferBoard({
             const effectiveStatus: ProoferStatus =
               post?.status && post.status !== "none"
                 ? post.status
-                : hasContent
-                ? "check"
                 : "none";
 
             const isLocked = effectiveStatus === "proofed" || effectiveStatus === "approved";
