@@ -123,42 +123,42 @@ export default async function DashboardPage() {
             style={{
               padding: "16px 18px",
               borderRadius: 14,
-              background: "#fff",
-              border: "1px solid #e4e4e7",
+              background: "#eef2ff",
+              border: "1px solid #c7d2fe",
               textDecoration: "none",
               color: "#18181b",
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Engine Dashboard</div>
-            <div style={{ fontSize: 12, color: "#71717a" }}>Ad performance, top priorities, spend analysis</div>
+            <div style={{ fontSize: 12, color: "#4338ca" }}>Ad performance, top priorities, spend analysis</div>
           </Link>
           <Link
             href="/app/proofer"
             style={{
               padding: "16px 18px",
               borderRadius: 14,
-              background: "#fff",
-              border: "1px solid #e4e4e7",
+              background: "#fdf2f8",
+              border: "1px solid #f9a8d4",
               textDecoration: "none",
               color: "#18181b",
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Social Publisher</div>
-            <div style={{ fontSize: 12, color: "#71717a" }}>Schedule and proof content for Instagram & Facebook</div>
+            <div style={{ fontSize: 12, color: "#9d174d" }}>Schedule and proof content for Instagram & Facebook</div>
           </Link>
           <Link
             href="/app/content"
             style={{
               padding: "16px 18px",
               borderRadius: 14,
-              background: "#fff",
-              border: "1px solid #e4e4e7",
+              background: "#ecfdf5",
+              border: "1px solid #a7f3d0",
               textDecoration: "none",
               color: "#18181b",
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Content Dashboard</div>
-            <div style={{ fontSize: 12, color: "#71717a" }}>Track content progress across all clients</div>
+            <div style={{ fontSize: 12, color: "#065f46" }}>Track content progress across all clients</div>
           </Link>
         </div>
 
