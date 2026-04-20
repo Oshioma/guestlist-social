@@ -8,7 +8,6 @@ import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import AutoApproveForm from "../components/AutoApproveForm";
-import AiSourcesForm from "../components/AiSourcesForm";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
   getReaperSettings,
@@ -22,9 +21,6 @@ import {
   getAutoApproveSettings,
   setAutoApproveSettings,
   type AutoApproveSettings,
-  getAiSourceSettings,
-  setAiSourceSettings,
-  type AiSourceSettings,
 } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
@@ -44,12 +40,11 @@ export default async function SettingsPage() {
 
   const adminClient = createAdminClient();
 
-  const [reaperSettings, engineSettings, autoApproveSettings, aiSources, { data: metaAccounts }] =
+  const [reaperSettings, engineSettings, autoApproveSettings, { data: metaAccounts }] =
     await Promise.all([
       getReaperSettings(adminClient),
       getEngineThresholds(adminClient),
       getAutoApproveSettings(adminClient),
-      getAiSourceSettings(adminClient),
       adminClient
         .from("connected_meta_accounts")
         .select("id, client_id, platform, account_name, token_expires_at, updated_at")
@@ -287,18 +282,6 @@ export default async function SettingsPage() {
             "use server";
             const admin = createAdminClient();
             await setEngineThresholds(admin, values);
-          }}
-        />
-      </SectionCard>
-
-      <SectionCard title="AI Suggestion Sources">
-        <AiSourcesForm
-          initial={aiSources}
-          hasOpenAiKey={hasOpenAiKey}
-          onSave={async (values) => {
-            "use server";
-            const admin = createAdminClient();
-            await setAiSourceSettings(admin, values as AiSourceSettings);
           }}
         />
       </SectionCard>
