@@ -27,12 +27,13 @@ export default async function ContentDashboardPage() {
   const months = getNextFiveMonths();
 
   try {
-    const [{ clients, progress }, ideasData, carouselData, storyData] = await Promise.all([
-      getContentDashboardData(),
-      getVideoIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
-      getCarouselIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
-      getStoryIdeasData().catch(() => ({ clients: [], themes: [], ideas: [] })),
+    const [contentData, ideasData, carouselData, storyData] = await Promise.all([
+      getContentDashboardData().catch(() => ({ clients: [], progress: [] })),
+      getVideoIdeasData().catch(() => ({ clients: [], themes: [], ideas: [], pillars: [] })),
+      getCarouselIdeasData().catch(() => ({ clients: [], themes: [], ideas: [], pillars: [] })),
+      getStoryIdeasData().catch(() => ({ clients: [], themes: [], ideas: [], pillars: [] })),
     ]);
+    const { clients, progress } = contentData;
 
     const allKeys = [...months.map((m) => m.key), "video", "images", "strategy", "style_guide"];
     const activeClientIds = new Set(clients.map((c) => c.id));
