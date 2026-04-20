@@ -3253,14 +3253,16 @@ function DayScrubber({
         const isElapsed = d.getTime() < todayStart.getTime();
         const bg =
           color === "red"
-            ? "#ef4444"
+            ? "#fca5a5"
             : color === "green"
             ? "#22c55e"
             : isElapsed
             ? "#a1a1aa"
             : "#e4e4e7";
         const fg =
-          color === "grey" && !isElapsed
+          color === "red"
+            ? "#7f1d1d"
+            : color === "grey" && !isElapsed
             ? "#a1a1aa"
             : color === "grey" && isElapsed
             ? "#f4f4f5"
