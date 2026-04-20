@@ -890,7 +890,7 @@ export default async function ClientDetailPage({
 
                           {campaign.meta_id && (
                             <a
-                              href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${(campaign.meta_ad_account_name ?? "").replace("act_", "")}&campaign_ids=${campaign.meta_id}`}
+                              href={`https://www.facebook.com/adsmanager/manage/ads?act=${((clientRes.data as any).meta_ad_account_id ?? campaign.meta_ad_account_name ?? process.env.META_AD_ACCOUNT_ID ?? "").replace("act_", "")}&selected_campaign_ids=${campaign.meta_id}`}
                               target="_blank"
                               rel="noreferrer"
                               style={{
