@@ -72,8 +72,8 @@
 }
 
 .app-sidebar-section + .app-sidebar-section {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 2px;
+  padding-top: 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -88,17 +88,18 @@
 }
 
 /* Primary section headings (Engine, Publisher, Tasks, Campaigns)
-   sit between nav items in visual weight — bigger, not uppercase,
-   so they read as top-level destinations instead of tiny labels. */
+   sit between nav items in visual weight — uppercase but bigger
+   than the utility section labels, so they read as top-level
+   destinations. */
 .app-sidebar-heading-button,
 .app-sidebar-heading-link {
-  font-size: 14px;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: #e4e4e7;
-  font-weight: 600;
-  padding: 7px 12px;
-  margin: 2px 0;
+  font-weight: 700;
+  padding: 6px 12px;
+  margin: 0;
 }
 
 .app-sidebar-heading-button {
