@@ -283,6 +283,13 @@ export default function ProoferBoard({
   const [imgScanning, setImgScanning] = useState(false);
   const [imgScanMsg, setImgScanMsg] = useState<string | null>(null);
 
+  // ── Pexels stock photo picker ──────────────────────────────────────────────
+  const [pexelsPostKey, setPexelsPostKey] = useState<string | null>(null);
+  const [pexelsQuery, setPexelsQuery] = useState("");
+  const [pexelsPhotos, setPexelsPhotos] = useState<{ id: number; thumb: string; full: string; photographer: string }[]>([]);
+  const [pexelsLoading, setPexelsLoading] = useState(false);
+  const [pexelsError, setPexelsError] = useState<string | null>(null);
+
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
     initialPillars.forEach((p) => map.set(p.id, p));
@@ -824,6 +831,27 @@ export default function ProoferBoard({
       setImgScanMsg("Network error during scan");
     } finally {
       setImgScanning(false);
+    }
+  }
+
+  async function handlePexelsSearch(q: string) {
+    if (!q.trim() || pexelsLoading) return;
+    setPexelsLoading(true);
+    setPexelsError(null);
+    setPexelsPhotos([]);
+    try {
+      const res = await fetch(`/api/suggest-images?q=${encodeURIComponent(q.trim())}&per_page=12`);
+      const data = await res.json();
+      if (data.ok) {
+        setPexelsPhotos(data.photos ?? []);
+        if ((data.photos ?? []).length === 0) setPexelsError("No photos found — try a different search");
+      } else {
+        setPexelsError(data.error ?? "Search failed");
+      }
+    } catch {
+      setPexelsError("Network error");
+    } finally {
+      setPexelsLoading(false);
     }
   }
 
@@ -1756,6 +1784,7 @@ export default function ProoferBoard({
                                   setImgLibraryPostKey(null);
                                 } else {
                                   setImgLibraryPostKey(slotKey);
+                                  setPexelsPostKey(null);
                                   if (clientImagesLoaded !== clientId || clientImages.length === 0) handleLoadClientImages(clientId);
                                 }
                               }}
@@ -1875,6 +1904,132 @@ export default function ProoferBoard({
                           </>
                         );
                       })()}
+
+                      {/* Pexels stock photo picker */}
+                      {(() => {
+                        const slotKey = postKey(dateKey, activePlatform);
+                        const open = pexelsPostKey === slotKey;
+                        const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
+                        const slotIdeas = postIdeasByKey.get(slotKey) ?? [];
+                        const autoQuery = [clientName, slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ");
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (open) {
+                                  setPexelsPostKey(null);
+                                } else {
+                                  setPexelsPostKey(slotKey);
+                                  setImgLibraryPostKey(null);
+                                  const q = autoQuery || clientName;
+                                  setPexelsQuery(q);
+                                  handlePexelsSearch(q);
+                                }
+                              }}
+                              style={{
+                                padding: "5px 12px",
+                                borderRadius: 7,
+                                border: "1px solid #e9d5ff",
+                                background: open ? "#ede9fe" : "#faf5ff",
+                                color: "#6d28d9",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {open ? "Close stock" : "📷 Stock"}
+                            </button>
+
+                            {open && (
+                              <div style={{
+                                border: "1px solid #e9d5ff",
+                                borderRadius: 10,
+                                background: "#faf5ff",
+                                padding: "10px 12px 12px",
+                              }}>
+                                {/* Search bar */}
+                                <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+                                  <input
+                                    type="text"
+                                    value={pexelsQuery}
+                                    onChange={(e) => setPexelsQuery(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handlePexelsSearch(pexelsQuery); }}
+                                    placeholder="Search Pexels…"
+                                    style={{
+                                      flex: 1, padding: "4px 8px", borderRadius: 6,
+                                      border: "1px solid #d8b4fe", fontSize: 11,
+                                      outline: "none", minWidth: 0,
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePexelsSearch(pexelsQuery)}
+                                    disabled={pexelsLoading}
+                                    style={{
+                                      padding: "4px 10px", borderRadius: 6, border: "none",
+                                      background: "#7c3aed", color: "#fff",
+                                      fontSize: 11, fontWeight: 600, cursor: pexelsLoading ? "wait" : "pointer", flexShrink: 0,
+                                    }}
+                                  >
+                                    {pexelsLoading ? "…" : "Search"}
+                                  </button>
+                                </div>
+
+                                {pexelsError && (
+                                  <div style={{ fontSize: 11, color: "#991b1b", marginBottom: 8 }}>{pexelsError}</div>
+                                )}
+
+                                {pexelsPhotos.length > 0 && (
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {pexelsPhotos.map((photo) => (
+                                      <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}>
+                                        <img
+                                          src={photo.thumb}
+                                          alt={photo.photographer}
+                                          style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff" }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            addMediaUrl(dateKey, activePlatform, photo.full);
+                                            setPexelsPostKey(null);
+                                          }}
+                                          style={{
+                                            position: "absolute", bottom: 4, right: 4,
+                                            padding: "2px 6px", borderRadius: 4, border: "none",
+                                            background: "rgba(0,0,0,0.65)", color: "#fff",
+                                            fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                          }}
+                                        >
+                                          Use
+                                        </button>
+                                        <div style={{
+                                          position: "absolute", bottom: 4, left: 4,
+                                          fontSize: 9, color: "rgba(255,255,255,0.8)",
+                                          background: "rgba(0,0,0,0.4)", borderRadius: 3, padding: "1px 3px",
+                                          maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                        }}>
+                                          {photo.photographer}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {!pexelsLoading && pexelsPhotos.length === 0 && !pexelsError && (
+                                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Type a search term above</div>
+                                )}
+
+                                <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 8 }}>
+                                  Photos from Pexels · free to use
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
                           type="time"
