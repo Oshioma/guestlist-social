@@ -9,6 +9,7 @@ type FormRow = {
   id: number;
   title: string;
   is_active: boolean;
+  updated_at: string | null;
 };
 
 export default async function PortalConsultationPage({
@@ -30,40 +31,15 @@ export default async function PortalConsultationPage({
 
   const supabase = await createClient();
 
-  const [formRes, questionsRes] = await Promise.all([
-    supabase
-      .from("consultation_forms")
-      .select("id, title, is_active")
-      .eq("client_id", clientId)
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("consultation_questions")
-      .select("id, prompt, sort_order, consultation_forms!inner(client_id, is_active)")
-      .eq("consultation_forms.client_id", clientId)
-      .eq("consultation_forms.is_active", true)
-      .order("sort_order", { ascending: true }),
-  ]);
+  const formsRes = await supabase
+    .from("consultation_forms")
+    .select("id, title, is_active, updated_at")
+    .eq("client_id", clientId)
+    .order("is_active", { ascending: false })
+    .order("updated_at", { ascending: false });
 
-  const formMissing = formRes.error?.code === "42P01";
-  const questionsMissing = questionsRes.error?.code === "42P01";
-
-  const activeForm = formMissing ? null : ((formRes.data as FormRow | null) ?? null);
-  const questions = questionsMissing
-    ? []
-    : ((questionsRes.data ?? []) as Array<{
-        id: number;
-        prompt: string | null;
-        sort_order: number | null;
-      }>).map((row) => ({
-        id: row.id,
-        prompt: row.prompt ?? "",
-        sortOrder: Number(row.sort_order ?? 0),
-      }));
-
-  if (!activeForm) {
+  const formsMissing = formsRes.error?.code === "42P01";
+  if (formsMissing) {
     return (
       <div
         style={{
@@ -78,12 +54,107 @@ export default async function PortalConsultationPage({
           Consultation
         </h1>
         <p style={{ margin: "10px 0 0", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-          Your consultation form is not available yet. Please check back soon or
-          message your account manager.
+          Consultation setup is in progress. Please check back shortly.
         </p>
       </div>
     );
   }
+
+  const allForms = (formsRes.data ?? []) as FormRow[];
+  const selectedForm =
+    allForms.find((row) => Boolean(row.is_active)) ?? allForms[0] ?? null;
+
+  if (!selectedForm) {
+    return (
+      <div
+        style={{
+          maxWidth: 860,
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          padding: 24,
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#0f172a" }}>
+          Consultation
+        </h1>
+        <p style={{ margin: "10px 0 0", fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+          Your consultation form is being prepared by your account manager.
+        </p>
+      </div>
+    );
+  }
+
+  const [questionsRes, latestSubmissionRes] = await Promise.all([
+    supabase
+      .from("consultation_questions")
+      .select("id, prompt, sort_order")
+      .eq("form_id", selectedForm.id)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("consultation_submissions")
+      .select("id, submitted_at")
+      .eq("client_id", clientId)
+      .eq("form_id", selectedForm.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const questionsMissing = questionsRes.error?.code === "42P01";
+  const submissionsMissing = latestSubmissionRes.error?.code === "42P01";
+  const questions = questionsMissing
+    ? []
+    : ((questionsRes.data ?? []) as Array<{
+        id: number;
+        prompt: string | null;
+        sort_order: number | null;
+      }>).map((row) => ({
+        id: row.id,
+        prompt: row.prompt ?? "",
+        sortOrder: Number(row.sort_order ?? 0),
+      }));
+  const latestSubmission =
+    submissionsMissing
+      ? null
+      : ((latestSubmissionRes.data as { id: number; submitted_at: string } | null) ??
+          null);
+
+  const answerRes =
+    latestSubmission === null
+      ? {
+          data: [] as Array<{
+            question_id: number | null;
+            answer_text: string | null;
+          }>,
+          error: null,
+        }
+      : await supabase
+          .from("consultation_answers")
+          .select("question_id, answer_text")
+          .eq("submission_id", latestSubmission.id);
+
+  const answersMissing = answerRes.error?.code === "42P01";
+  const initialAnswersByQuestionId = answersMissing
+    ? {}
+    : ((answerRes.data ?? []) as Array<{
+        question_id: number | null;
+        answer_text: string | null;
+      }>).reduce<Record<string, string>>((acc, row) => {
+        if (row.question_id == null) return acc;
+        acc[String(row.question_id)] = row.answer_text ?? "";
+        return acc;
+      }, {});
+
+  const latestSubmissionLabel = latestSubmission?.submitted_at
+    ? new Date(latestSubmission.submitted_at).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 900 }}>
@@ -99,7 +170,7 @@ export default async function PortalConsultationPage({
           Client portal
         </div>
         <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 700, color: "#0f172a" }}>
-          {activeForm.title || "Consultation"}
+          {selectedForm.title || "Consultation"}
         </h1>
         <p
           style={{
@@ -117,11 +188,13 @@ export default async function PortalConsultationPage({
 
       <ConsultationForm
         clientId={clientId}
-        formId={activeForm.id}
+        formId={selectedForm.id}
         questions={questions.map((question) => ({
           id: question.id,
           prompt: question.prompt,
         }))}
+        initialAnswersByQuestionId={initialAnswersByQuestionId}
+        latestSubmissionLabel={latestSubmissionLabel}
       />
     </div>
   );

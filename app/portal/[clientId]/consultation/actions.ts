@@ -40,7 +40,23 @@ export async function submitConsultationAction(
   }
 
   if (!form.is_active) {
-    return { error: "This consultation form is not active.", success: null };
+    const { count: activeFormCount, error: activeFormError } = await supabase
+      .from("consultation_forms")
+      .select("id", { head: true, count: "exact" })
+      .eq("client_id", clientId)
+      .eq("is_active", true);
+
+    if (activeFormError) {
+      console.error(
+        "submitConsultationAction active form lookup error:",
+        activeFormError
+      );
+      return { error: "Could not validate consultation form status.", success: null };
+    }
+
+    if ((activeFormCount ?? 0) > 0) {
+      return { error: "This consultation form is not active.", success: null };
+    }
   }
 
   const { data: questions, error: questionsError } = await supabase
@@ -74,7 +90,7 @@ export async function submitConsultationAction(
   }
 
   const answers = questions.map((question) => {
-    const raw = formData.get(`question:${question.id}`);
+    const raw = formData.get(`question-${question.id}`);
     return {
       submission_id: submission.id,
       question_id: question.id,

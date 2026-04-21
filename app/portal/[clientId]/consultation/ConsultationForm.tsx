@@ -12,6 +12,8 @@ type Props = {
   clientId: number;
   formId: number;
   questions: Question[];
+  initialAnswersByQuestionId: Record<string, string>;
+  latestSubmissionLabel: string | null;
 };
 
 const INITIAL_STATE = {
@@ -19,7 +21,13 @@ const INITIAL_STATE = {
   success: null as string | null,
 };
 
-export default function ConsultationForm({ clientId, formId, questions }: Props) {
+export default function ConsultationForm({
+  clientId,
+  formId,
+  questions,
+  initialAnswersByQuestionId,
+  latestSubmissionLabel,
+}: Props) {
   const formAction = submitConsultationAction.bind(
     null,
     String(clientId),
@@ -70,6 +78,22 @@ export default function ConsultationForm({ clientId, formId, questions }: Props)
         </div>
       ) : null}
 
+      {latestSubmissionLabel ? (
+        <div
+          style={{
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+            background: "#f8fafc",
+            color: "#334155",
+            fontSize: 12,
+            padding: "8px 10px",
+          }}
+        >
+          We loaded your latest answers from {latestSubmissionLabel}. Update anything
+          and submit again when ready.
+        </div>
+      ) : null}
+
       {questions.map((question) => (
         <label
           key={question.id}
@@ -91,6 +115,7 @@ export default function ConsultationForm({ clientId, formId, questions }: Props)
           </span>
           <textarea
             name={`question-${question.id}`}
+            defaultValue={initialAnswersByQuestionId[String(question.id)] ?? ""}
             rows={4}
             style={{
               width: "100%",
