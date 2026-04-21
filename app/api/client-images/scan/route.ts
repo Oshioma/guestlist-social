@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
     .eq("client_id", clientId);
 
   const existingSet = new Set((existing ?? []).map((r: { public_url: string }) => normalizeImageUrl(r.public_url)));
-  const newUrls = foundUrls.filter((u) => !existingSet.has(u)).slice(0, MAX_IMAGES);
+  const newUrls = foundUrls.filter((u) => !existingSet.has(normalizeImageUrl(u))).slice(0, MAX_IMAGES);
 
   if (newUrls.length === 0) {
     return NextResponse.json({ ok: true, added: 0, images: [] });

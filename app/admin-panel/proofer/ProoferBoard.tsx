@@ -1759,298 +1759,285 @@ export default function ProoferBoard({
 
                   </div>
 
-                  {!isLocked && (
+                  {!isLocked && (() => {
+                    const slotKey = postKey(dateKey, activePlatform);
+                    const libOpen = imgLibraryPostKey === slotKey;
+                    const stockOpen = pexelsPostKey === slotKey;
+                    const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
+                    const slotIdeas = postIdeasByKey.get(slotKey) ?? [];
+                    const autoQuery = [clientName, slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ");
+                    return (
                     <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                      <ImageUpload
-                        bucket="postimages"
-                        folder={`proofer/${clientId}/${month}`}
-                        onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
-                        label="🎬"
-                        accept="video/*"
-                      />
-                      <PasteLinkInput
-                        onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
-                      />
-                      {/* Client photo library button */}
-                      {clientId && (() => {
-                        const slotKey = postKey(dateKey, activePlatform);
-                        const open = imgLibraryPostKey === slotKey;
-                        return (
-                          <>
+
+                      {/* Single row of media buttons */}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <ImageUpload
+                          bucket="postimages"
+                          folder={`proofer/${clientId}/${month}`}
+                          onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                          label="🎬"
+                          accept="video/*"
+                        />
+                        <PasteLinkInput
+                          onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                        />
+                        {clientId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (libOpen) {
+                                setImgLibraryPostKey(null);
+                              } else {
+                                setImgLibraryPostKey(slotKey);
+                                setPexelsPostKey(null);
+                                if (clientImagesLoaded !== clientId || clientImages.length === 0) handleLoadClientImages(clientId);
+                              }
+                            }}
+                            style={{
+                              padding: "5px 12px", borderRadius: 7,
+                              border: `1px solid ${libOpen ? "#0369a1" : "#bae6fd"}`,
+                              background: libOpen ? "#0369a1" : "#e0f2fe",
+                              color: libOpen ? "#fff" : "#0369a1",
+                              fontSize: 12, fontWeight: 600, cursor: "pointer",
+                            }}
+                          >
+                            {libOpen ? "Close library" : "📁 Library"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (stockOpen) {
+                              setPexelsPostKey(null);
+                            } else {
+                              setPexelsPostKey(slotKey);
+                              setImgLibraryPostKey(null);
+                              const q = autoQuery || clientName;
+                              setPexelsQuery(q);
+                              handlePexelsSearch(q);
+                            }
+                          }}
+                          style={{
+                            padding: "5px 12px", borderRadius: 7,
+                            border: "1px solid #e9d5ff",
+                            background: stockOpen ? "#ede9fe" : "#faf5ff",
+                            color: "#6d28d9", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          {stockOpen ? "Close stock" : "📷 Stock"}
+                        </button>
+                      </div>
+
+                      {/* Library panel */}
+                      {clientId && libOpen && (
+                        <div style={{ border: "1px solid #bae6fd", borderRadius: 10, background: "#f8faff", padding: "10px 12px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>Client photos</span>
+                            <label style={{
+                              padding: "3px 10px", borderRadius: 6,
+                              border: "1px solid #bae6fd", background: "#e0f2fe",
+                              color: "#0369a1", fontSize: 11, fontWeight: 600,
+                              cursor: imgUploading ? "wait" : "pointer", flexShrink: 0,
+                            }}>
+                              {imgUploading ? "Uploading…" : "+ Photos"}
+                              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: "none" }}
+                                onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
+                              />
+                            </label>
                             <button
                               type="button"
-                              onClick={() => {
-                                if (open) {
-                                  setImgLibraryPostKey(null);
-                                } else {
-                                  setImgLibraryPostKey(slotKey);
-                                  setPexelsPostKey(null);
-                                  if (clientImagesLoaded !== clientId || clientImages.length === 0) handleLoadClientImages(clientId);
-                                }
-                              }}
+                              onClick={() => { setImgScanMsg(null); handleScanWebsite(); }}
+                              disabled={imgScanning}
+                              title="Scan website for new photos"
                               style={{
-                                padding: "5px 12px",
-                                borderRadius: 7,
-                                border: `1px solid ${open ? "#0369a1" : "#bae6fd"}`,
-                                background: open ? "#0369a1" : "#e0f2fe",
-                                color: open ? "#fff" : "#0369a1",
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                                textAlign: "left",
+                                padding: clientImages.length > 0 ? "3px 7px" : "3px 10px",
+                                borderRadius: 6, border: "1px solid #d1fae5", background: "#ecfdf5",
+                                color: "#065f46", fontSize: clientImages.length > 0 ? 14 : 11,
+                                fontWeight: 600, cursor: imgScanning ? "wait" : "pointer", flexShrink: 0,
                               }}
                             >
-                              {open ? "Close library" : "📁 Library"}
+                              {imgScanning ? "…" : clientImages.length > 0 ? "🔍" : "Scan website"}
                             </button>
-
-                            {open && (
-                              <div style={{
-                                border: "1px solid #bae6fd",
-                                borderRadius: 10,
-                                background: "#f8faff",
-                                padding: "10px 12px 12px",
-                              }}>
-                                {/* Library toolbar */}
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>Client photos</span>
-
-                                  {/* Upload files */}
-                                  <label style={{
-                                    padding: "3px 10px", borderRadius: 6,
-                                    border: "1px solid #bae6fd", background: "#e0f2fe",
-                                    color: "#0369a1", fontSize: 11, fontWeight: 600,
-                                    cursor: imgUploading ? "wait" : "pointer", flexShrink: 0,
-                                  }}>
-                                    {imgUploading ? "Uploading…" : "+ Photos"}
-                                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: "none" }}
-                                      onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
-                                    />
-                                  </label>
-
-                                  {/* Scan button — full text before first load, icon-only after */}
-                                  <button
-                                    type="button"
-                                    onClick={() => { setImgScanMsg(null); handleScanWebsite(); }}
-                                    disabled={imgScanning}
-                                    title="Scan website for new photos"
-                                    style={{
-                                      padding: clientImages.length > 0 ? "3px 7px" : "3px 10px",
-                                      borderRadius: 6,
-                                      border: "1px solid #d1fae5", background: "#ecfdf5",
-                                      color: "#065f46", fontSize: clientImages.length > 0 ? 14 : 11,
-                                      fontWeight: 600, cursor: imgScanning ? "wait" : "pointer", flexShrink: 0,
-                                    }}
-                                  >
-                                    {imgScanning ? "…" : clientImages.length > 0 ? "🔍" : "Scan website"}
-                                  </button>
-
-                                  {imgScanMsg && (
-                                    <span style={{ fontSize: 11, color: imgScanMsg.includes("failed") || imgScanMsg.includes("No website") || imgScanMsg.includes("error") ? "#991b1b" : "#065f46" }}>
-                                      {imgScanMsg}
-                                    </span>
-                                  )}
-                                  {clientImagesLoading && <span style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</span>}
-                                </div>
-
-                                {/* Image grid */}
-                                {clientImages.length === 0 && !clientImagesLoading ? (
-                                  <div style={{ fontSize: 12, color: "#94a3b8" }}>
-                                    No photos yet — upload some or click "Scan website".
-                                  </div>
-                                ) : (
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {clientImages.map((img) => (
-                                      <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
-                                        onMouseEnter={(e) => {
-                                          const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
-                                          if (el) el.style.display = "block";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
-                                          if (el) el.style.display = "none";
-                                        }}
-                                      >
-                                        <img
-                                          src={img.publicUrl}
-                                          alt=""
-                                          style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
-                                        />
-                                        {/* Hover preview */}
-                                        <div className="img-preview" style={{
-                                          display: "none", position: "absolute",
-                                          bottom: "calc(100% + 6px)", left: "50%",
-                                          transform: "translateX(-50%)",
-                                          zIndex: 50, pointerEvents: "none",
-                                          borderRadius: 8, overflow: "hidden",
-                                          boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-                                          border: "2px solid #e0f2fe",
-                                          background: "#000",
-                                        }}>
-                                          <img src={img.publicUrl} alt="" style={{ width: 220, height: 160, objectFit: "cover", display: "block" }} />
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            addMediaUrl(dateKey, activePlatform, img.publicUrl);
-                                            setImgLibraryPostKey(null);
-                                          }}
-                                          style={{
-                                            position: "absolute", bottom: 4, right: 4,
-                                            padding: "2px 6px", borderRadius: 4, border: "none",
-                                            background: "rgba(0,0,0,0.65)", color: "#fff",
-                                            fontSize: 10, fontWeight: 700, cursor: "pointer",
-                                          }}
-                                        >
-                                          Use
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteClientImage(img.id, img.table)}
-                                          style={{
-                                            position: "absolute", top: 4, right: 4,
-                                            width: 18, height: 18, borderRadius: "50%",
-                                            border: "none", background: "rgba(0,0,0,0.55)",
-                                            color: "#fff", fontSize: 11, lineHeight: "18px",
-                                            textAlign: "center", cursor: "pointer", padding: 0,
-                                          }}
-                                          title="Remove from library"
-                                        >
-                                          ×
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                            {imgScanMsg && (
+                              <span style={{ fontSize: 11, color: imgScanMsg.includes("failed") || imgScanMsg.includes("No website") || imgScanMsg.includes("error") ? "#991b1b" : "#065f46" }}>
+                                {imgScanMsg}
+                              </span>
                             )}
-                          </>
-                        );
-                      })()}
+                            {clientImagesLoading && <span style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</span>}
+                          </div>
 
-                      {/* Pexels stock photo picker */}
-                      {(() => {
-                        const slotKey = postKey(dateKey, activePlatform);
-                        const open = pexelsPostKey === slotKey;
-                        const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
-                        const slotIdeas = postIdeasByKey.get(slotKey) ?? [];
-                        const autoQuery = [clientName, slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ");
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (open) {
-                                  setPexelsPostKey(null);
-                                } else {
-                                  setPexelsPostKey(slotKey);
-                                  setImgLibraryPostKey(null);
-                                  const q = autoQuery || clientName;
-                                  setPexelsQuery(q);
-                                  handlePexelsSearch(q);
-                                }
-                              }}
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 7,
-                                border: "1px solid #e9d5ff",
-                                background: open ? "#ede9fe" : "#faf5ff",
-                                color: "#6d28d9",
-                                fontSize: 11,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {open ? "Close stock" : "📷 Stock"}
-                            </button>
-
-                            {open && (
-                              <div style={{
-                                border: "1px solid #e9d5ff",
-                                borderRadius: 10,
-                                background: "#faf5ff",
-                                padding: "10px 12px 12px",
-                              }}>
-                                {/* Search bar */}
-                                <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
-                                  <input
-                                    type="text"
-                                    value={pexelsQuery}
-                                    onChange={(e) => setPexelsQuery(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") handlePexelsSearch(pexelsQuery); }}
-                                    placeholder="Search Pexels…"
-                                    style={{
-                                      flex: 1, padding: "4px 8px", borderRadius: 6,
-                                      border: "1px solid #d8b4fe", fontSize: 11,
-                                      outline: "none", minWidth: 0,
-                                    }}
+                          {clientImages.length === 0 && !clientImagesLoading ? (
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                              No photos yet — upload some or click "Scan website".
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {clientImages.map((img) => (
+                                <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
+                                  onMouseEnter={(e) => {
+                                    const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
+                                    if (el) el.style.display = "block";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
+                                    if (el) el.style.display = "none";
+                                  }}
+                                >
+                                  <img
+                                    src={img.publicUrl}
+                                    alt=""
+                                    style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
                                   />
+                                  <div className="img-preview" style={{
+                                    display: "none", position: "absolute",
+                                    bottom: "calc(100% + 8px)", left: "50%",
+                                    transform: "translateX(-50%)",
+                                    zIndex: 50, pointerEvents: "none",
+                                    borderRadius: 10, overflow: "hidden",
+                                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+                                    border: "2px solid #e0f2fe", background: "#000",
+                                  }}>
+                                    <img src={img.publicUrl} alt="" style={{ width: 400, height: 280, objectFit: "cover", display: "block" }} />
+                                  </div>
                                   <button
                                     type="button"
-                                    onClick={() => handlePexelsSearch(pexelsQuery)}
-                                    disabled={pexelsLoading}
+                                    onClick={() => {
+                                      addMediaUrl(dateKey, activePlatform, img.publicUrl);
+                                      setImgLibraryPostKey(null);
+                                    }}
                                     style={{
-                                      padding: "4px 10px", borderRadius: 6, border: "none",
-                                      background: "#7c3aed", color: "#fff",
-                                      fontSize: 11, fontWeight: 600, cursor: pexelsLoading ? "wait" : "pointer", flexShrink: 0,
+                                      position: "absolute", bottom: 4, right: 4,
+                                      padding: "2px 6px", borderRadius: 4, border: "none",
+                                      background: "rgba(0,0,0,0.65)", color: "#fff",
+                                      fontSize: 10, fontWeight: 700, cursor: "pointer",
                                     }}
                                   >
-                                    {pexelsLoading ? "…" : "Search"}
+                                    Use
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteClientImage(img.id, img.table)}
+                                    style={{
+                                      position: "absolute", top: 4, right: 4,
+                                      width: 18, height: 18, borderRadius: "50%",
+                                      border: "none", background: "rgba(0,0,0,0.55)",
+                                      color: "#fff", fontSize: 11, lineHeight: "18px",
+                                      textAlign: "center", cursor: "pointer", padding: 0,
+                                    }}
+                                    title="Remove from library"
+                                  >
+                                    ×
                                   </button>
                                 </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                                {pexelsError && (
-                                  <div style={{ fontSize: 11, color: "#991b1b", marginBottom: 8 }}>{pexelsError}</div>
-                                )}
+                      {/* Pexels stock panel */}
+                      {stockOpen && (
+                        <div style={{ border: "1px solid #e9d5ff", borderRadius: 10, background: "#faf5ff", padding: "10px 12px 12px" }}>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
+                            <input
+                              type="text"
+                              value={pexelsQuery}
+                              onChange={(e) => setPexelsQuery(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") handlePexelsSearch(pexelsQuery); }}
+                              placeholder="Search Pexels…"
+                              style={{
+                                flex: 1, padding: "4px 8px", borderRadius: 6,
+                                border: "1px solid #d8b4fe", fontSize: 11,
+                                outline: "none", minWidth: 0,
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handlePexelsSearch(pexelsQuery)}
+                              disabled={pexelsLoading}
+                              style={{
+                                padding: "4px 10px", borderRadius: 6, border: "none",
+                                background: "#7c3aed", color: "#fff",
+                                fontSize: 11, fontWeight: 600, cursor: pexelsLoading ? "wait" : "pointer", flexShrink: 0,
+                              }}
+                            >
+                              {pexelsLoading ? "…" : "Search"}
+                            </button>
+                          </div>
 
-                                {pexelsPhotos.length > 0 && (
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {pexelsPhotos.map((photo) => (
-                                      <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}>
-                                        <img
-                                          src={photo.thumb}
-                                          alt={photo.photographer}
-                                          style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff" }}
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            addMediaUrl(dateKey, activePlatform, photo.full);
-                                            setPexelsPostKey(null);
-                                          }}
-                                          style={{
-                                            position: "absolute", bottom: 4, right: 4,
-                                            padding: "2px 6px", borderRadius: 4, border: "none",
-                                            background: "rgba(0,0,0,0.65)", color: "#fff",
-                                            fontSize: 10, fontWeight: 700, cursor: "pointer",
-                                          }}
-                                        >
-                                          Use
-                                        </button>
-                                        <div style={{
-                                          position: "absolute", bottom: 4, left: 4,
-                                          fontSize: 9, color: "rgba(255,255,255,0.8)",
-                                          background: "rgba(0,0,0,0.4)", borderRadius: 3, padding: "1px 3px",
-                                          maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                        }}>
-                                          {photo.photographer}
-                                        </div>
-                                      </div>
-                                    ))}
+                          {pexelsError && (
+                            <div style={{ fontSize: 11, color: "#991b1b", marginBottom: 8 }}>{pexelsError}</div>
+                          )}
+
+                          {pexelsPhotos.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {pexelsPhotos.map((photo) => (
+                                <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}
+                                  onMouseEnter={(e) => {
+                                    const el = e.currentTarget.querySelector<HTMLElement>(".stock-preview");
+                                    if (el) el.style.display = "block";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    const el = e.currentTarget.querySelector<HTMLElement>(".stock-preview");
+                                    if (el) el.style.display = "none";
+                                  }}
+                                >
+                                  <img
+                                    src={photo.thumb}
+                                    alt={photo.photographer}
+                                    style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff" }}
+                                  />
+                                  <div className="stock-preview" style={{
+                                    display: "none", position: "absolute",
+                                    bottom: "calc(100% + 8px)", left: "50%",
+                                    transform: "translateX(-50%)",
+                                    zIndex: 50, pointerEvents: "none",
+                                    borderRadius: 10, overflow: "hidden",
+                                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
+                                    border: "2px solid #e9d5ff", background: "#000",
+                                  }}>
+                                    <img src={photo.full} alt="" style={{ width: 400, height: 280, objectFit: "cover", display: "block" }} />
+                                    <div style={{ padding: "4px 8px", background: "#faf5ff", fontSize: 10, color: "#6d28d9" }}>
+                                      © {photo.photographer}
+                                    </div>
                                   </div>
-                                )}
-
-                                {!pexelsLoading && pexelsPhotos.length === 0 && !pexelsError && (
-                                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Type a search term above</div>
-                                )}
-
-                                <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 8 }}>
-                                  Photos from Pexels · free to use
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      addMediaUrl(dateKey, activePlatform, photo.full);
+                                      setPexelsPostKey(null);
+                                    }}
+                                    style={{
+                                      position: "absolute", bottom: 4, right: 4,
+                                      padding: "2px 6px", borderRadius: 4, border: "none",
+                                      background: "rgba(0,0,0,0.65)", color: "#fff",
+                                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                    }}
+                                  >
+                                    Use
+                                  </button>
+                                  <div style={{
+                                    position: "absolute", bottom: 4, left: 4,
+                                    fontSize: 9, color: "rgba(255,255,255,0.8)",
+                                    background: "rgba(0,0,0,0.4)", borderRadius: 3, padding: "1px 3px",
+                                    maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                  }}>
+                                    {photo.photographer}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
+                              ))}
+                            </div>
+                          )}
+
+                          {!pexelsLoading && pexelsPhotos.length === 0 && !pexelsError && (
+                            <div style={{ fontSize: 11, color: "#94a3b8" }}>Type a search term above</div>
+                          )}
+
+                          <div style={{ fontSize: 9, color: "#a78bfa", marginTop: 8 }}>
+                            Photos from Pexels · free to use
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
@@ -2072,7 +2059,8 @@ export default function ProoferBoard({
                         <span style={{ fontSize: 9, color: "#a1a1aa" }}>Publish (GMT)</span>
                       </div>
                     </div>
-                  )}
+                  );
+                  })()}
                 </div>
 
                 <div
