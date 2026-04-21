@@ -2685,14 +2685,7 @@ function DayScrubber({
             : isElapsed
             ? "#d4d4d8"
             : "#e4e4e7";
-        const fg =
-          color === "red"
-            ? "#7f1d1d"
-            : color === "green"
-            ? "#166534"
-            : color === "yellow"
-            ? "#854d0e"
-            : "#a1a1aa";
+        const fg = "#a1a1aa";
 
         return (
           <a
