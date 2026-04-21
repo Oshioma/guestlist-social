@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 
-export const DEFAULT_CONSULTATION_QUESTIONS = [
+const DEFAULT_CONSULTATION_QUESTIONS = [
   "Company name / handles",
   "Mission statement",
   "How would you describe the personality of your business?",
@@ -45,6 +45,80 @@ export type CreateConsultationFormState = {
   error: string | null;
   success: string | null;
 };
+
+/**
+ * Ensure every client has at least one consultation form available.
+ * This keeps the admin edit experience usable for older clients that were
+ * created before consultation forms existed.
+ */
+export async function ensureDefaultConsultationFormForClient(clientId: string) {
+  try {
+    const safeClientId = sanitizeClientId(clientId);
+    const supabase = await createClient();
+
+    const { data: existingForms, error: existingFormsError } = await supabase
+      .from("consultation_forms")
+      .select("id")
+      .eq("client_id", safeClientId)
+      .limit(1);
+
+    if (existingFormsError) {
+      if (existingFormsError.code === "42P01") {
+        return;
+      }
+      console.error(
+        "ensureDefaultConsultationFormForClient lookup error:",
+        existingFormsError
+      );
+      return;
+    }
+
+    if ((existingForms?.length ?? 0) > 0) {
+      return;
+    }
+
+    const { data: createdForm, error: createFormError } = await supabase
+      .from("consultation_forms")
+      .insert({
+        client_id: safeClientId,
+        title: "Consultation",
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (createFormError || !createdForm) {
+      if (createFormError?.code !== "42P01") {
+        console.error(
+          "ensureDefaultConsultationFormForClient create form error:",
+          createFormError
+        );
+      }
+      return;
+    }
+
+    const questions = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
+      form_id: createdForm.id,
+      prompt,
+      sort_order: index + 1,
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error: createQuestionsError } = await supabase
+      .from("consultation_questions")
+      .insert(questions);
+
+    if (createQuestionsError && createQuestionsError.code !== "42P01") {
+      console.error(
+        "ensureDefaultConsultationFormForClient create questions error:",
+        createQuestionsError
+      );
+    }
+  } catch (error) {
+    console.error("ensureDefaultConsultationFormForClient unexpected error:", error);
+  }
+}
 
 function sanitizeClientId(clientId: string) {
   const normalized = String(clientId ?? "").trim();
