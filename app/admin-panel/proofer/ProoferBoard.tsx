@@ -263,8 +263,14 @@ export default function ProoferBoard({
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
   const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
   const [previewIdxMap, setPreviewIdxMap] = useState<Record<string, number>>({});
-  const [imgSuggestions, setImgSuggestions] = useState<Record<string, { id: number; thumb: string; full: string; photographer: string; pexelsUrl: string }[]>>({});
-  const [imgSearching, setImgSearching] = useState<Record<string, boolean>>({});
+  // ── Client media library ───────────────────────────────────────────────────
+  const [clientImages, setClientImages] = useState<{ id: string; publicUrl: string; source: string }[]>([]);
+  const [clientImagesLoading, setClientImagesLoading] = useState(false);
+  const [clientImagesLoaded, setClientImagesLoaded] = useState<string | null>(null); // tracks which clientId was loaded
+  const [imgLibraryIdeaId, setImgLibraryIdeaId] = useState<string | null>(null);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [imgScanning, setImgScanning] = useState(false);
+  const [imgScanMsg, setImgScanMsg] = useState<string | null>(null);
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -748,21 +754,76 @@ export default function ProoferBoard({
     }
   }
 
-  async function handleSearchImages(ideaId: string, imageIdea: string) {
-    setImgSearching((prev) => ({ ...prev, [ideaId]: true }));
+  async function handleLoadClientImages(cid: string) {
+    if (clientImagesLoaded === cid || clientImagesLoading) return;
+    setClientImagesLoading(true);
     try {
-      const res = await fetch(`/api/suggest-images?q=${encodeURIComponent(imageIdea)}&per_page=4`);
+      const res = await fetch(`/api/client-images?clientId=${encodeURIComponent(cid)}`);
       const data = await res.json();
       if (data.ok) {
-        setImgSuggestions((prev) => ({ ...prev, [ideaId]: data.photos }));
+        setClientImages(data.images);
+        setClientImagesLoaded(cid);
+      }
+    } finally {
+      setClientImagesLoading(false);
+    }
+  }
+
+  async function handleUploadClientImage(file: File) {
+    if (!clientId || imgUploading) return;
+    setImgUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("clientId", clientId);
+      const res = await fetch("/api/client-images/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (data.ok) {
+        setClientImages((prev) => [data.image, ...prev]);
       } else {
-        alert(`Image search failed: ${data.error ?? "Unknown error"}`);
+        alert(data.error ?? "Upload failed");
       }
     } catch {
-      alert("Network error searching for photos.");
+      alert("Network error uploading image.");
     } finally {
-      setImgSearching((prev) => { const n = { ...prev }; delete n[ideaId]; return n; });
+      setImgUploading(false);
     }
+  }
+
+  async function handleScanWebsite() {
+    if (!clientId || imgScanning) return;
+    setImgScanning(true);
+    setImgScanMsg(null);
+    try {
+      const res = await fetch("/api/client-images/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (data.added > 0) {
+          setClientImages((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            return [...data.images.filter((i: { id: string }) => !existingIds.has(i.id)), ...prev];
+          });
+          setImgScanMsg(`Found ${data.added} new image${data.added !== 1 ? "s" : ""}`);
+        } else {
+          setImgScanMsg("No new images found");
+        }
+      } else {
+        setImgScanMsg(data.error ?? "Scan failed");
+      }
+    } catch {
+      setImgScanMsg("Network error during scan");
+    } finally {
+      setImgScanning(false);
+    }
+  }
+
+  async function handleDeleteClientImage(imageId: string) {
+    await fetch(`/api/client-images?id=${encodeURIComponent(imageId)}`, { method: "DELETE" });
+    setClientImages((prev) => prev.filter((i) => i.id !== imageId));
   }
 
   async function handleClearIdeas() {
@@ -2228,20 +2289,19 @@ export default function ProoferBoard({
                 </div>
               </div>
 
-              {/* AI image concept hints */}
+              {/* AI image concept hints + client media library */}
               {slotIdeas.filter((i) => i.imageIdea).map((idea, idx) => {
-                const photos = imgSuggestions[idea.id] ?? [];
-                const searching = imgSearching[idea.id] ?? false;
                 const hintCount = slotIdeas.filter((i) => i.imageIdea).length;
+                const libraryOpen = imgLibraryIdeaId === idea.id;
                 return (
                 <div
                   key={idea.id}
                   style={{
                     borderLeft: "1px solid #e0f2fe",
                     borderRight: "1px solid #e0f2fe",
-                    borderBottom: idx === hintCount - 1 ? "1px solid #e0f2fe" : undefined,
+                    borderBottom: idx === hintCount - 1 && !libraryOpen ? "1px solid #e0f2fe" : undefined,
                     borderTop: idx === 0 ? "1px solid #e0f2fe" : "1px solid #e4e4e7",
-                    borderRadius: idx === hintCount - 1 ? "0 0 12px 12px" : undefined,
+                    borderRadius: idx === hintCount - 1 && !libraryOpen ? "0 0 12px 12px" : undefined,
                     background: "#f0f9ff",
                   }}
                 >
@@ -2251,21 +2311,27 @@ export default function ProoferBoard({
                     <span style={{ fontSize: 12, color: "#374151", flex: 1, lineHeight: 1.5 }}>{idea.imageIdea}</span>
                     <button
                       type="button"
-                      onClick={() => handleSearchImages(idea.id, idea.imageIdea ?? "")}
-                      disabled={searching}
+                      onClick={() => {
+                        if (libraryOpen) {
+                          setImgLibraryIdeaId(null);
+                        } else {
+                          setImgLibraryIdeaId(idea.id);
+                          if (clientId && clientImagesLoaded !== clientId) handleLoadClientImages(clientId);
+                        }
+                      }}
                       style={{
                         flexShrink: 0,
                         padding: "2px 8px",
                         border: "1px solid #bae6fd",
                         borderRadius: 6,
-                        background: "#e0f2fe",
-                        color: "#0369a1",
+                        background: libraryOpen ? "#0369a1" : "#e0f2fe",
+                        color: libraryOpen ? "#fff" : "#0369a1",
                         fontSize: 11,
                         fontWeight: 600,
-                        cursor: searching ? "wait" : "pointer",
+                        cursor: "pointer",
                       }}
                     >
-                      {searching ? "Searching…" : photos.length > 0 ? "Refresh" : "Find photos"}
+                      Photos
                     </button>
                     <button
                       type="button"
@@ -2286,44 +2352,143 @@ export default function ProoferBoard({
                     </button>
                   </div>
 
-                  {/* Pexels photo suggestions */}
-                  {photos.length > 0 && (
-                    <div style={{ padding: "6px 14px 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {photos.map((photo) => (
-                        <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}>
-                          <img
-                            src={photo.thumb}
-                            alt={photo.photographer}
-                            style={{ width: 120, height: 80, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => addMediaUrl(dateKey, activePlatform, photo.full)}
-                            style={{
-                              position: "absolute",
-                              bottom: 4,
-                              right: 4,
-                              padding: "2px 6px",
-                              borderRadius: 4,
-                              border: "none",
-                              background: "rgba(0,0,0,0.65)",
-                              color: "#fff",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              cursor: "pointer",
+                  {/* Client media library panel */}
+                  {libraryOpen && (
+                    <div style={{
+                      borderTop: "1px solid #bae6fd",
+                      padding: "10px 14px 14px",
+                      background: "#f8faff",
+                      borderRadius: "0 0 12px 12px",
+                    }}>
+                      {/* Toolbar */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>
+                          Client photos
+                        </span>
+                        {/* Upload button */}
+                        <label style={{
+                          padding: "3px 10px",
+                          borderRadius: 6,
+                          border: "1px solid #bae6fd",
+                          background: "#e0f2fe",
+                          color: "#0369a1",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: imgUploading ? "wait" : "pointer",
+                          flexShrink: 0,
+                        }}>
+                          {imgUploading ? "Uploading…" : "+ Upload"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            multiple
+                            style={{ display: "none" }}
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files ?? []);
+                              files.forEach((f) => handleUploadClientImage(f));
+                              e.target.value = "";
                             }}
-                          >
-                            Use
-                          </button>
-                        </div>
-                      ))}
-                      <div style={{ width: "100%", fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
-                        Photos from{" "}
-                        <a href="https://www.pexels.com" target="_blank" rel="noreferrer" style={{ color: "#94a3b8" }}>
-                          Pexels
-                        </a>{" "}
-                        · free to use commercially
+                          />
+                        </label>
+                        {/* Scan website button */}
+                        <button
+                          type="button"
+                          onClick={() => { setImgScanMsg(null); handleScanWebsite(); }}
+                          disabled={imgScanning}
+                          style={{
+                            padding: "3px 10px",
+                            borderRadius: 6,
+                            border: "1px solid #d1fae5",
+                            background: "#ecfdf5",
+                            color: "#065f46",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: imgScanning ? "wait" : "pointer",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {imgScanning ? "Scanning…" : "Scan website"}
+                        </button>
+                        {imgScanMsg && (
+                          <span style={{ fontSize: 11, color: imgScanMsg.includes("failed") || imgScanMsg.includes("No website") || imgScanMsg.includes("error") ? "#991b1b" : "#065f46" }}>
+                            {imgScanMsg}
+                          </span>
+                        )}
+                        {clientImagesLoading && (
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</span>
+                        )}
                       </div>
+
+                      {/* Image grid */}
+                      {clientImages.length === 0 && !clientImagesLoading ? (
+                        <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0" }}>
+                          No photos yet — upload some or scan the client website.
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {clientImages.map((img) => (
+                            <div key={img.id} style={{ position: "relative", flexShrink: 0 }}>
+                              <img
+                                src={img.publicUrl}
+                                alt=""
+                                style={{
+                                  width: 110,
+                                  height: 75,
+                                  objectFit: "cover",
+                                  borderRadius: 6,
+                                  display: "block",
+                                  border: "2px solid #e0f2fe",
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  addMediaUrl(dateKey, activePlatform, img.publicUrl);
+                                  setImgLibraryIdeaId(null);
+                                }}
+                                style={{
+                                  position: "absolute",
+                                  bottom: 4,
+                                  right: 4,
+                                  padding: "2px 6px",
+                                  borderRadius: 4,
+                                  border: "none",
+                                  background: "rgba(0,0,0,0.65)",
+                                  color: "#fff",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Use
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteClientImage(img.id)}
+                                style={{
+                                  position: "absolute",
+                                  top: 4,
+                                  right: 4,
+                                  width: 18,
+                                  height: 18,
+                                  borderRadius: "50%",
+                                  border: "none",
+                                  background: "rgba(0,0,0,0.55)",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  lineHeight: "18px",
+                                  textAlign: "center",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                                title="Remove from library"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
