@@ -1731,8 +1731,8 @@ export default function ProoferBoard({
                         bucket="postimages"
                         folder={`proofer/${clientId}/${month}`}
                         onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
-                        label={draft.mediaUrls.length > 0 ? "Add another" : "Upload media"}
-                        accept="image/*,video/*"
+                        label="🎬"
+                        accept="video/*"
                       />
                       <PasteLinkInput
                         onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
@@ -1788,21 +1788,6 @@ export default function ProoferBoard({
                                   }}>
                                     {imgUploading ? "Uploading…" : "+ Photos"}
                                     <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: "none" }}
-                                      onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
-                                    />
-                                  </label>
-
-                                  {/* Upload folder */}
-                                  <label style={{
-                                    padding: "3px 10px", borderRadius: 6,
-                                    border: "1px solid #bae6fd", background: "#e0f2fe",
-                                    color: "#0369a1", fontSize: 11, fontWeight: 600,
-                                    cursor: imgUploading ? "wait" : "pointer", flexShrink: 0,
-                                  }} title="Upload an entire folder of photos">
-                                    📁 Folder
-                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                    {/* @ts-expect-error webkitdirectory is non-standard */}
-                                    <input type="file" accept="image/*" multiple webkitdirectory="" style={{ display: "none" }}
                                       onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
                                     />
                                   </label>
