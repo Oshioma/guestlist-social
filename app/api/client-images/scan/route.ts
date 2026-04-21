@@ -131,9 +131,15 @@ function extractImageUrls(html: string, base: string): string[] {
     )) {
       try { resolve(urlMatch[1]); } catch { /* skip */ }
     }
-    // Also catch CDN URLs without extensions (Squarespace, Imgix, etc.)
+    // CDN URLs without extensions (Squarespace, Imgix, etc.)
     for (const urlMatch of scriptContent.matchAll(
       /"(https?:\/\/[^"\\]{10,200}\/(?:image|images|img|photo|photos|media|upload|uploads)[^"\\]{0,200})"/gi
+    )) {
+      try { resolve(urlMatch[1]); } catch { /* skip */ }
+    }
+    // Relative asset paths — Vite/Next.js static imports become "/assets/name-hash.ext"
+    for (const urlMatch of scriptContent.matchAll(
+      /"(\/[a-zA-Z0-9/_-]{1,200}\.(?:jpe?g|png|webp|gif))"/gi
     )) {
       try { resolve(urlMatch[1]); } catch { /* skip */ }
     }
