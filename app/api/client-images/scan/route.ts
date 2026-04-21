@@ -35,15 +35,30 @@ const SKIP_PATTERNS = [
 const SIZE_PARAMS = new Set([
   "w","h","width","height","size","quality","q","format","fm","fit",
   "auto","cs","dpr","crop","gravity","blur","sharp","fl","pg","lossless",
+  "v","cb","t","ts","ver","rev","cachebuster","_","imwidth","imheight",
+  "resize","scale","maxwidth","maxheight","thumbnail",
 ]);
 
+// Strips query-param AND filename-encoded sizes so duplicate variants
+// of the same image collapse to one dedup key.
+// Examples handled:
+//   image-300x200.jpg  (WordPress)      → image.jpg
+//   image_600x.jpg     (Shopify)        → image.jpg
+//   image.300x200.jpg  (some CDNs)      → image.jpg
+//   image?width=800    (query param)    → image
 function normalizeImageUrl(raw: string): string {
   try {
     const u = new URL(raw);
+    // 1. Strip resize/cache-bust query params
     for (const key of [...u.searchParams.keys()]) {
       if (SIZE_PARAMS.has(key.toLowerCase())) u.searchParams.delete(key);
     }
-    // Drop trailing ? if all params were removed
+    // 2. Strip filename-encoded size suffixes before the extension
+    //    Matches: -300x200, _600x, _x400, .300x200 just before .jpg etc.
+    u.pathname = u.pathname.replace(
+      /[-_.](\d+x\d*|\d*x\d+)(?=\.[a-z]{2,5}$)/i,
+      ""
+    );
     return u.toString().replace(/\?$/, "");
   } catch {
     return raw;
@@ -235,10 +250,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Could not reach website." }, { status: 502 });
   }
 
-  // 2. Extract images from homepage + find internal links to crawl
-  const allImageUrls = new Set<string>(
-    extractImageUrls(homeHtml, websiteUrl).map(normalizeImageUrl)
-  );
+  // Returns a rough "size score" for a URL — higher is better quality.
+  // Prefers URLs without size suffixes, otherwise picks the largest dimensions.
+  function sizeScore(url: string): number {
+    const m = url.match(/[-_.](\d+)x(\d+)/i);
+    if (!m) return 999999; // no size suffix = original/full quality
+    return Number(m[1]) * Number(m[2]);
+  }
+
+  // 2. Extract images from homepage + find internal links to crawl.
+  // We deduplicate by normalised key but keep the BEST (largest) original URL.
+  const bestByKey = new Map<string, string>(); // normalised key → best original URL
+
+  const addUrl = (raw: string) => {
+    const key = normalizeImageUrl(raw);
+    const existing = bestByKey.get(key);
+    if (!existing || sizeScore(raw) > sizeScore(existing)) {
+      bestByKey.set(key, raw);
+    }
+  };
+
+  for (const url of extractImageUrls(homeHtml, websiteUrl)) addUrl(url);
+
   const internalLinks = extractInternalLinks(homeHtml, websiteUrl).slice(0, MAX_EXTRA_PAGES * 2);
 
   // 3. Fetch extra pages in parallel (cap at MAX_EXTRA_PAGES)
@@ -248,13 +281,11 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < extraPages.length; i++) {
       const html = extraHtmls[i];
       if (!html) continue;
-      for (const url of extractImageUrls(html, extraPages[i])) {
-        allImageUrls.add(normalizeImageUrl(url));
-      }
+      for (const url of extractImageUrls(html, extraPages[i])) addUrl(url);
     }
   }
 
-  const foundUrls = Array.from(allImageUrls);
+  const foundUrls = Array.from(bestByKey.values());
 
   if (foundUrls.length === 0) {
     return NextResponse.json({ ok: true, added: 0, images: [] });
