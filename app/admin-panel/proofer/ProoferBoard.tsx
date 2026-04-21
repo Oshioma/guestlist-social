@@ -2680,7 +2680,7 @@ function DayScrubber({
     >
       {days.map((d, i) => {
         const dateKey = toDateKey(d);
-        let color: "red" | "green" | "grey" = "grey";
+        let color: "red" | "green" | "yellow" | "grey" = "grey";
         for (const p of PROOFER_PLATFORMS) {
           const post = postsByKey.get(postKey(dateKey, p));
           if (!post) continue;
@@ -2690,6 +2690,8 @@ function DayScrubber({
           }
           if (post.status === "proofed" || post.status === "approved") {
             color = "green";
+          } else if (post.status === "check" && color !== "green") {
+            color = "yellow";
           }
         }
 
@@ -2698,18 +2700,20 @@ function DayScrubber({
           color === "red"
             ? "#fca5a5"
             : color === "green"
-            ? "#22c55e"
+            ? "#86efac"
+            : color === "yellow"
+            ? "#fef08a"
             : isElapsed
             ? "#d4d4d8"
             : "#e4e4e7";
         const fg =
           color === "red"
             ? "#7f1d1d"
-            : color === "grey" && !isElapsed
-            ? "#a1a1aa"
-            : color === "grey" && isElapsed
-            ? "#a1a1aa"
-            : "#fff";
+            : color === "green"
+            ? "#166534"
+            : color === "yellow"
+            ? "#854d0e"
+            : "#a1a1aa";
 
         return (
           <a
