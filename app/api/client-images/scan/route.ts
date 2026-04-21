@@ -119,7 +119,27 @@ function extractImageUrls(html: string, base: string): string[] {
     resolve(m[1]);
   }
 
-  // JSON-LD / data attributes that look like image URLs
+  // Image URLs embedded in <script> JSON blobs — catches Next.js __NEXT_DATA__,
+  // Squarespace gallery JSON, Wix data, and similar JS-rendered frameworks.
+  // Scan all <script> tag content for https URLs that look like images.
+  for (const m of html.matchAll(/<script[\s\S]*?>([\s\S]*?)<\/script>/gi)) {
+    const scriptContent = m[1];
+    if (!scriptContent) continue;
+    // Look for URLs ending with image extensions (with or without query params)
+    for (const urlMatch of scriptContent.matchAll(
+      /"(https?:\/\/[^"\\]{10,500}\.(?:jpe?g|png|webp|gif)(?:[^"\\]*)?)"/gi
+    )) {
+      try { resolve(urlMatch[1]); } catch { /* skip */ }
+    }
+    // Also catch CDN URLs without extensions (Squarespace, Imgix, etc.)
+    for (const urlMatch of scriptContent.matchAll(
+      /"(https?:\/\/[^"\\]{10,200}\/(?:image|images|img|photo|photos|media|upload|uploads)[^"\\]{0,200})"/gi
+    )) {
+      try { resolve(urlMatch[1]); } catch { /* skip */ }
+    }
+  }
+
+  // Fallback: any https image URL appearing anywhere in the HTML
   for (const m of html.matchAll(/"(https?:\/\/[^"]+\.(?:jpe?g|png|webp|gif))(?:\?[^"]*)?"(?:[^/])/gi)) {
     resolve(m[1]);
   }
