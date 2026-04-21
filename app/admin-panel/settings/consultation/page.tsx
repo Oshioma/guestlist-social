@@ -2,16 +2,30 @@ import Link from "next/link";
 import {
   createConsultationDefaultQuestionAction,
   deleteConsultationDefaultQuestionAction,
+  importConsultationForClientAction,
   updateConsultationDefaultQuestionAction,
 } from "@/app/admin-panel/lib/consultation-actions";
 import { createClient } from "@/lib/supabase/server";
 import { getConsultationDefaultQuestions } from "@/app/admin-panel/lib/consultation-default-questions";
+import ConsultationImportForm from "@/app/admin-panel/components/ConsultationImportForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConsultationSettingsPage() {
   const supabase = await createClient();
-  const defaultQuestions = await getConsultationDefaultQuestions(supabase);
+  const [defaultQuestions, clientsRes] = await Promise.all([
+    getConsultationDefaultQuestions(supabase),
+    supabase
+      .from("clients")
+      .select("id, name, archived")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+  ]);
+  const clients = (clientsRes.data ?? []) as Array<{
+    id: number;
+    name: string | null;
+    archived: boolean | null;
+  }>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -180,6 +194,32 @@ export default async function ConsultationSettingsPage() {
             Add question
           </button>
         </form>
+      </section>
+
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e4e4e7",
+          borderRadius: 14,
+          padding: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+          Consultation import
+        </h3>
+        <p style={{ margin: 0, fontSize: 13, color: "#71717a" }}>
+          Paste one consultation row here to import it for an existing client.
+        </p>
+        <ConsultationImportForm
+          clients={clients.map((client) => ({
+            id: client.id,
+            name: client.name ?? `Client ${client.id}`,
+          }))}
+          action={importConsultationForClientAction}
+        />
       </section>
     </div>
   );
