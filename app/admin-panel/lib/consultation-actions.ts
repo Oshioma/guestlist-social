@@ -2,12 +2,45 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
-import { DEFAULT_CONSULTATION_QUESTIONS } from "./consultation-default-questions";
+import {
+  getConsultationDefaultQuestions,
+  setConsultationDefaultQuestions,
+} from "./consultation-default-questions";
 
 export type CreateConsultationFormState = {
   error: string | null;
   success: string | null;
 };
+
+async function syncFormQuestionsToDefaults(supabase: Awaited<ReturnType<typeof createClient>>, formId: number) {
+  const { data: questionRows, error: questionLookupError } = await supabase
+    .from("consultation_questions")
+    .select("prompt, sort_order")
+    .eq("form_id", formId)
+    .order("sort_order", { ascending: true });
+
+  if (questionLookupError) {
+    console.error(
+      "syncFormQuestionsToDefaults lookup error:",
+      questionLookupError
+    );
+    return;
+  }
+
+  const prompts = (questionRows ?? [])
+    .map((row) => String(row.prompt ?? "").trim())
+    .filter((prompt) => prompt.length > 0);
+
+  if (prompts.length === 0) {
+    return;
+  }
+
+  try {
+    await setConsultationDefaultQuestions(supabase, prompts);
+  } catch (error) {
+    console.error("syncFormQuestionsToDefaults update error:", error);
+  }
+}
 
 /**
  * Ensure every client has at least one consultation form available.
@@ -61,7 +94,8 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
       return;
     }
 
-    const questions = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
+    const defaultQuestions = await getConsultationDefaultQuestions(supabase);
+    const questions = defaultQuestions.map((prompt, index) => ({
       form_id: createdForm.id,
       prompt,
       sort_order: index + 1,
@@ -168,7 +202,8 @@ export async function createConsultationFormAction(
       .neq("id", form.id);
 
     if (seedDefaults) {
-      const questions = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
+      const defaultQuestions = await getConsultationDefaultQuestions(supabase);
+      const questions = defaultQuestions.map((prompt, index) => ({
         form_id: form.id,
         prompt,
         sort_order: index + 1,
@@ -304,6 +339,7 @@ export async function addConsultationQuestionAction(
     throw new Error("Could not add consultation question.");
   }
 
+  await syncFormQuestionsToDefaults(supabase, formId);
   revalidateConsultationPaths(safeClientId);
 }
 
@@ -333,6 +369,7 @@ export async function updateConsultationQuestionAction(
     throw new Error("Could not update consultation question.");
   }
 
+  await syncFormQuestionsToDefaults(supabase, formId);
   revalidateConsultationPaths(safeClientId);
 }
 
@@ -356,5 +393,6 @@ export async function deleteConsultationQuestionAction(
     throw new Error("Could not delete consultation question.");
   }
 
+  await syncFormQuestionsToDefaults(supabase, formId);
   revalidateConsultationPaths(safeClientId);
 }

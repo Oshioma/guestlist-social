@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
-import { DEFAULT_CONSULTATION_QUESTIONS } from "./consultation-default-questions";
+import { getConsultationDefaultQuestions } from "./consultation-default-questions";
 import type { BrandContext } from "./types";
 
 function normalizeStatus(status: string) {
@@ -208,13 +208,14 @@ async function getOrSeedConsultationQuestions(
     return questions;
   }
 
-  const nowIso = new Date().toISOString();
-  const defaults = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
+  const defaults = (await getConsultationDefaultQuestions(supabase)).map(
+    (prompt, index) => ({
     form_id: formId,
     prompt,
     sort_order: index + 1,
-    updated_at: nowIso,
-  }));
+      updated_at: new Date().toISOString(),
+    })
+  );
 
   const { error: seedError } = await supabase
     .from("consultation_questions")

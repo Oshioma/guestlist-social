@@ -1,4 +1,11 @@
-export const DEFAULT_CONSULTATION_QUESTIONS = [
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+type DefaultQuestionRow = {
+  prompt: string | null;
+  sort_order: number | null;
+};
+
+const FALLBACK_CONSULTATION_DEFAULT_QUESTIONS = [
   "Company name / handles",
   "Mission statement",
   "How would you describe the personality of your business?",
@@ -35,3 +42,73 @@ export const DEFAULT_CONSULTATION_QUESTIONS = [
   "Are there any common questions you get asked by customers? What are the responses",
   "It's recommending that we respond with a name",
 ];
+
+function normalizePrompt(prompt: string) {
+  return String(prompt ?? "").trim();
+}
+
+export async function getConsultationDefaultQuestions(
+  supabase: SupabaseClient
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("consultation_default_questions")
+    .select("prompt, sort_order")
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    if (error.code !== "42P01") {
+      console.error("getConsultationDefaultQuestions error:", error);
+    }
+    return [...FALLBACK_CONSULTATION_DEFAULT_QUESTIONS];
+  }
+
+  const prompts = ((data ?? []) as DefaultQuestionRow[])
+    .map((row) => normalizePrompt(row.prompt ?? ""))
+    .filter((prompt) => prompt.length > 0);
+
+  if (prompts.length === 0) {
+    return [...FALLBACK_CONSULTATION_DEFAULT_QUESTIONS];
+  }
+
+  return prompts;
+}
+
+export async function setConsultationDefaultQuestions(
+  supabase: SupabaseClient,
+  prompts: string[]
+) {
+  const normalizedPrompts = prompts
+    .map((prompt) => normalizePrompt(prompt))
+    .filter((prompt) => prompt.length > 0);
+
+  if (normalizedPrompts.length === 0) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const rows = normalizedPrompts.map((prompt, index) => ({
+    sort_order: index + 1,
+    prompt,
+    updated_at: nowIso,
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("consultation_default_questions")
+    .upsert(rows, { onConflict: "sort_order" });
+
+  if (upsertError) {
+    if (upsertError.code === "42P01") {
+      return;
+    }
+    throw upsertError;
+  }
+
+  const { error: trimError } = await supabase
+    .from("consultation_default_questions")
+    .delete()
+    .gt("sort_order", normalizedPrompts.length);
+
+  if (trimError && trimError.code !== "42P01") {
+    throw trimError;
+  }
+}
