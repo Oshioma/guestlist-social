@@ -1896,8 +1896,9 @@ export default function ProoferBoard({
                                     borderRadius: 10, overflow: "hidden",
                                     boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
                                     border: "2px solid #e0f2fe", background: "#000",
+                                    width: 260,
                                   }}>
-                                    <img src={img.publicUrl} alt="" style={{ width: 400, height: 280, objectFit: "cover", display: "block" }} />
+                                    <img src={img.publicUrl} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
                                   </div>
                                   <button
                                     type="button"
@@ -1995,8 +1996,9 @@ export default function ProoferBoard({
                                     borderRadius: 10, overflow: "hidden",
                                     boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
                                     border: "2px solid #e9d5ff", background: "#000",
+                                    width: 260,
                                   }}>
-                                    <img src={photo.full} alt="" style={{ width: 400, height: 280, objectFit: "cover", display: "block" }} />
+                                    <img src={photo.full} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
                                     <div style={{ padding: "4px 8px", background: "#faf5ff", fontSize: 10, color: "#6d28d9" }}>
                                       © {photo.photographer}
                                     </div>
