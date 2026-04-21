@@ -7,6 +7,7 @@ import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientBrandContext from "../../../components/ClientBrandContext";
 import ClientConsultationManager from "../../../components/ClientConsultationManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
+import { ensureDefaultConsultationFormForClient } from "../../../lib/consultation-actions";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
 import type { BrandContext } from "../../../lib/types";
@@ -18,6 +19,8 @@ type Props = {
 export default async function EditClientPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
+
+  await ensureDefaultConsultationFormForClient(clientId);
 
   const [clientRes, formsRes, questionsRes, submissionsRes] = await Promise.all([
     supabase.from("clients").select("*").eq("id", clientId).single(),
