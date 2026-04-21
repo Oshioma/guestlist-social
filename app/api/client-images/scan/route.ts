@@ -14,9 +14,9 @@ import { createClient } from "../../../../lib/supabase/server";
 import { createClient as serviceClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 45;
+export const maxDuration = 30;
 
-const MAX_EXTRA_PAGES = 6;   // crawl up to 6 extra pages beyond the homepage
+const MAX_EXTRA_PAGES = 3;   // crawl up to 3 extra pages beyond the homepage
 const MAX_IMAGES      = 120; // total cap to insert per scan run
 
 function getServiceSupabase() {
@@ -130,7 +130,7 @@ async function fetchPage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; GuestlistBot/1.0)" },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     return await res.text();
