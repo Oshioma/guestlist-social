@@ -31,6 +31,25 @@ const SKIP_PATTERNS = [
   /sprite/i, /pixel/i, /tracking/i, /1x1/i, /placeholder/i, /blank/i,
 ];
 
+// Query params that only describe a resize/format variant of the same image
+const SIZE_PARAMS = new Set([
+  "w","h","width","height","size","quality","q","format","fm","fit",
+  "auto","cs","dpr","crop","gravity","blur","sharp","fl","pg","lossless",
+]);
+
+function normalizeImageUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    for (const key of [...u.searchParams.keys()]) {
+      if (SIZE_PARAMS.has(key.toLowerCase())) u.searchParams.delete(key);
+    }
+    // Drop trailing ? if all params were removed
+    return u.toString().replace(/\?$/, "");
+  } catch {
+    return raw;
+  }
+}
+
 // Prefer extra pages that are likely to contain photos
 const PAGE_PRIORITY_PATTERNS = [
   /galeri/i, /photo/i, /image/i, /media/i,
@@ -174,7 +193,9 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Extract images from homepage + find internal links to crawl
-  const allImageUrls = new Set<string>(extractImageUrls(homeHtml, websiteUrl));
+  const allImageUrls = new Set<string>(
+    extractImageUrls(homeHtml, websiteUrl).map(normalizeImageUrl)
+  );
   const internalLinks = extractInternalLinks(homeHtml, websiteUrl).slice(0, MAX_EXTRA_PAGES * 2);
 
   // 3. Fetch extra pages in parallel (cap at MAX_EXTRA_PAGES)
@@ -185,7 +206,7 @@ export async function POST(req: NextRequest) {
       const html = extraHtmls[i];
       if (!html) continue;
       for (const url of extractImageUrls(html, extraPages[i])) {
-        allImageUrls.add(url);
+        allImageUrls.add(normalizeImageUrl(url));
       }
     }
   }
@@ -202,7 +223,7 @@ export async function POST(req: NextRequest) {
     .select("public_url")
     .eq("client_id", clientId);
 
-  const existingSet = new Set((existing ?? []).map((r: { public_url: string }) => r.public_url));
+  const existingSet = new Set((existing ?? []).map((r: { public_url: string }) => normalizeImageUrl(r.public_url)));
   const newUrls = foundUrls.filter((u) => !existingSet.has(u)).slice(0, MAX_IMAGES);
 
   if (newUrls.length === 0) {
