@@ -2,10 +2,10 @@
  * POST /api/client-images/upload
  *
  * Uploads an image file to Supabase Storage under clients/{clientId}/
- * and saves a record to the client_images table.
+ * and saves a record to client_upload_images.
  *
- * Body: multipart/form-data with fields: file, clientId
- * Returns: { ok, image: { id, publicUrl, source, createdAt } }
+ * Body: multipart/form-data — fields: file, clientId
+ * Returns: { ok, image: { id, publicUrl, table, createdAt } }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,7 +13,7 @@ import { createClient } from "../../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_SIZE = 20 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export async function POST(req: NextRequest) {
@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
   const { data: { publicUrl } } = supabase.storage.from("gsocial").getPublicUrl(storagePath);
 
   const { data: row, error: dbError } = await supabase
-    .from("client_images")
-    .insert({ client_id: clientId, public_url: publicUrl, storage_path: storagePath, source: "upload" })
-    .select("id, public_url, source, created_at")
+    .from("client_upload_images")
+    .insert({ client_id: clientId, public_url: publicUrl, storage_path: storagePath })
+    .select("id, public_url, created_at")
     .single();
 
   if (dbError) {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     image: {
       id: row.id as string,
       publicUrl: row.public_url as string,
-      source: row.source as string,
+      table: "upload" as const,
       createdAt: row.created_at as string,
     },
   });

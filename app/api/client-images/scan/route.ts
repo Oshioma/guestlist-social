@@ -2,10 +2,11 @@
  * POST /api/client-images/scan
  *
  * Fetches the client's website_url, extracts image URLs from the HTML
- * (img src, og:image meta, srcset), saves new ones to client_images.
+ * (img src, og:image meta, srcset, inline CSS backgrounds), and saves
+ * new ones to client_site_images.
  *
  * Body: { clientId }
- * Returns: { ok, added: number, images: ClientImage[] }
+ * Returns: { ok, added: number, images: { id, publicUrl, table, createdAt }[] }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,9 +24,8 @@ function getServiceSupabase() {
 }
 
 const SKIP_PATTERNS = [
-  /favicon/i, /\.svg(\?|$)/i, /icon/i, /logo/i,
-  /sprite/i, /pixel/i, /tracking/i, /1x1/i,
-  /placeholder/i, /blank/i,
+  /favicon/i, /\.svg(\?|$)/i, /\bicon\b/i, /\blogo\b/i,
+  /sprite/i, /pixel/i, /tracking/i, /1x1/i, /placeholder/i, /blank/i,
 ];
 
 function isContentImage(url: string): boolean {
@@ -38,16 +38,13 @@ function extractUrls(html: string, base: string): string[] {
   const found = new Set<string>();
 
   const resolve = (src: string) => {
-    try { found.add(new URL(src.trim(), base).href); } catch { /* skip */ }
+    try { found.add(new URL(src.trim(), base).href); } catch { /* skip malformed */ }
   };
 
-  // <img src="..."> and <img srcset="...">
   for (const m of html.matchAll(/<img\b[^>]+>/gi)) {
     const tag = m[0];
     const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1];
     if (src) resolve(src);
-
-    // srcset may contain multiple URLs
     const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
     if (srcset) {
       for (const part of srcset.split(",")) {
@@ -57,7 +54,6 @@ function extractUrls(html: string, base: string): string[] {
     }
   }
 
-  // <meta property="og:image" content="...">
   for (const m of html.matchAll(/<meta\b[^>]+>/gi)) {
     const tag = m[0];
     if (/property=["']og:image["']/i.test(tag)) {
@@ -66,7 +62,6 @@ function extractUrls(html: string, base: string): string[] {
     }
   }
 
-  // CSS url(...) in inline styles
   for (const m of html.matchAll(/url\(["']?(https?:\/\/[^"')]+)["']?\)/gi)) {
     resolve(m[1]);
   }
@@ -121,9 +116,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, added: 0, images: [] });
   }
 
-  // Deduplicate against what's already in the library
   const { data: existing } = await db
-    .from("client_images")
+    .from("client_site_images")
     .select("public_url")
     .eq("client_id", clientId);
 
@@ -135,16 +129,16 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: inserted, error: insertError } = await db
-    .from("client_images")
-    .insert(newUrls.map((url) => ({ client_id: clientId, public_url: url, source: "website_scan" })))
-    .select("id, public_url, source, created_at");
+    .from("client_site_images")
+    .insert(newUrls.map((url) => ({ client_id: clientId, public_url: url })))
+    .select("id, public_url, created_at");
 
   if (insertError) return NextResponse.json({ ok: false, error: insertError.message }, { status: 500 });
 
-  const images = (inserted ?? []).map((row: { id: string; public_url: string; source: string; created_at: string }) => ({
+  const images = (inserted ?? []).map((row: { id: string; public_url: string; created_at: string }) => ({
     id: row.id,
     publicUrl: row.public_url,
-    source: row.source,
+    table: "site" as const,
     createdAt: row.created_at,
   }));
 

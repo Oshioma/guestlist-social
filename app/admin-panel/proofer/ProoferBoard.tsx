@@ -264,7 +264,7 @@ export default function ProoferBoard({
   const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
   const [previewIdxMap, setPreviewIdxMap] = useState<Record<string, number>>({});
   // ── Client media library ───────────────────────────────────────────────────
-  const [clientImages, setClientImages] = useState<{ id: string; publicUrl: string; source: string }[]>([]);
+  const [clientImages, setClientImages] = useState<{ id: string; publicUrl: string; table: "site" | "upload" }[]>([]);
   const [clientImagesLoading, setClientImagesLoading] = useState(false);
   const [clientImagesLoaded, setClientImagesLoaded] = useState<string | null>(null); // tracks which clientId was loaded
   const [imgLibraryIdeaId, setImgLibraryIdeaId] = useState<string | null>(null);
@@ -821,8 +821,8 @@ export default function ProoferBoard({
     }
   }
 
-  async function handleDeleteClientImage(imageId: string) {
-    await fetch(`/api/client-images?id=${encodeURIComponent(imageId)}`, { method: "DELETE" });
+  async function handleDeleteClientImage(imageId: string, table: "site" | "upload") {
+    await fetch(`/api/client-images?id=${encodeURIComponent(imageId)}&table=${table}`, { method: "DELETE" });
     setClientImages((prev) => prev.filter((i) => i.id !== imageId));
   }
 
@@ -2464,7 +2464,7 @@ export default function ProoferBoard({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteClientImage(img.id)}
+                                onClick={() => handleDeleteClientImage(img.id, img.table)}
                                 style={{
                                   position: "absolute",
                                   top: 4,
