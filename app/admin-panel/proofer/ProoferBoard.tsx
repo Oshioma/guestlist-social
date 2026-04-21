@@ -1867,14 +1867,14 @@ export default function ProoferBoard({
                       {/* Modifier buttons + Clear */}
                       {(draft.caption.trim() || post || hasDraft) && (
                         <div style={{ padding: "0 12px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {draft.caption.trim() && (["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
+                          {draft.caption.trim() && (["regenerate", "new_hook", "shorter", "more_playful", "more_premium", "stronger_cta"] as const).map((mod) => {
                             const labels: Record<string, string> = {
-                              new_hook: "↺ Hook",
+                              regenerate: "↺",
+                              new_hook: "Hook",
                               shorter: "Shorter",
-                              more_playful: "More playful",
-                              more_premium: "More premium",
-                              stronger_cta: "Stronger CTA",
-                              regenerate: "Regenerate",
+                              more_playful: "Fun",
+                              more_premium: "Premium",
+                              stronger_cta: "CTA",
                             };
                             const activeModifier = captionModifying[postKey(dateKey, activePlatform)];
                             const isThisOne = activeModifier === mod;
