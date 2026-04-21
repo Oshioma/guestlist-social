@@ -1671,28 +1671,11 @@ export default function ProoferBoard({
                       <PasteLinkInput
                         onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
                       />
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                  }}
-                >
-
-
-                  {!isLocked && (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
                           type="time"
                           value={draft.publishTime}
-                          onChange={(e) =>
-                            updateDraft(dateKey, activePlatform, { publishTime: e.target.value })
-                          }
+                          onChange={(e) => updateDraft(dateKey, activePlatform, { publishTime: e.target.value })}
                           disabled={isLocked}
                           style={{
                             padding: "4px 6px",
@@ -1707,40 +1690,19 @@ export default function ProoferBoard({
                         />
                         <span style={{ fontSize: 9, color: "#a1a1aa" }}>Publish (GMT)</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSave(dateKey, activePlatform)}
-                        disabled={isPending || !hasDraft || isLocked}
-                        style={{
-                          padding: "8px 14px",
-                          borderRadius: 8,
-                          background: hasDraft && !isLocked ? "#18181b" : "#e4e4e7",
-                          color: hasDraft && !isLocked ? "#fff" : "#a1a1aa",
-                          border: "none",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: hasDraft && !isLocked ? "pointer" : "not-allowed",
-                        }}
-                      >
-                        Save
-                      </button>
-                      {(post || hasDraft) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(dateKey, activePlatform)}
-                          disabled={isPending || isLocked}
-                          style={{
-                            ...secondaryButtonStyle,
-                            color: "#991b1b",
-                            opacity: isLocked ? 0.6 : 1,
-                            cursor: isPending || isLocked ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
                     </div>
                   )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+
+
 
                   {(() => {
                     const previewIdx = previewIdxMap[key] ?? 0;
@@ -1748,9 +1710,10 @@ export default function ProoferBoard({
                     const activeUrl = draft.mediaUrls[safeIdx] ?? "";
                     const setPreviewIdx = (n: number) => setPreviewIdxMap((prev) => ({ ...prev, [key]: n }));
                     return (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <div
                       style={{
-                        width: "100%",
+                        flex: 1,
                         maxWidth: 500,
                         background: "#fff",
                         border: "1px solid #e4e4e7",
@@ -1870,8 +1833,8 @@ export default function ProoferBoard({
                         )}
                       </div>
 
-                      {/* Editable caption + status dots */}
-                      <div style={{ display: "flex", alignItems: "stretch", borderTop: "1px solid #f4f4f5" }}>
+                      {/* Editable caption */}
+                      <div style={{ borderTop: "1px solid #f4f4f5" }}>
                         <textarea
                           value={draft.caption}
                           onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
@@ -1879,8 +1842,9 @@ export default function ProoferBoard({
                           disabled={isLocked}
                           rows={12}
                           style={{
-                            flex: 1,
-                            padding: "10px 12px",
+                            display: "block",
+                            width: "100%",
+                            padding: "8px 12px 4px",
                             border: "none",
                             outline: "none",
                             resize: "none",
@@ -1894,44 +1858,12 @@ export default function ProoferBoard({
                             boxSizing: "border-box",
                           }}
                         />
-                        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 7, padding: "0 10px", borderLeft: "1px solid #f4f4f5" }}>
-                          {["proofed", "check", "improve"].map((statusValue) => {
-                            const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
-                            const active = effectiveStatus === btn.value;
-                            const disableThisButton = isPending || (isLocked && btn.value !== "proofed");
-                            return (
-                              <button
-                                key={btn.value}
-                                type="button"
-                                title={btn.label}
-                                aria-label={btn.label}
-                                onClick={() => handleStatus(dateKey, activePlatform, btn.value)}
-                                disabled={disableThisButton}
-                                style={{
-                                  width: 16,
-                                  height: 16,
-                                  padding: 0,
-                                  borderRadius: "50%",
-                                  border: "1px solid #e4e4e7",
-                                  background: btn.dot,
-                                  cursor: disableThisButton ? "not-allowed" : "pointer",
-                                  boxShadow: "none",
-                                  opacity: disableThisButton ? 0.35 : active ? 1 : 0.35,
-                                  transition: "opacity 120ms ease",
-                                  flexShrink: 0,
-                                }}
-                                onMouseEnter={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.75"; }}
-                                onMouseLeave={(e) => { if (!disableThisButton && !active) e.currentTarget.style.opacity = "0.35"; }}
-                              />
-                            );
-                          })}
-                        </div>
                       </div>
 
-                      {/* Modifier buttons */}
-                      {draft.caption.trim() && (
+                      {/* Modifier buttons + Clear */}
+                      {(draft.caption.trim() || post || hasDraft) && (
                         <div style={{ padding: "0 12px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {(["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
+                          {draft.caption.trim() && (["new_hook", "shorter", "more_playful", "more_premium", "stronger_cta", "regenerate"] as const).map((mod) => {
                             const labels: Record<string, string> = {
                               new_hook: "↺ Hook",
                               shorter: "Shorter",
@@ -1965,8 +1897,66 @@ export default function ProoferBoard({
                               </button>
                             );
                           })}
+                          {(post || hasDraft) && !isLocked && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(dateKey, activePlatform)}
+                              disabled={isPending}
+                              style={{
+                                padding: "3px 9px",
+                                borderRadius: 99,
+                                border: "1px solid #fca5a5",
+                                background: "#fff",
+                                color: "#991b1b",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: isPending ? "wait" : "pointer",
+                                marginLeft: "auto",
+                              }}
+                            >
+                              Clear
+                            </button>
+                          )}
                         </div>
                       )}
+                    </div>
+
+                    {/* Status dots — outside the card, vertically centred */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                      {["proofed", "check", "improve"].map((statusValue) => {
+                        const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
+                        const isYellow = statusValue === "check";
+                        const active = isYellow ? hasDraft : effectiveStatus === statusValue;
+                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed");
+                        return (
+                          <button
+                            key={btn.value}
+                            type="button"
+                            title={isYellow ? "Save" : btn.label}
+                            aria-label={isYellow ? "Save" : btn.label}
+                            onClick={() => isYellow
+                              ? handleSave(dateKey, activePlatform)
+                              : handleStatus(dateKey, activePlatform, statusValue as ProoferStatus)
+                            }
+                            disabled={disableThisButton || (isYellow && !hasDraft)}
+                            style={{
+                              width: 16,
+                              height: 16,
+                              padding: 0,
+                              borderRadius: "50%",
+                              border: "1px solid #e4e4e7",
+                              background: btn.dot,
+                              cursor: (disableThisButton || (isYellow && !hasDraft)) ? "not-allowed" : "pointer",
+                              boxShadow: "none",
+                              opacity: (disableThisButton || (isYellow && !hasDraft)) ? 0.25 : active ? 1 : 0.35,
+                              transition: "opacity 120ms ease",
+                            }}
+                            onMouseEnter={(e) => { if (!disableThisButton && !(isYellow && !hasDraft) && !active) e.currentTarget.style.opacity = "0.75"; }}
+                            onMouseLeave={(e) => { if (!disableThisButton && !(isYellow && !hasDraft) && !active) e.currentTarget.style.opacity = "0.35"; }}
+                          />
+                        );
+                      })}
+                    </div>
                     </div>
                     );
                   })()}
