@@ -12,7 +12,12 @@ export type CreateConsultationFormState = {
   success: string | null;
 };
 
-async function syncFormQuestionsToDefaults(supabase: Awaited<ReturnType<typeof createClient>>, formId: number) {
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+async function syncFormQuestionsToDefaults(
+  supabase: SupabaseServerClient,
+  formId: number
+) {
   const { data: questionRows, error: questionLookupError } = await supabase
     .from("consultation_questions")
     .select("prompt, sort_order")
@@ -144,6 +149,21 @@ function revalidateConsultationPaths(clientId: string) {
   revalidatePath(`/portal/${clientId}/consultation`);
 }
 
+function revalidateConsultationTemplatePaths() {
+  revalidatePath("/admin-panel/settings/consultation");
+  revalidatePath("/app/settings/consultation");
+  revalidatePath("/admin-panel/clients/new");
+  revalidatePath("/app/clients/new");
+}
+
+function sanitizePositiveInteger(value: number, label: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new Error(`Invalid ${label}.`);
+  }
+  return Math.trunc(numeric);
+}
+
 async function assertFormBelongsToClient(
   formId: number,
   clientId: string
@@ -159,6 +179,25 @@ async function assertFormBelongsToClient(
   if (error || !data) {
     throw new Error("Consultation form not found.");
   }
+}
+
+async function assertSubmissionBelongsToClient(
+  submissionId: number,
+  clientId: string
+): Promise<{ id: number; form_id: number }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("consultation_submissions")
+    .select("id, form_id")
+    .eq("id", submissionId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error("Consultation submission not found.");
+  }
+
+  return data as { id: number; form_id: number };
 }
 
 export async function createConsultationFormAction(
@@ -394,5 +433,220 @@ export async function deleteConsultationQuestionAction(
   }
 
   await syncFormQuestionsToDefaults(supabase, formId);
+  revalidateConsultationPaths(safeClientId);
+}
+
+export async function createConsultationDefaultQuestionAction(formData: FormData) {
+  const prompt = sanitizePrompt(formData.get("prompt"));
+  const supabase = await createClient();
+
+  const defaults = await getConsultationDefaultQuestions(supabase);
+  await setConsultationDefaultQuestions(supabase, [...defaults, prompt]);
+  revalidateConsultationTemplatePaths();
+}
+
+export async function updateConsultationDefaultQuestionAction(
+  sortOrder: number,
+  formData: FormData
+) {
+  const safeSortOrder = sanitizePositiveInteger(sortOrder, "sort order");
+  const prompt = sanitizePrompt(formData.get("prompt"));
+  const supabase = await createClient();
+
+  const defaults = await getConsultationDefaultQuestions(supabase);
+  const nextDefaults = [...defaults];
+  if (safeSortOrder > nextDefaults.length) {
+    throw new Error("Question not found.");
+  }
+  nextDefaults[safeSortOrder - 1] = prompt;
+  await setConsultationDefaultQuestions(supabase, nextDefaults);
+  revalidateConsultationTemplatePaths();
+}
+
+export async function deleteConsultationDefaultQuestionAction(sortOrder: number) {
+  const safeSortOrder = sanitizePositiveInteger(sortOrder, "sort order");
+  const supabase = await createClient();
+
+  const defaults = await getConsultationDefaultQuestions(supabase);
+  const nextDefaults = defaults.filter((_, index) => index !== safeSortOrder - 1);
+  if (nextDefaults.length === 0) {
+    throw new Error("At least one default question is required.");
+  }
+
+  await setConsultationDefaultQuestions(supabase, nextDefaults);
+  revalidateConsultationTemplatePaths();
+}
+
+export async function createConsultationSubmissionAction(
+  clientId: string,
+  formId: number,
+  formData: FormData
+) {
+  const safeClientId = sanitizeClientId(clientId);
+  const safeFormId = sanitizePositiveInteger(formId, "form id");
+  await assertFormBelongsToClient(safeFormId, safeClientId);
+  const supabase = await createClient();
+
+  const { data: questions, error: questionsError } = await supabase
+    .from("consultation_questions")
+    .select("id, prompt")
+    .eq("form_id", safeFormId)
+    .order("sort_order", { ascending: true });
+
+  if (questionsError) {
+    console.error("createConsultationSubmissionAction questions error:", questionsError);
+    throw new Error("Could not load consultation questions.");
+  }
+
+  const { data: submission, error: submissionError } = await supabase
+    .from("consultation_submissions")
+    .insert({
+      form_id: safeFormId,
+      client_id: safeClientId,
+      submitted_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (submissionError || !submission) {
+    console.error(
+      "createConsultationSubmissionAction submission error:",
+      submissionError
+    );
+    throw new Error("Could not create consultation submission.");
+  }
+
+  const answers = (questions ?? []).map((question) => ({
+    submission_id: submission.id,
+    question_id: question.id,
+    question_prompt: String(question.prompt ?? "").trim(),
+    answer_text: String(formData.get(`question-${question.id}`) ?? "").trim(),
+  }));
+
+  const { error: answersError } = await supabase
+    .from("consultation_answers")
+    .insert(answers);
+
+  if (answersError) {
+    console.error("createConsultationSubmissionAction answers error:", answersError);
+    throw new Error("Could not save consultation answers.");
+  }
+
+  revalidateConsultationPaths(safeClientId);
+}
+
+export async function updateConsultationSubmissionAnswersAction(
+  clientId: string,
+  submissionId: number,
+  formData: FormData
+) {
+  const safeClientId = sanitizeClientId(clientId);
+  const safeSubmissionId = sanitizePositiveInteger(submissionId, "submission id");
+  const submission = await assertSubmissionBelongsToClient(
+    safeSubmissionId,
+    safeClientId
+  );
+  const supabase = await createClient();
+
+  const [questionsRes, existingAnswersRes] = await Promise.all([
+    supabase
+      .from("consultation_questions")
+      .select("id, prompt")
+      .eq("form_id", submission.form_id)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("consultation_answers")
+      .select("id, question_id")
+      .eq("submission_id", submission.id),
+  ]);
+
+  if (questionsRes.error) {
+    console.error(
+      "updateConsultationSubmissionAnswersAction questions error:",
+      questionsRes.error
+    );
+    throw new Error("Could not load consultation questions.");
+  }
+  if (existingAnswersRes.error) {
+    console.error(
+      "updateConsultationSubmissionAnswersAction answer lookup error:",
+      existingAnswersRes.error
+    );
+    throw new Error("Could not load existing consultation answers.");
+  }
+
+  const existingAnswersByQuestionId = new Map<
+    number,
+    { id: number; question_id: number | null }
+  >();
+  for (const answer of existingAnswersRes.data ?? []) {
+    const questionId = Number(answer.question_id ?? 0);
+    if (questionId > 0) {
+      existingAnswersByQuestionId.set(questionId, answer);
+    }
+  }
+
+  for (const question of questionsRes.data ?? []) {
+    const answerText = String(formData.get(`question-${question.id}`) ?? "").trim();
+    const existingAnswer = existingAnswersByQuestionId.get(Number(question.id));
+    if (existingAnswer) {
+      const { error: updateError } = await supabase
+        .from("consultation_answers")
+        .update({
+          answer_text: answerText,
+          question_prompt: String(question.prompt ?? "").trim(),
+        })
+        .eq("id", existingAnswer.id)
+        .eq("submission_id", submission.id);
+
+      if (updateError) {
+        console.error(
+          "updateConsultationSubmissionAnswersAction update error:",
+          updateError
+        );
+        throw new Error("Could not update consultation answer.");
+      }
+    } else {
+      const { error: createError } = await supabase
+        .from("consultation_answers")
+        .insert({
+          submission_id: submission.id,
+          question_id: question.id,
+          question_prompt: String(question.prompt ?? "").trim(),
+          answer_text: answerText,
+        });
+      if (createError) {
+        console.error(
+          "updateConsultationSubmissionAnswersAction insert error:",
+          createError
+        );
+        throw new Error("Could not add consultation answer.");
+      }
+    }
+  }
+
+  revalidateConsultationPaths(safeClientId);
+}
+
+export async function deleteConsultationSubmissionAction(
+  clientId: string,
+  submissionId: number
+) {
+  const safeClientId = sanitizeClientId(clientId);
+  const safeSubmissionId = sanitizePositiveInteger(submissionId, "submission id");
+  await assertSubmissionBelongsToClient(safeSubmissionId, safeClientId);
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("consultation_submissions")
+    .delete()
+    .eq("id", safeSubmissionId)
+    .eq("client_id", safeClientId);
+
+  if (error) {
+    console.error("deleteConsultationSubmissionAction error:", error);
+    throw new Error("Could not delete consultation submission.");
+  }
+
   revalidateConsultationPaths(safeClientId);
 }
