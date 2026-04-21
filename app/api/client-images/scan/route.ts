@@ -77,11 +77,13 @@ function extractImageUrls(html: string, base: string): string[] {
     try { found.add(new URL(src.trim(), base).href); } catch { /* skip malformed */ }
   };
 
-  // <img src / srcset>
+  // <img src / srcset / data-src / data-lazy-src / data-original>
   for (const m of html.matchAll(/<img\b[^>]+>/gi)) {
     const tag = m[0];
-    const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1];
-    if (src) resolve(src);
+    for (const attr of ["src", "data-src", "data-lazy-src", "data-original", "data-image"]) {
+      const val = tag.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"))?.[1];
+      if (val) resolve(val);
+    }
     const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
     if (srcset) {
       for (const part of srcset.split(",")) {
@@ -89,9 +91,18 @@ function extractImageUrls(html: string, base: string): string[] {
         if (u) resolve(u);
       }
     }
-    // data-src for lazy-loaded images
-    const dataSrc = tag.match(/\bdata-src=["']([^"']+)["']/i)?.[1];
-    if (dataSrc) resolve(dataSrc);
+  }
+
+  // <source srcset> inside <picture>
+  for (const m of html.matchAll(/<source\b[^>]+>/gi)) {
+    const tag = m[0];
+    const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
+    if (srcset) {
+      for (const part of srcset.split(",")) {
+        const u = part.trim().split(/\s+/)[0];
+        if (u) resolve(u);
+      }
+    }
   }
 
   // og:image / twitter:image meta
@@ -103,7 +114,7 @@ function extractImageUrls(html: string, base: string): string[] {
     }
   }
 
-  // CSS background-image url(...)
+  // Inline style background-image and any CSS url(...)
   for (const m of html.matchAll(/url\(["']?(https?:\/\/[^"')]+)["']?\)/gi)) {
     resolve(m[1]);
   }
@@ -148,7 +159,13 @@ function extractInternalLinks(html: string, base: string): string[] {
 async function fetchPage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; GuestlistBot/1.0)" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
+      },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
