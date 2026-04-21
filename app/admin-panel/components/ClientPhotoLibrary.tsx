@@ -10,6 +10,8 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/client-images?clientId=${encodeURIComponent(clientId)}`)
@@ -71,6 +73,39 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
     setImages((prev) => prev.filter((i) => i.id !== img.id));
   }
 
+  async function handleDeleteLastScan() {
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      // Auto-reset confirm state after 5 seconds if not clicked
+      setTimeout(() => setDeleteConfirm(false), 5000);
+      return;
+    }
+    setDeleting(true);
+    setDeleteConfirm(false);
+    setScanMsg(null);
+    try {
+      const res = await fetch("/api/client-images/last-scan", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setScanMsg(d.deleted > 0 ? `Removed ${d.deleted} image${d.deleted !== 1 ? "s" : ""} from last scan` : "Nothing to delete");
+        // Reload the image list
+        const r = await fetch(`/api/client-images?clientId=${encodeURIComponent(clientId)}`);
+        const data = await r.json();
+        if (data.ok) setImages(data.images);
+      } else {
+        setScanMsg(d.error ?? "Delete failed");
+      }
+    } catch {
+      setScanMsg("Network error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const isError = scanMsg && (scanMsg.includes("failed") || scanMsg.includes("No website") || scanMsg.includes("error") || scanMsg.includes("Error"));
 
   return (
@@ -130,6 +165,27 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
           >
             {scanning ? "Scanning…" : images.length > 0 ? "🔍 Scan for more" : "🔍 Scan website"}
           </button>
+
+          {/* Delete last scan batch */}
+          {images.some((i) => i.table === "site") && (
+            <button
+              type="button"
+              onClick={handleDeleteLastScan}
+              disabled={deleting}
+              style={{
+                padding: "7px 14px", borderRadius: 8,
+                border: `1px solid ${deleteConfirm ? "#fca5a5" : "#e4e4e7"}`,
+                background: deleteConfirm ? "#fef2f2" : "#fafafa",
+                color: deleteConfirm ? "#991b1b" : "#71717a",
+                fontSize: 12, fontWeight: 600,
+                cursor: deleting ? "wait" : "pointer",
+                transition: "all 0.15s",
+              }}
+              title="Delete all images from the most recent scan (click twice to confirm)"
+            >
+              {deleting ? "Deleting…" : deleteConfirm ? "⚠️ Confirm delete?" : "🗑 Delete last scan"}
+            </button>
+          )}
         </div>
       </div>
 
