@@ -5,6 +5,7 @@ import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientBrandContext from "../../../components/ClientBrandContext";
+import ClientConsultationManager from "../../../components/ClientConsultationManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
@@ -18,15 +19,149 @@ export default async function EditClientPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
 
-  const { data: client, error } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", clientId)
-    .single();
+  const [clientRes, formsRes, questionsRes, submissionsRes] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", clientId).single(),
+    supabase
+      .from("consultation_forms")
+      .select("id, title, is_active")
+      .eq("client_id", clientId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("consultation_questions")
+      .select("id, form_id, prompt, sort_order")
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("consultation_submissions")
+      .select("id, form_id, submitted_at, submitted_by")
+      .eq("client_id", clientId)
+      .order("submitted_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  const client = clientRes.data;
+  const error = clientRes.error;
 
   if (error || !client) {
     notFound();
   }
+
+  const formRows =
+    formsRes.error?.code === "42P01" ? [] : (formsRes.data ?? []);
+  const questionRows =
+    questionsRes.error?.code === "42P01" ? [] : (questionsRes.data ?? []);
+  const submissionRows =
+    submissionsRes.error?.code === "42P01" ? [] : (submissionsRes.data ?? []);
+
+  const formIds = new Set(formRows.map((row) => Number((row as { id: number }).id)));
+  const filteredQuestions = questionRows.filter((row) =>
+    formIds.has(Number((row as { form_id: number }).form_id))
+  );
+  const filteredSubmissions = submissionRows.filter((row) =>
+    formIds.has(Number((row as { form_id: number }).form_id))
+  );
+
+  const submissionIds = filteredSubmissions.map((row) =>
+    Number((row as { id: number }).id)
+  );
+
+  const answersRes =
+    submissionIds.length === 0
+      ? { data: [] as Array<{ id: number; submission_id: number; question_id: number | null; question_prompt: string; answer_text: string }>, error: null }
+      : await supabase
+          .from("consultation_answers")
+          .select("id, submission_id, question_id, question_prompt, answer_text")
+          .in("submission_id", submissionIds)
+          .order("id", { ascending: true });
+
+  const answerRows =
+    answersRes.error?.code === "42P01" ? [] : (answersRes.data ?? []);
+
+  const questionsByForm = new Map<
+    number,
+    Array<{ id: number; prompt: string; sortOrder: number }>
+  >();
+  for (const row of filteredQuestions as Array<{
+    id: number;
+    form_id: number;
+    prompt: string;
+    sort_order: number;
+  }>) {
+    const formQuestionList = questionsByForm.get(row.form_id) ?? [];
+    formQuestionList.push({
+      id: row.id,
+      prompt: row.prompt ?? "",
+      sortOrder: Number(row.sort_order ?? 0),
+    });
+    questionsByForm.set(row.form_id, formQuestionList);
+  }
+
+  const answersBySubmission = new Map<
+    number,
+    Array<{
+      id: number;
+      questionId: number | null;
+      questionPrompt: string;
+      answerText: string;
+    }>
+  >();
+  for (const row of answerRows as Array<{
+    id: number;
+    submission_id: number;
+    question_id: number | null;
+    question_prompt: string;
+    answer_text: string;
+  }>) {
+    const submissionAnswers = answersBySubmission.get(row.submission_id) ?? [];
+    submissionAnswers.push({
+      id: row.id,
+      questionId: row.question_id,
+      questionPrompt: row.question_prompt ?? "",
+      answerText: row.answer_text ?? "",
+    });
+    answersBySubmission.set(row.submission_id, submissionAnswers);
+  }
+
+  const submissionsByForm = new Map<
+    number,
+    Array<{
+      id: number;
+      submittedAt: string;
+      submittedBy: string | null;
+      answers: Array<{
+        id: number;
+        questionId: number | null;
+        questionPrompt: string;
+        answerText: string;
+      }>;
+    }>
+  >();
+  for (const row of filteredSubmissions as Array<{
+    id: number;
+    form_id: number;
+    submitted_at: string;
+    submitted_by: string | null;
+  }>) {
+    const formSubmissions = submissionsByForm.get(row.form_id) ?? [];
+    formSubmissions.push({
+      id: row.id,
+      submittedAt: row.submitted_at,
+      submittedBy: row.submitted_by,
+      answers: answersBySubmission.get(row.id) ?? [],
+    });
+    submissionsByForm.set(row.form_id, formSubmissions);
+  }
+
+  const consultationForms = (formRows as Array<{
+    id: number;
+    title: string;
+    is_active: boolean;
+  }>).map((row) => ({
+    id: row.id,
+    title: row.title ?? "Consultation",
+    isActive: Boolean(row.is_active),
+    questions: questionsByForm.get(row.id) ?? [],
+    submissions: submissionsByForm.get(row.id) ?? [],
+  }));
 
   async function action(
     _state: { error: string | null },
@@ -115,6 +250,11 @@ export default async function EditClientPage({ params }: Props) {
           hashtagsPolicy: (client.brand_context as BrandContext | null)?.hashtagsPolicy ?? "",
           platformRules: (client.brand_context as BrandContext | null)?.platformRules ?? "",
         }}
+      />
+
+      <ClientConsultationManager
+        clientId={clientId}
+        forms={consultationForms}
       />
     </div>
   );
