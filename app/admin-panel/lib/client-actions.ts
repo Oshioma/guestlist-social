@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
-import { DEFAULT_CONSULTATION_QUESTIONS } from "./consultation-actions";
+import { DEFAULT_CONSULTATION_QUESTIONS } from "./consultation-default-questions";
 import type { BrandContext } from "./types";
 
 function normalizeStatus(status: string) {
