@@ -181,8 +181,11 @@ export default function TasksBoard({
 
   // ── Filters ────────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState<TaskFilters>({
-    category: "all", assignee: "all", search: "", showCompleted: true,
+    category: "all", assignee: "all", search: "", showCompleted: false,
   });
+
+  // ── Completed view grouping ────────────────────────────────────────────────
+  const [completedGrouping, setCompletedGrouping] = useState<"by-person" | "by-date">("by-person");
 
   // ── Saved views (localStorage) ─────────────────────────────────────────────
   const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
@@ -747,6 +750,107 @@ export default function TasksBoard({
     );
   }
 
+  function renderCompletedView() {
+    const completedTasks = tasks.filter((t) => {
+      if (t.status !== "completed") return false;
+      if (filters.category !== "all" && t.category !== filters.category) return false;
+      if (filters.assignee !== "all" && t.assignee !== filters.assignee) return false;
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        if (!t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+
+    // Group by person
+    const byPersonMap = new Map<string, Task[]>();
+    completedTasks.forEach((t) => {
+      const key = t.assignee || "Unassigned";
+      const list = byPersonMap.get(key) ?? [];
+      list.push(t);
+      byPersonMap.set(key, list);
+    });
+    const byPerson = Array.from(byPersonMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+    // Group by date (dueDate, most recent first)
+    const byDateMap = new Map<string, Task[]>();
+    completedTasks.forEach((t) => {
+      const key = normalizeDueDate(t.dueDate) || "No due date";
+      const list = byDateMap.get(key) ?? [];
+      list.push(t);
+      byDateMap.set(key, list);
+    });
+    const byDate = Array.from(byDateMap.entries()).sort(([a], [b]) => {
+      if (a === "No due date") return 1;
+      if (b === "No due date") return -1;
+      return b.localeCompare(a);
+    });
+
+    const tabBtn = (active: boolean): React.CSSProperties => ({
+      padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",
+      background: active ? "#18181b" : "#fff", color: active ? "#fff" : "#52525b",
+      border: active ? "1px solid #18181b" : "1px solid #e4e4e7", fontFamily: "inherit",
+    });
+
+    const groupHeading = (label: string, count: number, icon?: React.ReactNode): React.ReactNode => (
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+        {icon}
+        <span style={{ fontSize:14, fontWeight:700, color:"#18181b" }}>{label}</span>
+        <span style={{ fontSize:12, color:"#a1a1aa", fontWeight:500 }}>{"\xb7"} {count} completed</span>
+      </div>
+    );
+
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:20, fontWeight:700, color:"#18181b" }}>Completed tasks</h2>
+            <p style={{ margin:"4px 0 0", fontSize:13, color:"#71717a" }}>{completedTasks.length} task{completedTasks.length!==1?"s":""} completed</p>
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <button type="button" onClick={() => setCompletedGrouping("by-person")} style={tabBtn(completedGrouping==="by-person")}>By person</button>
+            <button type="button" onClick={() => setCompletedGrouping("by-date")} style={tabBtn(completedGrouping==="by-date")}>By date</button>
+          </div>
+        </div>
+
+        {completedTasks.length === 0 ? (
+          <div style={{ padding:"40px 24px", textAlign:"center", fontSize:14, color:"#71717a", background:"#fff", borderRadius:12, border:"1px solid #e4e4e7" }}>
+            No completed tasks yet.
+          </div>
+        ) : completedGrouping === "by-person" ? (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            {byPerson.map(([assignee, list]) => (
+              <div key={assignee} style={{ background:"#fff", border:"1px solid #e4e4e7", borderRadius:12, padding:20 }}>
+                {groupHeading(
+                  assignee,
+                  list.length,
+                  <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:999, background:"#18181b", color:"#fff", fontSize:10, fontWeight:700, textTransform:"uppercase" }}>{assignee.slice(0,2)}</span>
+                )}
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {list.map((t) => renderListTaskRow(t, false))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            {byDate.map(([dateKey, list]) => (
+              <div key={dateKey} style={{ background:"#fff", border:"1px solid #e4e4e7", borderRadius:12, padding:20 }}>
+                {groupHeading(
+                  dateKey === "No due date" ? "No due date" : formatDate(dateKey + "T12:00:00"),
+                  list.length
+                )}
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {list.map((t) => renderListTaskRow(t, false))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderListView() {
     const wBtn: React.CSSProperties = { padding:"6px 10px", borderRadius:8, background:"#fff", color:"#52525b", border:"1px solid #e4e4e7", fontSize:12, fontWeight:600, cursor:"pointer", minWidth:32, fontFamily:"inherit" };
     return (
@@ -860,7 +964,7 @@ export default function TasksBoard({
           <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
             {/* View toggles */}
             <div style={{ display:"flex", gap:2, background:"#f4f4f5", borderRadius:9, padding:3 }}>
-              {([{ mode:"kanban" as const, label:"Kanban" }, { mode:"list" as const, label:"List" }]).map(({ mode, label }) => (
+              {([{ mode:"kanban" as const, label:"Kanban" }, { mode:"list" as const, label:"List" }, { mode:"completed" as const, label:"Completed" }]).map(({ mode, label }) => (
                 <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ padding:"5px 12px", borderRadius:7, background:viewMode===mode?"#fff":"transparent", color:viewMode===mode?"#18181b":"#71717a", border:viewMode===mode?"1px solid #e4e4e7":"1px solid transparent", fontSize:12, fontWeight:600, cursor:"pointer", boxShadow:viewMode===mode?"0 1px 2px rgba(0,0,0,0.05)":"none", fontFamily:"inherit" }}>
                   {label}
                 </button>
@@ -912,8 +1016,8 @@ export default function TasksBoard({
             <input type="checkbox" checked={filters.showCompleted} onChange={(e) => setFilters((f)=>({...f,showCompleted:e.target.checked}))} style={{ cursor:"pointer" }} />
             Show completed
           </label>
-          {(filters.category!=="all"||filters.assignee!=="all"||filters.search||!filters.showCompleted) && (
-            <button type="button" onClick={() => setFilters({category:"all",assignee:"all",search:"",showCompleted:true})} style={{ ...ghostButton, color:"#ef4444", fontSize:12 }}>Clear filters</button>
+          {(filters.category!=="all"||filters.assignee!=="all"||filters.search||filters.showCompleted) && (
+            <button type="button" onClick={() => setFilters({category:"all",assignee:"all",search:"",showCompleted:false})} style={{ ...ghostButton, color:"#ef4444", fontSize:12 }}>Clear filters</button>
           )}
         </div>
 
@@ -947,7 +1051,7 @@ export default function TasksBoard({
 
       {/* Main board */}
       <div style={{ marginRight:selectedTask?440:0, transition:"margin-right 0.2s ease" }}>
-        {viewMode==="kanban" ? renderKanbanView() : renderListView()}
+        {viewMode==="kanban" ? renderKanbanView() : viewMode==="completed" ? renderCompletedView() : renderListView()}
       </div>
 
       {/* Detail panel */}
