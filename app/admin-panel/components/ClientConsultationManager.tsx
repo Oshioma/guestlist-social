@@ -1,6 +1,8 @@
 "use client";
 
+import { useActionState } from "react";
 import {
+  type CreateConsultationFormState,
   addConsultationQuestionAction,
   createConsultationFormAction,
   deleteConsultationFormAction,
@@ -42,6 +44,11 @@ type Props = {
   forms: ConsultationForm[];
 };
 
+const INITIAL_CREATE_STATE: CreateConsultationFormState = {
+  error: null,
+  success: null,
+};
+
 function formatSubmittedAt(dateString: string) {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) {
@@ -58,6 +65,10 @@ function formatSubmittedAt(dateString: string) {
 
 export default function ClientConsultationManager({ clientId, forms }: Props) {
   const createForm = createConsultationFormAction.bind(null, clientId);
+  const [createState, createAction, createPending] = useActionState(
+    createForm,
+    INITIAL_CREATE_STATE
+  );
 
   return (
     <div
@@ -80,7 +91,7 @@ export default function ClientConsultationManager({ clientId, forms }: Props) {
       </div>
 
       <form
-        action={createForm}
+        action={createAction}
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(220px, 1fr) auto auto",
@@ -113,10 +124,46 @@ export default function ClientConsultationManager({ clientId, forms }: Props) {
           <input type="checkbox" name="seedDefaults" defaultChecked />
           Add default questions
         </label>
-        <button type="submit" style={primaryButtonStyle}>
-          New form
+        <button
+          type="submit"
+          disabled={createPending}
+          style={{ ...primaryButtonStyle, opacity: createPending ? 0.75 : 1 }}
+        >
+          {createPending ? "Creating..." : "New form"}
         </button>
       </form>
+      {createState.error ? (
+        <div
+          style={{
+            marginTop: -4,
+            marginBottom: 12,
+            border: "1px solid #fecaca",
+            borderRadius: 10,
+            background: "#fff5f5",
+            color: "#991b1b",
+            fontSize: 12,
+            padding: "8px 10px",
+          }}
+        >
+          {createState.error}
+        </div>
+      ) : null}
+      {createState.success ? (
+        <div
+          style={{
+            marginTop: -4,
+            marginBottom: 12,
+            border: "1px solid #bbf7d0",
+            borderRadius: 10,
+            background: "#f0fdf4",
+            color: "#166534",
+            fontSize: 12,
+            padding: "8px 10px",
+          }}
+        >
+          {createState.success}
+        </div>
+      ) : null}
 
       {forms.length === 0 ? (
         <div

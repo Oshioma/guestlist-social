@@ -74,7 +74,7 @@ export async function submitConsultationAction(
   }
 
   const answers = questions.map((question) => {
-    const raw = formData.get(`question:${question.id}`);
+    const raw = formData.get(`question-${question.id}`);
     return {
       submission_id: submission.id,
       question_id: question.id,

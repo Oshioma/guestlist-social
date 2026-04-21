@@ -41,10 +41,18 @@ export const DEFAULT_CONSULTATION_QUESTIONS = [
   "It's recommending that we respond with a name",
 ];
 
+export type CreateConsultationFormState = {
+  error: string | null;
+  success: string | null;
+};
+
 function sanitizeClientId(clientId: string) {
   const normalized = String(clientId ?? "").trim();
-  if (!normalized) throw new Error("Missing client id.");
-  return normalized;
+  const numericValue = Number(normalized);
+  if (!normalized || !Number.isFinite(numericValue)) {
+    throw new Error("Missing client id.");
+  }
+  return String(numericValue);
 }
 
 function sanitizeTitle(rawValue: FormDataEntryValue | null) {
@@ -84,57 +92,74 @@ async function assertFormBelongsToClient(
 
 export async function createConsultationFormAction(
   clientId: string,
+  _prevState: CreateConsultationFormState,
   formData: FormData
-) {
-  const safeClientId = sanitizeClientId(clientId);
-  const title = sanitizeTitle(formData.get("title"));
-  const seedDefaults = String(formData.get("seedDefaults") ?? "") === "on";
+) : Promise<CreateConsultationFormState> {
+  try {
+    const safeClientId = sanitizeClientId(clientId);
+    const title = sanitizeTitle(formData.get("title"));
+    const seedDefaults = String(formData.get("seedDefaults") ?? "") === "on";
 
-  const supabase = await createClient();
-  const { data: form, error: formError } = await supabase
-    .from("consultation_forms")
-    .insert({
-      client_id: safeClientId,
-      title,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+    const supabase = await createClient();
+    const { data: form, error: formError } = await supabase
+      .from("consultation_forms")
+      .insert({
+        client_id: safeClientId,
+        title,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
 
-  if (formError || !form) {
-    console.error("createConsultationFormAction form error:", formError);
-    throw new Error("Could not create consultation form.");
-  }
-
-  await supabase
-    .from("consultation_forms")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq("client_id", safeClientId)
-    .neq("id", form.id);
-
-  if (seedDefaults) {
-    const questions = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
-      form_id: form.id,
-      prompt,
-      sort_order: index + 1,
-      updated_at: new Date().toISOString(),
-    }));
-
-    const { error: questionError } = await supabase
-      .from("consultation_questions")
-      .insert(questions);
-
-    if (questionError) {
-      console.error(
-        "createConsultationFormAction default question error:",
-        questionError
-      );
-      throw new Error("Form created, but default questions could not be added.");
+    if (formError || !form) {
+      console.error("createConsultationFormAction form error:", formError);
+      if (formError?.code === "42P01") {
+        return {
+          error:
+            "Consultation tables are not available yet. Please run the latest database migration first.",
+          success: null,
+        };
+      }
+      return { error: "Could not create consultation form.", success: null };
     }
-  }
 
-  revalidateConsultationPaths(safeClientId);
+    await supabase
+      .from("consultation_forms")
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq("client_id", safeClientId)
+      .neq("id", form.id);
+
+    if (seedDefaults) {
+      const questions = DEFAULT_CONSULTATION_QUESTIONS.map((prompt, index) => ({
+        form_id: form.id,
+        prompt,
+        sort_order: index + 1,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: questionError } = await supabase
+        .from("consultation_questions")
+        .insert(questions);
+
+      if (questionError) {
+        console.error(
+          "createConsultationFormAction default question error:",
+          questionError
+        );
+        return {
+          error: "Form was created, but default questions could not be added.",
+          success: null,
+        };
+      }
+    }
+
+    revalidateConsultationPaths(safeClientId);
+    return { error: null, success: "Consultation form created." };
+  } catch (error) {
+    console.error("createConsultationFormAction unexpected error:", error);
+    return { error: "Could not create consultation form.", success: null };
+  }
 }
 
 export async function updateConsultationFormAction(
