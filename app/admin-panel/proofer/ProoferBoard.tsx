@@ -755,7 +755,8 @@ export default function ProoferBoard({
   }
 
   async function handleLoadClientImages(cid: string) {
-    if (clientImagesLoaded === cid || clientImagesLoading) return;
+    if (clientImagesLoading) return;
+    if (clientImagesLoaded === cid && clientImages.length > 0) return;
     setClientImagesLoading(true);
     try {
       const res = await fetch(`/api/client-images?clientId=${encodeURIComponent(cid)}`);
@@ -1749,7 +1750,7 @@ export default function ProoferBoard({
                                   setImgLibraryPostKey(null);
                                 } else {
                                   setImgLibraryPostKey(slotKey);
-                                  if (clientImagesLoaded !== clientId) handleLoadClientImages(clientId);
+                                  if (clientImagesLoaded !== clientId || clientImages.length === 0) handleLoadClientImages(clientId);
                                 }
                               }}
                               style={{
@@ -1775,50 +1776,54 @@ export default function ProoferBoard({
                                 padding: "10px 12px 12px",
                               }}>
                                 {/* Library toolbar */}
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                                   <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>Client photos</span>
+
+                                  {/* Upload files */}
                                   <label style={{
-                                    padding: "3px 10px",
-                                    borderRadius: 6,
-                                    border: "1px solid #bae6fd",
-                                    background: "#e0f2fe",
-                                    color: "#0369a1",
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    cursor: imgUploading ? "wait" : "pointer",
-                                    flexShrink: 0,
+                                    padding: "3px 10px", borderRadius: 6,
+                                    border: "1px solid #bae6fd", background: "#e0f2fe",
+                                    color: "#0369a1", fontSize: 11, fontWeight: 600,
+                                    cursor: imgUploading ? "wait" : "pointer", flexShrink: 0,
                                   }}>
-                                    {imgUploading ? "Uploading…" : "+ Upload"}
-                                    <input
-                                      type="file"
-                                      accept="image/jpeg,image/png,image/webp,image/gif"
-                                      multiple
-                                      style={{ display: "none" }}
-                                      onChange={(e) => {
-                                        const files = Array.from(e.target.files ?? []);
-                                        files.forEach((f) => handleUploadClientImage(f));
-                                        e.target.value = "";
-                                      }}
+                                    {imgUploading ? "Uploading…" : "+ Photos"}
+                                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: "none" }}
+                                      onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
                                     />
                                   </label>
+
+                                  {/* Upload folder */}
+                                  <label style={{
+                                    padding: "3px 10px", borderRadius: 6,
+                                    border: "1px solid #bae6fd", background: "#e0f2fe",
+                                    color: "#0369a1", fontSize: 11, fontWeight: 600,
+                                    cursor: imgUploading ? "wait" : "pointer", flexShrink: 0,
+                                  }} title="Upload an entire folder of photos">
+                                    📁 Folder
+                                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                    {/* @ts-expect-error webkitdirectory is non-standard */}
+                                    <input type="file" accept="image/*" multiple webkitdirectory="" style={{ display: "none" }}
+                                      onChange={(e) => { Array.from(e.target.files ?? []).forEach((f) => handleUploadClientImage(f)); e.target.value = ""; }}
+                                    />
+                                  </label>
+
+                                  {/* Scan button — full text before first load, icon-only after */}
                                   <button
                                     type="button"
                                     onClick={() => { setImgScanMsg(null); handleScanWebsite(); }}
                                     disabled={imgScanning}
+                                    title="Scan website for new photos"
                                     style={{
-                                      padding: "3px 10px",
+                                      padding: clientImages.length > 0 ? "3px 7px" : "3px 10px",
                                       borderRadius: 6,
-                                      border: "1px solid #d1fae5",
-                                      background: "#ecfdf5",
-                                      color: "#065f46",
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                      cursor: imgScanning ? "wait" : "pointer",
-                                      flexShrink: 0,
+                                      border: "1px solid #d1fae5", background: "#ecfdf5",
+                                      color: "#065f46", fontSize: clientImages.length > 0 ? 14 : 11,
+                                      fontWeight: 600, cursor: imgScanning ? "wait" : "pointer", flexShrink: 0,
                                     }}
                                   >
-                                    {imgScanning ? "Scanning…" : "Scan website"}
+                                    {imgScanning ? "…" : clientImages.length > 0 ? "🔍" : "Scan website"}
                                   </button>
+
                                   {imgScanMsg && (
                                     <span style={{ fontSize: 11, color: imgScanMsg.includes("failed") || imgScanMsg.includes("No website") || imgScanMsg.includes("error") ? "#991b1b" : "#065f46" }}>
                                       {imgScanMsg}

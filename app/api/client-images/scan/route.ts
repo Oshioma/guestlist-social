@@ -86,7 +86,10 @@ export async function POST(req: NextRequest) {
     .eq("id", clientId)
     .single();
 
-  const websiteUrl = (clientRow as { website_url?: string } | null)?.website_url;
+  let websiteUrl = (clientRow as { website_url?: string } | null)?.website_url?.trim();
+  if (websiteUrl && !websiteUrl.startsWith("http")) {
+    websiteUrl = "https://" + websiteUrl;
+  }
   if (!websiteUrl) {
     return NextResponse.json(
       { ok: false, error: "No website URL set for this client — add one on the client edit page." },

@@ -5,6 +5,7 @@ import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientBrandContext from "../../../components/ClientBrandContext";
+import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
 import type { BrandContext } from "../../../lib/types";
@@ -99,6 +100,8 @@ export default async function EditClientPage({ params }: Props) {
         clientId={clientId}
         initialInstructions={client.ai_instructions ?? ""}
       />
+
+      <ClientPhotoLibrary clientId={clientId} />
 
       <ClientBrandContext
         clientId={clientId}
