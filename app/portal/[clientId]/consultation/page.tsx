@@ -11,12 +11,6 @@ type FormRow = {
   is_active: boolean;
 };
 
-type QuestionRow = {
-  id: number;
-  prompt: string;
-  sort_order: number;
-};
-
 export default async function PortalConsultationPage({
   params,
 }: {
@@ -59,11 +53,11 @@ export default async function PortalConsultationPage({
   const activeForm = formMissing ? null : ((formRes.data as FormRow | null) ?? null);
   const questions = questionsMissing
     ? []
-    : ((questionsRes.data ?? []) as Array<
-        QuestionRow & {
-          consultation_forms: { client_id: number; is_active: boolean } | null;
-        }
-      >).map((row) => ({
+    : ((questionsRes.data ?? []) as Array<{
+        id: number;
+        prompt: string | null;
+        sort_order: number | null;
+      }>).map((row) => ({
         id: row.id,
         prompt: row.prompt ?? "",
         sortOrder: Number(row.sort_order ?? 0),
