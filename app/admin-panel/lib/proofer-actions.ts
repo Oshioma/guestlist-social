@@ -546,6 +546,11 @@ export async function updateProoferStatusAction(
       console.error("updateProoferStatusAction update error:", error);
       throw new Error("Could not update status.");
     }
+
+    // Marking a post as "improve" removes it from the publish queue
+    if (normalized === "improve") {
+      await supabase.from("proofer_publish_queue").delete().eq("post_id", existing.id);
+    }
   } else {
     const { error } = await supabase.from("proofer_posts").insert({
       client_id: clientId,

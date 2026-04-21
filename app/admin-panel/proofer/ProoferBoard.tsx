@@ -708,6 +708,9 @@ export default function ProoferBoard({
       await new Promise<void>((r) => setTimeout(r, 400));
     }
 
+    if (grandTotal === 0 && !genError) {
+      setGenError("All slots already have ideas — click Clear AI to regenerate.");
+    }
     setGenLoading(false);
   }
 
@@ -2116,7 +2119,7 @@ export default function ProoferBoard({
                         const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
                         const isYellow = statusValue === "check";
                         const active = isYellow ? hasDraft : effectiveStatus === statusValue;
-                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed");
+                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve");
                         return (
                           <button
                             key={btn.value}
