@@ -25,6 +25,7 @@ export default function NewClientPage() {
       title="Add Client"
       submitLabel="Create client"
       action={action}
+      showConsultationImport
     />
   );
 }
