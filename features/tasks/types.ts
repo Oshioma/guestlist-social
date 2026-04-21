@@ -31,7 +31,7 @@ export type Task = {
   updatedAt: string;
 };
 
-export type ViewMode = "kanban" | "list" | "by-assignee" | "by-category";
+export type ViewMode = "kanban" | "list" | "by-assignee" | "by-category" | "completed";
 
 export type TaskFilters = {
   category: TaskCategory | "all";
