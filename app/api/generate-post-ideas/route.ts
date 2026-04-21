@@ -98,11 +98,16 @@ export async function POST(req: Request) {
 
         const supabase = getSupabase();
 
-        // Load client + pillars + existing posts in parallel
-        const [clientRes, pillarsRes, postsRes] = await Promise.all([
+        const nextMonthDate = new Date(year, m, 1);
+        const nextMonthStr  = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+        const monthStart    = `${yearStr}-${monthStr}-01`;
+
+        // Load client + pillars + existing posts + existing ideas in parallel
+        const [clientRes, pillarsRes, postsRes, ideasRes] = await Promise.all([
           supabase.from("clients").select("id, name, industry, notes, ai_instructions, brand_context").eq("id", clientId).single(),
           supabase.from("content_pillars").select("id, name, description, color").eq("client_id", clientId).eq("archived", false).order("sort_order", { ascending: true }),
-          supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", `${yearStr}-${monthStr}-01`).lt("post_date", `${new Date(year, m, 1).getFullYear()}-${String(new Date(year, m, 1).getMonth() + 1).padStart(2, "0")}-01`).order("post_date", { ascending: true }),
+          supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", monthStart).lt("post_date", nextMonthStr).order("post_date", { ascending: true }),
+          supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).eq("platform", platform).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr),
         ]);
 
         if (!clientRes.data) {
@@ -115,10 +120,13 @@ export async function POST(req: Request) {
         const pillars  = pillarsRes.data ?? [];
         const brandCtx = (client.brand_context ?? {}) as Record<string, string>;
 
-        // Find empty slots
+        // Find empty slots — a slot is filled if it has a post OR an existing idea
         const filledSlots = new Set<string>();
         for (const p of postsRes.data ?? []) {
           if (p.platform === platform) filledSlots.add(p.post_date?.slice(0, 10) ?? "");
+        }
+        for (const i of ideasRes.data ?? []) {
+          filledSlots.add((i.post_slot_date as string)?.slice(0, 10) ?? "");
         }
 
         const allDays    = daysInMonth(year, m);
