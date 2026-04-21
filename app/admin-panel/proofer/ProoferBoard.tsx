@@ -1860,12 +1860,34 @@ export default function ProoferBoard({
                                 ) : (
                                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                                     {clientImages.map((img) => (
-                                      <div key={img.id} style={{ position: "relative", flexShrink: 0 }}>
+                                      <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
+                                        onMouseEnter={(e) => {
+                                          const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
+                                          if (el) el.style.display = "block";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
+                                          if (el) el.style.display = "none";
+                                        }}
+                                      >
                                         <img
                                           src={img.publicUrl}
                                           alt=""
-                                          style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
+                                          style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
                                         />
+                                        {/* Hover preview */}
+                                        <div className="img-preview" style={{
+                                          display: "none", position: "absolute",
+                                          bottom: "calc(100% + 6px)", left: "50%",
+                                          transform: "translateX(-50%)",
+                                          zIndex: 50, pointerEvents: "none",
+                                          borderRadius: 8, overflow: "hidden",
+                                          boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                                          border: "2px solid #e0f2fe",
+                                          background: "#000",
+                                        }}>
+                                          <img src={img.publicUrl} alt="" style={{ width: 220, height: 160, objectFit: "cover", display: "block" }} />
+                                        </div>
                                         <button
                                           type="button"
                                           onClick={() => {
