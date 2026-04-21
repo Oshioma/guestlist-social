@@ -289,6 +289,7 @@ export default function ProoferBoard({
   const [pexelsPhotos, setPexelsPhotos] = useState<{ id: number; thumb: string; full: string; photographer: string }[]>([]);
   const [pexelsLoading, setPexelsLoading] = useState(false);
   const [pexelsError, setPexelsError] = useState<string | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<{ url: string; credit?: string; x: number; y: number } | null>(null);
 
   const pillarsById = useMemo(() => {
     const map = new Map<string, ContentPillar>();
@@ -941,6 +942,29 @@ export default function ProoferBoard({
         paddingRight: 52,
       }}
     >
+      {/* Fixed hover preview — escapes all overflow containers */}
+      {hoverPreview && (
+        <div style={{
+          position: "fixed",
+          left: hoverPreview.x,
+          top: Math.max(8, hoverPreview.y),
+          zIndex: 9999,
+          pointerEvents: "none",
+          width: 260,
+          borderRadius: 12,
+          overflow: "hidden",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.45)",
+          border: "2px solid rgba(255,255,255,0.25)",
+          background: "#000",
+        }}>
+          <img src={hoverPreview.url} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
+          {hoverPreview.credit && (
+            <div style={{ padding: "5px 10px", background: "#18181b", fontSize: 10, color: "#a78bfa" }}>
+              © {hoverPreview.credit}
+            </div>
+          )}
+        </div>
+      )}
       <DayScrubber days={days} postsByKey={postsByKey} />
       <div
         style={{
@@ -1765,7 +1789,9 @@ export default function ProoferBoard({
                     const stockOpen = pexelsPostKey === slotKey;
                     const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
                     const slotIdeas = postIdeasByKey.get(slotKey) ?? [];
-                    const autoQuery = [clientName, slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ");
+                    const pillarName = draft.pillarId ? (pillarsById.get(draft.pillarId)?.name ?? "") : "";
+                    const captionLines = draft.caption.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ");
+                    const autoQuery = [pillarName || clientName, captionLines || slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ").slice(0, 80);
                     return (
                     <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
 
@@ -1875,31 +1901,16 @@ export default function ProoferBoard({
                               {clientImages.map((img) => (
                                 <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
                                   onMouseEnter={(e) => {
-                                    const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
-                                    if (el) el.style.display = "block";
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setHoverPreview({ url: img.publicUrl, x: r.right + 12, y: r.top });
                                   }}
-                                  onMouseLeave={(e) => {
-                                    const el = e.currentTarget.querySelector<HTMLElement>(".img-preview");
-                                    if (el) el.style.display = "none";
-                                  }}
+                                  onMouseLeave={() => setHoverPreview(null)}
                                 >
                                   <img
                                     src={img.publicUrl}
                                     alt=""
                                     style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
                                   />
-                                  <div className="img-preview" style={{
-                                    display: "none", position: "absolute",
-                                    bottom: "calc(100% + 8px)", left: "50%",
-                                    transform: "translateX(-50%)",
-                                    zIndex: 50, pointerEvents: "none",
-                                    borderRadius: 10, overflow: "hidden",
-                                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-                                    border: "2px solid #e0f2fe", background: "#000",
-                                    width: 260,
-                                  }}>
-                                    <img src={img.publicUrl} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
-                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1975,34 +1986,16 @@ export default function ProoferBoard({
                               {pexelsPhotos.map((photo) => (
                                 <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}
                                   onMouseEnter={(e) => {
-                                    const el = e.currentTarget.querySelector<HTMLElement>(".stock-preview");
-                                    if (el) el.style.display = "block";
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setHoverPreview({ url: photo.full, credit: photo.photographer, x: r.right + 12, y: r.top });
                                   }}
-                                  onMouseLeave={(e) => {
-                                    const el = e.currentTarget.querySelector<HTMLElement>(".stock-preview");
-                                    if (el) el.style.display = "none";
-                                  }}
+                                  onMouseLeave={() => setHoverPreview(null)}
                                 >
                                   <img
                                     src={photo.thumb}
                                     alt={photo.photographer}
                                     style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff" }}
                                   />
-                                  <div className="stock-preview" style={{
-                                    display: "none", position: "absolute",
-                                    bottom: "calc(100% + 8px)", left: "50%",
-                                    transform: "translateX(-50%)",
-                                    zIndex: 50, pointerEvents: "none",
-                                    borderRadius: 10, overflow: "hidden",
-                                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-                                    border: "2px solid #e9d5ff", background: "#000",
-                                    width: 260,
-                                  }}>
-                                    <img src={photo.full} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
-                                    <div style={{ padding: "4px 8px", background: "#faf5ff", fontSize: 10, color: "#6d28d9" }}>
-                                      © {photo.photographer}
-                                    </div>
-                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => {

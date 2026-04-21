@@ -65,6 +65,21 @@ function normalizeImageUrl(raw: string): string {
   }
 }
 
+// Dedup key: just the filename (last path segment after normalization).
+// This collapses CDN hostname variants so that e.g.
+//   bushbarnfarm.co.uk/cdn/shop/files/bottle3.png?v=xxx&width=1500
+//   cdn.shopify.com/s/files/1/xxxx/files/bottle3.png?v=xxx
+// both map to the same key "bottle3.png" and only one is stored.
+function dedupeKey(url: string): string {
+  const normalized = normalizeImageUrl(url);
+  try {
+    const filename = new URL(normalized).pathname.split("/").pop()?.toLowerCase() ?? "";
+    return filename || normalized;
+  } catch {
+    return normalized;
+  }
+}
+
 // Prefer extra pages that are likely to contain photos
 const PAGE_PRIORITY_PATTERNS = [
   /galeri/i, /photo/i, /image/i, /media/i,
@@ -259,11 +274,12 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Extract images from homepage + find internal links to crawl.
-  // We deduplicate by normalised key but keep the BEST (largest) original URL.
-  const bestByKey = new Map<string, string>(); // normalised key → best original URL
+  // Deduplicate by filename (dedupeKey) so CDN hostname variants of the same
+  // image don't produce separate entries. Keep the best (largest) original URL.
+  const bestByKey = new Map<string, string>(); // dedup key → best original URL
 
   const addUrl = (raw: string) => {
-    const key = normalizeImageUrl(raw);
+    const key = dedupeKey(raw);
     const existing = bestByKey.get(key);
     if (!existing || sizeScore(raw) > sizeScore(existing)) {
       bestByKey.set(key, raw);
@@ -297,8 +313,8 @@ export async function POST(req: NextRequest) {
     .select("public_url")
     .eq("client_id", clientId);
 
-  const existingSet = new Set((existing ?? []).map((r: { public_url: string }) => normalizeImageUrl(r.public_url)));
-  const newUrls = foundUrls.filter((u) => !existingSet.has(normalizeImageUrl(u))).slice(0, MAX_IMAGES);
+  const existingSet = new Set((existing ?? []).map((r: { public_url: string }) => dedupeKey(r.public_url)));
+  const newUrls = foundUrls.filter((u) => !existingSet.has(dedupeKey(u))).slice(0, MAX_IMAGES);
 
   if (newUrls.length === 0) {
     return NextResponse.json({ ok: true, added: 0, images: [] });
