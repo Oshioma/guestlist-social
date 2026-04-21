@@ -218,7 +218,6 @@ export default async function ConsultationSettingsPage() {
             id: client.id,
             name: client.name ?? `Client ${client.id}`,
           }))}
-          action={importConsultationForClientAction}
         />
       </section>
     </div>
