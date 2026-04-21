@@ -228,7 +228,18 @@ export default function ProoferBoard({
     linkedIdeaKind: IdeaKind | null;
     publishTime: string;
   };
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [drafts, setDrafts] = useState<Record<string, Draft>>(() => {
+    const initial: Record<string, Draft> = {};
+    for (const idea of initialPostIdeas) {
+      const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+      if (!initial[slotKey]) {
+        const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
+          .filter(Boolean).join("\n\n");
+        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00" };
+      }
+    }
+    return initial;
+  });
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const [hideResolved, setHideResolved] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
@@ -863,11 +874,12 @@ export default function ProoferBoard({
         return (
           caption.trim().length > 0 ||
           mediaUrls.length > 0 ||
-          (post && post.status !== "none")
+          (post && post.status !== "none") ||
+          (postIdeasByKey.get(key) ?? []).length > 0
         );
       });
     });
-  }, [days, drafts, postsByKey, hideEmpty]);
+  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey]);
 
   const scrolledRef = useRef(false);
   useEffect(() => {
