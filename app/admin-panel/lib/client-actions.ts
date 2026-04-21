@@ -48,6 +48,46 @@ function parsePipeCells(line: string) {
   return cells;
 }
 
+function parsePlainTextCells(raw: string) {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => normalizeConsultationCell(line))
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const cells: string[] = [];
+  let firstLineRemainder = lines[0];
+
+  const timestampMatch = firstLineRemainder.match(
+    /^(\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?)/
+  );
+  if (timestampMatch) {
+    cells.push(timestampMatch[1].trim());
+    firstLineRemainder = firstLineRemainder
+      .slice(timestampMatch[1].length)
+      .trim();
+  }
+
+  const urlMatch = firstLineRemainder.match(/https?:\/\/\S+/i);
+  if (urlMatch) {
+    const url = urlMatch[0];
+    const urlIndex = urlMatch.index ?? 0;
+    const beforeUrl = firstLineRemainder.slice(0, urlIndex).trim();
+    const afterUrl = firstLineRemainder.slice(urlIndex + url.length).trim();
+    if (beforeUrl) cells.push(beforeUrl);
+    cells.push(url);
+    if (afterUrl) cells.push(afterUrl);
+  } else if (firstLineRemainder) {
+    cells.push(firstLineRemainder);
+  }
+
+  cells.push(...lines.slice(1));
+  return cells;
+}
+
 function parseConsultationCells(raw: string) {
   if (raw.includes("|")) {
     return parsePipeCells(raw);
@@ -55,7 +95,7 @@ function parseConsultationCells(raw: string) {
   if (raw.includes("\t")) {
     return raw.split("\t").map(normalizeConsultationCell);
   }
-  return [normalizeConsultationCell(raw)];
+  return parsePlainTextCells(raw);
 }
 
 function looksLikeTimestamp(value: string) {
