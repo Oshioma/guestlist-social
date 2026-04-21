@@ -41,6 +41,63 @@ function normalizeConsultationCell(cell: string) {
     .trim();
 }
 
+function parsePipeCells(line: string) {
+  let cells = line.split("|").map(normalizeConsultationCell);
+  if (cells[0] === "") cells = cells.slice(1);
+  if (cells[cells.length - 1] === "") cells = cells.slice(0, -1);
+  return cells;
+}
+
+function parsePlainTextCells(raw: string) {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => normalizeConsultationCell(line))
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const cells: string[] = [];
+  let firstLineRemainder = lines[0];
+
+  const timestampMatch = firstLineRemainder.match(
+    /^(\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?)/
+  );
+  if (timestampMatch) {
+    cells.push(timestampMatch[1].trim());
+    firstLineRemainder = firstLineRemainder
+      .slice(timestampMatch[1].length)
+      .trim();
+  }
+
+  const urlMatch = firstLineRemainder.match(/https?:\/\/\S+/i);
+  if (urlMatch) {
+    const url = urlMatch[0];
+    const urlIndex = urlMatch.index ?? 0;
+    const beforeUrl = firstLineRemainder.slice(0, urlIndex).trim();
+    const afterUrl = firstLineRemainder.slice(urlIndex + url.length).trim();
+    if (beforeUrl) cells.push(beforeUrl);
+    cells.push(url);
+    if (afterUrl) cells.push(afterUrl);
+  } else if (firstLineRemainder) {
+    cells.push(firstLineRemainder);
+  }
+
+  cells.push(...lines.slice(1));
+  return cells;
+}
+
+function parseConsultationCells(raw: string) {
+  if (raw.includes("|")) {
+    return parsePipeCells(raw);
+  }
+  if (raw.includes("\t")) {
+    return raw.split("\t").map(normalizeConsultationCell);
+  }
+  return parsePlainTextCells(raw);
+}
+
 function looksLikeTimestamp(value: string) {
   const normalized = value.trim();
   if (!normalized) return false;
@@ -71,11 +128,7 @@ function parseConsultationImport(rawValue: string): ParsedConsultationImport {
   if (tableRows.length > 0) {
     selectedLine = tableRows[0];
 
-    let firstRowCells = tableRows[0].split("|").map(normalizeConsultationCell);
-    if (firstRowCells[0] === "") firstRowCells = firstRowCells.slice(1);
-    if (firstRowCells[firstRowCells.length - 1] === "") {
-      firstRowCells = firstRowCells.slice(0, -1);
-    }
+    const firstRowCells = parsePipeCells(tableRows[0]);
 
     const firstCell = String(firstRowCells[0] ?? "").toLowerCase();
     const secondRow = tableRows[1];
@@ -95,10 +148,7 @@ function parseConsultationImport(rawValue: string): ParsedConsultationImport {
     }
   }
 
-  let cells = selectedLine.split("|").map(normalizeConsultationCell);
-
-  if (cells[0] === "") cells = cells.slice(1);
-  if (cells[cells.length - 1] === "") cells = cells.slice(0, -1);
+  let cells = parseConsultationCells(selectedLine);
   while (cells.length > 0 && cells[cells.length - 1] === "") {
     cells.pop();
   }
