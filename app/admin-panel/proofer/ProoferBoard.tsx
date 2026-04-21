@@ -753,9 +753,13 @@ export default function ProoferBoard({
     try {
       const res = await fetch(`/api/suggest-images?q=${encodeURIComponent(imageIdea)}&per_page=4`);
       const data = await res.json();
-      if (data.ok) setImgSuggestions((prev) => ({ ...prev, [ideaId]: data.photos }));
+      if (data.ok) {
+        setImgSuggestions((prev) => ({ ...prev, [ideaId]: data.photos }));
+      } else {
+        alert(`Image search failed: ${data.error ?? "Unknown error"}`);
+      }
     } catch {
-      // silently fail — user can retry
+      alert("Network error searching for photos.");
     } finally {
       setImgSearching((prev) => { const n = { ...prev }; delete n[ideaId]; return n; });
     }
