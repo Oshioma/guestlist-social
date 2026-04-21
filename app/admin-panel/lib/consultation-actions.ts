@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 
-const DEFAULT_CONSULTATION_QUESTIONS = [
+export const DEFAULT_CONSULTATION_QUESTIONS = [
   "Company name / handles",
   "Mission statement",
   "How would you describe the personality of your business?",

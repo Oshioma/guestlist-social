@@ -11,6 +11,7 @@ type ClientFormValues = {
   notes?: string;
   industry?: string;
   metaAdAccountId?: string;
+  consultationRow?: string;
 };
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   submitLabel: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
   initialValues?: ClientFormValues;
+  showConsultationImport?: boolean;
 };
 
 export default function ClientForm({
@@ -25,6 +27,7 @@ export default function ClientForm({
   submitLabel,
   action,
   initialValues,
+  showConsultationImport = false,
 }: Props) {
   const [state, formAction, pending] = useActionState(action, { error: null });
 
@@ -158,6 +161,30 @@ export default function ClientForm({
             placeholder="Client notes, context, positioning, priorities..."
           />
         </div>
+
+        {showConsultationImport ? (
+          <div>
+            <label style={labelStyle}>Consultation import (optional)</label>
+            <textarea
+              name="consultationRow"
+              defaultValue={initialValues?.consultationRow ?? ""}
+              style={{
+                ...inputStyle,
+                minHeight: 140,
+                resize: "vertical",
+                fontFamily: "monospace",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+              placeholder="Paste one full Google Form table row (include timestamp if available)."
+            />
+            <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
+              Paste a single row from your consultation sheet (the row with client
+              answers). We will create the client and save this as their first
+              consultation submission in one step.
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <label style={labelStyle}>Status</label>
