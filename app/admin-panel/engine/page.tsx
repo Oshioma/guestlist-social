@@ -16,6 +16,11 @@ const ENGINE_TOOLS: {
   blurb: string;
 }[] = [
   {
+    label: "Interaction",
+    href: "/app/interaction",
+    blurb: "Pick a client and run the engine in one place",
+  },
+  {
     label: "Meta queue",
     href: "/app/meta-queue",
     blurb: "Approve engine changes before they hit Meta",

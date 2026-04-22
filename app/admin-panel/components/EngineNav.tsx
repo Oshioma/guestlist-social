@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ENGINE_TABS = [
+  { label: "Interaction", href: "/app/interaction" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
