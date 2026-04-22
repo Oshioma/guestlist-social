@@ -1,8 +1,19 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type PatternCandidate } from "@/lib/pattern-phrases";
+import { fetchAnnotatedPatternFeedback } from "@/lib/pattern-feedback";
+import SectionCard from "../components/SectionCard";
+import MetaSyncButton from "../components/MetaSyncButton";
+import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import AutoApproveForm from "../components/AutoApproveForm";
 import EngineNav from "../components/EngineNav";
+import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
+  getReaperSettings,
+  REAPER_BOUNDS,
+  DEFAULT_REAPER_SETTINGS,
   getEngineThresholds,
   setEngineThresholds,
   DEFAULT_ENGINE_THRESHOLDS,
@@ -16,15 +27,69 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const supabase = await createClient();
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name, status, meta_ad_account_id")
+    .eq("archived", false)
+    .order("name", { ascending: true });
+
+  const clientList = (clients ?? []).filter(
+    (c) => c.status === "growing" || c.status === "active"
+  );
+
   const adminClient = createAdminClient();
-  const [engineSettings, autoApproveSettings] = await Promise.all([
-    getEngineThresholds(adminClient),
-    getAutoApproveSettings(adminClient),
-  ]);
+
+  const [reaperSettings, engineSettings, autoApproveSettings, { data: metaAccounts }] =
+    await Promise.all([
+      getReaperSettings(adminClient),
+      getEngineThresholds(adminClient),
+      getAutoApproveSettings(adminClient),
+      adminClient
+        .from("connected_meta_accounts")
+        .select("id, client_id, platform, account_name, token_expires_at, updated_at")
+        .order("updated_at", { ascending: false }),
+    ]);
+  const reaperPercent = Math.round(reaperSettings.negRatio * 100);
+  const reaperIsDefault =
+    reaperSettings.minDecisiveVerdicts ===
+      DEFAULT_REAPER_SETTINGS.minDecisiveVerdicts &&
+    reaperSettings.negRatio === DEFAULT_REAPER_SETTINGS.negRatio;
 
   const engineIsDefault = (Object.keys(DEFAULT_ENGINE_THRESHOLDS) as (keyof EngineThresholds)[]).every(
     (k) => engineSettings[k] === DEFAULT_ENGINE_THRESHOLDS[k]
   );
+
+  const accounts = (metaAccounts ?? []) as {
+    id: string;
+    client_id: number;
+    platform: string;
+    account_name: string | null;
+    token_expires_at: string | null;
+    updated_at: string | null;
+  }[];
+
+  const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
+  const hasMetaToken = !!process.env.META_ACCESS_TOKEN;
+  const hasMetaAccount = !!process.env.META_AD_ACCOUNT_ID;
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
+  const hasSmtp = !!process.env.SMTP_HOST;
+  const hasMetaSocialApp = !!process.env.META_SOCIAL_APP_ID;
+
+  // Narrow the annotated feed to the active slice with at least one verdict —
+  // the reaper only sweeps rows it's seen measured outcomes on.
+  const { rows: annotated } = await fetchAnnotatedPatternFeedback(adminClient);
+  const reaperPatterns: PatternCandidate[] = annotated
+    .filter((r) => !r.retired_at && r.decisive > 0)
+    .map((r) => ({
+      pattern_key: r.pattern_key,
+      industry: r.industry,
+      positive: r.positive,
+      negative: r.negative,
+      decisive: r.decisive,
+      phrase: r.phrase,
+    }));
 
   return (
     <div
@@ -39,37 +104,234 @@ export default async function SettingsPage() {
       }}
     >
       <EngineNav />
-      <div
-        style={{
-          borderRadius: 24,
-          border: "1px solid rgba(16,24,40,0.06)",
-          background: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(10px)",
-          boxShadow: "0 10px 28px rgba(16,24,40,0.05)",
-          padding: 20,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em" }}>
-          Settings
-        </h2>
-        <p style={{ margin: "6px 0 0", fontSize: 14, color: "#667085", maxWidth: 740 }}>
-          Control how strict and automated the engine is.
-        </p>
+      <div>
+        <div
+          style={{
+            borderRadius: 16,
+            padding: "18px 18px 16px",
+            border: "1px solid rgba(16,24,40,0.06)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(250,250,251,0.78))",
+            boxShadow: "0 12px 30px rgba(16, 24, 40, 0.06)",
+          }}
+        >
+          <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
+            Engine Settings
+          </h2>
+          <p style={{ fontSize: 14, color: "#667085", margin: "6px 0 0", maxWidth: 760 }}>
+            Configure thresholds, approvals, and sync behavior for how the
+            decision engine scores ads and executes recommendations.
+          </p>
+        </div>
       </div>
 
-      <div
-        style={{
-          borderRadius: 20,
-          border: "1px solid rgba(16,24,40,0.06)",
-          background: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(10px)",
-          boxShadow: "0 10px 28px rgba(16,24,40,0.05)",
-          padding: 18,
-        }}
-      >
-        <h3 style={{ margin: "0 0 14px", fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em" }}>
-          Engine Thresholds
-        </h3>
+      <SectionCard title="Team access">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Invite team members, set roles, and manage who can access the app.
+          </p>
+          <Link
+            href="/app/settings/members"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Manage members →
+          </Link>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Consultation template">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Manage default consultation questions used for new client forms.
+          </p>
+          <Link
+            href="/app/settings/consultation"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Manage consultation template →
+          </Link>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Agency profile">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 13, color: "#71717a", marginBottom: 4 }}>
+              Agency Name
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>
+              Guestlist Social
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, color: "#71717a", marginBottom: 4 }}>
+              Contact Email
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>
+              nelly@guestlistsocial.com
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Environment health">
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          {[
+            { label: "Meta Access Token", ok: hasMetaToken, env: "META_ACCESS_TOKEN" },
+            { label: "Meta Ad Account ID", ok: hasMetaAccount, env: "META_AD_ACCOUNT_ID" },
+            { label: "Meta Social App ID", ok: hasMetaSocialApp, env: "META_SOCIAL_APP_ID" },
+            { label: "Anthropic API Key", ok: hasAnthropicKey, env: "ANTHROPIC_API_KEY" },
+            { label: "SMTP (email)", ok: hasSmtp, env: "SMTP_HOST" },
+            { label: "OpenAI (image gen)", ok: hasOpenAiKey, env: "OPENAI_API_KEY" },
+          ].map((item) => (
+            <div
+              key={item.env}
+              title={item.ok ? `${item.env} configured` : `Missing ${item.env}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: item.ok ? "#ecfdf5" : "#fef2f2",
+                border: `1px solid ${item.ok ? "#bbf7d0" : "#fecaca"}`,
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#18181b",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: item.ok ? "#22c55e" : "#ef4444",
+                  flexShrink: 0,
+                }}
+              />
+              {item.label}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {accounts.length > 0 && (
+        <details
+          style={{
+            border: "1px solid #e4e4e7",
+            borderRadius: 14,
+            background: "#fff",
+            overflow: "hidden",
+          }}
+        >
+          <summary
+            style={{
+              padding: "14px 18px",
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#18181b",
+              listStyle: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 11, color: "#71717a" }}>&#9654;</span>
+            Connected Meta Accounts ({accounts.length})
+          </summary>
+          <div style={{ padding: "0 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {accounts.map((acc) => {
+              const clientName = clientList.find((c) => String(c.id) === String(acc.client_id))?.name ?? `Client ${acc.client_id}`;
+              const expires = acc.token_expires_at ? new Date(acc.token_expires_at) : null;
+              const isExpired = expires ? expires.getTime() < Date.now() : false;
+              const expiresSoon = expires ? expires.getTime() < Date.now() + 7 * 24 * 60 * 60 * 1000 : false;
+
+              return (
+                <div
+                  key={acc.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #e4e4e7",
+                    background: isExpired ? "#fef2f2" : expiresSoon ? "#fffbeb" : "#fff",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 150 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>
+                      {acc.account_name ?? acc.platform}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
+                      {clientName} · {acc.platform}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: isExpired ? "#991b1b" : expiresSoon ? "#92400e" : "#71717a" }}>
+                    {isExpired
+                      ? "Token expired"
+                      : expires
+                      ? `Expires ${expires.toLocaleDateString()}`
+                      : "No expiry set"}
+                  </div>
+                  {acc.updated_at && (
+                    <div style={{ fontSize: 11, color: "#a1a1aa" }}>
+                      Updated {new Date(acc.updated_at).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
+      <SectionCard title="Scoring thresholds">
         <EngineThresholdsForm
           initial={engineSettings}
           bounds={ENGINE_BOUNDS}
@@ -80,21 +342,9 @@ export default async function SettingsPage() {
             await setEngineThresholds(admin, values);
           }}
         />
-      </div>
+      </SectionCard>
 
-      <div
-        style={{
-          borderRadius: 20,
-          border: "1px solid rgba(16,24,40,0.06)",
-          background: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(10px)",
-          boxShadow: "0 10px 28px rgba(16,24,40,0.05)",
-          padding: 18,
-        }}
-      >
-        <h3 style={{ margin: "0 0 14px", fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em" }}>
-          Auto Mode
-        </h3>
+      <SectionCard title="Auto-approve rules">
         <AutoApproveForm
           initial={autoApproveSettings}
           onSave={async (values) => {
@@ -103,27 +353,149 @@ export default async function SettingsPage() {
             await setAutoApproveSettings(admin, values as AutoApproveSettings);
           }}
         />
-      </div>
+      </SectionCard>
 
-      <div
-        style={{
-          borderRadius: 20,
-          border: "1px solid rgba(16,24,40,0.06)",
-          background: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(10px)",
-          boxShadow: "0 10px 28px rgba(16,24,40,0.05)",
-          padding: 18,
-        }}
-      >
-        <h3 style={{ margin: "0 0 8px", fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em" }}>
-          How this works
-        </h3>
-        <p style={{ margin: 0, fontSize: 14, color: "#667085", lineHeight: 1.6 }}>
-          These settings control how aggressive or conservative the engine is.
-          Lower thresholds produce more actions. Higher thresholds produce safer
-          decisions.
-        </p>
-      </div>
+      <SectionCard title="Meta sync">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Pull campaigns, ads, performance data, and daily snapshots from your
+            Meta ad account. Syncs the last 12 months of data and 30 days of
+            daily trend snapshots.
+          </p>
+
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+              Import from Meta
+            </div>
+            <p style={{ fontSize: 13, color: "#71717a", margin: "0 0 12px" }}>
+              Creates a client from your Meta ad account name and imports all
+              campaigns, ads, and performance data into it. Safe to run multiple
+              times — it won't create duplicates.
+            </p>
+            <MetaSyncButton
+              action={async () => {
+                "use server";
+                return await importFromMeta();
+              }}
+              label="Import from Meta"
+              pendingLabel="Importing from Meta..."
+            />
+          </div>
+
+          {clientList.length > 1 && (
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                Sync All Clients
+              </div>
+              <p style={{ fontSize: 13, color: "#71717a", margin: "0 0 12px" }}>
+                Runs a full Meta sync for all {clientList.length} clients in one
+                go.
+              </p>
+              <MetaSyncButton
+                action={async () => {
+                  "use server";
+                  return await syncAllClients();
+                }}
+                label="Sync All Clients"
+                pendingLabel="Syncing all clients..."
+              />
+            </div>
+          )}
+
+          {clientList.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {clientList.map((client) => (
+                <div
+                  key={client.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    padding: 14,
+                    borderRadius: 12,
+                    border: "1px solid #e4e4e7",
+                    background: "#fafafa",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>
+                      {client.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
+                      {(client as any).meta_ad_account_id
+                        ? (client as any).meta_ad_account_id
+                        : process.env.META_AD_ACCOUNT_ID
+                        ? `${process.env.META_AD_ACCOUNT_ID} (global)`
+                        : "No ad account set"}
+                    </div>
+                  </div>
+
+                  <MetaSyncButton
+                    action={async () => {
+                      "use server";
+                      return await syncMetaData(String(client.id));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: "#a1a1aa", margin: 0 }}>
+              No clients found. Create a client first, then sync Meta data into
+              it.
+            </p>
+          )}
+
+          {!hasMetaToken && (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                fontSize: 12,
+                color: "#991b1b",
+              }}
+            >
+              <strong>META_ACCESS_TOKEN</strong> and{" "}
+              <strong>META_AD_ACCOUNT_ID</strong> are not set. Add them in
+              Vercel → Settings → Environment Variables to enable Meta sync.
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Pattern retirement (reaper)">
+        <ReaperThresholdsForm
+          initialMinDecisive={reaperSettings.minDecisiveVerdicts}
+          initialNegRatioPercent={reaperPercent}
+          bounds={{
+            minDecisiveVerdicts: REAPER_BOUNDS.minDecisiveVerdicts,
+            negRatioPercent: {
+              min: Math.round(REAPER_BOUNDS.negRatio.min * 100),
+              max: Math.round(REAPER_BOUNDS.negRatio.max * 100),
+            },
+          }}
+          isDefault={reaperIsDefault}
+          patterns={reaperPatterns}
+        />
+      </SectionCard>
     </div>
   );
 }

@@ -60,6 +60,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
 
 function buildUtilityItems(_isAdmin: boolean): NavItem[] {
   return [
+    { label: "Engine settings", href: "/app/engine-settings" },
     { label: "Settings", href: "/app/settings" },
     { label: "Consultation Template", href: "/app/settings/consultation" },
     { label: "Guide", href: "/app/guide" },
