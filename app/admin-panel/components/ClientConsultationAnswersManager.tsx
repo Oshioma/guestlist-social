@@ -1,6 +1,10 @@
 "use client";
 
-import { updateConsultationSubmissionAnswersAction } from "../lib/consultation-actions";
+import {
+  createConsultationSubmissionAction,
+  deleteConsultationSubmissionAction,
+  updateConsultationSubmissionAnswersAction,
+} from "../lib/consultation-actions";
 
 type ConsultationQuestion = {
   id: number;
@@ -98,6 +102,11 @@ export default function ClientConsultationAnswersManager({
     );
   }
 
+  const createSubmission = createConsultationSubmissionAction.bind(
+    null,
+    clientId,
+    selectedForm.id
+  );
   const submissions = [...selectedForm.submissions];
 
   return (
@@ -151,9 +160,46 @@ export default function ClientConsultationAnswersManager({
           padding: 16,
           display: "flex",
           flexDirection: "column",
-          gap: 10,
+          gap: 14,
         }}
       >
+        <div
+          style={{
+            border: "1px solid #e4e4e7",
+            borderRadius: 12,
+            padding: 12,
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#71717a", marginBottom: 10 }}>
+            Add consultation data
+          </div>
+          <form action={createSubmission}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {selectedForm.questions.map((question) => (
+                <label
+                  key={question.id}
+                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                >
+                  <span style={{ fontSize: 12, color: "#3f3f46", fontWeight: 600 }}>
+                    {question.prompt}
+                  </span>
+                  <textarea
+                    name={`question-${question.id}`}
+                    rows={2}
+                    style={textAreaStyle}
+                  />
+                </label>
+              ))}
+              <div>
+                <button type="submit" style={primaryButtonStyle}>
+                  Add data entry
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
         {submissions.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: "#71717a" }}>
             No consultation entries yet.
@@ -165,21 +211,17 @@ export default function ClientConsultationAnswersManager({
               clientId,
               submission.id
             );
+            const deleteSubmission = deleteConsultationSubmissionAction.bind(
+              null,
+              clientId,
+              submission.id
+            );
             const answersByQuestionId = new Map<number, ConsultationAnswer>();
             for (const answer of submission.answers) {
               if (answer.questionId != null) {
                 answersByQuestionId.set(Number(answer.questionId), answer);
               }
             }
-
-            const knownQuestionIds = new Set(
-              selectedForm.questions.map((question) => Number(question.id))
-            );
-            const orphanAnswers = submission.answers.filter(
-              (answer) =>
-                answer.questionId == null ||
-                !knownQuestionIds.has(Number(answer.questionId))
-            );
 
             return (
               <details
@@ -227,86 +269,50 @@ export default function ClientConsultationAnswersManager({
                   </span>
                 </summary>
 
-                <form action={updateSubmission}>
-                  <div
-                    style={{
-                      borderTop: "1px solid #f4f4f5",
-                      padding: 14,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 10,
-                    }}
-                  >
-                    {selectedForm.questions.map((question) => {
-                      const answer =
-                        answersByQuestionId.get(Number(question.id))?.answerText ?? "";
-                      return (
-                      <label
-                        key={`question-${submission.id}-${question.id}`}
-                        style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                      >
-                        <span
-                          style={{
-                            margin: 0,
-                            fontSize: 12,
-                            color: "#3f3f46",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {question.prompt}
-                        </span>
-                        <textarea
-                          name={`question-${question.id}`}
-                          defaultValue={answer}
-                          rows={2}
-                          style={textAreaStyle}
-                        />
-                      </label>
-                      );
-                    })}
-                    {orphanAnswers.length > 0 ? (
-                      <div
-                        style={{
-                          borderTop: "1px solid #f4f4f5",
-                          paddingTop: 10,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                        }}
-                      >
-                        {orphanAnswers.map((answer) => (
-                          <div key={`orphan-${answer.id}`}>
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: 12,
-                                color: "#52525b",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {answer.questionPrompt || "Additional answer"}
-                            </p>
-                            <p
-                              style={{
-                                margin: "4px 0 0",
-                                fontSize: 13,
-                                color: "#3f3f46",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              {answer.answerText.trim() || "—"}
-                            </p>
-                          </div>
-                        ))}
+                <div
+                  style={{
+                    borderTop: "1px solid #f4f4f5",
+                    padding: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <form action={updateSubmission}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {selectedForm.questions.map((question) => {
+                        const answer = answersByQuestionId.get(question.id);
+                        return (
+                          <label
+                            key={`${submission.id}-${question.id}`}
+                            style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                          >
+                            <span style={{ fontSize: 12, color: "#3f3f46", fontWeight: 600 }}>
+                              {question.prompt}
+                            </span>
+                            <textarea
+                              name={`question-${question.id}`}
+                              defaultValue={answer?.answerText ?? ""}
+                              rows={2}
+                              style={textAreaStyle}
+                            />
+                          </label>
+                        );
+                      })}
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button type="submit" style={secondaryButtonStyle}>
+                          Save changes
+                        </button>
                       </div>
-                    ) : null}
-                    <div>
-                      <button type="submit" style={secondaryButtonStyle}>
-                        Save changes
-                      </button>
                     </div>
-                  </div>
-                </form>
+                  </form>
+
+                  <form action={deleteSubmission}>
+                    <button type="submit" style={dangerButtonStyle}>
+                      Delete entry
+                    </button>
+                  </form>
+                </div>
               </details>
             );
           })
@@ -328,6 +334,17 @@ const textAreaStyle: React.CSSProperties = {
   background: "#fff",
 };
 
+const primaryButtonStyle: React.CSSProperties = {
+  border: "none",
+  borderRadius: 8,
+  background: "#18181b",
+  color: "#fff",
+  padding: "8px 12px",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
 const secondaryButtonStyle: React.CSSProperties = {
   border: "1px solid #d4d4d8",
   borderRadius: 8,
@@ -337,4 +354,16 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   cursor: "pointer",
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  border: "1px solid #fecaca",
+  borderRadius: 8,
+  background: "#fff5f5",
+  color: "#b91c1c",
+  padding: "7px 11px",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  alignSelf: "flex-start",
 };
