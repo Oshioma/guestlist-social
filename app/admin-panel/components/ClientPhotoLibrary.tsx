@@ -319,11 +319,22 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {images.map((img) => (
             <div key={img.id} style={{ position: "relative", flexShrink: 0 }}>
-              {img.publicUrl.includes("drive.google.com/uc") ? (
-                <div style={{ width: 140, height: 95, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b", border: "1px solid #e4e4e7", flexShrink: 0 }}>
-                  <span style={{ fontSize: 28, color: "#fff", opacity: 0.8 }}>▶</span>
-                </div>
-              ) : (
+              {img.publicUrl.includes("drive.google.com/uc") ? (() => {
+                const m = img.publicUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                const thumbUrl = m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w400` : null;
+                return (
+                  <div style={{ position: "relative", width: 140, height: 95, flexShrink: 0 }}>
+                    {thumbUrl ? (
+                      <img src={thumbUrl} alt="" style={{ width: 140, height: 95, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e4e4e7" }} />
+                    ) : (
+                      <div style={{ width: 140, height: 95, borderRadius: 8, background: "#18181b", border: "1px solid #e4e4e7" }} />
+                    )}
+                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "rgba(0,0,0,0.25)" }}>
+                      <span style={{ fontSize: 26, color: "#fff", lineHeight: 1 }}>▶</span>
+                    </div>
+                  </div>
+                );
+              })() : (
                 <img
                   src={img.publicUrl}
                   alt=""

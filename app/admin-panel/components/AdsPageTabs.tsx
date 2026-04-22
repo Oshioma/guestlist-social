@@ -55,9 +55,14 @@ export default function AdsPageTabs({
       <div
         style={{
           display: "flex",
-          gap: 4,
-          borderBottom: "2px solid #e4e4e7",
-          marginBottom: 20,
+          gap: 8,
+          padding: 6,
+          border: "1px solid rgba(16,24,40,0.08)",
+          borderRadius: 14,
+          background: "rgba(255,255,255,0.72)",
+          backdropFilter: "blur(8px)",
+          marginBottom: 18,
+          flexWrap: "wrap",
         }}
       >
         {TABS.map((tab) => {
@@ -69,20 +74,20 @@ export default function AdsPageTabs({
               type="button"
               onClick={() => setActive(tab.key)}
               style={{
-                padding: "10px 16px",
+                padding: "9px 14px",
                 fontSize: 13,
                 fontWeight: 600,
-                color: isActive ? "#18181b" : "#71717a",
-                background: "none",
-                border: "none",
-                borderBottom: isActive
-                  ? "2px solid #18181b"
-                  : "2px solid transparent",
-                marginBottom: -2,
+                color: isActive ? "#101828" : "#667085",
+                background: isActive ? "#ffffff" : "transparent",
+                border: isActive
+                  ? "1px solid rgba(16,24,40,0.10)"
+                  : "1px solid transparent",
+                borderRadius: 999,
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
+                boxShadow: isActive ? "0 2px 10px rgba(16,24,40,0.06)" : "none",
               }}
             >
               {tab.label}
@@ -93,8 +98,8 @@ export default function AdsPageTabs({
                     fontWeight: 700,
                     padding: "1px 7px",
                     borderRadius: 999,
-                    background: isActive ? "#18181b" : "#e4e4e7",
-                    color: isActive ? "#fff" : "#52525b",
+                    background: isActive ? "#101828" : "#e4e7ec",
+                    color: isActive ? "#fff" : "#475467",
                   }}
                 >
                   {badge}

@@ -395,8 +395,27 @@ export default async function ClientAdsPage({
   const losing = ads.filter((a) => a._perfStatus === "losing").length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        background:
+          "linear-gradient(180deg, #f6f7f8 0%, #f1f3f5 45%, #eef1f4 100%)",
+        borderRadius: 20,
+        padding: 14,
+      }}
+    >
+      <div
+        style={{
+          borderRadius: 16,
+          padding: "18px 18px 16px",
+          border: "1px solid rgba(16,24,40,0.06)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,250,251,0.76))",
+          boxShadow: "0 12px 30px rgba(16, 24, 40, 0.06)",
+        }}
+      >
         <Link
           href={`/app/clients/${clientId}`}
           style={{
@@ -443,8 +462,8 @@ export default async function ClientAdsPage({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 16,
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 12,
         }}
       >
         {[
@@ -458,10 +477,12 @@ export default async function ClientAdsPage({
           <div
             key={stat.label}
             style={{
-              border: "1px solid #e4e4e7",
-              borderRadius: 16,
+              border: "1px solid rgba(16,24,40,0.06)",
+              borderRadius: 18,
               padding: 16,
-              background: "#fff",
+              background: "rgba(255,255,255,0.78)",
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 10px 24px rgba(16, 24, 40, 0.04)",
             }}
           >
             <div style={{ fontSize: 12, color: "#71717a" }}>{stat.label}</div>
