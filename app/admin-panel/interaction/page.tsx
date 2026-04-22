@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type PostStatus = "new" | "approved" | "skipped" | "saved";
+type FetchState = "idle" | "loading" | "success" | "error";
 type Tab =
   | "Feed"
   | "Saved Audiences"
@@ -24,6 +25,21 @@ type Post = {
   mediaUrl: string;
   status: PostStatus;
   why: string[];
+};
+
+type InstagramCommentApiItem = {
+  id?: string;
+  text?: string;
+  username?: string;
+  timestamp?: string;
+  permalink?: string;
+};
+
+type InstagramCommentsApiResponse = {
+  ok: boolean;
+  comments?: InstagramCommentApiItem[];
+  fetched?: number;
+  error?: string;
 };
 
 const CLIENTS = [
@@ -373,6 +389,8 @@ export default function InteractionEngineUI() {
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [isLive, setIsLive] = useState(true);
   const [highValueOnly, setHighValueOnly] = useState(true);
+  const [ingestionState, setIngestionState] = useState<FetchState>("idle");
+  const [ingestionError, setIngestionError] = useState<string | null>(null);
 
   const tabs: Tab[] = ["Feed", "Saved Audiences", "Competitors", "Playbook", "Results", "Learnings"];
 
@@ -387,6 +405,80 @@ export default function InteractionEngineUI() {
       current.map((post) => (post.id === postId ? { ...post, ...patch } : post))
     );
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ingestInstagramComments() {
+      setIngestionState((prev) => (prev === "idle" ? "loading" : prev));
+      setIngestionError(null);
+      try {
+        const res = await fetch("/api/interaction/instagram-comments?limit=10", {
+          cache: "no-store",
+        });
+        const payload: InstagramCommentsApiResponse = await res.json();
+        if (!res.ok || !payload.ok) {
+          throw new Error(payload.error ?? "Failed to fetch Instagram comments.");
+        }
+
+        const incoming = (payload.comments ?? []).map((comment) => {
+          const timestamp = String(comment.timestamp ?? "");
+          const parsed = timestamp ? new Date(timestamp) : null;
+          const minutesAgo =
+            parsed && Number.isFinite(parsed.getTime())
+              ? Math.max(1, Math.round((Date.now() - parsed.getTime()) / 60000))
+              : 10;
+          const text = String(comment.text ?? "").trim() || "Instagram comment";
+          return {
+            id: String(comment.id ?? `ig-${Date.now()}`),
+            clientId: "client-organzibar",
+            author: `@${String(comment.username ?? "instagram_user").replace(/^@/, "")}`,
+            platform: "Instagram",
+            time: `${minutesAgo}m ago`,
+            text,
+            relevance: 80 + Math.floor(Math.random() * 18),
+            opportunity: 70 + Math.floor(Math.random() * 22),
+            risk: 8 + Math.floor(Math.random() * 18),
+            comment:
+              "Helpful local recommendation based on their question and timing.",
+            mediaUrl:
+              "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
+            status: "new" as const,
+            why: [
+              "Live Instagram comment",
+              "High intent signal",
+              "Fresh opportunity window",
+            ],
+          };
+        });
+
+        if (cancelled || incoming.length === 0) return;
+        setPosts((prev) => {
+          const byId = new Map(prev.map((post) => [post.id, post]));
+          for (const item of incoming) {
+            if (!byId.has(item.id)) {
+              byId.set(item.id, item);
+            }
+          }
+          return Array.from(byId.values()).slice(0, 40);
+        });
+        setIngestionState("success");
+      } catch (error) {
+        if (cancelled) return;
+        setIngestionState("error");
+        setIngestionError(
+          error instanceof Error ? error.message : "Failed to ingest Instagram comments."
+        );
+      }
+    }
+
+    ingestInstagramComments();
+    const interval = setInterval(ingestInstagramComments, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLive) return;
@@ -692,6 +784,21 @@ export default function InteractionEngineUI() {
               <div className="text-sm text-gray-500">{activeClient.handle}</div>
             </div>
             <div className="flex items-center gap-3">
+              <div
+                className={`text-xs ${
+                  ingestionState === "error"
+                    ? "text-red-600"
+                    : ingestionState === "success"
+                    ? "text-emerald-600"
+                    : "text-gray-400"
+                }`}
+                title={ingestionError ?? "Instagram source ingestion status"}
+              >
+                {ingestionState === "success" && "● Instagram source connected"}
+                {ingestionState === "loading" && "● Connecting Instagram source..."}
+                {ingestionState === "error" && "● Instagram source error"}
+                {ingestionState === "idle" && "● Instagram source idle"}
+              </div>
               <div className={`text-xs ${isLive ? "text-green-600" : "text-gray-400"}`}>
                 {isLive ? "● Live feed" : "Paused"}
               </div>
