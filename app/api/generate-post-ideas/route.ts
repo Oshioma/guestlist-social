@@ -212,10 +212,15 @@ RULES:
         const anthropic = new Anthropic({ apiKey });
         let totalGenerated = 0;
 
-        // Generate in weekly batches, streaming each batch as it completes
+        // Build all weekly batches
+        const batches: string[][] = [];
         for (let i = 0; i < emptySlots.length; i += BATCH_SIZE) {
-          const batch = emptySlots.slice(i, i + BATCH_SIZE);
+          batches.push(emptySlots.slice(i, i + BATCH_SIZE));
+        }
 
+        // Generate all batches in parallel — ideas stream in as each batch finishes
+        // (JS is single-threaded so send() calls are safe across concurrent promises)
+        await Promise.all(batches.map(async (batch) => {
           const slotDescriptions = batch
             .map((date) => {
               const dow = dayOfWeek(date);
@@ -242,14 +247,12 @@ Generate ${batch.length} ideas total.`;
 
             const raw = message.content.filter((b) => b.type === "text").map((b) => (b as { type: "text"; text: string }).text).join("");
             const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) continue;
+            if (!jsonMatch) return;
 
             const parsed = JSON.parse(jsonMatch[0]);
             const rawIdeas: Record<string, unknown>[] = Array.isArray(parsed.ideas) ? parsed.ideas : [];
+            if (rawIdeas.length === 0) return;
 
-            if (rawIdeas.length === 0) continue;
-
-            // Insert batch and stream each idea immediately
             const toInsert = rawIdeas.map((idea) => {
               const pillarName = String(idea.pillar_name ?? "").toLowerCase().trim();
               return {
@@ -303,7 +306,7 @@ Generate ${batch.length} ideas total.`;
           } catch {
             // One batch failing shouldn't kill the whole stream — skip and continue
           }
-        }
+        }));
 
         // Update run with final count
         if (runId) {
