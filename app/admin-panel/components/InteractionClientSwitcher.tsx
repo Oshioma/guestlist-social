@@ -17,19 +17,28 @@ export default function InteractionClientSwitcher({
   selectedClientId,
 }: Props) {
   const router = useRouter();
+  const selectedClientName =
+    clients.find((client) => client.id === selectedClientId)?.name ?? "";
 
   return (
-    <label
+    <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        flexWrap: "wrap",
-        fontSize: 13,
-        color: "#52525b",
+        display: "grid",
+        gap: 6,
+        width: "100%",
       }}
     >
-      <span style={{ fontWeight: 600 }}>Client</span>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "#71717a",
+        }}
+      >
+        Client
+      </span>
       <select
         aria-label="Select a client for interaction engine"
         value={selectedClientId}
@@ -39,13 +48,14 @@ export default function InteractionClientSwitcher({
           router.push(`/app/interaction?clientId=${encodeURIComponent(nextClientId)}`);
         }}
         style={{
-          minWidth: 240,
-          padding: "9px 10px",
-          borderRadius: 10,
-          border: "1px solid #e4e4e7",
+          width: "100%",
+          padding: "10px 12px",
+          borderRadius: 12,
+          border: "1px solid #d4d4d8",
           background: "#fff",
           color: "#18181b",
-          fontSize: 13,
+          fontSize: 14,
+          fontWeight: 600,
           outline: "none",
         }}
       >
@@ -55,6 +65,9 @@ export default function InteractionClientSwitcher({
           </option>
         ))}
       </select>
-    </label>
+      <span style={{ fontSize: 12, color: "#71717a" }}>
+        Running engine for <strong style={{ color: "#18181b" }}>{selectedClientName}</strong>
+      </span>
+    </div>
   );
 }

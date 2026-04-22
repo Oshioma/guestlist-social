@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { canRunAds } from "@/lib/auth/permissions";
-import EngineNav from "@/app/admin-panel/components/EngineNav";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import InteractionClientSwitcher from "@/app/admin-panel/components/InteractionClientSwitcher";
 import ScoreAndGenerateButton from "@/app/admin-panel/components/ScoreAndGenerateButton";
@@ -47,7 +46,6 @@ export default async function InteractionPage({ searchParams }: Props) {
   if (clientsError) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <EngineNav />
         <EmptyState
           title="Unable to load clients"
           description={clientsError.message}
@@ -60,7 +58,6 @@ export default async function InteractionPage({ searchParams }: Props) {
   if (allClients.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <EngineNav />
         <EmptyState
           title="No clients yet"
           description="Create a client first, then use Interaction to run the engine per client."
@@ -100,30 +97,28 @@ export default async function InteractionPage({ searchParams }: Props) {
     ]);
 
   const stats = [
-    { label: "Ads in scope", value: String(adCount) },
-    { label: "Pending decisions", value: String(pendingDecisions) },
-    { label: "Queue waiting approval", value: String(pendingQueue) },
+    { label: "ADS IN SCOPE", value: String(adCount) },
+    { label: "PENDING DECISIONS", value: String(pendingDecisions) },
+    { label: "QUEUE WAITING APPROVAL", value: String(pendingQueue) },
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 1100 }}>
-      <EngineNav />
-
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 980 }}>
       <section
         style={{
-          background: "#fff",
-          border: "1px solid #e4e4e7",
-          borderRadius: 14,
-          padding: 18,
+          background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+          border: "1px solid #d4d4d8",
+          borderRadius: 18,
+          padding: 20,
           display: "flex",
           flexDirection: "column",
-          gap: 14,
+          gap: 16,
         }}
       >
         <div
           style={{
             display: "flex",
-            gap: 14,
+            gap: 16,
             justifyContent: "space-between",
             alignItems: "flex-start",
             flexWrap: "wrap",
@@ -133,33 +128,35 @@ export default async function InteractionPage({ searchParams }: Props) {
             <h1
               style={{
                 margin: 0,
-                fontSize: 24,
-                fontWeight: 700,
+                fontSize: 28,
+                fontWeight: 800,
                 color: "#18181b",
                 letterSpacing: "-0.02em",
               }}
             >
-              Interaction
+              INTERACTION
             </h1>
-            <p style={{ margin: "6px 0 0", fontSize: 13, color: "#71717a" }}>
-              Choose a client and run the engine actions for that client.
+            <p style={{ margin: "6px 0 0", fontSize: 13, color: "#52525b", maxWidth: 620 }}>
+              Switch clients and run your interaction workflow from one place.
             </p>
           </div>
 
-          <InteractionClientSwitcher
-            clients={selectableClients.map((client) => ({
-              id: client.id,
-              name: client.name,
-            }))}
-            selectedClientId={selectedClientId}
-          />
+          <div style={{ minWidth: 320, flex: "1 1 340px", maxWidth: 420 }}>
+            <InteractionClientSwitcher
+              clients={selectableClients.map((client) => ({
+                id: client.id,
+                name: client.name,
+              }))}
+              selectedClientId={selectedClientId}
+            />
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+            gap: 12,
           }}
         >
           {stats.map((stat) => (
@@ -167,16 +164,25 @@ export default async function InteractionPage({ searchParams }: Props) {
               key={stat.label}
               style={{
                 border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: "12px 14px",
-                background: "#fafafa",
+                borderRadius: 14,
+                padding: "14px 14px",
+                background: "#fff",
               }}
             >
-              <div style={{ fontSize: 12, color: "#71717a" }}>{stat.label}</div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#71717a",
+                  letterSpacing: "0.08em",
+                  fontWeight: 700,
+                }}
+              >
+                {stat.label}
+              </div>
               <div
                 style={{
                   marginTop: 2,
-                  fontSize: 24,
+                  fontSize: 26,
                   fontWeight: 700,
                   color: "#18181b",
                   letterSpacing: "-0.02em",
@@ -192,7 +198,7 @@ export default async function InteractionPage({ searchParams }: Props) {
       <section
         style={{
           display: "grid",
-          gap: 16,
+          gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
           alignItems: "start",
         }}
@@ -200,19 +206,28 @@ export default async function InteractionPage({ searchParams }: Props) {
         <div
           style={{
             background: "#fff",
-            border: "1px solid #e4e4e7",
-            borderRadius: 14,
-            padding: 16,
+            border: "1px solid #d4d4d8",
+            borderRadius: 16,
+            padding: 18,
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 10,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#18181b" }}>
-            Score + generate actions
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 800,
+              color: "#18181b",
+              letterSpacing: "0.02em",
+              textTransform: "uppercase",
+            }}
+          >
+            Interaction Scan
           </h2>
           <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-            Scores this client&apos;s ads and creates action suggestions.
+            Score this client&apos;s ads and generate fresh actions.
           </p>
           <ScoreAndGenerateButton clientId={selectedClientId} />
         </div>
@@ -220,19 +235,28 @@ export default async function InteractionPage({ searchParams }: Props) {
         <div
           style={{
             background: "#fff",
-            border: "1px solid #e4e4e7",
-            borderRadius: 14,
-            padding: 16,
+            border: "1px solid #d4d4d8",
+            borderRadius: 16,
+            padding: 18,
             display: "flex",
             flexDirection: "column",
-            gap: 8,
+            gap: 10,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#18181b" }}>
-            Decision engine
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 800,
+              color: "#18181b",
+              letterSpacing: "0.02em",
+              textTransform: "uppercase",
+            }}
+          >
+            Decision Run
           </h2>
           <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-            Preview and save decision recommendations for this client.
+            Preview then save engine decisions for this client.
           </p>
           <PreviewDecisionsButton clientId={selectedClientId} />
           <GenerateDecisionsButton clientId={selectedClientId} />
@@ -242,9 +266,9 @@ export default async function InteractionPage({ searchParams }: Props) {
       <section
         style={{
           background: "#fff",
-          border: "1px solid #e4e4e7",
-          borderRadius: 14,
-          padding: 16,
+          border: "1px solid #d4d4d8",
+          borderRadius: 16,
+          padding: 18,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -253,7 +277,17 @@ export default async function InteractionPage({ searchParams }: Props) {
         }}
       >
         <div>
-          <h3 style={{ margin: 0, fontSize: 14, color: "#18181b" }}>Open full client workspace</h3>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 13,
+              color: "#18181b",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Open Full Client Workspace
+          </h3>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: "#71717a" }}>
             Jump into ads, creatives, reports, and reviews for this client.
           </p>
