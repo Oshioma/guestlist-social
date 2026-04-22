@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
-type Client = { id: string; name: string };
+type Client = { id: string; name: string; igHandle: string };
 
 type Comment = {
   id: string;
@@ -57,7 +57,13 @@ function formatTime(ts: string): string {
 
 export default function InteractionsPanel({ clients }: { clients: Client[] }) {
   const [selectedClientId, setSelectedClientId] = useState(clients[0]?.id ?? "");
-  const [handle, setHandle] = useState("");
+  const [handle, setHandle] = useState(clients[0]?.igHandle ?? "");
+
+  // Auto-fill handle when client changes
+  useEffect(() => {
+    const client = clients.find((c) => c.id === selectedClientId);
+    if (client?.igHandle) setHandle(client.igHandle);
+  }, [selectedClientId, clients]);
   const [limit, setLimit] = useState(50);
   const [loading, setLoading] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);

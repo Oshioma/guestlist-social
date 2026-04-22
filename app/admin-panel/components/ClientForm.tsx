@@ -8,6 +8,7 @@ type ClientFormValues = {
   monthlyBudget: number;
   status: "active" | "paused" | "onboarding";
   websiteUrl?: string;
+  igHandle?: string;
   notes?: string;
   industry?: string;
   metaAdAccountId?: string;
@@ -110,6 +111,21 @@ export default function ClientForm({
             />
           </div>
 
+          <div>
+            <label style={labelStyle}>Instagram Handle</label>
+            <input
+              name="igHandle"
+              defaultValue={initialValues?.igHandle ?? ""}
+              style={inputStyle}
+              placeholder="@handle"
+            />
+            <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
+              Used for the Interactions comment feed.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div>
             <label style={labelStyle}>Industry</label>
             <input
