@@ -1,5 +1,6 @@
 "use client";
 
+import { useActionState } from "react";
 import {
   saveSingleConsultationSubmissionAnswersAction,
 } from "../lib/consultation-actions";
@@ -34,6 +35,16 @@ type ConsultationForm = {
 type Props = {
   clientId: string;
   activeForm: ConsultationForm | null;
+};
+
+type SaveConsultationState = {
+  error: string | null;
+  success: string | null;
+};
+
+const INITIAL_SAVE_STATE: SaveConsultationState = {
+  error: null,
+  success: null,
 };
 
 function formatSubmittedAt(dateString: string) {
@@ -101,10 +112,14 @@ export default function ClientConsultationAnswersManager({
   }
 
   const submissions = [...selectedForm.submissions];
-  const saveAnswers = saveSingleConsultationSubmissionAnswersAction.bind(
+  const saveAnswersAction = saveSingleConsultationSubmissionAnswersAction.bind(
     null,
     clientId,
     selectedForm.id
+  );
+  const [saveState, saveAction, savePending] = useActionState(
+    saveAnswersAction,
+    INITIAL_SAVE_STATE
   );
   const latestSubmission = submissions[0] ?? null;
   const answersByQuestionId = new Map<number, ConsultationAnswer>();
@@ -182,7 +197,36 @@ export default function ClientConsultationAnswersManager({
           </p>
         ) : null}
 
-        <form action={saveAnswers}>
+        {saveState.error ? (
+          <div
+            style={{
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+              background: "#fff5f5",
+              color: "#991b1b",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            {saveState.error}
+          </div>
+        ) : null}
+        {saveState.success ? (
+          <div
+            style={{
+              border: "1px solid #bbf7d0",
+              borderRadius: 10,
+              background: "#f0fdf4",
+              color: "#166534",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            {saveState.success}
+          </div>
+        ) : null}
+
+        <form action={saveAction}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {selectedForm.questions.map((question) => (
               <label
@@ -239,8 +283,16 @@ export default function ClientConsultationAnswersManager({
               </div>
             ) : null}
             <div>
-              <button type="submit" style={secondaryButtonStyle}>
-                Save
+              <button
+                type="submit"
+                disabled={savePending}
+                style={{
+                  ...secondaryButtonStyle,
+                  cursor: savePending ? "wait" : "pointer",
+                  opacity: savePending ? 0.75 : 1,
+                }}
+              >
+                {savePending ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
