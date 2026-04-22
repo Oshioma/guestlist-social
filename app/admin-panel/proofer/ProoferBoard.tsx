@@ -2387,20 +2387,18 @@ export default function ProoferBoard({
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", flexShrink: 0 }}>
                       {["proofed", "check", "improve"].map((statusValue) => {
                         const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
-                        const isYellow = statusValue === "check";
-                        const active = isYellow ? hasDraft : effectiveStatus === statusValue;
+                        const active = effectiveStatus === statusValue;
                         const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve");
+                        const isCheckBtn = statusValue === "check";
+                        const isDisabled = disableThisButton || (isCheckBtn && !post && !hasDraft);
                         return (
                           <button
                             key={btn.value}
                             type="button"
-                            title={isYellow ? "Save" : btn.label}
-                            aria-label={isYellow ? "Save" : btn.label}
-                            onClick={() => isYellow
-                              ? handleSave(dateKey, activePlatform)
-                              : handleStatus(dateKey, activePlatform, statusValue as ProoferStatus)
-                            }
-                            disabled={disableThisButton || (isYellow && !hasDraft)}
+                            title={btn.label}
+                            aria-label={btn.label}
+                            onClick={() => handleStatus(dateKey, activePlatform, statusValue as ProoferStatus)}
+                            disabled={isDisabled}
                             style={{
                               width: 16,
                               height: 16,
@@ -2408,13 +2406,13 @@ export default function ProoferBoard({
                               borderRadius: "50%",
                               border: "1px solid #e4e4e7",
                               background: btn.dot,
-                              cursor: (disableThisButton || (isYellow && !hasDraft)) ? "not-allowed" : "pointer",
+                              cursor: isDisabled ? "not-allowed" : "pointer",
                               boxShadow: "none",
-                              opacity: (disableThisButton || (isYellow && !hasDraft)) ? 0.25 : active ? 1 : 0.35,
+                              opacity: isDisabled ? 0.25 : active ? 1 : 0.35,
                               transition: "opacity 120ms ease",
                             }}
-                            onMouseEnter={(e) => { if (!disableThisButton && !(isYellow && !hasDraft) && !active) e.currentTarget.style.opacity = "0.75"; }}
-                            onMouseLeave={(e) => { if (!disableThisButton && !(isYellow && !hasDraft) && !active) e.currentTarget.style.opacity = "0.35"; }}
+                            onMouseEnter={(e) => { if (!isDisabled && !active) e.currentTarget.style.opacity = "0.75"; }}
+                            onMouseLeave={(e) => { if (!isDisabled && !active) e.currentTarget.style.opacity = "0.35"; }}
                           />
                         );
                       })}
