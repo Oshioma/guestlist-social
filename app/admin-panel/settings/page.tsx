@@ -131,6 +131,38 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
+      <SectionCard title="Consultation template">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Manage default consultation questions used for new client forms.
+          </p>
+          <Link
+            href="/app/settings/consultation"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Manage consultation template →
+          </Link>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Account">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>

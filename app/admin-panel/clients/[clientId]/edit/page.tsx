@@ -5,7 +5,7 @@ import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientBrandContext from "../../../components/ClientBrandContext";
-import ClientConsultationManager from "../../../components/ClientConsultationManager";
+import ClientConsultationAnswersManager from "../../../components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
 import { ensureDefaultConsultationFormForClient } from "../../../lib/consultation-actions";
 import { updateClientAction } from "../../../lib/client-actions";
@@ -56,10 +56,10 @@ export default async function EditClientPage({ params }: Props) {
     submissionsRes.error?.code === "42P01" ? [] : (submissionsRes.data ?? []);
 
   const formIds = new Set(formRows.map((row) => Number((row as { id: number }).id)));
-  const filteredQuestions = questionRows.filter((row) =>
+  const filteredSubmissions = submissionRows.filter((row) =>
     formIds.has(Number((row as { form_id: number }).form_id))
   );
-  const filteredSubmissions = submissionRows.filter((row) =>
+  const filteredQuestions = questionRows.filter((row) =>
     formIds.has(Number((row as { form_id: number }).form_id))
   );
 
@@ -78,25 +78,6 @@ export default async function EditClientPage({ params }: Props) {
 
   const answerRows =
     answersRes.error?.code === "42P01" ? [] : (answersRes.data ?? []);
-
-  const questionsByForm = new Map<
-    number,
-    Array<{ id: number; prompt: string; sortOrder: number }>
-  >();
-  for (const row of filteredQuestions as Array<{
-    id: number;
-    form_id: number;
-    prompt: string;
-    sort_order: number;
-  }>) {
-    const formQuestionList = questionsByForm.get(row.form_id) ?? [];
-    formQuestionList.push({
-      id: row.id,
-      prompt: row.prompt ?? "",
-      sortOrder: Number(row.sort_order ?? 0),
-    });
-    questionsByForm.set(row.form_id, formQuestionList);
-  }
 
   const answersBySubmission = new Map<
     number,
@@ -122,6 +103,27 @@ export default async function EditClientPage({ params }: Props) {
       answerText: row.answer_text ?? "",
     });
     answersBySubmission.set(row.submission_id, submissionAnswers);
+  }
+
+  const questionsByForm = new Map<
+    number,
+    Array<{
+      id: number;
+      prompt: string;
+    }>
+  >();
+  for (const row of filteredQuestions as Array<{
+    id: number;
+    form_id: number;
+    prompt: string;
+    sort_order: number;
+  }>) {
+    const existing = questionsByForm.get(row.form_id) ?? [];
+    existing.push({
+      id: row.id,
+      prompt: row.prompt ?? "",
+    });
+    questionsByForm.set(row.form_id, existing);
   }
 
   const submissionsByForm = new Map<
@@ -165,6 +167,8 @@ export default async function EditClientPage({ params }: Props) {
     questions: questionsByForm.get(row.id) ?? [],
     submissions: submissionsByForm.get(row.id) ?? [],
   }));
+  const activeForm =
+    consultationForms.find((form) => form.isActive) ?? consultationForms[0] ?? null;
 
   async function action(
     _state: { error: string | null },
@@ -255,9 +259,9 @@ export default async function EditClientPage({ params }: Props) {
         }}
       />
 
-      <ClientConsultationManager
+      <ClientConsultationAnswersManager
         clientId={clientId}
-        forms={consultationForms}
+        activeForm={activeForm}
       />
     </div>
   );
