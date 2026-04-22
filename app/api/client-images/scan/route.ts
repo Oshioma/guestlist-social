@@ -14,7 +14,7 @@ import { createClient } from "../../../../lib/supabase/server";
 import { createClient as serviceClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 const MAX_EXTRA_PAGES = 3;   // crawl up to 3 extra pages beyond the homepage
 const MAX_IMAGES      = 120; // total cap to insert per scan run
@@ -289,25 +289,46 @@ async function tryShopifyProducts(base: string): Promise<string[]> {
 
 // WordPress: /wp-json/wp/v2/media is public for published images
 async function tryWordPressMedia(base: string): Promise<string[]> {
+  const urls: string[] = [];
+
+  // Try REST API media endpoint
   try {
     const res = await fetch(`${base}/wp-json/wp/v2/media?per_page=100&media_type=image`, {
       headers: { "User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/json" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return [];
-    const json = await res.json() as Array<{ source_url?: string; media_details?: { sizes?: Record<string, { source_url?: string }> } }>;
-    if (!Array.isArray(json)) return [];
-    const urls: string[] = [];
-    for (const item of json) {
-      // Prefer the full/large size, fallback to source_url
-      const sizes = item.media_details?.sizes ?? {};
-      const full = sizes.full?.source_url ?? sizes.large?.source_url ?? item.source_url;
-      if (full) urls.push(full);
+    if (res.ok) {
+      const json = await res.json() as Array<{ source_url?: string; media_details?: { sizes?: Record<string, { source_url?: string }> } }>;
+      if (Array.isArray(json)) {
+        for (const item of json) {
+          const sizes = item.media_details?.sizes ?? {};
+          const full = sizes.full?.source_url ?? sizes.large?.source_url ?? item.source_url;
+          if (full) urls.push(full);
+        }
+      }
     }
-    return urls;
-  } catch {
-    return [];
-  }
+  } catch { /* skip */ }
+
+  // Try RSS feed — contains featured images and post content images
+  try {
+    const res = await fetch(`${base}/feed/`, {
+      headers: { "User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/rss+xml,text/xml,*/*" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const xml = await res.text();
+      // <enclosure url="..."> tags
+      for (const m of xml.matchAll(/<enclosure[^>]+url=["']([^"']+)["']/gi)) urls.push(m[1]);
+      // <media:content url="...">
+      for (const m of xml.matchAll(/<media:content[^>]+url=["']([^"']+)["']/gi)) urls.push(m[1]);
+      // Image URLs inside <description> or <content:encoded>
+      for (const m of xml.matchAll(/https?:\/\/[^\s"'<>]+\.(?:jpe?g|png|webp|gif)(?:\?[^\s"'<>]*)?/gi)) {
+        urls.push(m[0]);
+      }
+    }
+  } catch { /* skip */ }
+
+  return urls;
 }
 
 // Discover extra pages from sitemap.xml / wp-sitemap.xml / sitemap_index.xml
@@ -423,8 +444,12 @@ export async function POST(req: NextRequest) {
     discoverSitemapPages(base),
   ]);
 
-  if (!homeHtml && shopifyUrls.length === 0 && wpUrls.length === 0) {
-    return NextResponse.json({ ok: false, error: "Could not reach website. It may be blocking automated access." }, { status: 502 });
+  const hasAnything = homeHtml || shopifyUrls.length > 0 || wpUrls.length > 0 || sitemapPages.length > 0;
+  if (!hasAnything) {
+    return NextResponse.json({
+      ok: false,
+      error: "This website is blocking automated access. Try using ☁️ Drive folder import instead — upload images to a shared Google Drive folder and paste the link.",
+    }, { status: 502 });
   }
 
   // Add images from API fallbacks
