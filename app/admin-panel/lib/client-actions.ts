@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
 import { getConsultationDefaultQuestions } from "./consultation-default-questions";
-import type { BrandContext } from "./types";
 
 function normalizeStatus(status: string) {
   if (status === "active" || status === "paused" || status === "onboarding") {
@@ -560,21 +559,3 @@ export async function deleteClientAction(clientId: string) {
   redirect("/app/clients");
 }
 
-export async function updateBrandContextAction(
-  clientId: string,
-  context: BrandContext
-) {
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("clients")
-    .update({ brand_context: context })
-    .eq("id", clientId);
-
-  if (error) {
-    console.error("updateBrandContextAction error:", error);
-    throw new Error("Could not save brand context.");
-  }
-
-  revalidatePath(`/admin-panel/clients/${clientId}/edit`);
-}
