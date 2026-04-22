@@ -40,14 +40,21 @@ function extractFolderId(input: string): string | null {
   return null;
 }
 
-function driveImageUrl(fileId: string): string {
+function driveFileUrl(fileId: string, mimeType: string): string {
+  if (mimeType.startsWith("video/")) {
+    // Use the uc endpoint for videos — browser follows the redirect and streams it
+    return `https://drive.google.com/uc?id=${fileId}`;
+  }
   return `https://lh3.googleusercontent.com/d/${fileId}`;
 }
 
 function dedupeKey(url: string): string {
-  // For Drive URLs, the file ID is the stable key
-  const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (driveMatch) return `drive:${driveMatch[1]}`;
+  // lh3.googleusercontent.com/d/{id} — images
+  const lh3Match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (lh3Match) return `drive:${lh3Match[1]}`;
+  // drive.google.com/uc?id={id} — videos
+  const ucMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (ucMatch) return `drive:${ucMatch[1]}`;
   return url;
 }
 
@@ -131,7 +138,7 @@ export async function POST(req: Request) {
 
     const toInsert = files
       .slice(0, MAX_IMAGES)
-      .map((f) => ({ fileId: f.id, url: driveImageUrl(f.id) }))
+      .map((f) => ({ fileId: f.id, url: driveFileUrl(f.id, f.mimeType) }))
       .filter(({ url }) => !existingKeys.has(dedupeKey(url)))
       .map(({ url }) => ({ client_id: clientId, public_url: url }));
 

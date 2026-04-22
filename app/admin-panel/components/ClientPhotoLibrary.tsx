@@ -319,17 +319,33 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {images.map((img) => (
             <div key={img.id} style={{ position: "relative", flexShrink: 0 }}>
-              <img
-                src={img.publicUrl}
-                alt=""
-                style={{ width: 140, height: 95, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e4e4e7" }}
-              />
+              {img.publicUrl.includes("drive.google.com/uc") ? (
+                <video
+                  src={img.publicUrl}
+                  style={{ width: 140, height: 95, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e4e4e7", background: "#18181b" }}
+                  preload="metadata"
+                  controls={false}
+                  muted
+                />
+              ) : (
+                <img
+                  src={img.publicUrl}
+                  alt=""
+                  style={{ width: 140, height: 95, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e4e4e7" }}
+                />
+              )}
               <div style={{
                 position: "absolute", bottom: 4, left: 4,
                 fontSize: 9, fontWeight: 700, color: "#fff",
                 background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "1px 4px",
               }}>
-                {img.table === "upload" ? "uploaded" : img.publicUrl.includes("lh3.googleusercontent.com") ? "drive" : "website"}
+                {img.publicUrl.includes("drive.google.com/uc")
+                  ? "🎥 drive"
+                  : img.table === "upload"
+                  ? "uploaded"
+                  : img.publicUrl.includes("lh3.googleusercontent.com")
+                  ? "drive"
+                  : "website"}
               </div>
               <button
                 type="button"

@@ -161,7 +161,10 @@ function prettyFileName(url: string): string {
 }
 
 function isVideoUrl(url: string): boolean {
-  return /\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url);
+  if (/\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url)) return true;
+  // Google Drive video URLs use the uc endpoint
+  if (/drive\.google\.com\/uc\?/.test(url)) return true;
+  return false;
 }
 
 const inputStyle: React.CSSProperties = {
