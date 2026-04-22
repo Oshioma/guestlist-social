@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { getDashboardData } from "../lib/queries";
 import { canRunAds } from "@/lib/auth/permissions";
+import { createClient } from "@/lib/supabase/server";
 import ClientCard from "../components/ClientCard";
 import EmptyState from "../components/EmptyState";
 import TopPriorities from "../components/TopPriorities";
 import WhatsWorkingNow from "../components/WhatsWorkingNow";
 import DecisionAccuracy from "../components/DecisionAccuracy";
 import TokenExpiryBanner from "../components/TokenExpiryBanner";
+import EngineActivityStrip from "../components/EngineActivityStrip";
+import EngineDecisionWorkbench, {
+  type EngineDecisionWorkbenchData,
+} from "../components/EngineDecisionWorkbench";
 import type { Ad } from "../lib/types";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +70,23 @@ function selectCreativePulseAds(ads: Ad[]) {
     .slice(0, 4);
 
   return { winners, atRisk };
+}
+
+type AdRelation =
+  | {
+      name: string | null;
+      creative_image_url: string | null;
+      creative_video_url: string | null;
+    }
+  | Array<{
+      name: string | null;
+      creative_image_url: string | null;
+      creative_video_url: string | null;
+    }>
+  | null;
+
+function normalizeAdRelation(ad: AdRelation) {
+  return Array.isArray(ad) ? ad[0] ?? null : ad;
 }
 
 function CreativePulseColumn({
@@ -199,7 +221,34 @@ function CreativePulseColumn({
 export default async function DashboardPage() {
   await canRunAds();
   try {
-    const { clients, ads } = await getDashboardData();
+    const supabase = await createClient();
+    const [dashboardData, decisionsRes, queueRes, outcomesRes] = await Promise.all([
+      getDashboardData(),
+      supabase
+        .from("ad_decisions")
+        .select(
+          "id, ad_id, client_id, type, status, confidence, reason, action, created_at, meta_action, ads(name, creative_image_url, creative_video_url)"
+        )
+        .order("created_at", { ascending: false })
+        .limit(80),
+      supabase
+        .from("meta_execution_queue")
+        .select(
+          "id, ad_id, client_id, decision_type, status, reason, risk_level, created_at, executed_at, execution_error, ads(name, creative_image_url, creative_video_url)"
+        )
+        .order("created_at", { ascending: false })
+        .limit(80),
+      supabase
+        .from("decision_outcomes")
+        .select(
+          "id, queue_id, ad_id, client_id, decision_type, status, verdict, verdict_reason, ctr_lift_pct, measured_at, baseline_captured_at, ads(name, creative_image_url, creative_video_url)"
+        )
+        .order("measured_at", { ascending: false, nullsFirst: false })
+        .order("baseline_captured_at", { ascending: false })
+        .limit(80),
+    ]);
+
+    const { clients, ads } = dashboardData;
 
     const winningAds = ads.filter((ad) => ad.performanceStatus === "winner");
     const activeClients = clients.filter((c) => c.status === "active");
@@ -209,6 +258,101 @@ export default async function DashboardPage() {
       : "0";
     const { winners: winnerShowcase, atRisk: atRiskShowcase } =
       selectCreativePulseAds(ads);
+
+    const workbenchData: EngineDecisionWorkbenchData = {
+      decisions: ((decisionsRes.data ?? []) as any[]).map((row) => {
+        const ad = normalizeAdRelation((row as any).ads as AdRelation);
+        return {
+          id: Number((row as any).id),
+          adId:
+            (row as any).ad_id == null ? null : Number((row as any).ad_id),
+          clientId:
+            (row as any).client_id == null
+              ? null
+              : Number((row as any).client_id),
+          adName: ad?.name ?? null,
+          decisionType: String((row as any).type ?? "unknown"),
+          status: String((row as any).status ?? "unknown"),
+          confidence:
+            (row as any).confidence == null
+              ? null
+              : String((row as any).confidence),
+          reason: (row as any).reason == null ? null : String((row as any).reason),
+          action: (row as any).action == null ? null : String((row as any).action),
+          createdAt: String((row as any).created_at ?? ""),
+          metaAction:
+            (row as any).meta_action == null
+              ? null
+              : String((row as any).meta_action),
+          creativeImageUrl: ad?.creative_image_url ?? null,
+          creativeVideoUrl: ad?.creative_video_url ?? null,
+        };
+      }),
+      queue: ((queueRes.data ?? []) as any[]).map((row) => {
+        const ad = normalizeAdRelation((row as any).ads as AdRelation);
+        return {
+          id: Number((row as any).id),
+          adId:
+            (row as any).ad_id == null ? null : Number((row as any).ad_id),
+          clientId:
+            (row as any).client_id == null
+              ? null
+              : Number((row as any).client_id),
+          adName: ad?.name ?? null,
+          decisionType: String((row as any).decision_type ?? "unknown"),
+          status: String((row as any).status ?? "unknown"),
+          reason: (row as any).reason == null ? null : String((row as any).reason),
+          riskLevel:
+            (row as any).risk_level == null
+              ? null
+              : String((row as any).risk_level),
+          createdAt: String((row as any).created_at ?? ""),
+          executedAt:
+            (row as any).executed_at == null
+              ? null
+              : String((row as any).executed_at),
+          executionError:
+            (row as any).execution_error == null
+              ? null
+              : String((row as any).execution_error),
+          creativeImageUrl: ad?.creative_image_url ?? null,
+          creativeVideoUrl: ad?.creative_video_url ?? null,
+        };
+      }),
+      outcomes: ((outcomesRes.data ?? []) as any[]).map((row) => {
+        const ad = normalizeAdRelation((row as any).ads as AdRelation);
+        return {
+          id: Number((row as any).id),
+          queueId: Number((row as any).queue_id),
+          adId:
+            (row as any).ad_id == null ? null : Number((row as any).ad_id),
+          clientId:
+            (row as any).client_id == null
+              ? null
+              : Number((row as any).client_id),
+          adName: ad?.name ?? null,
+          decisionType: String((row as any).decision_type ?? "unknown"),
+          status: String((row as any).status ?? "unknown"),
+          verdict:
+            (row as any).verdict == null ? null : String((row as any).verdict),
+          verdictReason:
+            (row as any).verdict_reason == null
+              ? null
+              : String((row as any).verdict_reason),
+          ctrLiftPct:
+            typeof (row as any).ctr_lift_pct === "number"
+              ? Number((row as any).ctr_lift_pct)
+              : null,
+          measuredAt:
+            (row as any).measured_at == null
+              ? null
+              : String((row as any).measured_at),
+          createdAt: String((row as any).baseline_captured_at ?? ""),
+          creativeImageUrl: ad?.creative_image_url ?? null,
+          creativeVideoUrl: ad?.creative_video_url ?? null,
+        };
+      }),
+    };
 
     const stats = [
       { label: "Clients", value: String(activeClients.length), sub: `${clients.length} total` },
@@ -273,6 +417,7 @@ export default async function DashboardPage() {
         </div>
 
         <TokenExpiryBanner />
+        <EngineActivityStrip />
 
         <div
           style={{
@@ -322,12 +467,32 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
-          <WhatsWorkingNow />
-          <DecisionAccuracy />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(290px, 360px)",
+            gap: 12,
+            alignItems: "start",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 16,
+                alignItems: "start",
+              }}
+            >
+              <WhatsWorkingNow />
+              <DecisionAccuracy />
+            </div>
+            <TopPriorities />
+          </div>
+          <div style={{ position: "sticky", top: 14 }}>
+            <EngineDecisionWorkbench data={workbenchData} />
+          </div>
         </div>
-
-        <TopPriorities />
 
         <div>
           <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#18181b" }}>
