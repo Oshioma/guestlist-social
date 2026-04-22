@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
+import { isAdmin } from "@/lib/auth/permissions";
 import { getConsultationDefaultQuestions } from "./consultation-default-questions";
 
 function normalizeStatus(status: string) {
@@ -541,7 +542,12 @@ export async function archiveClientAction(clientId: string) {
   redirect("/app/clients");
 }
 
-export async function deleteClientAction(clientId: string) {
+export async function deleteClientAction(clientId: string, redirectTo?: string) {
+  const admin = await isAdmin();
+  if (!admin) {
+    throw new Error("Only admins can delete clients.");
+  }
+
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -556,6 +562,10 @@ export async function deleteClientAction(clientId: string) {
 
   revalidatePath("/admin-panel/clients");
   revalidatePath("/admin-panel/dashboard");
-  redirect("/app/clients");
+  redirect(
+    typeof redirectTo === "string" && redirectTo.trim().length > 0
+      ? redirectTo
+      : "/app/clients"
+  );
 }
 
