@@ -1,6 +1,8 @@
 "use client";
 
-import { updateConsultationSubmissionAnswersAction } from "../lib/consultation-actions";
+import {
+  saveSingleConsultationSubmissionAnswersAction,
+} from "../lib/consultation-actions";
 
 type ConsultationQuestion = {
   id: number;
@@ -99,6 +101,26 @@ export default function ClientConsultationAnswersManager({
   }
 
   const submissions = [...selectedForm.submissions];
+  const saveAnswers = saveSingleConsultationSubmissionAnswersAction.bind(
+    null,
+    clientId,
+    selectedForm.id
+  );
+  const latestSubmission = submissions[0] ?? null;
+  const answersByQuestionId = new Map<number, ConsultationAnswer>();
+  for (const answer of latestSubmission?.answers ?? []) {
+    if (answer.questionId != null) {
+      answersByQuestionId.set(Number(answer.questionId), answer);
+    }
+  }
+
+  const knownQuestionIds = new Set(
+    selectedForm.questions.map((question) => Number(question.id))
+  );
+  const orphanAnswers = (latestSubmission?.answers ?? []).filter(
+    (answer) =>
+      answer.questionId == null || !knownQuestionIds.has(Number(answer.questionId))
+  );
 
   return (
     <details
@@ -140,8 +162,8 @@ export default function ClientConsultationAnswersManager({
           }}
         >
           {submissions.length > 0
-            ? `${submissions.length} entries · ${buildSubmissionPreview(submissions[0])}`
-            : "No entries yet"}
+            ? buildSubmissionPreview(submissions[0])
+            : "No answers yet"}
         </span>
       </summary>
 
@@ -154,163 +176,75 @@ export default function ClientConsultationAnswersManager({
           gap: 10,
         }}
       >
-        {submissions.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 13, color: "#71717a" }}>
-            No consultation entries yet.
+        {latestSubmission ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
+            Last updated: {formatSubmittedAt(latestSubmission.submittedAt)}
           </p>
-        ) : (
-          submissions.map((submission, index) => {
-            const updateSubmission = updateConsultationSubmissionAnswersAction.bind(
-              null,
-              clientId,
-              submission.id
-            );
-            const answersByQuestionId = new Map<number, ConsultationAnswer>();
-            for (const answer of submission.answers) {
-              if (answer.questionId != null) {
-                answersByQuestionId.set(Number(answer.questionId), answer);
-              }
-            }
+        ) : null}
 
-            const knownQuestionIds = new Set(
-              selectedForm.questions.map((question) => Number(question.id))
-            );
-            const orphanAnswers = submission.answers.filter(
-              (answer) =>
-                answer.questionId == null ||
-                !knownQuestionIds.has(Number(answer.questionId))
-            );
-
-            return (
-              <details
-                key={submission.id}
-                open
+        <form action={saveAnswers}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {selectedForm.questions.map((question) => (
+              <label
+                key={question.id}
+                style={{ display: "flex", flexDirection: "column", gap: 6 }}
+              >
+                <span style={{ fontSize: 12, color: "#3f3f46", fontWeight: 600 }}>
+                  {question.prompt}
+                </span>
+                <textarea
+                  name={`question-${question.id}`}
+                  defaultValue={
+                    answersByQuestionId.get(Number(question.id))?.answerText ?? ""
+                  }
+                  rows={2}
+                  style={textAreaStyle}
+                />
+              </label>
+            ))}
+            {orphanAnswers.length > 0 ? (
+              <div
                 style={{
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 12,
-                  background: "#fff",
-                  overflow: "hidden",
+                  borderTop: "1px solid #f4f4f5",
+                  paddingTop: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
                 }}
               >
-                <summary
-                  style={{
-                    cursor: "pointer",
-                    padding: "12px 14px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    listStyle: "none",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
-                      Entry {submissions.length - index}
-                    </span>
-                    <span style={{ fontSize: 11, color: "#71717a" }}>
-                      {formatSubmittedAt(submission.submittedAt)}
-                    </span>
+                {orphanAnswers.map((answer) => (
+                  <div key={`orphan-${answer.id}`}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 12,
+                        color: "#52525b",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {answer.questionPrompt || "Additional answer"}
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        fontSize: 13,
+                        color: "#3f3f46",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {answer.answerText.trim() || "—"}
+                    </p>
                   </div>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "#52525b",
-                      maxWidth: 520,
-                      whiteSpace: "normal",
-                      overflow: "hidden",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                    }}
-                  >
-                    {buildSubmissionPreview(submission)}
-                  </span>
-                </summary>
-
-                <form action={updateSubmission}>
-                  <div
-                    style={{
-                      borderTop: "1px solid #f4f4f5",
-                      padding: 14,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 10,
-                    }}
-                  >
-                    {selectedForm.questions.map((question) => {
-                      const answer =
-                        answersByQuestionId.get(Number(question.id))?.answerText ?? "";
-                      return (
-                      <label
-                        key={`question-${submission.id}-${question.id}`}
-                        style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                      >
-                        <span
-                          style={{
-                            margin: 0,
-                            fontSize: 12,
-                            color: "#3f3f46",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {question.prompt}
-                        </span>
-                        <textarea
-                          name={`question-${question.id}`}
-                          defaultValue={answer}
-                          rows={2}
-                          style={textAreaStyle}
-                        />
-                      </label>
-                      );
-                    })}
-                    {orphanAnswers.length > 0 ? (
-                      <div
-                        style={{
-                          borderTop: "1px solid #f4f4f5",
-                          paddingTop: 10,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 10,
-                        }}
-                      >
-                        {orphanAnswers.map((answer) => (
-                          <div key={`orphan-${answer.id}`}>
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: 12,
-                                color: "#52525b",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {answer.questionPrompt || "Additional answer"}
-                            </p>
-                            <p
-                              style={{
-                                margin: "4px 0 0",
-                                fontSize: 13,
-                                color: "#3f3f46",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              {answer.answerText.trim() || "—"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div>
-                      <button type="submit" style={secondaryButtonStyle}>
-                        Save changes
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </details>
-            );
-          })
-        )}
+                ))}
+              </div>
+            ) : null}
+            <div>
+              <button type="submit" style={secondaryButtonStyle}>
+                Save
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </details>
   );
