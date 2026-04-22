@@ -21,7 +21,17 @@ type ProxyComment = {
   postMediaUrl?: string | null;
   permalink?: string | null;
   postUrl?: string | null;
+  userType?: string | null;
+  accountType?: string | null;
+  followers?: number | string | null;
+  followerCount?: number | string | null;
+  followersCount?: number | string | null;
+  engagement?: number | string | null;
+  engagementRate?: number | string | null;
+  engagement_rate?: number | string | null;
 };
+
+type PosterType = "tourist" | "creator" | "spam";
 
 type NormalizedComment = {
   id: string;
@@ -31,6 +41,13 @@ type NormalizedComment = {
   mediaUrl: string;
   permalink: string | null;
   platform: "Instagram";
+  posterType: PosterType;
+  followerCount: number | null;
+  engagementRate: number | null;
+  posterScore: number;
+  posterReasons: string[];
+  onIslandNow: boolean;
+  islandSignals: string[];
 };
 
 const DEFAULT_MEDIA_URL =
@@ -76,6 +93,136 @@ function normalizeAuthor(value: string | null | undefined): string {
   return raw.startsWith("@") ? raw : `@${raw}`;
 }
 
+function parseCompactNumber(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+  const normalized = raw.replace(/,/g, "");
+  const match = normalized.match(/^(\d+(?:\.\d+)?)([km])?$/i);
+  if (!match) {
+    const asNum = Number(normalized);
+    return Number.isFinite(asNum) ? asNum : null;
+  }
+  const base = Number(match[1]);
+  if (!Number.isFinite(base)) return null;
+  const suffix = match[2];
+  if (suffix === "k") return Math.round(base * 1000);
+  if (suffix === "m") return Math.round(base * 1000000);
+  return Math.round(base);
+}
+
+function parsePercent(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value).replace("%", "").trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function inferPosterType(args: {
+  explicitType: string | null;
+  text: string;
+  followerCount: number | null;
+  engagementRate: number | null;
+}): { posterType: PosterType; reasons: string[] } {
+  const reasons: string[] = [];
+  const explicit = String(args.explicitType ?? "").trim().toLowerCase();
+  if (explicit === "spam") {
+    reasons.push("Source labeled as spam");
+    return { posterType: "spam", reasons };
+  }
+  if (explicit === "creator") {
+    reasons.push("Source labeled as creator");
+    return { posterType: "creator", reasons };
+  }
+  if (explicit === "tourist") {
+    reasons.push("Source labeled as tourist");
+    return { posterType: "tourist", reasons };
+  }
+
+  const text = args.text.toLowerCase();
+  const linkCount = (args.text.match(/https?:\/\//gi) ?? []).length;
+  const spamTerms = /(dm me|promo|discount|giveaway|crypto|forex|airdrop|telegram|onlyfans)/i;
+  if (linkCount >= 2 || spamTerms.test(text)) {
+    reasons.push("Spam-like language or excessive links");
+    return { posterType: "spam", reasons };
+  }
+
+  const followerCount = args.followerCount ?? 0;
+  const engagementRate = args.engagementRate ?? 0;
+  if (followerCount >= 5000 || engagementRate >= 3.5) {
+    reasons.push("Strong creator footprint");
+    return { posterType: "creator", reasons };
+  }
+
+  reasons.push("Likely traveler/audience account");
+  return { posterType: "tourist", reasons };
+}
+
+const ON_ISLAND_PLACE_PATTERNS: Array<{ key: string; regex: RegExp }> = [
+  { key: "Zanzibar", regex: /\bzanzibar\b/i },
+  { key: "Kendwa", regex: /\bkendwa\b/i },
+  { key: "Nungwi", regex: /\bnungwi\b/i },
+];
+
+const ON_ISLAND_NOW_PATTERNS: RegExp[] = [
+  /\bnow\b/i,
+  /\bright now\b/i,
+  /\bcurrently\b/i,
+  /\btoday\b/i,
+  /\bthis week(end)?\b/i,
+  /\bon[-\s]?island\b/i,
+  /\bhere\b/i,
+  /\bin\s+(zanzibar|kendwa|nungwi)\b/i,
+  /\bnear\s+(kendwa|nungwi|zanzibar)\b/i,
+];
+
+function detectIslandIntent(text: string): {
+  onIslandNow: boolean;
+  islandSignals: string[];
+} {
+  const signals = ON_ISLAND_PLACE_PATTERNS.filter((item) => item.regex.test(text)).map(
+    (item) => item.key
+  );
+  const hasPlace = signals.length > 0;
+  const hasNowLanguage = ON_ISLAND_NOW_PATTERNS.some((pattern) => pattern.test(text));
+  return {
+    onIslandNow: hasPlace && hasNowLanguage,
+    islandSignals: signals,
+  };
+}
+
+function computePosterScore(args: {
+  posterType: PosterType;
+  followerCount: number | null;
+  engagementRate: number | null;
+  onIslandNow: boolean;
+}): number {
+  const baseByType: Record<PosterType, number> = {
+    tourist: 58,
+    creator: 76,
+    spam: 8,
+  };
+  let score = baseByType[args.posterType];
+  if (args.followerCount != null && args.followerCount > 0) {
+    const followerBoost = Math.min(14, Math.log10(args.followerCount + 1) * 4);
+    score += followerBoost;
+  }
+  if (args.engagementRate != null && args.engagementRate > 0) {
+    const engagementBoost = Math.min(14, args.engagementRate * 2.6);
+    score += engagementBoost;
+  }
+  if (args.posterType === "spam") {
+    score = Math.min(score, 12);
+  } else if (args.onIslandNow) {
+    // On-island-now comments are highest intent for this workflow.
+    score += 14;
+  }
+  return Math.max(1, Math.min(100, Math.round(score)));
+}
+
 function normalizeComment(row: ProxyComment, index: number): NormalizedComment | null {
   const id =
     row.id ?? row.commentId ?? `${String(row.username ?? row.author ?? "comment")}-${index}`;
@@ -86,6 +233,38 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     row.mediaUrl ?? row.imageUrl ?? row.postMediaUrl ?? DEFAULT_MEDIA_URL
   );
   const permalink = String(row.permalink ?? row.postUrl ?? "").trim() || null;
+  const followerCount = parseCompactNumber(
+    row.followerCount ?? row.followersCount ?? row.followers ?? null
+  );
+  const engagementRate = parsePercent(
+    row.engagementRate ?? row.engagement_rate ?? row.engagement ?? null
+  );
+  const inferred = inferPosterType({
+    explicitType: row.userType ?? row.accountType ?? null,
+    text,
+    followerCount,
+    engagementRate,
+  });
+  const islandIntent = detectIslandIntent(text);
+  const posterScore = computePosterScore({
+    posterType: inferred.posterType,
+    followerCount,
+    engagementRate,
+    onIslandNow: islandIntent.onIslandNow,
+  });
+  const posterReasons = [...inferred.reasons];
+  if (islandIntent.onIslandNow) {
+    posterReasons.push(`On-island intent now (${islandIntent.islandSignals.join(", ")})`);
+  } else if (islandIntent.islandSignals.length > 0) {
+    posterReasons.push(`Island mention (${islandIntent.islandSignals.join(", ")})`);
+  }
+  if (followerCount != null) {
+    posterReasons.push(`${followerCount.toLocaleString("en-GB")} followers`);
+  }
+  if (engagementRate != null) {
+    posterReasons.push(`${engagementRate.toFixed(1)}% engagement`);
+  }
+
   return {
     id: String(id),
     author: normalizeAuthor(row.author ?? row.username ?? row.handle ?? null),
@@ -94,6 +273,13 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     mediaUrl: mediaUrl || DEFAULT_MEDIA_URL,
     permalink,
     platform: "Instagram",
+    posterType: inferred.posterType,
+    followerCount,
+    engagementRate,
+    posterScore,
+    posterReasons,
+    onIslandNow: islandIntent.onIslandNow,
+    islandSignals: islandIntent.islandSignals,
   };
 }
 
@@ -119,18 +305,31 @@ function extractCommentArray(payload: unknown): ProxyComment[] {
 
 export async function POST(req: NextRequest) {
   try {
-    const proxyUrl = String(process.env.INTERACTION_IG_PROXY_URL ?? "").trim();
-    const proxyMethod = String(process.env.INTERACTION_IG_PROXY_METHOD ?? "POST")
+    const proxyUrl = String(
+      process.env.INTERACTION_IG_SOURCE_URL ?? process.env.INTERACTION_IG_PROXY_URL ?? ""
+    ).trim();
+    const proxyMethod = String(
+      process.env.INTERACTION_IG_SOURCE_METHOD ?? process.env.INTERACTION_IG_PROXY_METHOD ?? "POST"
+    )
       .trim()
       .toUpperCase();
+    const sourceAuthHeader = String(process.env.INTERACTION_IG_SOURCE_AUTH_HEADER ?? "").trim();
     const proxyToken = String(process.env.INTERACTION_IG_PROXY_TOKEN ?? "").trim();
+    const keywordsRaw = String(
+      process.env.INTERACTION_IG_KEYWORDS ??
+        "zanzibar,kendwa,nungwi,restaurant,lunch,dinner,smoothie,food"
+    ).trim();
+    const keywords = keywordsRaw
+      .split(",")
+      .map((keyword) => keyword.trim().toLowerCase())
+      .filter(Boolean);
 
     if (!proxyUrl) {
       return NextResponse.json(
         {
           ok: false,
           error:
-            "INTERACTION_IG_PROXY_URL is not configured. Set it to your Instagram scraping/API proxy endpoint.",
+            "INTERACTION_IG_SOURCE_URL is not configured. Set it to your Instagram scraping/API proxy endpoint.",
         },
         { status: 503 }
       );
@@ -148,7 +347,9 @@ export async function POST(req: NextRequest) {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
-    if (proxyToken) {
+    if (sourceAuthHeader) {
+      headers.Authorization = sourceAuthHeader;
+    } else if (proxyToken) {
       headers.Authorization = `Bearer ${proxyToken}`;
       headers["x-api-key"] = proxyToken;
     }
@@ -192,12 +393,19 @@ export async function POST(req: NextRequest) {
     const comments = extractCommentArray(payload)
       .map(normalizeComment)
       .filter((row): row is NormalizedComment => Boolean(row))
+      .filter((row) => {
+        if (keywords.length === 0) return true;
+        const haystack = `${row.text} ${row.author}`.toLowerCase();
+        return keywords.some((keyword) => haystack.includes(keyword));
+      })
+      .sort((a, b) => b.posterScore - a.posterScore)
       .slice(0, limit);
 
     return NextResponse.json({
       ok: true,
       comments,
       source: "instagram-proxy",
+      fetched: comments.length,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -209,4 +417,8 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(req: NextRequest) {
+  return POST(req);
 }

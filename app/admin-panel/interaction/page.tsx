@@ -25,7 +25,16 @@ type Post = {
   mediaUrl: string;
   status: PostStatus;
   why: string[];
+  posterType?: "tourist" | "creator" | "spam";
+  followerCount?: number | null;
+  engagementRate?: number | null;
+  posterScore?: number;
+  posterReasons?: string[];
+  onIslandNow?: boolean;
+  islandSignals?: string[];
 };
+
+type PosterType = "tourist" | "creator" | "spam";
 
 type InstagramCommentApiItem = {
   id?: string;
@@ -33,6 +42,13 @@ type InstagramCommentApiItem = {
   username?: string;
   timestamp?: string;
   permalink?: string;
+  posterType?: PosterType;
+  followerCount?: number | null;
+  engagementRate?: number | null;
+  posterScore?: number;
+  posterReasons?: string[];
+  onIslandNow?: boolean;
+  islandSignals?: string[];
 };
 
 type InstagramCommentsApiResponse = {
@@ -195,10 +211,46 @@ const LEARNINGS = [
 ];
 
 function getEngageScore(post: Post) {
+  const posterWeight = post.posterScore != null ? post.posterScore : 60;
+  const posterPenalty = post.posterType === "spam" ? 20 : 0;
+  const onIslandBoost = post.onIslandNow ? 12 : 0;
   return Math.max(
     1,
-    Math.round(post.relevance * 0.4 + post.opportunity * 0.45 + (100 - post.risk) * 0.15)
+    Math.round(
+      post.relevance * 0.33 +
+        post.opportunity * 0.34 +
+        (100 - post.risk) * 0.13 +
+        posterWeight * 0.2 -
+        posterPenalty +
+        onIslandBoost
+    )
   );
+}
+
+function getPosterTypeBadge(type?: PosterType) {
+  if (type === "creator") {
+    return {
+      label: "Creator",
+      className: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    };
+  }
+  if (type === "spam") {
+    return {
+      label: "Spam risk",
+      className: "bg-rose-50 text-rose-700 border-rose-200",
+    };
+  }
+  return {
+    label: "Tourist",
+    className: "bg-teal-50 text-teal-700 border-teal-200",
+  };
+}
+
+function formatCompactCount(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "n/a";
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(Math.round(value));
 }
 
 function getTimingBadge(time: string) {
@@ -284,6 +336,7 @@ function PostCard({
   const engageScore = getEngageScore(post);
   const timing = getTimingBadge(post.time);
   const status = getStatusBadge(post.status);
+  const posterBadge = getPosterTypeBadge(post.posterType);
   const isHandled = post.status === "approved" || post.status === "skipped";
 
   return (
@@ -308,6 +361,16 @@ function PostCard({
               <span className={`rounded-full border px-3 py-1 text-[11px] font-medium ${status.className}`}>
                 {status.label}
               </span>
+              <span
+                className={`rounded-full border px-3 py-1 text-[11px] font-medium ${posterBadge.className}`}
+              >
+                {posterBadge.label}
+              </span>
+              {post.onIslandNow && (
+                <span className="rounded-full border border-fuchsia-200 bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-700">
+                  On-island now
+                </span>
+              )}
             </div>
           </div>
           <div className="mt-3 text-[17px] leading-snug text-gray-900">"{post.text}"</div>
@@ -327,7 +390,42 @@ function PostCard({
                 <div className="text-[10px] uppercase tracking-[0.25em] text-white/60">Engage score</div>
                 <div className="mt-1 text-3xl font-semibold tracking-tight">{engageScore}</div>
               </div>
-              {scorePill("Risk", post.risk, "risk")}
+              {scorePill("Poster rank", post.posterScore ?? 60, post.posterType === "spam" ? "risk" : "good")}
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
+            <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Poster quality</div>
+            <div className="mt-2 grid grid-cols-2 gap-3 text-xs text-gray-600">
+              <div>
+                <span className="text-gray-400">Type:</span>{" "}
+                <span className="font-medium text-gray-900">{posterBadge.label}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Followers:</span>{" "}
+                <span className="font-medium text-gray-900">
+                  {formatCompactCount(post.followerCount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Engagement:</span>{" "}
+                <span className="font-medium text-gray-900">
+                  {post.engagementRate != null ? `${post.engagementRate.toFixed(1)}%` : "n/a"}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400">Rank score:</span>{" "}
+                <span className="font-medium text-gray-900">{post.posterScore ?? 60}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-400">Island intent:</span>{" "}
+                <span className="font-medium text-gray-900">
+                  {post.onIslandNow
+                    ? `On-island now${post.islandSignals?.length ? ` (${post.islandSignals.join(", ")})` : ""}`
+                    : post.islandSignals?.length
+                    ? `Island mention (${post.islandSignals.join(", ")})`
+                    : "No on-island signal"}
+                </span>
+              </div>
             </div>
           </div>
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -383,7 +481,7 @@ function PostCard({
 }
 
 export default function InteractionEngineUI() {
-  const [activeClientId] = useState("client-organzibar");
+  const [activeClientId, setActiveClientId] = useState("client-organzibar");
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
   const [selectedId, setSelectedId] = useState("post-1");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
@@ -399,6 +497,13 @@ export default function InteractionEngineUI() {
     () => posts.filter((p) => p.clientId === activeClient.id),
     [posts, activeClient.id]
   );
+
+  useEffect(() => {
+    const firstClientPost = posts.find((post) => post.clientId === activeClientId);
+    if (firstClientPost) {
+      setSelectedId(firstClientPost.id);
+    }
+  }, [activeClientId, posts]);
 
   const updatePost = (postId: string, patch: Partial<Post>) => {
     setPosts((current) =>
@@ -429,6 +534,27 @@ export default function InteractionEngineUI() {
               ? Math.max(1, Math.round((Date.now() - parsed.getTime()) / 60000))
               : 10;
           const text = String(comment.text ?? "").trim() || "Instagram comment";
+          const followerCount =
+            typeof comment.followerCount === "number"
+              ? comment.followerCount
+              : comment.followerCount != null
+              ? Number(comment.followerCount)
+              : null;
+          const engagementRate =
+            typeof comment.engagementRate === "number"
+              ? comment.engagementRate
+              : comment.engagementRate != null
+              ? Number(comment.engagementRate)
+              : null;
+          const posterType = comment.posterType ?? "tourist";
+          const posterScore =
+            typeof comment.posterScore === "number"
+              ? comment.posterScore
+              : posterType === "creator"
+              ? 78
+              : posterType === "spam"
+              ? 10
+              : 62;
           return {
             id: String(comment.id ?? `ig-${Date.now()}`),
             clientId: "client-organzibar",
@@ -449,6 +575,15 @@ export default function InteractionEngineUI() {
               "High intent signal",
               "Fresh opportunity window",
             ],
+            posterType,
+            followerCount: Number.isFinite(followerCount) ? Number(followerCount) : null,
+            engagementRate: Number.isFinite(engagementRate) ? Number(engagementRate) : null,
+            posterScore,
+            posterReasons: comment.posterReasons ?? [],
+            onIslandNow: Boolean(comment.onIslandNow),
+            islandSignals: Array.isArray(comment.islandSignals)
+              ? comment.islandSignals.map((signal) => String(signal))
+              : [],
           };
         });
 
@@ -460,7 +595,9 @@ export default function InteractionEngineUI() {
               byId.set(item.id, item);
             }
           }
-          return Array.from(byId.values()).slice(0, 40);
+          return Array.from(byId.values())
+            .sort((a, b) => (b.posterScore ?? 0) - (a.posterScore ?? 0))
+            .slice(0, 40);
         });
         setIngestionState("success");
       } catch (error) {
@@ -499,6 +636,8 @@ export default function InteractionEngineUI() {
           "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
         status: "new",
         why: ["Live tourist intent", "Fresh post", "High reply potential"],
+        onIslandNow: true,
+        islandSignals: ["Zanzibar"],
       };
       setPosts((prev) => [newPost, ...prev].slice(0, 20));
     }, 8000);
@@ -506,8 +645,13 @@ export default function InteractionEngineUI() {
   }, [isLive]);
 
   const visiblePosts = useMemo(() => {
-    if (!highValueOnly) return clientPosts;
-    return clientPosts.filter((post) => getEngageScore(post) >= 85);
+    const ranked = [...clientPosts].sort(
+      (a, b) =>
+        getEngageScore(b) - getEngageScore(a) ||
+        (b.posterScore ?? 0) - (a.posterScore ?? 0)
+    );
+    if (!highValueOnly) return ranked;
+    return ranked.filter((post) => getEngageScore(post) >= 85);
   }, [clientPosts, highValueOnly]);
 
   const ready = visiblePosts.filter((p) => p.status === "new");
@@ -628,7 +772,44 @@ export default function InteractionEngineUI() {
                 <div className="text-[10px] uppercase tracking-[0.25em] text-white/60">Engage score</div>
                 <div className="mt-1 text-3xl font-semibold tracking-tight">{getEngageScore(active)}</div>
               </div>
-              {scorePill("Risk", active.risk, "risk")}
+              {scorePill(
+                "Poster rank",
+                active.posterScore ?? 60,
+                active.posterType === "spam" ? "risk" : "good"
+              )}
+            </div>
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">User ranking</div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-700">
+                <div>
+                  <span className="text-gray-400">Type:</span>{" "}
+                  <span className="font-medium">{getPosterTypeBadge(active.posterType).label}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Followers:</span>{" "}
+                  <span className="font-medium">{formatCompactCount(active.followerCount)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Engagement:</span>{" "}
+                  <span className="font-medium">
+                    {active.engagementRate != null ? `${active.engagementRate.toFixed(1)}%` : "n/a"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400">Rank score:</span>{" "}
+                  <span className="font-medium">{active.posterScore ?? 60}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-400">Island intent:</span>{" "}
+                  <span className="font-medium">
+                    {active.onIslandNow
+                      ? `On-island now${active.islandSignals?.length ? ` (${active.islandSignals.join(", ")})` : ""}`
+                      : active.islandSignals?.length
+                      ? `Island mention (${active.islandSignals.join(", ")})`
+                      : "No on-island signal"}
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
               <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Why this post</div>
@@ -780,8 +961,24 @@ export default function InteractionEngineUI() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-gray-400">Client</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight">{activeClient.name}</div>
-              <div className="text-sm text-gray-500">{activeClient.handle}</div>
+              <div className="mt-2 max-w-[300px]">
+                <label className="sr-only" htmlFor="interaction-client-picker">
+                  Select client
+                </label>
+                <select
+                  id="interaction-client-picker"
+                  value={activeClientId}
+                  onChange={(event) => setActiveClientId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-semibold tracking-tight text-gray-900 outline-none focus:border-black"
+                >
+                  {CLIENTS.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-1 text-sm text-gray-500">{activeClient.handle}</div>
             </div>
             <div className="flex items-center gap-3">
               <div
@@ -829,7 +1026,7 @@ export default function InteractionEngineUI() {
             <h1 className="text-4xl font-semibold tracking-tight">{activeTab}</h1>
             <p className="mt-2 max-w-xl text-sm text-gray-500">
               {activeTab === "Feed" &&
-                "High-quality interaction opportunities ranked by intent, timing, and potential upside."}
+                "High-quality interaction opportunities ranked by intent, timing, user type, poster quality, and on-island-now signals."}
               {activeTab === "Saved Audiences" &&
                 "Audience buckets that shape discovery and give the interaction engine sharper targets."}
               {activeTab === "Competitors" &&
