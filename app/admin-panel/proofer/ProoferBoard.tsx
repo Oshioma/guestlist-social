@@ -1008,9 +1008,8 @@ export default function ProoferBoard({
               maxWidth: 760,
             }}
           >
-            Draft captions and upload images for every day of the month, then
-            flag each post as Improve, Check, Proofed or Approved as it moves
-            through review.
+            Image 3 big lights and Green (bigger versions of ones next to
+            messages) = Approved, Yellow = Progress, Red = Improve.
           </p>
         </div>
 
