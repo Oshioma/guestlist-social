@@ -320,13 +320,9 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
           {images.map((img) => (
             <div key={img.id} style={{ position: "relative", flexShrink: 0 }}>
               {img.publicUrl.includes("drive.google.com/uc") ? (
-                <video
-                  src={img.publicUrl}
-                  style={{ width: 140, height: 95, objectFit: "cover", borderRadius: 8, display: "block", border: "1px solid #e4e4e7", background: "#18181b" }}
-                  preload="metadata"
-                  controls={false}
-                  muted
-                />
+                <div style={{ width: 140, height: 95, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b", border: "1px solid #e4e4e7", flexShrink: 0 }}>
+                  <span style={{ fontSize: 28, color: "#fff", opacity: 0.8 }}>▶</span>
+                </div>
               ) : (
                 <img
                   src={img.publicUrl}
