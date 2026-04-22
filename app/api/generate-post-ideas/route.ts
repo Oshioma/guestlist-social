@@ -289,7 +289,7 @@ Generate ${batch.length} ideas total.`;
                 status: "idea",
                 is_weak: false,
                 generated_by: "ai",
-                brand_context_snapshot: brandCtx,
+                brand_context_snapshot: {},
               };
             });
 
