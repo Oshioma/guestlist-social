@@ -679,11 +679,15 @@ export default function ProoferBoard({
         let passErrored = false;
 
         try {
+          // Build local today string (YYYY-MM-DD) using the browser's timezone
+          const _now = new Date();
+          const localToday = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
+
           const res = await fetch("/api/generate-post-ideas", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             signal: controller.signal,
-            body: JSON.stringify({ clientId, month, platform: genPlatform, prompt: genPrompt }),
+            body: JSON.stringify({ clientId, month, platform: genPlatform, prompt: genPrompt, today: localToday, postFrequency }),
           });
 
           if (!res.body) { errorMsg = "No response from server."; break; }
