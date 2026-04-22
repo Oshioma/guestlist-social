@@ -13,6 +13,7 @@ const titles: Record<string, string> = {
   "/app/engine": "Engine Dashboard",
   "/app/engine-settings": "Engine Settings",
   "/app/outcomes": "Outcomes",
+  "/app/interaction": "Interaction",
   "/app/meta-queue": "Meta Queue",
   "/app/whats-working": "Playbook",
   "/app/creative": "Creative Library",
@@ -34,6 +35,7 @@ const titles: Record<string, string> = {
 function resolveTitle(pathname: string): string {
   if (titles[pathname]) return titles[pathname];
   if (pathname.startsWith("/app/clients/")) return "Client";
+  if (pathname.startsWith("/app/interaction")) return "Interaction";
   if (pathname.startsWith("/app/proofer/")) return "Proofer";
   if (pathname.startsWith("/app/settings/")) return "Settings";
   return "Admin";

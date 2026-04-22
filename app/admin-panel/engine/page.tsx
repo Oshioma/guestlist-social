@@ -23,6 +23,12 @@ const ENGINE_TOOLS: {
   icon: string;
 }[] = [
   {
+    label: "Interaction",
+    href: "/app/interaction",
+    blurb: "Pick a client and run the engine in one place",
+    icon: "🤝",
+  },
+  {
     label: "Meta queue",
     href: "/app/meta-queue",
     blurb: "Approve engine changes before they hit Meta",

@@ -453,6 +453,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   const monthlyBudget = Number(formData.get("monthlyBudget") ?? 0);
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
+  const igHandle = String(formData.get("igHandle") ?? "").trim().replace(/^@/, "");
   const notes = String(formData.get("notes") ?? "").trim();
   const industry = String(formData.get("industry") ?? "").trim();
   let metaAdAccountId = String(formData.get("metaAdAccountId") ?? "").trim();
@@ -481,6 +482,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     monthly_budget: monthlyBudget,
     status: dbStatus,
     website_url: websiteUrl || null,
+    ig_handle: igHandle || null,
     notes: notes || null,
     meta_ad_account_id: metaAdAccountId || null,
   };

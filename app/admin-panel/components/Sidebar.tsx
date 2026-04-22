@@ -38,23 +38,28 @@ const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
   { label: "Content Dashboard", href: "/app/content" },
+  { label: "Interactions", href: "/app/interactions" },
 ];
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
-  const groups: NavGroup[] = [
-    { heading: "Dashboard", items: [], headingHref: "/app/dashboard" },
-    { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
-    { heading: "Tasks", items: [], headingHref: "/app/tasks" },
-  ];
+  const groups: NavGroup[] = [{ heading: "Dashboard", items: [], headingHref: "/app/dashboard" }];
 
   if (canRunAds) {
-    groups.splice(2, 0, { heading: "ADS", items: ADS_ITEMS, collapsible: true });
-    groups.splice(3, 0, {
+    groups.push({ heading: "INTERACTION", items: [], headingHref: "/app/interaction" });
+  }
+
+  groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
+
+  if (canRunAds) {
+    groups.push({ heading: "ADS", items: ADS_ITEMS, collapsible: true });
+    groups.push({
       heading: "Engine",
       items: ENGINE_ITEMS,
       collapsible: true,
     });
   }
+
+  groups.push({ heading: "Tasks", items: [], headingHref: "/app/tasks" });
 
   return groups;
 }
