@@ -7,11 +7,13 @@ import {
   type Confidence,
 } from "@/app/admin-panel/lib/action-confidence";
 import SaveAsLearningButton from "./SaveAsLearningButton";
+import AdCreativeThumb from "./AdCreativeThumb";
 
 type AdAction = {
   id: string;
   ad_id: number;
   ad_name: string;
+  client_id?: number | null;
   problem: string;
   action: string;
   priority: string;
@@ -31,6 +33,8 @@ type AdAction = {
   evidence?: string | null;
   expected_outcome?: string | null;
   last_similar?: string | null;
+  creative_image_url?: string | null;
+  creative_video_url?: string | null;
 };
 
 const priorityColors: Record<string, { bg: string; text: string }> = {
@@ -160,218 +164,239 @@ export default function AdActionRow({ action }: { action: AdAction }) {
         background: "#fff",
       }}
     >
-      {/* Header row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 15, fontWeight: 600, color: "#18181b" }}>
-          {action.ad_name}
-        </span>
-        <span
-          style={{
-            padding: "2px 10px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 600,
-            background: pColors.bg,
-            color: pColors.text,
-            textTransform: "uppercase",
-          }}
-        >
-          {action.priority}
-        </span>
-        <span
-          style={{
-            padding: "2px 10px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 500,
-            background: action.status === "completed" ? "#dcfce7" : action.status === "in_progress" ? "#dbeafe" : "#f4f4f5",
-            color: action.status === "completed" ? "#166534" : action.status === "in_progress" ? "#1e40af" : "#71717a",
-          }}
-        >
-          {action.status}
-        </span>
-        {action.outcome && (
-          <span
-            style={{
-              padding: "2px 10px",
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 600,
-              background: outcomeColors[action.outcome]?.bg ?? "#f4f4f5",
-              color: outcomeColors[action.outcome]?.text ?? "#71717a",
-              textTransform: "uppercase",
-            }}
-          >
-            {outcomeLabels[action.outcome] ?? action.outcome}
-          </span>
-        )}
-        <span
-          style={{
-            marginLeft: "auto",
-            padding: "2px 10px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 600,
-            background: confPalette.bg,
-            color: confPalette.fg,
-            border: `1px solid ${confPalette.border}`,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-          title="How confident we are in this suggestion based on past results across all clients"
-        >
-          {confPalette.label}
-        </span>
-      </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <AdCreativeThumb
+          imageUrl={action.creative_image_url}
+          videoUrl={action.creative_video_url}
+          alt={action.ad_name}
+          href={action.client_id ? `/app/clients/${action.client_id}/ads/${action.ad_id}` : null}
+        />
 
-      {/* Problem + Action */}
-      {(() => {
-        const isOpportunity = /winning|winner|scale/i.test(action.problem);
-        const labelText = isOpportunity ? "Opportunity" : "Problem";
-        const labelColor = isOpportunity ? "#166534" : "#991b1b";
-        return (
-          <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
-            <span style={{ color: labelColor, fontWeight: 600 }}>
-              {labelText}: {action.problem}
-            </span>
-            <span style={{ color: "#71717a", margin: "0 8px" }}>→</span>
-            <span style={{ color: "#18181b", fontWeight: 500 }}>{action.action}</span>
-          </div>
-        );
-      })()}
-
-      {/* Trust panel: why we're suggesting this, what we expect, last result */}
-      {showTrustPanel ? (
-        <div
-          style={{
-            marginTop: 10,
-            padding: "10px 12px",
-            background: "#fafafa",
-            border: "1px solid #f4f4f5",
-            borderRadius: 10,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-          }}
-        >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Header row */}
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#71717a",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              marginBottom: 2,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
             }}
           >
-            Why we&rsquo;re suggesting this
-          </div>
-          {action.evidence && (
-            <div style={{ fontSize: 13, color: "#27272a", lineHeight: 1.5 }}>
-              {action.evidence}
-            </div>
-          )}
-          {action.expected_outcome && (
-            <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
-              {action.expected_outcome}
-            </div>
-          )}
-          {action.last_similar && (
-            <div
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#18181b" }}>
+              {action.ad_name}
+            </span>
+            <span
               style={{
+                padding: "2px 10px",
+                borderRadius: 999,
                 fontSize: 12,
-                color: "#52525b",
-                lineHeight: 1.5,
-                marginTop: 2,
-                fontStyle: "italic",
+                fontWeight: 600,
+                background: pColors.bg,
+                color: pColors.text,
+                textTransform: "uppercase",
               }}
             >
-              {action.last_similar}
+              {action.priority}
+            </span>
+            <span
+              style={{
+                padding: "2px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 500,
+                background:
+                  action.status === "completed"
+                    ? "#dcfce7"
+                    : action.status === "in_progress"
+                      ? "#dbeafe"
+                      : "#f4f4f5",
+                color:
+                  action.status === "completed"
+                    ? "#166534"
+                    : action.status === "in_progress"
+                      ? "#1e40af"
+                      : "#71717a",
+              }}
+            >
+              {action.status}
+            </span>
+            {action.outcome && (
+              <span
+                style={{
+                  padding: "2px 10px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: outcomeColors[action.outcome]?.bg ?? "#f4f4f5",
+                  color: outcomeColors[action.outcome]?.text ?? "#71717a",
+                  textTransform: "uppercase",
+                }}
+              >
+                {outcomeLabels[action.outcome] ?? action.outcome}
+              </span>
+            )}
+            <span
+              style={{
+                marginLeft: "auto",
+                padding: "2px 10px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 600,
+                background: confPalette.bg,
+                color: confPalette.fg,
+                border: `1px solid ${confPalette.border}`,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+              title="How confident we are in this suggestion based on past results across all clients"
+            >
+              {confPalette.label}
+            </span>
+          </div>
+
+          {/* Problem + Action */}
+          {(() => {
+            const isOpportunity = /winning|winner|scale/i.test(action.problem);
+            const labelText = isOpportunity ? "Opportunity" : "Problem";
+            const labelColor = isOpportunity ? "#166534" : "#991b1b";
+            return (
+              <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
+                <span style={{ color: labelColor, fontWeight: 600 }}>
+                  {labelText}: {action.problem}
+                </span>
+                <span style={{ color: "#71717a", margin: "0 8px" }}>→</span>
+                <span style={{ color: "#18181b", fontWeight: 500 }}>{action.action}</span>
+              </div>
+            );
+          })()}
+
+          {/* Trust panel: why we're suggesting this, what we expect, last result */}
+          {showTrustPanel ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 12px",
+                background: "#fafafa",
+                border: "1px solid #f4f4f5",
+                borderRadius: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#71717a",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  marginBottom: 2,
+                }}
+              >
+                Why we&rsquo;re suggesting this
+              </div>
+              {action.evidence && (
+                <div style={{ fontSize: 13, color: "#27272a", lineHeight: 1.5 }}>
+                  {action.evidence}
+                </div>
+              )}
+              {action.expected_outcome && (
+                <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
+                  {action.expected_outcome}
+                </div>
+              )}
+              {action.last_similar && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#52525b",
+                    lineHeight: 1.5,
+                    marginTop: 2,
+                    fontStyle: "italic",
+                  }}
+                >
+                  {action.last_similar}
+                </div>
+              )}
+            </div>
+          ) : (
+            confidence === "unknown" && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "8px 12px",
+                  background: "#fafafa",
+                  border: "1px dashed #e4e4e7",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  color: "#71717a",
+                  lineHeight: 1.5,
+                }}
+              >
+                No prior pattern matches this suggestion yet. Treat it as a fresh
+                test — we&rsquo;ll learn from the outcome.
+              </div>
+            )
+          )}
+
+          {/* Hypothesis */}
+          {action.hypothesis && (
+            <div style={{ marginTop: 6, fontSize: 13, color: "#52525b", fontStyle: "italic" }}>
+              Hypothesis: {action.hypothesis}
+            </div>
+          )}
+
+          {/* Result summary */}
+          {action.result_summary && (
+            <div style={{ marginTop: 6, fontSize: 13, color: "#52525b" }}>
+              Result: {action.result_summary}
+            </div>
+          )}
+
+          {/* Operator note — kept distinct from the auto reasons so the
+              operator's voice is unmistakable in the trail. Surfaces in the
+              per-ad audit timeline and the next review verbatim. */}
+          {action.operator_note && (
+            <div
+              style={{
+                marginTop: 6,
+                padding: "8px 10px",
+                background: "#fef9c3",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#713f12",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong style={{ fontWeight: 600 }}>Note:</strong>{" "}
+              {action.operator_note}
+            </div>
+          )}
+
+          {/* Before / After metric diffs */}
+          {before && after && (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                gap: 16,
+                flexWrap: "wrap",
+                padding: "6px 10px",
+                background: "#fafafa",
+                borderRadius: 8,
+                border: "1px solid #f4f4f5",
+              }}
+            >
+              <MetricDiff label="CTR" before={before.ctr ?? 0} after={after.ctr ?? 0} />
+              <MetricDiff label="CPC" before={before.cpc ?? 0} after={after.cpc ?? 0} lowerIsBetter />
+              <MetricDiff label="Conversions" before={before.conversions ?? 0} after={after.conversions ?? 0} />
+              <MetricDiff label="Score" before={before.performance_score ?? 0} after={after.performance_score ?? 0} />
             </div>
           )}
         </div>
-      ) : (
-        confidence === "unknown" && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "8px 12px",
-              background: "#fafafa",
-              border: "1px dashed #e4e4e7",
-              borderRadius: 10,
-              fontSize: 12,
-              color: "#71717a",
-              lineHeight: 1.5,
-            }}
-          >
-            No prior pattern matches this suggestion yet. Treat it as a fresh
-            test — we&rsquo;ll learn from the outcome.
-          </div>
-        )
-      )}
-
-      {/* Hypothesis */}
-      {action.hypothesis && (
-        <div style={{ marginTop: 6, fontSize: 13, color: "#52525b", fontStyle: "italic" }}>
-          Hypothesis: {action.hypothesis}
-        </div>
-      )}
-
-      {/* Result summary */}
-      {action.result_summary && (
-        <div style={{ marginTop: 6, fontSize: 13, color: "#52525b" }}>
-          Result: {action.result_summary}
-        </div>
-      )}
-
-      {/* Operator note — kept distinct from the auto reasons so the
-          operator's voice is unmistakable in the trail. Surfaces in the
-          per-ad audit timeline and the next review verbatim. */}
-      {action.operator_note && (
-        <div
-          style={{
-            marginTop: 6,
-            padding: "8px 10px",
-            background: "#fef9c3",
-            border: "1px solid #fde68a",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "#713f12",
-            lineHeight: 1.5,
-          }}
-        >
-          <strong style={{ fontWeight: 600 }}>Note:</strong>{" "}
-          {action.operator_note}
-        </div>
-      )}
-
-      {/* Before / After metric diffs */}
-      {before && after && (
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            gap: 16,
-            flexWrap: "wrap",
-            padding: "6px 10px",
-            background: "#fafafa",
-            borderRadius: 8,
-            border: "1px solid #f4f4f5",
-          }}
-        >
-          <MetricDiff label="CTR" before={before.ctr ?? 0} after={after.ctr ?? 0} />
-          <MetricDiff label="CPC" before={before.cpc ?? 0} after={after.cpc ?? 0} lowerIsBetter />
-          <MetricDiff label="Conversions" before={before.conversions ?? 0} after={after.conversions ?? 0} />
-          <MetricDiff label="Score" before={before.performance_score ?? 0} after={after.performance_score ?? 0} />
-        </div>
-      )}
+      </div>
 
       {/* Save as learning — quick shortcut for completed actions */}
       {action.status === "completed" && (
