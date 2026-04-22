@@ -219,6 +219,7 @@ export default function ProoferBoard({
   const [clientId, setClientId] = useState(initialClientId);
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
+  const [postFrequency, setPostFrequency] = useState<"every-day" | "every-other-day">("every-other-day");
 
   type Draft = {
     caption: string;
@@ -897,24 +898,29 @@ export default function ProoferBoard({
   }
 
   const visibleDays = useMemo(() => {
-    if (!hideEmpty) return days;
-    return days.filter((d) => {
-      const dateKey = toDateKey(d);
-      return PROOFER_PLATFORMS.some((platform) => {
-        const key = postKey(dateKey, platform);
-        const draft = drafts[key];
-        const post = postsByKey.get(key);
-        const caption = draft?.caption ?? post?.caption ?? "";
-        const mediaUrls = draft?.mediaUrls ?? post?.mediaUrls ?? [];
-        return (
-          caption.trim().length > 0 ||
-          mediaUrls.length > 0 ||
-          (post && post.status !== "none") ||
-          (postIdeasByKey.get(key) ?? []).length > 0
-        );
+    let filtered = postFrequency === "every-other-day"
+      ? days.filter((_, i) => i % 2 === 0)
+      : days;
+    if (hideEmpty) {
+      filtered = filtered.filter((d) => {
+        const dateKey = toDateKey(d);
+        return PROOFER_PLATFORMS.some((platform) => {
+          const key = postKey(dateKey, platform);
+          const draft = drafts[key];
+          const post = postsByKey.get(key);
+          const caption = draft?.caption ?? post?.caption ?? "";
+          const mediaUrls = draft?.mediaUrls ?? post?.mediaUrls ?? [];
+          return (
+            caption.trim().length > 0 ||
+            mediaUrls.length > 0 ||
+            (post && post.status !== "none") ||
+            (postIdeasByKey.get(key) ?? []).length > 0
+          );
+        });
       });
-    });
-  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey]);
+    }
+    return filtered;
+  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency]);
 
   const scrolledRef = useRef(false);
   useEffect(() => {
@@ -1024,6 +1030,40 @@ export default function ProoferBoard({
         >
           Publish Queue →
         </button>
+      </div>
+
+      {/* Post frequency toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#52525b" }}>Posting schedule:</span>
+        <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
+          {(["every-other-day", "every-day"] as const).map((freq) => {
+            const active = postFrequency === freq;
+            return (
+              <button
+                key={freq}
+                type="button"
+                onClick={() => setPostFrequency(freq)}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  border: "none",
+                  background: active ? "#18181b" : "transparent",
+                  color: active ? "#fff" : "#71717a",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                {freq === "every-other-day" ? "Every other day" : "Every day"}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ fontSize: 11, color: "#a1a1aa" }}>
+          {postFrequency === "every-other-day"
+            ? `${visibleDays.length} slots this month`
+            : `${visibleDays.length} days this month`}
+        </span>
       </div>
 
       <SectionCard title="Settings">
