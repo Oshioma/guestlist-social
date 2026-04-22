@@ -8,6 +8,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getConsultationDefaultQuestions } from "@/app/admin-panel/lib/consultation-default-questions";
 import ConsultationImportForm from "@/app/admin-panel/components/ConsultationImportForm";
+import ConsultationDefaultQuestionsEditor from "@/app/admin-panel/components/ConsultationDefaultQuestionsEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,10 @@ export default async function ConsultationSettingsPage() {
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
           Default Questions ({defaultQuestions.length})
         </h3>
+
+        <ConsultationDefaultQuestionsEditor
+          initialQuestions={defaultQuestions}
+        />
 
         {defaultQuestions.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: "#71717a" }}>

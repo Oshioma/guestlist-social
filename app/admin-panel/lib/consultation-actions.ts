@@ -17,6 +17,11 @@ export type ImportConsultationState = {
   success: string | null;
 };
 
+export type ReorderConsultationDefaultsState = {
+  error: string | null;
+  success: string | null;
+};
+
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 type ParsedConsultationImport = {
@@ -786,6 +791,45 @@ export async function deleteConsultationDefaultQuestionAction(sortOrder: number)
 
   await setConsultationDefaultQuestions(supabase, nextDefaults);
   revalidateConsultationTemplatePaths();
+}
+
+export async function reorderConsultationDefaultQuestionsAction(
+  _prevState: ReorderConsultationDefaultsState,
+  formData: FormData
+): Promise<ReorderConsultationDefaultsState> {
+  try {
+    const rawOrder = String(formData.get("orderedPrompts") ?? "").trim();
+    if (!rawOrder) {
+      return { error: "Question order is required.", success: null };
+    }
+
+    const parsed = JSON.parse(rawOrder) as unknown;
+    if (!Array.isArray(parsed)) {
+      return { error: "Invalid question order payload.", success: null };
+    }
+
+    const prompts = parsed
+      .map((value) => String(value ?? "").trim())
+      .filter((prompt) => prompt.length > 0);
+
+    if (prompts.length === 0) {
+      return { error: "At least one question is required.", success: null };
+    }
+
+    const supabase = await createClient();
+    await setConsultationDefaultQuestions(supabase, prompts);
+    revalidateConsultationTemplatePaths();
+    return { error: null, success: "Question order updated." };
+  } catch (error) {
+    console.error("reorderConsultationDefaultQuestionsAction error:", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not reorder consultation questions.",
+      success: null,
+    };
+  }
 }
 
 export async function createConsultationSubmissionAction(
