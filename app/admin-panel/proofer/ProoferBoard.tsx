@@ -1060,7 +1060,6 @@ export default function ProoferBoard({
 
       {/* Post frequency toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#52525b" }}>Posting schedule:</span>
         <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
           {(["every-other-day", "every-day"] as const).map((freq) => {
             const active = postFrequency === freq;
@@ -1074,7 +1073,7 @@ export default function ProoferBoard({
                   fontSize: 12,
                   fontWeight: active ? 700 : 500,
                   border: "none",
-                  background: active ? "#18181b" : "transparent",
+                  background: active ? "#71717a" : "transparent",
                   color: active ? "#fff" : "#71717a",
                   cursor: "pointer",
                   transition: "all 0.15s",
