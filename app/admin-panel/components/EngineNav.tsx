@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const ENGINE_TABS = [
   { label: "Settings", href: "/app/engine-settings" },
   { label: "Decisions", href: "/app/decisions" },
+  { label: "Outcomes", href: "/app/outcomes" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
