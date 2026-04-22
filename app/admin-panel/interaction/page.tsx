@@ -383,7 +383,7 @@ function PostCard({
 }
 
 export default function InteractionEngineUI() {
-  const [activeClientId] = useState("client-organzibar");
+  const [activeClientId, setActiveClientId] = useState("client-organzibar");
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
   const [selectedId, setSelectedId] = useState("post-1");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
@@ -399,6 +399,13 @@ export default function InteractionEngineUI() {
     () => posts.filter((p) => p.clientId === activeClient.id),
     [posts, activeClient.id]
   );
+
+  useEffect(() => {
+    const firstClientPost = posts.find((post) => post.clientId === activeClientId);
+    if (firstClientPost) {
+      setSelectedId(firstClientPost.id);
+    }
+  }, [activeClientId, posts]);
 
   const updatePost = (postId: string, patch: Partial<Post>) => {
     setPosts((current) =>
@@ -780,8 +787,24 @@ export default function InteractionEngineUI() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-gray-400">Client</div>
-              <div className="mt-2 text-2xl font-semibold tracking-tight">{activeClient.name}</div>
-              <div className="text-sm text-gray-500">{activeClient.handle}</div>
+              <div className="mt-2 max-w-[300px]">
+                <label className="sr-only" htmlFor="interaction-client-picker">
+                  Select client
+                </label>
+                <select
+                  id="interaction-client-picker"
+                  value={activeClientId}
+                  onChange={(event) => setActiveClientId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-semibold tracking-tight text-gray-900 outline-none focus:border-black"
+                >
+                  {CLIENTS.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-1 text-sm text-gray-500">{activeClient.handle}</div>
             </div>
             <div className="flex items-center gap-3">
               <div
