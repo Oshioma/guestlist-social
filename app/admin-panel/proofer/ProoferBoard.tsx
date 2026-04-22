@@ -1008,9 +1008,44 @@ export default function ProoferBoard({
               maxWidth: 760,
             }}
           >
-            Draft captions and upload images for every day of the month, then
-            flag each post as Improve, Check, Proofed or Approved as it moves
-            through review.
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              {[
+                { label: "Approved", color: "#22c55e" },
+                { label: "Progress", color: "#f59e0b" },
+                { label: "Improve", color: "#ef4444" },
+              ].map((light) => (
+                <span
+                  key={light.label}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#52525b",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      background: light.color,
+                      boxShadow: `0 0 0 2px ${light.color}33`,
+                    }}
+                  />
+                  {light.label}
+                </span>
+              ))}
+            </span>
           </p>
         </div>
 
