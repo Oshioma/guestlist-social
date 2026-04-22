@@ -1,5 +1,7 @@
 "use client";
 
+import { updateConsultationSubmissionAnswersAction } from "../lib/consultation-actions";
+
 type ConsultationQuestion = {
   id: number;
   prompt: string;
@@ -60,7 +62,6 @@ export default function ClientConsultationAnswersManager({
   clientId,
   activeForm,
 }: Props) {
-  void clientId;
   const selectedForm = activeForm;
 
   if (!selectedForm) {
@@ -159,6 +160,11 @@ export default function ClientConsultationAnswersManager({
           </p>
         ) : (
           submissions.map((submission, index) => {
+            const updateSubmission = updateConsultationSubmissionAnswersAction.bind(
+              null,
+              clientId,
+              submission.id
+            );
             const answersByQuestionId = new Map<number, ConsultationAnswer>();
             for (const answer of submission.answers) {
               if (answer.questionId != null) {
@@ -169,29 +175,16 @@ export default function ClientConsultationAnswersManager({
             const knownQuestionIds = new Set(
               selectedForm.questions.map((question) => Number(question.id))
             );
-            const orphanAnswers = submission.answers
-              .filter(
-                (answer) =>
-                  answer.questionId == null ||
-                  !knownQuestionIds.has(Number(answer.questionId))
-              )
-              .map((answer) => ({
-                key: `orphan-${answer.id}`,
-                prompt: answer.questionPrompt || "Additional answer",
-                answerText: answer.answerText,
-              }));
-
-            const orderedAnswers = selectedForm.questions.map((question) => ({
-              key: `question-${submission.id}-${question.id}`,
-              prompt: question.prompt,
-              answerText: answersByQuestionId.get(question.id)?.answerText ?? "",
-            }));
-
-            const displayAnswers = [...orderedAnswers, ...orphanAnswers];
+            const orphanAnswers = submission.answers.filter(
+              (answer) =>
+                answer.questionId == null ||
+                !knownQuestionIds.has(Number(answer.questionId))
+            );
 
             return (
               <details
                 key={submission.id}
+                open
                 style={{
                   border: "1px solid #e4e4e7",
                   borderRadius: 12,
@@ -234,40 +227,86 @@ export default function ClientConsultationAnswersManager({
                   </span>
                 </summary>
 
-                <div
-                  style={{
-                    borderTop: "1px solid #f4f4f5",
-                    padding: 14,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                  }}
-                >
-                  {displayAnswers.map((answer) => (
-                    <div key={answer.key}>
-                      <p
+                <form action={updateSubmission}>
+                  <div
+                    style={{
+                      borderTop: "1px solid #f4f4f5",
+                      padding: 14,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    {selectedForm.questions.map((question) => {
+                      const answer =
+                        answersByQuestionId.get(Number(question.id))?.answerText ?? "";
+                      return (
+                      <label
+                        key={`question-${submission.id}-${question.id}`}
+                        style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                      >
+                        <span
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            color: "#3f3f46",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {question.prompt}
+                        </span>
+                        <textarea
+                          name={`question-${question.id}`}
+                          defaultValue={answer}
+                          rows={2}
+                          style={textAreaStyle}
+                        />
+                      </label>
+                      );
+                    })}
+                    {orphanAnswers.length > 0 ? (
+                      <div
                         style={{
-                          margin: 0,
-                          fontSize: 12,
-                          color: "#3f3f46",
-                          fontWeight: 600,
+                          borderTop: "1px solid #f4f4f5",
+                          paddingTop: 10,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
                         }}
                       >
-                        {answer.prompt}
-                      </p>
-                      <p
-                        style={{
-                          margin: "4px 0 0",
-                          fontSize: 13,
-                          color: "#18181b",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {answer.answerText.trim() || "—"}
-                      </p>
+                        {orphanAnswers.map((answer) => (
+                          <div key={`orphan-${answer.id}`}>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: 12,
+                                color: "#52525b",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {answer.questionPrompt || "Additional answer"}
+                            </p>
+                            <p
+                              style={{
+                                margin: "4px 0 0",
+                                fontSize: 13,
+                                color: "#3f3f46",
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              {answer.answerText.trim() || "—"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div>
+                      <button type="submit" style={secondaryButtonStyle}>
+                        Save changes
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                </form>
               </details>
             );
           })
@@ -276,3 +315,26 @@ export default function ClientConsultationAnswersManager({
     </details>
   );
 }
+
+const textAreaStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #d4d4d8",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 13,
+  color: "#18181b",
+  fontFamily: "inherit",
+  resize: "vertical",
+  background: "#fff",
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  border: "1px solid #d4d4d8",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#18181b",
+  padding: "7px 11px",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+};
