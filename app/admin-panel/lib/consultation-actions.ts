@@ -35,6 +35,55 @@ type ParsedConsultationImport = {
   headerPrompts: string[] | null;
 };
 
+async function cleanupDuplicateConsultationSubmissions(
+  supabase: SupabaseServerClient,
+  clientId: string,
+  formId: number
+) {
+  const { data: submissions, error: submissionsError } = await supabase
+    .from("consultation_submissions")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("form_id", formId)
+    .order("submitted_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (submissionsError) {
+    console.error(
+      "cleanupDuplicateConsultationSubmissions lookup error:",
+      submissionsError
+    );
+    return;
+  }
+
+  if (!submissions || submissions.length <= 1) {
+    return;
+  }
+
+  const duplicateIds = submissions
+    .slice(1)
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (duplicateIds.length === 0) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("consultation_submissions")
+    .delete()
+    .in("id", duplicateIds)
+    .eq("client_id", clientId)
+    .eq("form_id", formId);
+
+  if (deleteError) {
+    console.error(
+      "cleanupDuplicateConsultationSubmissions delete error:",
+      deleteError
+    );
+  }
+}
+
 async function syncFormQuestionsToDefaults(
   supabase: SupabaseServerClient,
   formId: number
@@ -171,32 +220,36 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
       (prompt) => !normalizedExistingPrompts.has(String(prompt).trim().toLowerCase())
     );
 
-    if (missingPrompts.length === 0) {
-      return;
-    }
-
-    const maxSortOrder = Math.max(
-      0,
-      ...(existingQuestions ?? []).map((row) => Number(row.sort_order ?? 0))
-    );
-    const nowIso = new Date().toISOString();
-    const missingRows = missingPrompts.map((prompt, index) => ({
-      form_id: targetFormId,
-      prompt,
-      sort_order: maxSortOrder + index + 1,
-      updated_at: nowIso,
-    }));
-
-    const { error: addMissingError } = await supabase
-      .from("consultation_questions")
-      .insert(missingRows);
-
-    if (addMissingError && addMissingError.code !== "42P01") {
-      console.error(
-        "ensureDefaultConsultationFormForClient add missing questions error:",
-        addMissingError
+    if (missingPrompts.length > 0) {
+      const maxSortOrder = Math.max(
+        0,
+        ...(existingQuestions ?? []).map((row) => Number(row.sort_order ?? 0))
       );
+      const nowIso = new Date().toISOString();
+      const missingRows = missingPrompts.map((prompt, index) => ({
+        form_id: targetFormId,
+        prompt,
+        sort_order: maxSortOrder + index + 1,
+        updated_at: nowIso,
+      }));
+
+      const { error: addMissingError } = await supabase
+        .from("consultation_questions")
+        .insert(missingRows);
+
+      if (addMissingError && addMissingError.code !== "42P01") {
+        console.error(
+          "ensureDefaultConsultationFormForClient add missing questions error:",
+          addMissingError
+        );
+      }
     }
+
+    await cleanupDuplicateConsultationSubmissions(
+      supabase,
+      safeClientId,
+      targetFormId
+    );
   } catch (error) {
     console.error("ensureDefaultConsultationFormForClient unexpected error:", error);
   }
@@ -1100,6 +1153,12 @@ export async function saveSingleConsultationSubmissionAnswersAction(
         touchSubmissionError
       );
     }
+
+    await cleanupDuplicateConsultationSubmissions(
+      supabase,
+      safeClientId,
+      safeFormId
+    );
 
     revalidateConsultationPaths(safeClientId);
     return { error: null, success: "Consultation answers saved." };
