@@ -182,6 +182,11 @@ function driveVideoFileId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+function driveThumbUrl(url: string): string | null {
+  const id = driveVideoFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : null;
+}
+
 const inputStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -987,9 +992,12 @@ export default function ProoferBoard({
           border: "2px solid rgba(255,255,255,0.25)",
           background: "#000",
         }}>
-          {isVideoUrl(hoverPreview.url) ? (
-            <div style={{ width: 260, height: 360, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b" }}>
-              <span style={{ fontSize: 48, color: "#fff", opacity: 0.8 }}>▶</span>
+          {isDriveVideo(hoverPreview.url) ? (
+            <div style={{ position: "relative", width: 260, height: 360 }}>
+              <img src={driveThumbUrl(hoverPreview.url) ?? ""} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.25)" }}>
+                <span style={{ fontSize: 52, color: "#fff", lineHeight: 1 }}>▶</span>
+              </div>
             </div>
           ) : (
             <img src={hoverPreview.url} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
@@ -1087,7 +1095,6 @@ export default function ProoferBoard({
 
       {/* Post frequency toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#52525b" }}>Posting schedule:</span>
         <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
           {(["every-other-day", "every-day"] as const).map((freq) => {
             const active = postFrequency === freq;
@@ -1101,7 +1108,7 @@ export default function ProoferBoard({
                   fontSize: 12,
                   fontWeight: active ? 700 : 500,
                   border: "none",
-                  background: active ? "#18181b" : "transparent",
+                  background: active ? "#71717a" : "transparent",
                   color: active ? "#fff" : "#71717a",
                   cursor: "pointer",
                   transition: "all 0.15s",
@@ -2022,9 +2029,16 @@ export default function ProoferBoard({
                                   }}
                                   onMouseLeave={() => setHoverPreview(null)}
                                 >
-                                  {isVideoUrl(img.publicUrl) ? (
-                                    <div style={{ width: 100, height: 70, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b", border: "2px solid #e0f2fe", cursor: "pointer", flexShrink: 0 }}>
-                                      <span style={{ fontSize: 22, color: "#fff", opacity: 0.85 }}>▶</span>
+                                  {isDriveVideo(img.publicUrl) ? (
+                                    <div style={{ position: "relative", width: 100, height: 70, flexShrink: 0 }}>
+                                      <img
+                                        src={driveThumbUrl(img.publicUrl) ?? ""}
+                                        alt=""
+                                        style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
+                                      />
+                                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "rgba(0,0,0,0.28)" }}>
+                                        <span style={{ fontSize: 18, color: "#fff", lineHeight: 1 }}>▶</span>
+                                      </div>
                                     </div>
                                   ) : (
                                     <img
@@ -2423,7 +2437,7 @@ export default function ProoferBoard({
                       {["proofed", "check", "improve"].map((statusValue) => {
                         const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
                         const active = effectiveStatus === statusValue;
-                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve");
+                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve" && statusValue !== "check");
                         const isCheckBtn = statusValue === "check";
                         const isDisabled = disableThisButton || (isCheckBtn && !post && !hasDraft);
                         return (
