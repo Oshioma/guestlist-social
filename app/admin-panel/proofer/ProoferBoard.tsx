@@ -167,6 +167,15 @@ function isVideoUrl(url: string): boolean {
   return false;
 }
 
+function isDriveVideo(url: string): boolean {
+  return /drive\.google\.com\/uc\?/.test(url);
+}
+
+function driveVideoFileId(url: string): string | null {
+  const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
 const inputStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -972,7 +981,13 @@ export default function ProoferBoard({
           border: "2px solid rgba(255,255,255,0.25)",
           background: "#000",
         }}>
-          <img src={hoverPreview.url} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
+          {isVideoUrl(hoverPreview.url) ? (
+            <div style={{ width: 260, height: 360, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b" }}>
+              <span style={{ fontSize: 48, color: "#fff", opacity: 0.8 }}>▶</span>
+            </div>
+          ) : (
+            <img src={hoverPreview.url} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
+          )}
           {hoverPreview.credit && (
             <div style={{ padding: "5px 10px", background: "#18181b", fontSize: 10, color: "#a78bfa" }}>
               © {hoverPreview.credit}
@@ -1972,11 +1987,17 @@ export default function ProoferBoard({
                                   }}
                                   onMouseLeave={() => setHoverPreview(null)}
                                 >
-                                  <img
-                                    src={img.publicUrl}
-                                    alt=""
-                                    style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
-                                  />
+                                  {isVideoUrl(img.publicUrl) ? (
+                                    <div style={{ width: 100, height: 70, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b", border: "2px solid #e0f2fe", cursor: "pointer", flexShrink: 0 }}>
+                                      <span style={{ fontSize: 22, color: "#fff", opacity: 0.85 }}>▶</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={img.publicUrl}
+                                      alt=""
+                                      style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
+                                    />
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -2232,7 +2253,14 @@ export default function ProoferBoard({
                         }}
                       >
                         {activeUrl ? (
-                          isVideoUrl(activeUrl) ? (
+                          isDriveVideo(activeUrl) ? (
+                            <iframe
+                              src={`https://drive.google.com/file/d/${driveVideoFileId(activeUrl)}/preview`}
+                              style={{ display: "block", width: "100%", height: "100%", border: "none" }}
+                              allow="autoplay"
+                              title="Video preview"
+                            />
+                          ) : isVideoUrl(activeUrl) ? (
                             <video src={activeUrl} controls style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
                           ) : (
                             <img src={activeUrl} alt="Preview" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
