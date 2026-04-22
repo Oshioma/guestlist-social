@@ -1791,7 +1791,7 @@ export default function ProoferBoard({
                     const slotIdeas = postIdeasByKey.get(slotKey) ?? [];
                     const pillarName = draft.pillarId ? (pillarsById.get(draft.pillarId)?.name ?? "") : "";
                     const captionLines = draft.caption.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ");
-                    const autoQuery = [pillarName || clientName, captionLines || slotIdeas[0]?.title ?? ""].filter(Boolean).join(" ").slice(0, 80);
+                    const autoQuery = [pillarName || clientName, captionLines || (slotIdeas[0]?.title ?? "")].filter(Boolean).join(" ").slice(0, 80);
                     return (
                     <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
 
