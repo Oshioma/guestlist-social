@@ -30,6 +30,8 @@ type Post = {
   engagementRate?: number | null;
   posterScore?: number;
   posterReasons?: string[];
+  onIslandNow?: boolean;
+  islandSignals?: string[];
 };
 
 type PosterType = "tourist" | "creator" | "spam";
@@ -45,6 +47,8 @@ type InstagramCommentApiItem = {
   engagementRate?: number | null;
   posterScore?: number;
   posterReasons?: string[];
+  onIslandNow?: boolean;
+  islandSignals?: string[];
 };
 
 type InstagramCommentsApiResponse = {
@@ -209,6 +213,7 @@ const LEARNINGS = [
 function getEngageScore(post: Post) {
   const posterWeight = post.posterScore != null ? post.posterScore : 60;
   const posterPenalty = post.posterType === "spam" ? 20 : 0;
+  const onIslandBoost = post.onIslandNow ? 12 : 0;
   return Math.max(
     1,
     Math.round(
@@ -216,7 +221,8 @@ function getEngageScore(post: Post) {
         post.opportunity * 0.34 +
         (100 - post.risk) * 0.13 +
         posterWeight * 0.2 -
-        posterPenalty
+        posterPenalty +
+        onIslandBoost
     )
   );
 }
@@ -360,6 +366,11 @@ function PostCard({
               >
                 {posterBadge.label}
               </span>
+              {post.onIslandNow && (
+                <span className="rounded-full border border-fuchsia-200 bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-700">
+                  On-island now
+                </span>
+              )}
             </div>
           </div>
           <div className="mt-3 text-[17px] leading-snug text-gray-900">"{post.text}"</div>
@@ -404,6 +415,16 @@ function PostCard({
               <div>
                 <span className="text-gray-400">Rank score:</span>{" "}
                 <span className="font-medium text-gray-900">{post.posterScore ?? 60}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-400">Island intent:</span>{" "}
+                <span className="font-medium text-gray-900">
+                  {post.onIslandNow
+                    ? `On-island now${post.islandSignals?.length ? ` (${post.islandSignals.join(", ")})` : ""}`
+                    : post.islandSignals?.length
+                    ? `Island mention (${post.islandSignals.join(", ")})`
+                    : "No on-island signal"}
+                </span>
               </div>
             </div>
           </div>
@@ -559,6 +580,10 @@ export default function InteractionEngineUI() {
             engagementRate: Number.isFinite(engagementRate) ? Number(engagementRate) : null,
             posterScore,
             posterReasons: comment.posterReasons ?? [],
+            onIslandNow: Boolean(comment.onIslandNow),
+            islandSignals: Array.isArray(comment.islandSignals)
+              ? comment.islandSignals.map((signal) => String(signal))
+              : [],
           };
         });
 
@@ -611,6 +636,8 @@ export default function InteractionEngineUI() {
           "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
         status: "new",
         why: ["Live tourist intent", "Fresh post", "High reply potential"],
+        onIslandNow: true,
+        islandSignals: ["Zanzibar"],
       };
       setPosts((prev) => [newPost, ...prev].slice(0, 20));
     }, 8000);
@@ -771,6 +798,16 @@ export default function InteractionEngineUI() {
                 <div>
                   <span className="text-gray-400">Rank score:</span>{" "}
                   <span className="font-medium">{active.posterScore ?? 60}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-400">Island intent:</span>{" "}
+                  <span className="font-medium">
+                    {active.onIslandNow
+                      ? `On-island now${active.islandSignals?.length ? ` (${active.islandSignals.join(", ")})` : ""}`
+                      : active.islandSignals?.length
+                      ? `Island mention (${active.islandSignals.join(", ")})`
+                      : "No on-island signal"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -989,7 +1026,7 @@ export default function InteractionEngineUI() {
             <h1 className="text-4xl font-semibold tracking-tight">{activeTab}</h1>
             <p className="mt-2 max-w-xl text-sm text-gray-500">
               {activeTab === "Feed" &&
-                "High-quality interaction opportunities ranked by intent, timing, user type, and poster quality signals."}
+                "High-quality interaction opportunities ranked by intent, timing, user type, poster quality, and on-island-now signals."}
               {activeTab === "Saved Audiences" &&
                 "Audience buckets that shape discovery and give the interaction engine sharper targets."}
               {activeTab === "Competitors" &&

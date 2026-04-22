@@ -46,6 +46,8 @@ type NormalizedComment = {
   engagementRate: number | null;
   posterScore: number;
   posterReasons: string[];
+  onIslandNow: boolean;
+  islandSignals: string[];
 };
 
 const DEFAULT_MEDIA_URL =
@@ -159,10 +161,44 @@ function inferPosterType(args: {
   return { posterType: "tourist", reasons };
 }
 
+const ON_ISLAND_PLACE_PATTERNS: Array<{ key: string; regex: RegExp }> = [
+  { key: "Zanzibar", regex: /\bzanzibar\b/i },
+  { key: "Kendwa", regex: /\bkendwa\b/i },
+  { key: "Nungwi", regex: /\bnungwi\b/i },
+];
+
+const ON_ISLAND_NOW_PATTERNS: RegExp[] = [
+  /\bnow\b/i,
+  /\bright now\b/i,
+  /\bcurrently\b/i,
+  /\btoday\b/i,
+  /\bthis week(end)?\b/i,
+  /\bon[-\s]?island\b/i,
+  /\bhere\b/i,
+  /\bin\s+(zanzibar|kendwa|nungwi)\b/i,
+  /\bnear\s+(kendwa|nungwi|zanzibar)\b/i,
+];
+
+function detectIslandIntent(text: string): {
+  onIslandNow: boolean;
+  islandSignals: string[];
+} {
+  const signals = ON_ISLAND_PLACE_PATTERNS.filter((item) => item.regex.test(text)).map(
+    (item) => item.key
+  );
+  const hasPlace = signals.length > 0;
+  const hasNowLanguage = ON_ISLAND_NOW_PATTERNS.some((pattern) => pattern.test(text));
+  return {
+    onIslandNow: hasPlace && hasNowLanguage,
+    islandSignals: signals,
+  };
+}
+
 function computePosterScore(args: {
   posterType: PosterType;
   followerCount: number | null;
   engagementRate: number | null;
+  onIslandNow: boolean;
 }): number {
   const baseByType: Record<PosterType, number> = {
     tourist: 58,
@@ -180,6 +216,9 @@ function computePosterScore(args: {
   }
   if (args.posterType === "spam") {
     score = Math.min(score, 12);
+  } else if (args.onIslandNow) {
+    // On-island-now comments are highest intent for this workflow.
+    score += 14;
   }
   return Math.max(1, Math.min(100, Math.round(score)));
 }
@@ -206,12 +245,19 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     followerCount,
     engagementRate,
   });
+  const islandIntent = detectIslandIntent(text);
   const posterScore = computePosterScore({
     posterType: inferred.posterType,
     followerCount,
     engagementRate,
+    onIslandNow: islandIntent.onIslandNow,
   });
   const posterReasons = [...inferred.reasons];
+  if (islandIntent.onIslandNow) {
+    posterReasons.push(`On-island intent now (${islandIntent.islandSignals.join(", ")})`);
+  } else if (islandIntent.islandSignals.length > 0) {
+    posterReasons.push(`Island mention (${islandIntent.islandSignals.join(", ")})`);
+  }
   if (followerCount != null) {
     posterReasons.push(`${followerCount.toLocaleString("en-GB")} followers`);
   }
@@ -232,6 +278,8 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     engagementRate,
     posterScore,
     posterReasons,
+    onIslandNow: islandIntent.onIslandNow,
+    islandSignals: islandIntent.islandSignals,
   };
 }
 
