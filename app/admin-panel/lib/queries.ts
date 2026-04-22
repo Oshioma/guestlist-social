@@ -4,12 +4,10 @@ import { supabaseTasksAdapter } from "./tasks/supabase-adapter";
 import {
   mapDbAdToUiAd,
   mapDbClientToUiClient,
-  mapDbSuggestionToUiSuggestion,
 } from "./mappers";
 import type {
   Ad,
   Client,
-  Suggestion,
   ContentProgress,
   VideoIdea,
   ContentTheme,
@@ -37,22 +35,16 @@ import type {
 export async function getDashboardData(): Promise<{
   clients: Client[];
   ads: Ad[];
-  suggestions: Suggestion[];
 }> {
   const supabase = await createClient();
 
-  const [clientsRes, adsRes, suggestionsRes] = await Promise.all([
+  const [clientsRes, adsRes] = await Promise.all([
     supabase
       .from("clients")
       .select("*")
       .eq("archived", false)
       .order("created_at", { ascending: false }),
     supabase.from("ads").select("*").order("created_at", { ascending: false }).limit(500),
-    supabase
-      .from("suggestions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50),
   ]);
 
   if (clientsRes.error) throw new Error(`clients: ${clientsRes.error.message}`);
@@ -71,11 +63,7 @@ export async function getDashboardData(): Promise<{
     return mapDbClientToUiClient(row, adCount);
   });
 
-  const suggestions = suggestionsRes.error
-    ? []
-    : (suggestionsRes.data ?? []).map(mapDbSuggestionToUiSuggestion);
-
-  return { clients, ads, suggestions };
+  return { clients, ads };
 }
 
 export async function getContentDashboardData(): Promise<{
