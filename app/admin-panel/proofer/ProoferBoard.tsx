@@ -1965,7 +1965,7 @@ export default function ProoferBoard({
                                 <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
                                   onMouseEnter={(e) => {
                                     const r = e.currentTarget.getBoundingClientRect();
-                                    setHoverPreview({ url: img.publicUrl, x: r.right + 12, y: r.top });
+                                    setHoverPreview({ url: img.publicUrl, x: r.right + 12, y: Math.max(8, Math.min(r.top, window.innerHeight - 400)) });
                                   }}
                                   onMouseLeave={() => setHoverPreview(null)}
                                 >
@@ -1980,6 +1980,7 @@ export default function ProoferBoard({
                                       addMediaUrl(dateKey, activePlatform, img.publicUrl);
                                       setImgLibraryPostKey(null);
                                       setHoverPreview(null);
+                                      setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
                                     }}
                                     style={{
                                       position: "absolute", bottom: 4, right: 4,
@@ -2051,7 +2052,7 @@ export default function ProoferBoard({
                                 <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}
                                   onMouseEnter={(e) => {
                                     const r = e.currentTarget.getBoundingClientRect();
-                                    setHoverPreview({ url: photo.full, credit: photo.photographer, x: r.right + 12, y: r.top });
+                                    setHoverPreview({ url: photo.full, credit: photo.photographer, x: r.right + 12, y: Math.max(8, Math.min(r.top, window.innerHeight - 400)) });
                                   }}
                                   onMouseLeave={() => setHoverPreview(null)}
                                 >
@@ -2066,6 +2067,7 @@ export default function ProoferBoard({
                                       addMediaUrl(dateKey, activePlatform, photo.full);
                                       setPexelsPostKey(null);
                                       setHoverPreview(null);
+                                      setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
                                     }}
                                     style={{
                                       position: "absolute", bottom: 4, right: 4,
@@ -2249,8 +2251,8 @@ export default function ProoferBoard({
                           </>
                         )}
 
-                        {/* Per-image controls */}
-                        {activeUrl && !isLocked && (
+                        {/* Per-image controls — only show when there are unsaved changes, so saved posts are browse-only */}
+                        {activeUrl && !isLocked && hasDraft && (
                           <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
                             <button type="button" onClick={() => moveMedia(dateKey, activePlatform, safeIdx, -1)} disabled={safeIdx === 0}
                               style={{ padding: "3px 7px", borderRadius: 6, border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 11, cursor: "pointer", opacity: safeIdx === 0 ? 0.4 : 1 }}>◀</button>
