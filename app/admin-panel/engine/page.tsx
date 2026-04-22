@@ -43,7 +43,7 @@ const ENGINE_TOOLS: {
 ];
 
 export default async function DashboardPage() {
-  const adsAllowed = await canRunAds();
+  await canRunAds();
   try {
     const { clients, ads } = await getDashboardData();
 

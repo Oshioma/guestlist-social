@@ -13,6 +13,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AdCreativeThumb from "./AdCreativeThumb";
 
 export type MetaQueueRowData = {
   id: number;
@@ -28,6 +29,10 @@ export type MetaQueueRowData = {
   proposedPayload: Record<string, unknown> | null;
   clientName: string | null;
   adName: string | null;
+  adId: number | null;
+  clientId: number | null;
+  creativeImageUrl: string | null;
+  creativeVideoUrl: string | null;
   campaignName: string | null;
   adMetaId: string | null;
   adsetMetaId: string | null;
@@ -203,64 +208,79 @@ export default function MetaQueueRow({ row }: { row: MetaQueueRowData }) {
         background: isTerminal ? "#fafafa" : "#fff",
       }}
     >
-      {/* Header row: action type · client · ad */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span
-          style={{
-            padding: "3px 10px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 700,
-            background: dc.bg,
-            color: dc.text,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-        >
-          {dl}
-        </span>
-        <span
-          style={{
-            padding: "2px 8px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 600,
-            background: sc.bg,
-            color: sc.text,
-            textTransform: "uppercase",
-          }}
-        >
-          {statusLabels[row.status] ?? row.status}
-        </span>
-        <span
-          style={{
-            padding: "2px 8px",
-            borderRadius: 999,
-            fontSize: 11,
-            fontWeight: 600,
-            background: rc.bg,
-            color: rc.text,
-            border: `1px solid ${rc.border}`,
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-          title="Engine-assigned risk — executor still has hard caps"
-        >
-          {row.riskLevel} risk
-        </span>
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: "#a1a1aa" }}>
-          queued {formatTimestamp(row.createdAt)}
-        </span>
-      </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <AdCreativeThumb
+          imageUrl={row.creativeImageUrl}
+          videoUrl={row.creativeVideoUrl}
+          alt={row.adName ?? row.campaignName ?? "Queued ad"}
+          href={
+            row.clientId && row.adId
+              ? `/app/clients/${row.clientId}/ads/${row.adId}`
+              : null
+          }
+        />
 
-      {/* Subject line: who + what */}
-      <div style={{ marginTop: 10, fontSize: 14, color: "#18181b", fontWeight: 600 }}>
-        {row.clientName ?? "Unknown client"}
-        {row.adName ? <> · <span style={{ fontWeight: 500 }}>{row.adName}</span></> : null}
-        {!row.adName && row.campaignName ? (
-          <> · <span style={{ fontWeight: 500 }}>{row.campaignName}</span></>
-        ) : null}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Header row: action type · client · ad */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span
+              style={{
+                padding: "3px 10px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 700,
+                background: dc.bg,
+                color: dc.text,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {dl}
+            </span>
+            <span
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 600,
+                background: sc.bg,
+                color: sc.text,
+                textTransform: "uppercase",
+              }}
+            >
+              {statusLabels[row.status] ?? row.status}
+            </span>
+            <span
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 600,
+                background: rc.bg,
+                color: rc.text,
+                border: `1px solid ${rc.border}`,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+              title="Engine-assigned risk — executor still has hard caps"
+            >
+              {row.riskLevel} risk
+            </span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: "#a1a1aa" }}>
+              queued {formatTimestamp(row.createdAt)}
+            </span>
+          </div>
+
+          {/* Subject line: who + what */}
+          <div style={{ marginTop: 10, fontSize: 14, color: "#18181b", fontWeight: 600 }}>
+            {row.clientName ?? "Unknown client"}
+            {row.adName ? <> · <span style={{ fontWeight: 500 }}>{row.adName}</span></> : null}
+            {!row.adName && row.campaignName ? (
+              <> · <span style={{ fontWeight: 500 }}>{row.campaignName}</span></>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       {/* Proposed change */}

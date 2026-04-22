@@ -22,6 +22,20 @@ type RawQueueRow = {
   client_id: number | null;
   campaign_id: number | null;
   ad_id: number | null;
+  ads:
+    | {
+        id: number;
+        client_id: number | null;
+        creative_image_url: string | null;
+        creative_video_url: string | null;
+      }
+    | {
+        id: number;
+        client_id: number | null;
+        creative_image_url: string | null;
+        creative_video_url: string | null;
+      }[]
+    | null;
   adset_meta_id: string | null;
   ad_meta_id: string | null;
   decision_type: string;
@@ -50,7 +64,9 @@ export default async function MetaQueuePage() {
   // upstream, not a sign we need pagination.
   const { data: rawRows, error } = await supabase
     .from("meta_execution_queue")
-    .select("*")
+    .select(
+      "*, ads(id, client_id, creative_image_url, creative_video_url)"
+    )
     .order("created_at", { ascending: false })
     .limit(500);
 
@@ -109,30 +125,43 @@ export default async function MetaQueuePage() {
     campaignNameMap.set(Number(c.id), String(c.name));
   }
 
-  const normalized: MetaQueueRowData[] = rows.map((r) => ({
-    id: r.id,
-    decisionType: r.decision_type,
-    status: r.status,
-    riskLevel: (r.risk_level ?? "low") as MetaQueueRowData["riskLevel"],
-    reason: r.reason,
-    proposedPayload: r.proposed_payload,
-    clientName: r.client_id != null ? clientNameMap.get(r.client_id) ?? null : null,
-    adName: r.ad_id != null ? adNameMap.get(r.ad_id) ?? null : null,
-    campaignName:
-      r.campaign_id != null ? campaignNameMap.get(r.campaign_id) ?? null : null,
-    adMetaId: r.ad_meta_id,
-    adsetMetaId: r.adset_meta_id,
-    approvedBy: r.approved_by,
-    approvedAt: r.approved_at,
-    executedAt: r.executed_at,
-    executionResult: r.execution_result,
-    executionError: r.execution_error,
-    lastCheckedAt: r.last_checked_at,
-    lastCheckedState: r.last_checked_state,
-    sourcePatternKey: r.source_pattern_key,
-    sourcePatternIndustry: r.source_pattern_industry,
-    createdAt: r.created_at,
-  }));
+  const normalized: MetaQueueRowData[] = rows.map((r) => {
+    const adRelation = Array.isArray(r.ads) ? r.ads[0] ?? null : r.ads;
+    return {
+      id: r.id,
+      decisionType: r.decision_type,
+      status: r.status,
+      riskLevel: (r.risk_level ?? "low") as MetaQueueRowData["riskLevel"],
+      reason: r.reason,
+      proposedPayload: r.proposed_payload,
+      clientName:
+        r.client_id != null ? clientNameMap.get(r.client_id) ?? null : null,
+      adName: r.ad_id != null ? adNameMap.get(r.ad_id) ?? null : null,
+      adId: r.ad_id != null ? r.ad_id : null,
+      clientId:
+        adRelation?.client_id != null
+          ? Number(adRelation.client_id)
+          : r.client_id != null
+            ? r.client_id
+            : null,
+      creativeImageUrl: adRelation?.creative_image_url ?? null,
+      creativeVideoUrl: adRelation?.creative_video_url ?? null,
+      campaignName:
+        r.campaign_id != null ? campaignNameMap.get(r.campaign_id) ?? null : null,
+      adMetaId: r.ad_meta_id,
+      adsetMetaId: r.adset_meta_id,
+      approvedBy: r.approved_by,
+      approvedAt: r.approved_at,
+      executedAt: r.executed_at,
+      executionResult: r.execution_result,
+      executionError: r.execution_error,
+      lastCheckedAt: r.last_checked_at,
+      lastCheckedState: r.last_checked_state,
+      sourcePatternKey: r.source_pattern_key,
+      sourcePatternIndustry: r.source_pattern_industry,
+      createdAt: r.created_at,
+    };
+  });
 
   // Bucket: pending → approved → recent history. Cancelled and failed
   // sit alongside executed in "recent" — the operator wants one history

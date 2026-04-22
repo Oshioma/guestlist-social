@@ -80,12 +80,14 @@ export default async function TopPriorities() {
     supabase.from("clients").select("id, name, status").eq("archived", false),
     supabase
       .from("ad_actions")
-      .select("*, ads!inner(id, name, client_id)")
+      .select(
+        "*, ads!inner(id, name, client_id, creative_image_url, creative_video_url)"
+      )
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
     supabase
       .from("ad_decisions")
-      .select("*, ads(name)")
+      .select("*, ads(name, creative_image_url, creative_video_url)")
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
   ]);
@@ -223,6 +225,7 @@ export default async function TopPriorities() {
       action: {
         id: a.id,
         ad_id: a.ad_id,
+        client_id: clientId,
         ad_name: (a.ads as any)?.name ?? "Unknown ad",
         problem: a.problem ?? "",
         action: a.action ?? "",
@@ -243,6 +246,8 @@ export default async function TopPriorities() {
             ? lastSimilarByKey.get(a.validated_pattern_key) ?? null
             : null
         ),
+        creative_image_url: (a.ads as any)?.creative_image_url ?? null,
+        creative_video_url: (a.ads as any)?.creative_video_url ?? null,
       },
     });
   }
@@ -263,6 +268,7 @@ export default async function TopPriorities() {
       decision: {
         id: d.id,
         ad_id: d.ad_id,
+        client_id: d.client_id,
         ad_name: (d.ads as any)?.name ?? "Unknown ad",
         type: d.type,
         reason: d.reason,
@@ -273,6 +279,8 @@ export default async function TopPriorities() {
         execution_result: d.execution_result,
         evidence: formatDecisionEvidence(stats),
         last_similar: formatDecisionLastSimilar(last),
+        creative_image_url: (d.ads as any)?.creative_image_url ?? null,
+        creative_video_url: (d.ads as any)?.creative_video_url ?? null,
       },
     });
   }

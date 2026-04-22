@@ -81,7 +81,7 @@ export default async function ClientAdsPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("ad_actions")
-      .select("*, ads!inner(name, client_id)")
+      .select("*, ads!inner(name, client_id, creative_image_url, creative_video_url)")
       .eq("ads.client_id", clientId)
       .order("created_at", { ascending: false }),
     supabase
@@ -101,7 +101,7 @@ export default async function ClientAdsPage({
       .order("avg_reliability", { ascending: false }),
     supabase
       .from("ad_decisions")
-      .select("*, ads(name)")
+      .select("*, ads(name, creative_image_url, creative_video_url)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false }),
     supabase
@@ -285,6 +285,7 @@ export default async function ClientAdsPage({
     return {
       id: d.id,
       ad_id: d.ad_id,
+      client_id: Number(clientId),
       ad_name: (d.ads as any)?.name ?? "Unknown ad",
       type: d.type,
       reason: d.reason,
@@ -296,6 +297,8 @@ export default async function ClientAdsPage({
       approved_by: d.approved_by ?? null,
       evidence: formatDecisionEvidence(stats),
       last_similar: formatDecisionLastSimilar(last),
+      creative_image_url: (d.ads as any)?.creative_image_url ?? null,
+      creative_video_url: (d.ads as any)?.creative_video_url ?? null,
     };
   }
 
@@ -307,6 +310,7 @@ export default async function ClientAdsPage({
     return {
       id: a.id,
       ad_id: a.ad_id,
+      client_id: Number(clientId),
       ad_name: (a.ads as any)?.name ?? "Unknown ad",
       problem: a.problem ?? "",
       action: a.action ?? "",
@@ -323,6 +327,8 @@ export default async function ClientAdsPage({
       evidence: formatEvidence(stats),
       expected_outcome: formatExpectedOutcome(stats),
       last_similar: formatLastSimilar(lastSimilar),
+      creative_image_url: (a.ads as any)?.creative_image_url ?? null,
+      creative_video_url: (a.ads as any)?.creative_video_url ?? null,
     };
   }
 
