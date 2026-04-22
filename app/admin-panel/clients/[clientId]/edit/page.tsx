@@ -257,6 +257,7 @@ export default async function EditClientPage({ params }: Props) {
           monthlyBudget: Number(client.monthly_budget ?? 0),
           status: mapClientStatus(client.status ?? "testing"),
           websiteUrl: client.website_url ?? "",
+          igHandle: client.ig_handle ?? "",
           notes: client.notes ?? "",
           industry: client.industry ?? "",
           metaAdAccountId: client.meta_ad_account_id ?? "",
