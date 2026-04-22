@@ -87,6 +87,12 @@ const STATUS_BUTTONS: {
   },
 ];
 
+const PROOFER_LIGHT_LEGEND = [
+  { dot: "#ef4444", label: "Red light: To Improve" },
+  { dot: "#f59e0b", label: "Yellow light: In Progress" },
+  { dot: "#22c55e", label: "Green light: Approved" },
+] as const;
+
 function daysInMonth(month: string): Date[] {
   const [y, m] = month.split("-").map(Number);
   if (!y || !m) return [];
@@ -1000,17 +1006,47 @@ export default function ProoferBoard({
           >
             Proofer
           </h1>
-          <p
+          <div
             style={{
-              margin: "8px 0 0",
-              fontSize: 14,
-              color: "#71717a",
-              maxWidth: 760,
+              marginTop: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 16,
             }}
           >
-            Image 3 big lights and Green (bigger versions of ones next to
-            messages) = Approved, Yellow = Progress, Red = Improve.
-          </p>
+            {PROOFER_LIGHT_LEGEND.map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: "50%",
+                    border: "1px solid #e4e4e7",
+                    background: item.dot,
+                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 14,
+                    color: "#52525b",
+                    fontWeight: 600,
+                  }}
+                >
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <button
