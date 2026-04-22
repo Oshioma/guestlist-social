@@ -24,6 +24,7 @@ const ADS_ITEMS: NavItem[] = [
 
 const ENGINE_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app/engine" },
+  { label: "Interaction", href: "/app/interaction" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
