@@ -6,6 +6,7 @@ import ClientForm from "../../../components/ClientForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientConsultationAnswersManager from "../../../components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
+import ClientEditSwitcher from "../../../components/ClientEditSwitcher";
 import { ensureDefaultConsultationFormForClient } from "../../../lib/consultation-actions";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
@@ -14,30 +15,40 @@ type Props = {
   params: Promise<{ clientId: string }>;
 };
 
+function isActiveClientStatus(status: string | null | undefined) {
+  return status === "growing" || status === "active";
+}
+
 export default async function EditClientPage({ params }: Props) {
   const { clientId } = await params;
   const supabase = await createClient();
 
   await ensureDefaultConsultationFormForClient(clientId);
 
-  const [clientRes, formsRes, questionsRes, submissionsRes] = await Promise.all([
-    supabase.from("clients").select("*").eq("id", clientId).single(),
-    supabase
-      .from("consultation_forms")
-      .select("id, title, is_active")
-      .eq("client_id", clientId)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("consultation_questions")
-      .select("id, form_id, prompt, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("consultation_submissions")
-      .select("id, form_id, submitted_at, submitted_by")
-      .eq("client_id", clientId)
-      .order("submitted_at", { ascending: false })
-      .limit(1),
-  ]);
+  const [clientRes, activeClientsRes, formsRes, questionsRes, submissionsRes] =
+    await Promise.all([
+      supabase.from("clients").select("*").eq("id", clientId).single(),
+      supabase
+        .from("clients")
+        .select("id, name, status, created_at")
+        .eq("archived", false)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("consultation_forms")
+        .select("id, title, is_active")
+        .eq("client_id", clientId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("consultation_questions")
+        .select("id, form_id, prompt, sort_order")
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("consultation_submissions")
+        .select("id, form_id, submitted_at, submitted_by")
+        .eq("client_id", clientId)
+        .order("submitted_at", { ascending: false })
+        .limit(1),
+    ]);
 
   const client = clientRes.data;
   const error = clientRes.error;
@@ -45,6 +56,16 @@ export default async function EditClientPage({ params }: Props) {
   if (error || !client) {
     notFound();
   }
+
+  const activeClients = (activeClientsRes.data ?? [])
+    .filter((row) =>
+      isActiveClientStatus((row as { status?: string | null }).status)
+    )
+    .map((row) => ({
+      id: (row as { id: number | string }).id,
+      name: (row as { name?: string | null }).name ?? "Untitled client",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const formRows =
     formsRes.error?.code === "42P01" ? [] : (formsRes.data ?? []);
@@ -192,7 +213,7 @@ export default async function EditClientPage({ params }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <Link
             href={`/app/clients/${clientId}`}
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "#71717a", textDecoration: "none" }}
@@ -201,6 +222,12 @@ export default async function EditClientPage({ params }: Props) {
           </Link>
           <span style={{ color: "#d4d4d8" }}>/</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>Edit</span>
+          {activeClients.length > 0 ? (
+            <ClientEditSwitcher
+              clients={activeClients}
+              currentClientId={String(clientId)}
+            />
+          ) : null}
         </div>
         <Link
           href={`/app/clients/${clientId}`}
