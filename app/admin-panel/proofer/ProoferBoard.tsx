@@ -176,6 +176,11 @@ function driveVideoFileId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+function driveThumbUrl(url: string): string | null {
+  const id = driveVideoFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : null;
+}
+
 const inputStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -981,9 +986,12 @@ export default function ProoferBoard({
           border: "2px solid rgba(255,255,255,0.25)",
           background: "#000",
         }}>
-          {isVideoUrl(hoverPreview.url) ? (
-            <div style={{ width: 260, height: 360, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b" }}>
-              <span style={{ fontSize: 48, color: "#fff", opacity: 0.8 }}>▶</span>
+          {isDriveVideo(hoverPreview.url) ? (
+            <div style={{ position: "relative", width: 260, height: 360 }}>
+              <img src={driveThumbUrl(hoverPreview.url) ?? ""} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.25)" }}>
+                <span style={{ fontSize: 52, color: "#fff", lineHeight: 1 }}>▶</span>
+              </div>
             </div>
           ) : (
             <img src={hoverPreview.url} alt="" style={{ width: 260, height: 360, objectFit: "cover", display: "block" }} />
@@ -1987,9 +1995,16 @@ export default function ProoferBoard({
                                   }}
                                   onMouseLeave={() => setHoverPreview(null)}
                                 >
-                                  {isVideoUrl(img.publicUrl) ? (
-                                    <div style={{ width: 100, height: 70, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: "#18181b", border: "2px solid #e0f2fe", cursor: "pointer", flexShrink: 0 }}>
-                                      <span style={{ fontSize: 22, color: "#fff", opacity: 0.85 }}>▶</span>
+                                  {isDriveVideo(img.publicUrl) ? (
+                                    <div style={{ position: "relative", width: 100, height: 70, flexShrink: 0 }}>
+                                      <img
+                                        src={driveThumbUrl(img.publicUrl) ?? ""}
+                                        alt=""
+                                        style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
+                                      />
+                                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "rgba(0,0,0,0.28)" }}>
+                                        <span style={{ fontSize: 18, color: "#fff", lineHeight: 1 }}>▶</span>
+                                      </div>
                                     </div>
                                   ) : (
                                     <img
