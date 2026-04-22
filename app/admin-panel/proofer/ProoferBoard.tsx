@@ -88,9 +88,9 @@ const STATUS_BUTTONS: {
 ];
 
 const PROOFER_LIGHT_LEGEND = [
-  { dot: "#ef4444", label: "Red light: To Improve" },
-  { dot: "#f59e0b", label: "Yellow light: In Progress" },
-  { dot: "#22c55e", label: "Green light: Approved" },
+  { dot: "#fda4af", label: "To Improve" },
+  { dot: "#fde68a", label: "In Progress" },
+  { dot: "#86efac", label: "Approved" },
 ] as const;
 
 function daysInMonth(month: string): Date[] {
