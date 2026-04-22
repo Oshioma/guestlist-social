@@ -1333,6 +1333,7 @@ export default function ProoferBoard({
 
       {/* ── Generate Month Ideas panel ──────────────────────────────────── */}
       {clients.length > 0 && (
+        <>
         <div
           style={{
             background: "linear-gradient(135deg, #f0f9ff 0%, #e8f0fe 100%)",
@@ -1419,21 +1420,22 @@ export default function ProoferBoard({
             </button>
           )}
 
-          {/* Sources info line — full-width row below controls */}
-          <div style={{ flexBasis: "100%", fontSize: 11, color: "#64748b", lineHeight: 1.6 }}>
-            <span style={{ fontWeight: 600, color: "#475569" }}>AI uses: </span>
-            consultation answers
-            {" · "}
-            {initialPillars.length > 0
-              ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
-              : "no content pillars"}
-            {" · existing posts this month · "}
-            {PROOFER_PLATFORM_LABELS[genPlatform]}
-            {genPrompt.trim()
-              ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
-              : " · no direction prompt"}
-          </div>
         </div>
+
+        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6, paddingLeft: 4 }}>
+          <span style={{ fontWeight: 600, color: "#475569" }}>AI uses: </span>
+          consultation answers
+          {" · "}
+          {initialPillars.length > 0
+            ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
+            : "no content pillars"}
+          {" · existing posts this month · "}
+          {PROOFER_PLATFORM_LABELS[genPlatform]}
+          {genPrompt.trim()
+            ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
+            : " · no direction prompt"}
+        </div>
+        </>
       )}
 
       {clients.length === 0 ? (
