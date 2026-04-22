@@ -10,12 +10,28 @@ type Props = {
   initialQuestions: string[];
 };
 
+type EditableQuestion = {
+  id: string;
+  prompt: string;
+};
+
 const INITIAL_REORDER_STATE: ReorderConsultationDefaultsState = {
   error: null,
   success: null,
 };
 
-function moveItem(list: string[], fromIndex: number, toIndex: number) {
+function createEditableQuestions(prompts: string[]): EditableQuestion[] {
+  return prompts.map((prompt, index) => ({
+    id: `question-${index}-${Math.random().toString(36).slice(2, 9)}`,
+    prompt,
+  }));
+}
+
+function moveItem(
+  list: EditableQuestion[],
+  fromIndex: number,
+  toIndex: number
+) {
   const next = [...list];
   const [moved] = next.splice(fromIndex, 1);
   if (moved == null) return list;
@@ -26,25 +42,46 @@ function moveItem(list: string[], fromIndex: number, toIndex: number) {
 export default function ConsultationDefaultQuestionsEditor({
   initialQuestions,
 }: Props) {
-  const [questions, setQuestions] = useState(initialQuestions);
+  const [questions, setQuestions] = useState(() =>
+    createEditableQuestions(initialQuestions)
+  );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(
     reorderConsultationDefaultQuestionsAction,
     INITIAL_REORDER_STATE
   );
 
-  const orderPayload = useMemo(() => JSON.stringify(questions), [questions]);
+  const orderPayload = useMemo(
+    () => JSON.stringify(questions.map((question) => question.prompt)),
+    [questions]
+  );
 
   useEffect(() => {
-    setQuestions(initialQuestions);
+    setQuestions(createEditableQuestions(initialQuestions));
+    setLocalError(null);
   }, [initialQuestions]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-        Drag and drop rows to reorder the default consultation questions, then
-        click Save order.
+        Drag and drop these question boxes to reorder. Edit text directly, add
+        or delete rows, then click Save changes.
       </p>
+      {localError ? (
+        <div
+          style={{
+            border: "1px solid #fecaca",
+            borderRadius: 10,
+            background: "#fff5f5",
+            color: "#991b1b",
+            fontSize: 12,
+            padding: "8px 10px",
+          }}
+        >
+          {localError}
+        </div>
+      ) : null}
       {state.error ? (
         <div
           style={{
@@ -76,7 +113,7 @@ export default function ConsultationDefaultQuestionsEditor({
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {questions.map((question, index) => (
           <div
-            key={`${question}-${index}`}
+            key={question.id}
             draggable
             onDragStart={() => setDragIndex(index)}
             onDragOver={(event) => {
@@ -86,11 +123,12 @@ export default function ConsultationDefaultQuestionsEditor({
               if (dragIndex == null || dragIndex === index) return;
               setQuestions((previous) => moveItem(previous, dragIndex, index));
               setDragIndex(null);
+              setLocalError(null);
             }}
             onDragEnd={() => setDragIndex(null)}
             style={{
               display: "grid",
-              gridTemplateColumns: "auto 1fr",
+              gridTemplateColumns: "auto 1fr auto",
               alignItems: "center",
               gap: 10,
               border: "1px solid #e4e4e7",
@@ -113,11 +151,97 @@ export default function ConsultationDefaultQuestionsEditor({
             >
               ⋮⋮
             </span>
-            <span style={{ fontSize: 13, color: "#18181b" }}>{question}</span>
+            <input
+              type="text"
+              value={question.prompt}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setQuestions((previous) =>
+                  previous.map((row, rowIndex) =>
+                    rowIndex === index ? { ...row, prompt: nextValue } : row
+                  )
+                );
+                setLocalError(null);
+              }}
+              style={{
+                width: "100%",
+                border: "1px solid #d4d4d8",
+                borderRadius: 8,
+                padding: "8px 10px",
+                fontSize: 13,
+                background: "#fff",
+                color: "#18181b",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setQuestions((previous) => {
+                  if (previous.length <= 1) return previous;
+                  return previous.filter((_, rowIndex) => rowIndex !== index);
+                });
+                setLocalError(null);
+              }}
+              disabled={questions.length <= 1}
+              style={{
+                border: "1px solid #fecaca",
+                borderRadius: 8,
+                background: "#fff5f5",
+                color: "#b91c1c",
+                padding: "7px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: questions.length <= 1 ? "not-allowed" : "pointer",
+                opacity: questions.length <= 1 ? 0.55 : 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>
-      <form action={action}>
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            setQuestions((previous) => [
+              ...previous,
+              {
+                id: `question-new-${Math.random().toString(36).slice(2, 9)}`,
+                prompt: "",
+              },
+            ]);
+            setLocalError(null);
+          }}
+          style={{
+            border: "none",
+            borderRadius: 8,
+            background: "#18181b",
+            color: "#fff",
+            padding: "8px 12px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Add question
+        </button>
+      </div>
+      <form
+        action={action}
+        onSubmit={(event) => {
+          const hasEmptyPrompt = questions.some(
+            (question) => question.prompt.trim().length === 0
+          );
+          if (hasEmptyPrompt) {
+            event.preventDefault();
+            setLocalError("Fill or delete empty questions before saving.");
+            return;
+          }
+          setLocalError(null);
+        }}
+      >
         <input type="hidden" name="orderedPrompts" value={orderPayload} />
         <button
           type="submit"
@@ -134,7 +258,7 @@ export default function ConsultationDefaultQuestionsEditor({
             opacity: pending ? 0.75 : 1,
           }}
         >
-          {pending ? "Saving..." : "Save order"}
+          {pending ? "Saving..." : "Save changes"}
         </button>
       </form>
     </div>
