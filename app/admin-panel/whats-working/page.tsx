@@ -545,17 +545,36 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
       : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        background:
+          "linear-gradient(180deg, #f6f7f8 0%, #f1f3f5 45%, #eef1f4 100%)",
+        borderRadius: 20,
+        padding: 14,
+      }}
+    >
       <EngineNav />
-      <div>
-        <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
+      <div
+        style={{
+          borderRadius: 20,
+          border: "1px solid rgba(16,24,40,0.06)",
+          background: "rgba(255,255,255,0.72)",
+          backdropFilter: "blur(10px)",
+          boxShadow: "0 12px 30px rgba(16, 24, 40, 0.06)",
+          padding: "16px 18px",
+        }}
+      >
+        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
           What&rsquo;s working right now
         </h2>
-        <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
+        <p style={{ fontSize: 14, color: "#667085", margin: "6px 0 0" }}>
           Everything we&rsquo;ve tried, across every client, turned into one
           shared playbook. The more we run, the sharper this gets.
         </p>
-        <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
+        <p style={{ fontSize: 12, color: "#98a2b3", margin: "6px 0 0" }}>
           Computed from the last 90 days of action outcomes and ad performance.
           Use Refresh everything for a full sync, or Regenerate Global Learnings
           to rebuild only the patterns.
@@ -570,9 +589,10 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
           gap: 16,
           flexWrap: "wrap",
           padding: 16,
-          background: "linear-gradient(135deg,#fafafa,#f4f4f5)",
-          border: "1px solid #e4e4e7",
-          borderRadius: 12,
+          background: "rgba(255,255,255,0.78)",
+          border: "1px solid rgba(16,24,40,0.08)",
+          borderRadius: 16,
+          boxShadow: "0 10px 24px rgba(16, 24, 40, 0.05)",
         }}
       >
         <div>
@@ -614,9 +634,10 @@ export default async function WhatsWorkingPage({ searchParams }: PageProps) {
             gap: 8,
             flexWrap: "wrap",
             padding: "10px 14px",
-            background: "#fff",
-            border: "1px solid #e4e4e7",
-            borderRadius: 12,
+            background: "rgba(255,255,255,0.78)",
+            border: "1px solid rgba(16,24,40,0.08)",
+            borderRadius: 14,
+            boxShadow: "0 10px 24px rgba(16, 24, 40, 0.05)",
           }}
         >
           <span

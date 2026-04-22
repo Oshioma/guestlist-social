@@ -178,20 +178,43 @@ export default async function MetaQueuePage() {
   const appSecretConfigured = Boolean(process.env.META_APP_SECRET);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        padding: 24,
+        maxWidth: 1180,
+        background:
+          "linear-gradient(180deg, #f6f7f8 0%, #f1f3f5 45%, #eef1f4 100%)",
+        borderRadius: 20,
+      }}
+    >
       <EngineNav />
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Action queue</h1>
-        <span style={{ color: "#71717a", fontSize: 13 }}>
-          {pending.length} waiting on you · {approved.length} ready to send · {recent.length} done
-        </span>
+      <div
+        style={{
+          borderRadius: 16,
+          border: "1px solid rgba(16,24,40,0.08)",
+          background: "rgba(255,255,255,0.78)",
+          backdropFilter: "blur(10px)",
+          boxShadow: "0 10px 24px rgba(16, 24, 40, 0.05)",
+          padding: "16px 18px",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
+            Action queue
+          </h1>
+          <span style={{ color: "#667085", fontSize: 13 }}>
+            {pending.length} waiting on you · {approved.length} ready to send · {recent.length} done
+          </span>
+        </div>
+        <p style={{ color: "#667085", fontSize: 13, margin: "6px 0 0", maxWidth: 760 }}>
+          Review what the engine wants to do, check live Meta state, and approve
+          only what you trust.
+        </p>
       </div>
-      <p style={{ color: "#71717a", fontSize: 13, marginTop: 6, maxWidth: 720 }}>
-        Every change the engine wants to make to your Meta ads waits here for
-        you. Approve to mark it ready, Preview to peek at the live state in
-        Meta without changing anything, and Execute to actually make the change.
-      </p>
 
       {/* Mode banner — make the dry-run state impossible to miss */}
       <div
@@ -315,14 +338,23 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section style={{ marginTop: 28 }}>
+    <section
+      style={{
+        marginTop: 20,
+        borderRadius: 16,
+        border: "1px solid rgba(16,24,40,0.08)",
+        background: "rgba(255,255,255,0.78)",
+        backdropFilter: "blur(8px)",
+        padding: 16,
+      }}
+    >
       <h2
         style={{
           fontSize: 13,
           fontWeight: 700,
           textTransform: "uppercase",
           letterSpacing: "0.04em",
-          color: "#71717a",
+          color: "#667085",
           margin: "0 0 12px 0",
         }}
       >

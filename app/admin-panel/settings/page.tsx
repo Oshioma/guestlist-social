@@ -8,6 +8,7 @@ import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import AutoApproveForm from "../components/AutoApproveForm";
+import EngineNav from "../components/EngineNav";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
   getReaperSettings,
@@ -91,15 +92,40 @@ export default async function SettingsPage() {
     }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        background:
+          "linear-gradient(180deg, #f6f7f8 0%, #f1f3f5 45%, #eef1f4 100%)",
+        borderRadius: 20,
+        padding: 14,
+      }}
+    >
+      <EngineNav />
       <div>
-        <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Settings</h2>
-        <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
-          Admin configuration and preferences.
-        </p>
+        <div
+          style={{
+            borderRadius: 16,
+            padding: "18px 18px 16px",
+            border: "1px solid rgba(16,24,40,0.06)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(250,250,251,0.78))",
+            boxShadow: "0 12px 30px rgba(16, 24, 40, 0.06)",
+          }}
+        >
+          <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
+            Engine Settings
+          </h2>
+          <p style={{ fontSize: 14, color: "#667085", margin: "6px 0 0", maxWidth: 760 }}>
+            Configure thresholds, approvals, and sync behavior for how the
+            decision engine scores ads and executes recommendations.
+          </p>
+        </div>
       </div>
 
-      <SectionCard title="Members">
+      <SectionCard title="Team access">
         <div
           style={{
             display: "flex",
@@ -163,7 +189,7 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Account">
+      <SectionCard title="Agency profile">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
             <div style={{ fontSize: 13, color: "#71717a", marginBottom: 4 }}>
@@ -184,7 +210,7 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="API Keys">
+      <SectionCard title="Environment health">
         <div
           style={{
             display: "flex",
@@ -305,7 +331,7 @@ export default async function SettingsPage() {
         </details>
       )}
 
-      <SectionCard title="Engine Scoring Thresholds">
+      <SectionCard title="Scoring thresholds">
         <EngineThresholdsForm
           initial={engineSettings}
           bounds={ENGINE_BOUNDS}
@@ -318,7 +344,7 @@ export default async function SettingsPage() {
         />
       </SectionCard>
 
-      <SectionCard title="Auto-Approve Decisions">
+      <SectionCard title="Auto-approve rules">
         <AutoApproveForm
           initial={autoApproveSettings}
           onSave={async (values) => {
@@ -329,7 +355,7 @@ export default async function SettingsPage() {
         />
       </SectionCard>
 
-      <SectionCard title="Meta Ads Sync">
+      <SectionCard title="Meta sync">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
             Pull campaigns, ads, performance data, and daily snapshots from your
@@ -455,7 +481,7 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="When to retire failing moves">
+      <SectionCard title="Pattern retirement (reaper)">
         <ReaperThresholdsForm
           initialMinDecisive={reaperSettings.minDecisiveVerdicts}
           initialNegRatioPercent={reaperPercent}
