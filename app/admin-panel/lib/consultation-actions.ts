@@ -22,6 +22,11 @@ export type ReorderConsultationDefaultsState = {
   success: string | null;
 };
 
+export type SaveSingleConsultationAnswersState = {
+  error: string | null;
+  success: string | null;
+};
+
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 type ParsedConsultationImport = {
@@ -29,6 +34,55 @@ type ParsedConsultationImport = {
   answers: string[];
   headerPrompts: string[] | null;
 };
+
+async function cleanupDuplicateConsultationSubmissions(
+  supabase: SupabaseServerClient,
+  clientId: string,
+  formId: number
+) {
+  const { data: submissions, error: submissionsError } = await supabase
+    .from("consultation_submissions")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("form_id", formId)
+    .order("submitted_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (submissionsError) {
+    console.error(
+      "cleanupDuplicateConsultationSubmissions lookup error:",
+      submissionsError
+    );
+    return;
+  }
+
+  if (!submissions || submissions.length <= 1) {
+    return;
+  }
+
+  const duplicateIds = submissions
+    .slice(1)
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (duplicateIds.length === 0) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("consultation_submissions")
+    .delete()
+    .in("id", duplicateIds)
+    .eq("client_id", clientId)
+    .eq("form_id", formId);
+
+  if (deleteError) {
+    console.error(
+      "cleanupDuplicateConsultationSubmissions delete error:",
+      deleteError
+    );
+  }
+}
 
 async function syncFormQuestionsToDefaults(
   supabase: SupabaseServerClient,
@@ -75,8 +129,10 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
 
     const { data: existingForms, error: existingFormsError } = await supabase
       .from("consultation_forms")
-      .select("id")
+      .select("id, is_active, updated_at")
       .eq("client_id", safeClientId)
+      .order("is_active", { ascending: false })
+      .order("updated_at", { ascending: false })
       .limit(1);
 
     if (existingFormsError) {
@@ -90,49 +146,110 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
       return;
     }
 
-    if ((existingForms?.length ?? 0) > 0) {
+    const defaultQuestions = await getConsultationDefaultQuestions(supabase);
+    if (defaultQuestions.length === 0) {
       return;
     }
 
-    const { data: createdForm, error: createFormError } = await supabase
-      .from("consultation_forms")
-      .insert({
-        client_id: safeClientId,
-        title: "Consultation",
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    let targetFormId = Number(existingForms?.[0]?.id ?? 0);
+    if (targetFormId <= 0) {
+      const { data: createdForm, error: createFormError } = await supabase
+        .from("consultation_forms")
+        .insert({
+          client_id: safeClientId,
+          title: "Consultation",
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
 
-    if (createFormError || !createdForm) {
-      if (createFormError?.code !== "42P01") {
+      if (createFormError || !createdForm) {
+        if (createFormError?.code !== "42P01") {
+          console.error(
+            "ensureDefaultConsultationFormForClient create form error:",
+            createFormError
+          );
+        }
+        return;
+      }
+
+      targetFormId = Number(createdForm.id);
+      const questions = defaultQuestions.map((prompt, index) => ({
+        form_id: targetFormId,
+        prompt,
+        sort_order: index + 1,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: createQuestionsError } = await supabase
+        .from("consultation_questions")
+        .insert(questions);
+
+      if (createQuestionsError && createQuestionsError.code !== "42P01") {
         console.error(
-          "ensureDefaultConsultationFormForClient create form error:",
-          createFormError
+          "ensureDefaultConsultationFormForClient create questions error:",
+          createQuestionsError
         );
       }
       return;
     }
 
-    const defaultQuestions = await getConsultationDefaultQuestions(supabase);
-    const questions = defaultQuestions.map((prompt, index) => ({
-      form_id: createdForm.id,
-      prompt,
-      sort_order: index + 1,
-      updated_at: new Date().toISOString(),
-    }));
-
-    const { error: createQuestionsError } = await supabase
+    const { data: existingQuestions, error: existingQuestionsError } = await supabase
       .from("consultation_questions")
-      .insert(questions);
+      .select("prompt, sort_order")
+      .eq("form_id", targetFormId)
+      .order("sort_order", { ascending: true });
 
-    if (createQuestionsError && createQuestionsError.code !== "42P01") {
-      console.error(
-        "ensureDefaultConsultationFormForClient create questions error:",
-        createQuestionsError
-      );
+    if (existingQuestionsError) {
+      if (existingQuestionsError.code !== "42P01") {
+        console.error(
+          "ensureDefaultConsultationFormForClient load questions error:",
+          existingQuestionsError
+        );
+      }
+      return;
     }
+
+    const normalizedExistingPrompts = new Set(
+      (existingQuestions ?? [])
+        .map((row) => String(row.prompt ?? "").trim().toLowerCase())
+        .filter((prompt) => prompt.length > 0)
+    );
+    const missingPrompts = defaultQuestions.filter(
+      (prompt) => !normalizedExistingPrompts.has(String(prompt).trim().toLowerCase())
+    );
+
+    if (missingPrompts.length > 0) {
+      const maxSortOrder = Math.max(
+        0,
+        ...(existingQuestions ?? []).map((row) => Number(row.sort_order ?? 0))
+      );
+      const nowIso = new Date().toISOString();
+      const missingRows = missingPrompts.map((prompt, index) => ({
+        form_id: targetFormId,
+        prompt,
+        sort_order: maxSortOrder + index + 1,
+        updated_at: nowIso,
+      }));
+
+      const { error: addMissingError } = await supabase
+        .from("consultation_questions")
+        .insert(missingRows);
+
+      if (addMissingError && addMissingError.code !== "42P01") {
+        console.error(
+          "ensureDefaultConsultationFormForClient add missing questions error:",
+          addMissingError
+        );
+      }
+    }
+
+    await cleanupDuplicateConsultationSubmissions(
+      supabase,
+      safeClientId,
+      targetFormId
+    );
   } catch (error) {
     console.error("ensureDefaultConsultationFormForClient unexpected error:", error);
   }
@@ -893,149 +1010,168 @@ export async function createConsultationSubmissionAction(
 export async function saveSingleConsultationSubmissionAnswersAction(
   clientId: string,
   formId: number,
+  _prevState: SaveSingleConsultationAnswersState,
   formData: FormData
-) {
-  const safeClientId = sanitizeClientId(clientId);
-  const safeFormId = sanitizePositiveInteger(formId, "form id");
-  await assertFormBelongsToClient(safeFormId, safeClientId);
-  const supabase = await createClient();
+) : Promise<SaveSingleConsultationAnswersState> {
+  try {
+    const safeClientId = sanitizeClientId(clientId);
+    const safeFormId = sanitizePositiveInteger(formId, "form id");
+    await assertFormBelongsToClient(safeFormId, safeClientId);
+    const supabase = await createClient();
 
-  const { data: latestSubmission, error: latestSubmissionError } = await supabase
-    .from("consultation_submissions")
-    .select("id")
-    .eq("client_id", safeClientId)
-    .eq("form_id", safeFormId)
-    .order("submitted_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestSubmissionError) {
-    console.error(
-      "saveSingleConsultationSubmissionAnswersAction submission lookup error:",
-      latestSubmissionError
-    );
-    throw new Error("Could not load consultation submission.");
-  }
-
-  let submissionId = Number(latestSubmission?.id ?? 0);
-  if (submissionId <= 0) {
-    const { data: createdSubmission, error: createSubmissionError } = await supabase
+    const { data: latestSubmission, error: latestSubmissionError } = await supabase
       .from("consultation_submissions")
-      .insert({
-        form_id: safeFormId,
-        client_id: safeClientId,
-        submitted_at: new Date().toISOString(),
-      })
       .select("id")
-      .single();
-
-    if (createSubmissionError || !createdSubmission) {
-      console.error(
-        "saveSingleConsultationSubmissionAnswersAction create submission error:",
-        createSubmissionError
-      );
-      throw new Error("Could not create consultation submission.");
-    }
-
-    submissionId = sanitizePositiveInteger(
-      Number(createdSubmission.id),
-      "submission id"
-    );
-  }
-
-  const [questionsRes, existingAnswersRes] = await Promise.all([
-    supabase
-      .from("consultation_questions")
-      .select("id, prompt")
+      .eq("client_id", safeClientId)
       .eq("form_id", safeFormId)
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("consultation_answers")
-      .select("id, question_id")
-      .eq("submission_id", submissionId),
-  ]);
+      .order("submitted_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (questionsRes.error) {
-    console.error(
-      "saveSingleConsultationSubmissionAnswersAction questions error:",
-      questionsRes.error
-    );
-    throw new Error("Could not load consultation questions.");
-  }
-  if (existingAnswersRes.error) {
-    console.error(
-      "saveSingleConsultationSubmissionAnswersAction answer lookup error:",
-      existingAnswersRes.error
-    );
-    throw new Error("Could not load existing consultation answers.");
-  }
-
-  const existingAnswersByQuestionId = new Map<
-    number,
-    { id: number; question_id: number | null }
-  >();
-  for (const answer of existingAnswersRes.data ?? []) {
-    const questionId = Number(answer.question_id ?? 0);
-    if (questionId > 0) {
-      existingAnswersByQuestionId.set(questionId, answer);
+    if (latestSubmissionError) {
+      console.error(
+        "saveSingleConsultationSubmissionAnswersAction submission lookup error:",
+        latestSubmissionError
+      );
+      throw new Error("Could not load consultation submission.");
     }
-  }
 
-  for (const question of questionsRes.data ?? []) {
-    const answerText = String(formData.get(`question-${question.id}`) ?? "").trim();
-    const existingAnswer = existingAnswersByQuestionId.get(Number(question.id));
-    if (existingAnswer) {
-      const { error: updateError } = await supabase
-        .from("consultation_answers")
-        .update({
-          answer_text: answerText,
-          question_prompt: String(question.prompt ?? "").trim(),
-        })
-        .eq("id", existingAnswer.id)
-        .eq("submission_id", submissionId);
-
-      if (updateError) {
-        console.error(
-          "saveSingleConsultationSubmissionAnswersAction update error:",
-          updateError
-        );
-        throw new Error("Could not update consultation answer.");
-      }
-    } else {
-      const { error: insertError } = await supabase
-        .from("consultation_answers")
+    let submissionId = Number(latestSubmission?.id ?? 0);
+    if (submissionId <= 0) {
+      const { data: createdSubmission, error: createSubmissionError } = await supabase
+        .from("consultation_submissions")
         .insert({
-          submission_id: submissionId,
-          question_id: question.id,
-          question_prompt: String(question.prompt ?? "").trim(),
-          answer_text: answerText,
-        });
+          form_id: safeFormId,
+          client_id: safeClientId,
+          submitted_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
 
-      if (insertError) {
+      if (createSubmissionError || !createdSubmission) {
         console.error(
-          "saveSingleConsultationSubmissionAnswersAction insert error:",
-          insertError
+          "saveSingleConsultationSubmissionAnswersAction create submission error:",
+          createSubmissionError
         );
-        throw new Error("Could not add consultation answer.");
+        throw new Error("Could not create consultation submission.");
+      }
+
+      submissionId = sanitizePositiveInteger(
+        Number(createdSubmission.id),
+        "submission id"
+      );
+    }
+
+    const [questionsRes, existingAnswersRes] = await Promise.all([
+      supabase
+        .from("consultation_questions")
+        .select("id, prompt")
+        .eq("form_id", safeFormId)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("consultation_answers")
+        .select("id, question_id")
+        .eq("submission_id", submissionId),
+    ]);
+
+    if (questionsRes.error) {
+      console.error(
+        "saveSingleConsultationSubmissionAnswersAction questions error:",
+        questionsRes.error
+      );
+      throw new Error("Could not load consultation questions.");
+    }
+    if (existingAnswersRes.error) {
+      console.error(
+        "saveSingleConsultationSubmissionAnswersAction answer lookup error:",
+        existingAnswersRes.error
+      );
+      throw new Error("Could not load existing consultation answers.");
+    }
+
+    const existingAnswersByQuestionId = new Map<
+      number,
+      { id: number; question_id: number | null }
+    >();
+    for (const answer of existingAnswersRes.data ?? []) {
+      const questionId = Number(answer.question_id ?? 0);
+      if (questionId > 0) {
+        existingAnswersByQuestionId.set(questionId, answer);
       }
     }
-  }
 
-  const { error: touchSubmissionError } = await supabase
-    .from("consultation_submissions")
-    .update({ submitted_at: new Date().toISOString() })
-    .eq("id", submissionId)
-    .eq("client_id", safeClientId);
+    for (const question of questionsRes.data ?? []) {
+      const answerText = String(formData.get(`question-${question.id}`) ?? "").trim();
+      const existingAnswer = existingAnswersByQuestionId.get(Number(question.id));
+      if (existingAnswer) {
+        const { error: updateError } = await supabase
+          .from("consultation_answers")
+          .update({
+            answer_text: answerText,
+            question_prompt: String(question.prompt ?? "").trim(),
+          })
+          .eq("id", existingAnswer.id)
+          .eq("submission_id", submissionId);
 
-  if (touchSubmissionError) {
-    console.error(
-      "saveSingleConsultationSubmissionAnswersAction touch submission error:",
-      touchSubmissionError
+        if (updateError) {
+          console.error(
+            "saveSingleConsultationSubmissionAnswersAction update error:",
+            updateError
+          );
+          throw new Error("Could not update consultation answer.");
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from("consultation_answers")
+          .insert({
+            submission_id: submissionId,
+            question_id: question.id,
+            question_prompt: String(question.prompt ?? "").trim(),
+            answer_text: answerText,
+          });
+
+        if (insertError) {
+          console.error(
+            "saveSingleConsultationSubmissionAnswersAction insert error:",
+            insertError
+          );
+          throw new Error("Could not add consultation answer.");
+        }
+      }
+    }
+
+    const { error: touchSubmissionError } = await supabase
+      .from("consultation_submissions")
+      .update({ submitted_at: new Date().toISOString() })
+      .eq("id", submissionId)
+      .eq("client_id", safeClientId);
+
+    if (touchSubmissionError) {
+      console.error(
+        "saveSingleConsultationSubmissionAnswersAction touch submission error:",
+        touchSubmissionError
+      );
+    }
+
+    await cleanupDuplicateConsultationSubmissions(
+      supabase,
+      safeClientId,
+      safeFormId
     );
-  }
 
-  revalidateConsultationPaths(safeClientId);
+    revalidateConsultationPaths(safeClientId);
+    return { error: null, success: "Consultation answers saved." };
+  } catch (error) {
+    console.error("saveSingleConsultationSubmissionAnswersAction error:", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not save consultation answers.",
+      success: null,
+    };
+  }
 }
 
 export async function updateConsultationSubmissionAnswersAction(

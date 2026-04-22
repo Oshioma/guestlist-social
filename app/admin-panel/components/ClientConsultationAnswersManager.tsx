@@ -1,5 +1,6 @@
 "use client";
 
+import { useActionState, useEffect, useState } from "react";
 import {
   saveSingleConsultationSubmissionAnswersAction,
 } from "../lib/consultation-actions";
@@ -34,6 +35,16 @@ type ConsultationForm = {
 type Props = {
   clientId: string;
   activeForm: ConsultationForm | null;
+};
+
+type SaveConsultationState = {
+  error: string | null;
+  success: string | null;
+};
+
+const INITIAL_SAVE_STATE: SaveConsultationState = {
+  error: null,
+  success: null,
 };
 
 function formatSubmittedAt(dateString: string) {
@@ -101,11 +112,29 @@ export default function ClientConsultationAnswersManager({
   }
 
   const submissions = [...selectedForm.submissions];
-  const saveAnswers = saveSingleConsultationSubmissionAnswersAction.bind(
+  const saveAnswersAction = saveSingleConsultationSubmissionAnswersAction.bind(
     null,
     clientId,
     selectedForm.id
   );
+  const [saveState, saveAction, savePending] = useActionState(
+    saveAnswersAction,
+    INITIAL_SAVE_STATE
+  );
+  const [localSavedAt, setLocalSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!saveState.success) return;
+    setLocalSavedAt(
+      new Date().toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    );
+  }, [saveState.success]);
   const latestSubmission = submissions[0] ?? null;
   const answersByQuestionId = new Map<number, ConsultationAnswer>();
   for (const answer of latestSubmission?.answers ?? []) {
@@ -176,13 +205,45 @@ export default function ClientConsultationAnswersManager({
           gap: 10,
         }}
       >
-        {latestSubmission ? (
+        {latestSubmission || localSavedAt ? (
           <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-            Last updated: {formatSubmittedAt(latestSubmission.submittedAt)}
+            Last updated:{" "}
+            {localSavedAt
+              ? localSavedAt
+              : formatSubmittedAt(String(latestSubmission?.submittedAt ?? ""))}
           </p>
         ) : null}
 
-        <form action={saveAnswers}>
+        {saveState.error ? (
+          <div
+            style={{
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+              background: "#fff5f5",
+              color: "#991b1b",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            {saveState.error}
+          </div>
+        ) : null}
+        {saveState.success ? (
+          <div
+            style={{
+              border: "1px solid #bbf7d0",
+              borderRadius: 10,
+              background: "#f0fdf4",
+              color: "#166534",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            {saveState.success}
+          </div>
+        ) : null}
+
+        <form action={saveAction}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {selectedForm.questions.map((question) => (
               <label
@@ -238,10 +299,28 @@ export default function ClientConsultationAnswersManager({
                 ))}
               </div>
             ) : null}
-            <div>
-              <button type="submit" style={secondaryButtonStyle}>
-                Save
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="submit"
+                disabled={savePending}
+                style={{
+                  ...secondaryButtonStyle,
+                  cursor: savePending ? "wait" : "pointer",
+                  opacity: savePending ? 0.75 : 1,
+                }}
+              >
+                {savePending ? "Saving..." : "Save"}
               </button>
+              {saveState.success ? (
+                <span style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
+                  Saved
+                </span>
+              ) : null}
+              {saveState.error ? (
+                <span style={{ fontSize: 12, color: "#991b1b", fontWeight: 600 }}>
+                  Not saved
+                </span>
+              ) : null}
             </div>
           </div>
         </form>
