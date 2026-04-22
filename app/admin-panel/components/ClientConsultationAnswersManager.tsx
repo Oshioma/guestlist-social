@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   saveSingleConsultationSubmissionAnswersAction,
 } from "../lib/consultation-actions";
@@ -121,6 +121,20 @@ export default function ClientConsultationAnswersManager({
     saveAnswersAction,
     INITIAL_SAVE_STATE
   );
+  const [localSavedAt, setLocalSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!saveState.success) return;
+    setLocalSavedAt(
+      new Date().toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    );
+  }, [saveState.success]);
   const latestSubmission = submissions[0] ?? null;
   const answersByQuestionId = new Map<number, ConsultationAnswer>();
   for (const answer of latestSubmission?.answers ?? []) {
@@ -191,9 +205,12 @@ export default function ClientConsultationAnswersManager({
           gap: 10,
         }}
       >
-        {latestSubmission ? (
+        {latestSubmission || localSavedAt ? (
           <p style={{ margin: 0, fontSize: 12, color: "#71717a" }}>
-            Last updated: {formatSubmittedAt(latestSubmission.submittedAt)}
+            Last updated:{" "}
+            {localSavedAt
+              ? localSavedAt
+              : formatSubmittedAt(String(latestSubmission?.submittedAt ?? ""))}
           </p>
         ) : null}
 
@@ -282,7 +299,7 @@ export default function ClientConsultationAnswersManager({
                 ))}
               </div>
             ) : null}
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <button
                 type="submit"
                 disabled={savePending}
@@ -294,6 +311,16 @@ export default function ClientConsultationAnswersManager({
               >
                 {savePending ? "Saving..." : "Save"}
               </button>
+              {saveState.success ? (
+                <span style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
+                  Saved
+                </span>
+              ) : null}
+              {saveState.error ? (
+                <span style={{ fontSize: 12, color: "#991b1b", fontWeight: 600 }}>
+                  Not saved
+                </span>
+              ) : null}
             </div>
           </div>
         </form>
