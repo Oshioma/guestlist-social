@@ -19,8 +19,16 @@ type Props = {
 
 const ADS_ITEMS: NavItem[] = [
   { label: "Clients", href: "/app/clients" },
-  { label: "Engine Dashboard", href: "/app/engine" },
   { label: "Client view", href: "/portal" },
+];
+
+const ENGINE_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/app/engine" },
+  { label: "Meta queue", href: "/app/meta-queue" },
+  { label: "Playbook", href: "/app/whats-working" },
+  { label: "Creative library", href: "/app/creative" },
+  { label: "Reports", href: "/app/reports" },
+  { label: "Memory", href: "/app/memory" },
 ];
 
 const PUBLISHER_ITEMS: NavItem[] = [
@@ -33,9 +41,17 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [
     { heading: "Dashboard", items: [], headingHref: "/app/dashboard" },
     { heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true },
-    { heading: "ADS", items: ADS_ITEMS, collapsible: true },
     { heading: "Tasks", items: [], headingHref: "/app/tasks" },
   ];
+
+  if (canRunAds) {
+    groups.splice(2, 0, { heading: "ADS", items: ADS_ITEMS, collapsible: true });
+    groups.splice(3, 0, {
+      heading: "Engine",
+      items: ENGINE_ITEMS,
+      collapsible: true,
+    });
+  }
 
   return groups;
 }
