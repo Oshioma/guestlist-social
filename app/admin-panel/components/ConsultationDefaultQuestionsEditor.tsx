@@ -46,6 +46,7 @@ export default function ConsultationDefaultQuestionsEditor({
     createEditableQuestions(initialQuestions)
   );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [state, action, pending] = useActionState(
     reorderConsultationDefaultQuestionsAction,
@@ -60,6 +61,7 @@ export default function ConsultationDefaultQuestionsEditor({
   useEffect(() => {
     setQuestions(createEditableQuestions(initialQuestions));
     setLocalError(null);
+    setConfirmDeleteId(null);
   }, [initialQuestions]);
 
   return (
@@ -176,18 +178,30 @@ export default function ConsultationDefaultQuestionsEditor({
             <button
               type="button"
               onClick={() => {
-                setQuestions((previous) => {
-                  if (previous.length <= 1) return previous;
-                  return previous.filter((_, rowIndex) => rowIndex !== index);
-                });
+                if (questions.length <= 1) return;
+
+                if (confirmDeleteId !== question.id) {
+                  setConfirmDeleteId(question.id);
+                  return;
+                }
+
+                setQuestions((previous) =>
+                  previous.filter((row) => row.id !== question.id)
+                );
+                setConfirmDeleteId(null);
                 setLocalError(null);
               }}
               disabled={questions.length <= 1}
               style={{
-                border: "1px solid #fecaca",
+                border:
+                  confirmDeleteId === question.id
+                    ? "1px solid #ef4444"
+                    : "1px solid #fecaca",
                 borderRadius: 8,
-                background: "#fff5f5",
-                color: "#b91c1c",
+                background:
+                  confirmDeleteId === question.id ? "#fee2e2" : "#fff5f5",
+                color:
+                  confirmDeleteId === question.id ? "#991b1b" : "#b91c1c",
                 padding: "7px 10px",
                 fontSize: 12,
                 fontWeight: 600,
@@ -196,11 +210,16 @@ export default function ConsultationDefaultQuestionsEditor({
                 whiteSpace: "nowrap",
               }}
             >
-              Delete
+              {confirmDeleteId === question.id ? "Confirm delete" : "Delete"}
             </button>
           </div>
         ))}
       </div>
+      {confirmDeleteId ? (
+        <p style={{ margin: 0, fontSize: 12, color: "#991b1b" }}>
+          Click <strong>Confirm delete</strong> again to remove that question.
+        </p>
+      ) : null}
       <div>
         <button
           type="button"
@@ -234,6 +253,13 @@ export default function ConsultationDefaultQuestionsEditor({
           const hasEmptyPrompt = questions.some(
             (question) => question.prompt.trim().length === 0
           );
+          if (confirmDeleteId) {
+            event.preventDefault();
+            setLocalError(
+              "Confirm or cancel the pending delete before saving changes."
+            );
+            return;
+          }
           if (hasEmptyPrompt) {
             event.preventDefault();
             setLocalError("Fill or delete empty questions before saving.");
