@@ -217,7 +217,17 @@ export default async function DashboardPage() {
     ];
 
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          background:
+            "linear-gradient(180deg, #f6f7f8 0%, #f1f3f5 45%, #eef1f4 100%)",
+          borderRadius: 20,
+          padding: 14,
+        }}
+      >
 
         <div
           style={{
