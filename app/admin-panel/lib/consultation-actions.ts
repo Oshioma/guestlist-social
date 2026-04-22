@@ -75,8 +75,10 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
 
     const { data: existingForms, error: existingFormsError } = await supabase
       .from("consultation_forms")
-      .select("id")
+      .select("id, is_active, updated_at")
       .eq("client_id", safeClientId)
+      .order("is_active", { ascending: false })
+      .order("updated_at", { ascending: false })
       .limit(1);
 
     if (existingFormsError) {
@@ -90,47 +92,104 @@ export async function ensureDefaultConsultationFormForClient(clientId: string) {
       return;
     }
 
-    if ((existingForms?.length ?? 0) > 0) {
+    const defaultQuestions = await getConsultationDefaultQuestions(supabase);
+    if (defaultQuestions.length === 0) {
       return;
     }
 
-    const { data: createdForm, error: createFormError } = await supabase
-      .from("consultation_forms")
-      .insert({
-        client_id: safeClientId,
-        title: "Consultation",
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    let targetFormId = Number(existingForms?.[0]?.id ?? 0);
+    if (targetFormId <= 0) {
+      const { data: createdForm, error: createFormError } = await supabase
+        .from("consultation_forms")
+        .insert({
+          client_id: safeClientId,
+          title: "Consultation",
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
 
-    if (createFormError || !createdForm) {
-      if (createFormError?.code !== "42P01") {
+      if (createFormError || !createdForm) {
+        if (createFormError?.code !== "42P01") {
+          console.error(
+            "ensureDefaultConsultationFormForClient create form error:",
+            createFormError
+          );
+        }
+        return;
+      }
+
+      targetFormId = Number(createdForm.id);
+      const questions = defaultQuestions.map((prompt, index) => ({
+        form_id: targetFormId,
+        prompt,
+        sort_order: index + 1,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: createQuestionsError } = await supabase
+        .from("consultation_questions")
+        .insert(questions);
+
+      if (createQuestionsError && createQuestionsError.code !== "42P01") {
         console.error(
-          "ensureDefaultConsultationFormForClient create form error:",
-          createFormError
+          "ensureDefaultConsultationFormForClient create questions error:",
+          createQuestionsError
         );
       }
       return;
     }
 
-    const defaultQuestions = await getConsultationDefaultQuestions(supabase);
-    const questions = defaultQuestions.map((prompt, index) => ({
-      form_id: createdForm.id,
+    const { data: existingQuestions, error: existingQuestionsError } = await supabase
+      .from("consultation_questions")
+      .select("prompt, sort_order")
+      .eq("form_id", targetFormId)
+      .order("sort_order", { ascending: true });
+
+    if (existingQuestionsError) {
+      if (existingQuestionsError.code !== "42P01") {
+        console.error(
+          "ensureDefaultConsultationFormForClient load questions error:",
+          existingQuestionsError
+        );
+      }
+      return;
+    }
+
+    const normalizedExistingPrompts = new Set(
+      (existingQuestions ?? [])
+        .map((row) => String(row.prompt ?? "").trim().toLowerCase())
+        .filter((prompt) => prompt.length > 0)
+    );
+    const missingPrompts = defaultQuestions.filter(
+      (prompt) => !normalizedExistingPrompts.has(String(prompt).trim().toLowerCase())
+    );
+
+    if (missingPrompts.length === 0) {
+      return;
+    }
+
+    const maxSortOrder = Math.max(
+      0,
+      ...(existingQuestions ?? []).map((row) => Number(row.sort_order ?? 0))
+    );
+    const nowIso = new Date().toISOString();
+    const missingRows = missingPrompts.map((prompt, index) => ({
+      form_id: targetFormId,
       prompt,
-      sort_order: index + 1,
-      updated_at: new Date().toISOString(),
+      sort_order: maxSortOrder + index + 1,
+      updated_at: nowIso,
     }));
 
-    const { error: createQuestionsError } = await supabase
+    const { error: addMissingError } = await supabase
       .from("consultation_questions")
-      .insert(questions);
+      .insert(missingRows);
 
-    if (createQuestionsError && createQuestionsError.code !== "42P01") {
+    if (addMissingError && addMissingError.code !== "42P01") {
       console.error(
-        "ensureDefaultConsultationFormForClient create questions error:",
-        createQuestionsError
+        "ensureDefaultConsultationFormForClient add missing questions error:",
+        addMissingError
       );
     }
   } catch (error) {
