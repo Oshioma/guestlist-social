@@ -38,7 +38,15 @@ export type ResultItem = {
   adName: string;
   action: string;
   outcome: Outcome;
-  summary: string;
+  before: {
+    ctr: number | null;
+    spend: number | null;
+  };
+  after: {
+    ctr: number | null;
+    spend: number | null;
+  };
+  insight: string;
 };
 
 export type DecisionsPageModel = {
@@ -978,13 +986,76 @@ function OutcomeRow({ item }: { item: ResultItem }) {
       <div
         style={{
           marginTop: 8,
-          fontSize: 13,
-          color: "#667085",
-          lineHeight: 1.55,
-          overflowWrap: "anywhere",
+          display: "grid",
+          gap: 8,
         }}
       >
-        {item.summary}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+          }}
+        >
+          <div
+            style={{
+              borderRadius: 12,
+              border: "1px solid rgba(16,24,40,0.06)",
+              background: "#f8fafc",
+              padding: "8px 9px",
+            }}
+          >
+            <div style={{ fontSize: 11, color: "#667085", marginBottom: 4 }}>
+              Before
+            </div>
+            <div style={{ fontSize: 12, color: "#101828", fontWeight: 600 }}>
+              CTR{" "}
+              {item.before.ctr == null
+                ? "—"
+                : `${item.before.ctr.toFixed(1)}%`}
+            </div>
+            <div style={{ fontSize: 12, color: "#101828", fontWeight: 600 }}>
+              Spend{" "}
+              {item.before.spend == null
+                ? "—"
+                : formatCurrency(item.before.spend)}
+            </div>
+          </div>
+          <div
+            style={{
+              borderRadius: 12,
+              border: "1px solid rgba(16,24,40,0.06)",
+              background: "#f8fafc",
+              padding: "8px 9px",
+            }}
+          >
+            <div style={{ fontSize: 11, color: "#667085", marginBottom: 4 }}>
+              After
+            </div>
+            <div style={{ fontSize: 12, color: "#101828", fontWeight: 600 }}>
+              CTR{" "}
+              {item.after.ctr == null
+                ? "—"
+                : `${item.after.ctr.toFixed(1)}%`}
+            </div>
+            <div style={{ fontSize: 12, color: "#101828", fontWeight: 600 }}>
+              Spend{" "}
+              {item.after.spend == null
+                ? "—"
+                : formatCurrency(item.after.spend)}
+            </div>
+          </div>
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#667085",
+            lineHeight: 1.55,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {item.insight}
+        </div>
       </div>
     </div>
   );

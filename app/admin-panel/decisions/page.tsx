@@ -63,6 +63,10 @@ type OutcomeRow = {
   decision_type: string | null;
   measured_at: string | null;
   status: string | null;
+  baseline_ctr: number | null;
+  followup_ctr: number | null;
+  baseline_spend_cents: number | null;
+  followup_spend_cents: number | null;
   ads:
     | {
         name: string | null;
@@ -192,7 +196,7 @@ export default async function DecisionsPage() {
         supabase
           .from("decision_outcomes")
           .select(
-            "id, ad_id, verdict, verdict_reason, decision_type, measured_at, status, ads(name)"
+            "id, ad_id, verdict, verdict_reason, decision_type, measured_at, status, baseline_ctr, followup_ctr, baseline_spend_cents, followup_spend_cents, ads(name)"
           )
           .eq("status", "measured")
           .order("measured_at", { ascending: false })
@@ -255,12 +259,32 @@ export default async function DecisionsPage() {
     const recentOutcomes = ((outcomesRes.data ?? []) as OutcomeRow[]).slice(0, 7);
     const results: ResultItem[] = recentOutcomes.map((row) => {
       const ad = relOne(row.ads);
+      const beforeCtr =
+        typeof row.baseline_ctr === "number" ? Number(row.baseline_ctr) : null;
+      const afterCtr =
+        typeof row.followup_ctr === "number" ? Number(row.followup_ctr) : null;
+      const beforeSpend =
+        typeof row.baseline_spend_cents === "number"
+          ? Number(row.baseline_spend_cents) / 100
+          : null;
+      const afterSpend =
+        typeof row.followup_spend_cents === "number"
+          ? Number(row.followup_spend_cents) / 100
+          : null;
       return {
         id: String(row.id),
         adName: ad?.name ?? "Unknown ad",
         action: actionLabelFromType(row.decision_type ?? null),
         outcome: outcomeFromVerdict(row.verdict),
-        summary:
+        before: {
+          ctr: beforeCtr,
+          spend: beforeSpend,
+        },
+        after: {
+          ctr: afterCtr,
+          spend: afterSpend,
+        },
+        insight:
           row.verdict_reason ??
           `Outcome measured as ${row.verdict ?? "neutral"} for this action.`,
       };
