@@ -390,6 +390,35 @@ export default async function DashboardPage() {
           </p>
           <div
             style={{
+              marginTop: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <Link
+              href="/app/engine-settings"
+              style={{
+                borderRadius: 10,
+                border: "1px solid #1d4ed8",
+                background: "#1d4ed8",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                textDecoration: "none",
+                padding: "7px 12px",
+                boxShadow: "0 6px 14px rgba(29,78,216,0.22)",
+              }}
+            >
+              Engine Settings
+            </Link>
+            <span style={{ fontSize: 12, color: "#667085" }}>
+              Configure thresholds and auto mode
+            </span>
+          </div>
+          <div
+            style={{
               marginTop: 12,
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
