@@ -76,10 +76,13 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const clientId   = String(body.clientId ?? "").trim();
-        const month      = String(body.month ?? "").trim();
-        const platform   = String(body.platform ?? "instagram_feed").trim();
-        const userPrompt = String(body.prompt ?? "").trim();
+        const clientId      = String(body.clientId ?? "").trim();
+        const month         = String(body.month ?? "").trim();
+        const platform      = String(body.platform ?? "instagram_feed").trim();
+        const userPrompt    = String(body.prompt ?? "").trim();
+        const postFrequency = String(body.postFrequency ?? "every-other-day").trim();
+        // Use the client's local today if provided, otherwise fall back to UTC
+        const todayOverride = typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : null;
 
         if (!clientId || !month) {
           send(controller, encoder, { type: "error", error: "clientId and month required." });
@@ -142,9 +145,13 @@ export async function POST(req: Request) {
           filledSlots.add((i.post_slot_date as string)?.slice(0, 10) ?? "");
         }
 
-        const allDays    = daysInMonth(year, m);
-        const todayStr   = new Date().toISOString().slice(0, 10);
-        const emptySlots = allDays.filter((d) => !filledSlots.has(d) && d >= todayStr);
+        const allDays  = daysInMonth(year, m);
+        const todayStr = todayOverride ?? new Date().toISOString().slice(0, 10);
+        // If every-other-day, only use days at even indices (1st, 3rd, 5th... of month)
+        const scheduledDays = postFrequency === "every-other-day"
+          ? allDays.filter((_, i) => i % 2 === 0)
+          : allDays;
+        const emptySlots = scheduledDays.filter((d) => !filledSlots.has(d) && d >= todayStr);
 
         if (emptySlots.length === 0) {
           send(controller, encoder, { type: "status", emptySlotsFound: 0 });
@@ -241,7 +248,7 @@ RULES:
           const slotDescriptions = batch
             .map((date) => {
               const dow = dayOfWeek(date);
-              const pos = positionInMonth(allDays.indexOf(date), allDays.length);
+              const pos = positionInMonth(scheduledDays.indexOf(date), scheduledDays.length);
               return `  - ${date} (${dow}, ${pos})`;
             })
             .join("\n");
