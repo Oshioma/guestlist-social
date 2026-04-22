@@ -102,12 +102,19 @@ export async function POST(req: Request) {
         const nextMonthStr  = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
         const monthStart    = `${yearStr}-${monthStr}-01`;
 
-        // Load client + pillars + existing posts + existing ideas in parallel
-        const [clientRes, pillarsRes, postsRes, ideasRes] = await Promise.all([
-          supabase.from("clients").select("id, name, industry, notes, ai_instructions, brand_context").eq("id", clientId).single(),
+        // Load client + pillars + existing posts + existing ideas + consultation in parallel
+        const [clientRes, pillarsRes, postsRes, ideasRes, consultationRes] = await Promise.all([
+          supabase.from("clients").select("id, name, industry, notes, ai_instructions").eq("id", clientId).single(),
           supabase.from("content_pillars").select("id, name, description, color").eq("client_id", clientId).eq("archived", false).order("sort_order", { ascending: true }),
           supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", monthStart).lt("post_date", nextMonthStr).order("post_date", { ascending: true }),
           supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).eq("platform", platform).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr),
+          // Most recent consultation submission answers for this client
+          supabase.from("consultation_submissions")
+            .select("id, consultation_answers(question_prompt, answer_text)")
+            .eq("client_id", clientId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ]);
 
         if (!clientRes.data) {
@@ -116,9 +123,15 @@ export async function POST(req: Request) {
           return;
         }
 
-        const client   = clientRes.data;
-        const pillars  = pillarsRes.data ?? [];
-        const brandCtx = (client.brand_context ?? {}) as Record<string, string>;
+        const client  = clientRes.data;
+        const pillars = pillarsRes.data ?? [];
+
+        // Build consultation Q&A block from the most recent submission
+        type ConsultationAnswer = { question_prompt: string; answer_text: string };
+        const consultationAnswers = (
+          (consultationRes.data as { consultation_answers: ConsultationAnswer[] } | null)
+            ?.consultation_answers ?? []
+        ).filter((a) => a.answer_text?.trim());
 
         // Find empty slots — a slot is filled if it has a post OR an existing idea
         const filledSlots = new Set<string>();
@@ -161,24 +174,27 @@ export async function POST(req: Request) {
           facebook: "Facebook",
         };
 
-        const brandBlock = [
-          client.name            ? `Business: ${client.name}`                               : null,
-          client.industry        ? `Industry: ${client.industry}`                            : null,
-          brandCtx.toneOfVoice   ? `Tone of voice: ${brandCtx.toneOfVoice}`                 : null,
-          brandCtx.targetAudience? `Target audience: ${brandCtx.targetAudience}`            : null,
-          brandCtx.offers        ? `Products/offers: ${brandCtx.offers}`                    : null,
-          brandCtx.bannedWords   ? `BANNED (never use): ${brandCtx.bannedWords}`            : null,
-          brandCtx.ctaStyle      ? `CTA style: ${brandCtx.ctaStyle}`                        : null,
-          brandCtx.visualStyle   ? `Visual style: ${brandCtx.visualStyle}`                  : null,
-          brandCtx.hashtagsPolicy? `Hashtags policy: ${brandCtx.hashtagsPolicy}`            : null,
-          brandCtx.platformRules ? `Platform rules: ${brandCtx.platformRules}`              : null,
-          client.ai_instructions ? `Additional rules:\n${client.ai_instructions}`           : null,
+        // Format consultation answers as a Q&A block
+        const consultationBlock = consultationAnswers.length > 0
+          ? consultationAnswers
+              .map((a) => `Q: ${a.question_prompt.trim()}\nA: ${a.answer_text.trim()}`)
+              .join("\n\n")
+          : null;
+
+        const clientHeader = [
+          client.name     ? `Business: ${client.name}`     : null,
+          client.industry ? `Industry: ${client.industry}` : null,
         ].filter(Boolean).join("\n");
 
         const systemPrompt = `You are an expert social media content strategist generating structured post ideas.
 
-BRAND:
-${brandBlock || "(no brand context — use professional defaults)"}
+CLIENT:
+${clientHeader || "(unnamed client)"}
+
+${consultationBlock
+  ? `CLIENT CONSULTATION (answers given by the client — use this as your primary brand knowledge):\n${consultationBlock}`
+  : "(no consultation data yet — use professional defaults based on the client name and industry)"}
+${client.ai_instructions ? `\nADDITIONAL RULES FROM AGENCY:\n${client.ai_instructions}` : ""}
 
 CONTENT PILLARS:
 ${pillarList}
@@ -192,6 +208,7 @@ EXISTING POSTS THIS MONTH (do not repeat):
 ${existingCaptions || "(none yet)"}
 
 RULES:
+- Ground every post idea in specific details from the consultation answers above
 - Vary content type — no consecutive same-type posts
 - Weekdays: educational/behind-scenes. Weekends: lifestyle/offers
 - Separate caption from image concept — never merge them
@@ -205,7 +222,7 @@ RULES:
         // Create generation run record
         const { data: runRow } = await supabase
           .from("ai_generation_runs")
-          .insert({ client_id: clientId, month, platform, prompt: userPrompt || null, brand_context_snapshot: brandCtx, number_of_ideas: 0, empty_slots_found: emptySlots.length, created_by: "admin" })
+          .insert({ client_id: clientId, month, platform, prompt: userPrompt || null, brand_context_snapshot: {}, number_of_ideas: 0, empty_slots_found: emptySlots.length, created_by: "admin" })
           .select("id").single();
         const runId = runRow?.id ?? null;
 

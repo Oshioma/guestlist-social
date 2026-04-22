@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
     const { data: idea } = await supabase
       .from("post_ideas")
-      .select("*, clients(name, brand_context, ai_instructions)")
+      .select("*, clients(id, name, ai_instructions)")
       .eq("id", ideaId)
       .single();
 
@@ -107,7 +107,20 @@ export async function POST(req: Request) {
     }
 
     const client = (idea.clients ?? {}) as Record<string, unknown>;
-    const brandCtx = (client.brand_context ?? {}) as Record<string, string>;
+    const clientId = String(client.id ?? "");
+
+    // Fetch most recent consultation answers for this client
+    type A = { question_prompt: string; answer_text: string };
+    const consultationRes = clientId ? await supabase
+      .from("consultation_submissions")
+      .select("consultation_answers(question_prompt, answer_text)")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle() : { data: null };
+
+    const consultationAnswers = ((consultationRes.data as { consultation_answers: A[] } | null)?.consultation_answers ?? []).filter((a) => a.answer_text?.trim());
+    const consultationBlock = consultationAnswers.map((a) => `Q: ${a.question_prompt}\nA: ${a.answer_text}`).join("\n\n");
 
     const currentValue = String((idea as Record<string, unknown>)[field] ?? "");
 
@@ -121,13 +134,11 @@ export async function POST(req: Request) {
 
     const brandBlock = [
       client.name ? `Business: ${client.name}` : null,
-      brandCtx.toneOfVoice ? `Tone: ${brandCtx.toneOfVoice}` : null,
-      brandCtx.bannedWords ? `BANNED: ${brandCtx.bannedWords}` : null,
-      brandCtx.ctaStyle ? `CTA style: ${brandCtx.ctaStyle}` : null,
+      consultationBlock || null,
       (client.ai_instructions as string) ? `Rules: ${client.ai_instructions}` : null,
     ]
       .filter(Boolean)
-      .join("\n");
+      .join("\n\n");
 
     const context = [
       idea.title ? `Post title: ${idea.title}` : null,
@@ -145,7 +156,7 @@ export async function POST(req: Request) {
 
     const prompt = `You are rewriting the ${fieldLabels[field]} for a social media post.
 
-BRAND CONTEXT:
+CLIENT CONTEXT:
 ${brandBlock || "(no brand context)"}
 
 POST CONTEXT:

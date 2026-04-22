@@ -48,24 +48,29 @@ export async function POST(req: Request) {
     let brandBlock = "";
     if (clientId) {
       const supabase = getSupabase();
-      const { data: client } = await supabase
-        .from("clients")
-        .select("name, brand_context, ai_instructions")
-        .eq("id", clientId)
-        .single();
-      if (client) {
-        const ctx = (client.brand_context ?? {}) as Record<string, string>;
+      const [clientRes, consultationRes] = await Promise.all([
+        supabase.from("clients").select("name, ai_instructions").eq("id", clientId).single(),
+        supabase.from("consultation_submissions")
+          .select("consultation_answers(question_prompt, answer_text)")
+          .eq("client_id", clientId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (clientRes.data) {
+        const client = clientRes.data;
+        type A = { question_prompt: string; answer_text: string };
+        const answers = ((consultationRes.data as { consultation_answers: A[] } | null)?.consultation_answers ?? []).filter((a) => a.answer_text?.trim());
+        const consultationBlock = answers.map((a) => `Q: ${a.question_prompt}\nA: ${a.answer_text}`).join("\n\n");
         brandBlock = [
           client.name ? `Business: ${client.name}` : null,
-          ctx.toneOfVoice ? `Tone: ${ctx.toneOfVoice}` : null,
-          ctx.bannedWords ? `BANNED words: ${ctx.bannedWords}` : null,
-          ctx.ctaStyle ? `CTA style: ${ctx.ctaStyle}` : null,
+          consultationBlock || null,
           client.ai_instructions ? `Rules: ${client.ai_instructions}` : null,
-        ].filter(Boolean).join("\n");
+        ].filter(Boolean).join("\n\n");
       }
     }
 
-    const prompt = `You are rewriting a social media caption.${brandBlock ? `\n\nBRAND CONTEXT:\n${brandBlock}` : ""}
+    const prompt = `You are rewriting a social media caption.${brandBlock ? `\n\nCLIENT CONTEXT:\n${brandBlock}` : ""}
 
 CURRENT CAPTION:
 "${text}"
