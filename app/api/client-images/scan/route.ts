@@ -107,19 +107,32 @@ function extractImageUrls(html: string, base: string): string[] {
     try { found.add(new URL(src.trim(), base).href); } catch { /* skip malformed */ }
   };
 
-  // <img src / srcset / data-src / data-lazy-src / data-original>
+  // <img> — all common lazy-load and standard attributes
+  const IMG_URL_ATTRS = ["src","data-src","data-lazy-src","data-original","data-image",
+    "data-lazy","data-ll-src","data-flickity-lazyload","data-cfsrc"];
   for (const m of html.matchAll(/<img\b[^>]+>/gi)) {
     const tag = m[0];
-    for (const attr of ["src", "data-src", "data-lazy-src", "data-original", "data-image"]) {
+    for (const attr of IMG_URL_ATTRS) {
+      const val = tag.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"))?.[1];
+      if (val && !val.includes(" ")) resolve(val);
+    }
+    for (const ssAttr of ["srcset", "data-srcset", "data-bgset"]) {
+      const srcset = tag.match(new RegExp(`\\b${ssAttr}=["']([^"']+)["']`, "i"))?.[1];
+      if (srcset) {
+        for (const part of srcset.split(",")) {
+          const u = part.trim().split(/\s+/)[0];
+          if (u) resolve(u);
+        }
+      }
+    }
+  }
+
+  // <div/section> with data-bg or data-background (lazy background images)
+  for (const m of html.matchAll(/<(?:div|section|a|span|li)\b[^>]+>/gi)) {
+    const tag = m[0];
+    for (const attr of ["data-bg", "data-background", "data-background-image"]) {
       const val = tag.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"))?.[1];
       if (val) resolve(val);
-    }
-    const srcset = tag.match(/\bsrcset=["']([^"']+)["']/i)?.[1];
-    if (srcset) {
-      for (const part of srcset.split(",")) {
-        const u = part.trim().split(/\s+/)[0];
-        if (u) resolve(u);
-      }
     }
   }
 
@@ -212,23 +225,151 @@ function extractInternalLinks(html: string, base: string): string[] {
   return all;
 }
 
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "en-GB,en;q=0.9",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  "Pragma": "no-cache",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+};
+
+function isBotChallenge(html: string): boolean {
+  // Cloudflare, Akamai, and similar bot challenges
+  if (html.length < 5000 && (
+    /just a moment/i.test(html) ||
+    /checking your browser/i.test(html) ||
+    /enable javascript/i.test(html) ||
+    /cf-browser-verification/i.test(html) ||
+    /_cf_chl_opt/i.test(html)
+  )) return true;
+  return false;
+}
+
 async function fetchPage(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Cache-Control": "no-cache",
-      },
-      signal: AbortSignal.timeout(5000),
+      headers: { ...BROWSER_HEADERS, "Referer": new URL(url).origin + "/" },
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
-    return await res.text();
+    const html = await res.text();
+    if (isBotChallenge(html)) return null;
+    return html;
   } catch {
     return null;
   }
+}
+
+// Shopify: /products.json is a public unauthenticated API — no auth needed
+async function tryShopifyProducts(base: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${base}/products.json?limit=250`, {
+      headers: { "User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const json = await res.json() as { products?: Array<{ images?: Array<{ src: string }> }> };
+    const urls: string[] = [];
+    for (const p of json.products ?? []) {
+      for (const img of p.images ?? []) {
+        if (img.src) urls.push(img.src);
+      }
+    }
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+// WordPress: /wp-json/wp/v2/media is public for published images
+async function tryWordPressMedia(base: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${base}/wp-json/wp/v2/media?per_page=100&media_type=image`, {
+      headers: { "User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const json = await res.json() as Array<{ source_url?: string; media_details?: { sizes?: Record<string, { source_url?: string }> } }>;
+    if (!Array.isArray(json)) return [];
+    const urls: string[] = [];
+    for (const item of json) {
+      // Prefer the full/large size, fallback to source_url
+      const sizes = item.media_details?.sizes ?? {};
+      const full = sizes.full?.source_url ?? sizes.large?.source_url ?? item.source_url;
+      if (full) urls.push(full);
+    }
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+// Discover extra pages from sitemap.xml / wp-sitemap.xml / sitemap_index.xml
+async function discoverSitemapPages(base: string): Promise<string[]> {
+  const candidates = [
+    `${base}/sitemap.xml`,
+    `${base}/wp-sitemap.xml`,
+    `${base}/sitemap_index.xml`,
+  ];
+  const baseHost = new URL(base).hostname;
+  const pages = new Set<string>();
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/xml,text/xml,*/*" },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      // Extract <loc> entries that are HTML pages on the same host
+      for (const m of xml.matchAll(/<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)) {
+        const loc = m[1].trim();
+        try {
+          const u = new URL(loc);
+          if (u.hostname === baseHost && !/\.(xml|pdf|jpg|png|webp|gif)$/i.test(u.pathname)) {
+            pages.add(loc);
+          }
+        } catch { /* skip */ }
+      }
+      // Sub-sitemaps: follow <sitemap><loc> entries
+      for (const m of xml.matchAll(/<sitemap>[\s\S]*?<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)) {
+        try {
+          const subRes = await fetch(m[1].trim(), {
+            headers: { "User-Agent": BROWSER_HEADERS["User-Agent"] },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!subRes.ok) continue;
+          const subXml = await subRes.text();
+          for (const sm of subXml.matchAll(/<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)) {
+            const loc = sm[1].trim();
+            try {
+              const u = new URL(loc);
+              if (u.hostname === baseHost && !/\.(xml|pdf|jpg|png|webp|gif)$/i.test(u.pathname)) {
+                pages.add(loc);
+              }
+            } catch { /* skip */ }
+          }
+        } catch { /* skip */ }
+      }
+      if (pages.size > 0) break; // found a working sitemap, stop
+    } catch { /* skip */ }
+  }
+
+  // Sort: priority pages first, then limit
+  const all = Array.from(pages);
+  all.sort((a, b) => {
+    const aScore = PAGE_PRIORITY_PATTERNS.some((p) => p.test(a)) ? 1 : 0;
+    const bScore = PAGE_PRIORITY_PATTERNS.some((p) => p.test(b)) ? 1 : 0;
+    return bScore - aScore;
+  });
+  return all;
 }
 
 export async function POST(req: NextRequest) {
@@ -259,39 +400,49 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 1. Fetch homepage
-  const homeHtml = await fetchPage(websiteUrl);
-  if (!homeHtml) {
-    return NextResponse.json({ ok: false, error: "Could not reach website." }, { status: 502 });
-  }
-
-  // Returns a rough "size score" for a URL — higher is better quality.
-  // Prefers URLs without size suffixes, otherwise picks the largest dimensions.
   function sizeScore(url: string): number {
     const m = url.match(/[-_.](\d+)x(\d+)/i);
-    if (!m) return 999999; // no size suffix = original/full quality
+    if (!m) return 999999;
     return Number(m[1]) * Number(m[2]);
   }
 
-  // 2. Extract images from homepage + find internal links to crawl.
-  // Deduplicate by filename (dedupeKey) so CDN hostname variants of the same
-  // image don't produce separate entries. Keep the best (largest) original URL.
-  const bestByKey = new Map<string, string>(); // dedup key → best original URL
-
+  const bestByKey = new Map<string, string>();
   const addUrl = (raw: string) => {
     const key = dedupeKey(raw);
     const existing = bestByKey.get(key);
-    if (!existing || sizeScore(raw) > sizeScore(existing)) {
-      bestByKey.set(key, raw);
-    }
+    if (!existing || sizeScore(raw) > sizeScore(existing)) bestByKey.set(key, raw);
   };
 
-  for (const url of extractImageUrls(homeHtml, websiteUrl)) addUrl(url);
+  const base = websiteUrl.replace(/\/$/, "");
 
-  const internalLinks = extractInternalLinks(homeHtml, websiteUrl).slice(0, MAX_EXTRA_PAGES * 2);
+  // 1. Fetch homepage + API fallbacks in parallel
+  const [homeHtml, shopifyUrls, wpUrls, sitemapPages] = await Promise.all([
+    fetchPage(websiteUrl),
+    tryShopifyProducts(base),
+    tryWordPressMedia(base),
+    discoverSitemapPages(base),
+  ]);
 
-  // 3. Fetch extra pages in parallel (cap at MAX_EXTRA_PAGES)
-  const extraPages = internalLinks.slice(0, MAX_EXTRA_PAGES);
+  if (!homeHtml && shopifyUrls.length === 0 && wpUrls.length === 0) {
+    return NextResponse.json({ ok: false, error: "Could not reach website. It may be blocking automated access." }, { status: 502 });
+  }
+
+  // Add images from API fallbacks
+  for (const url of shopifyUrls) addUrl(url);
+  for (const url of wpUrls) addUrl(url);
+
+  // 2. Extract images from homepage HTML
+  if (homeHtml) {
+    for (const url of extractImageUrls(homeHtml, websiteUrl)) addUrl(url);
+  }
+
+  // 3. Crawl extra pages — prefer sitemap pages, fallback to links found in HTML
+  const htmlLinks = homeHtml ? extractInternalLinks(homeHtml, websiteUrl) : [];
+  const extraCandidates = sitemapPages.length > 0
+    ? sitemapPages.slice(0, MAX_EXTRA_PAGES * 3)
+    : htmlLinks.slice(0, MAX_EXTRA_PAGES * 2);
+  const extraPages = extraCandidates.slice(0, MAX_EXTRA_PAGES);
+
   if (extraPages.length > 0) {
     const extraHtmls = await Promise.all(extraPages.map((u) => fetchPage(u)));
     for (let i = 0; i < extraPages.length; i++) {
