@@ -127,6 +127,10 @@ function toneForStatus(status: string): { bg: string; fg: string; border: string
   return { bg: "#f4f4f5", fg: "#52525b", border: "#d4d4d8" };
 }
 
+function canUseMatchMedia() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function";
+}
+
 export default function EngineDecisionWorkbench({
   data,
 }: {
@@ -134,6 +138,16 @@ export default function EngineDecisionWorkbench({
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("decisions");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+
+  useEffect(() => {
+    if (!canUseMatchMedia()) return;
+    const query = window.matchMedia("(max-width: 900px)");
+    const apply = () => setIsNarrowViewport(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
 
   const items = useMemo<DrawerItem[]>(() => {
     if (activeTab === "decisions") {
@@ -223,6 +237,24 @@ export default function EngineDecisionWorkbench({
     const stillExists = items.some((item) => item.id === selectedId);
     if (!stillExists) setSelectedId(null);
   }, [items, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [selectedId]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -319,7 +351,7 @@ export default function EngineDecisionWorkbench({
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
-                maxHeight: "min(58vh, 560px)",
+                maxHeight: isNarrowViewport ? "min(44vh, 420px)" : "min(58vh, 560px)",
                 overflowY: "auto",
                 paddingRight: 2,
               }}
@@ -429,11 +461,11 @@ export default function EngineDecisionWorkbench({
           <aside
             style={{
               position: "fixed",
-              right: 12,
-              top: 12,
-              bottom: 12,
-              width: "min(500px, calc(100vw - 24px))",
-              borderRadius: 16,
+              right: isNarrowViewport ? 0 : 12,
+              top: isNarrowViewport ? 0 : 12,
+              bottom: isNarrowViewport ? 0 : 12,
+              width: isNarrowViewport ? "100vw" : "min(500px, calc(100vw - 24px))",
+              borderRadius: isNarrowViewport ? 0 : 16,
               border: "1px solid rgba(16,24,40,0.12)",
               background: "#ffffff",
               boxShadow: "0 24px 48px rgba(15, 23, 42, 0.25)",
@@ -450,6 +482,7 @@ export default function EngineDecisionWorkbench({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                gap: 10,
                 background:
                   "linear-gradient(165deg, rgba(239,246,255,0.9) 0%, rgba(255,255,255,0.95) 100%)",
               }}
@@ -631,7 +664,8 @@ export default function EngineDecisionWorkbench({
                 borderTop: "1px solid #e4e4e7",
                 padding: 12,
                 display: "flex",
-                justifyContent: "space-between",
+                justifyContent: isNarrowViewport ? "flex-end" : "space-between",
+                flexWrap: "wrap",
                 gap: 10,
                 background: "#fff",
               }}
