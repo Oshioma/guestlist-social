@@ -346,13 +346,3 @@ export type GenerationRun = {
   createdAt: string;
 };
 
-export type BrandContext = {
-  toneOfVoice: string;
-  targetAudience: string;
-  offers: string;
-  bannedWords: string;
-  ctaStyle: string;
-  visualStyle: string;
-  hashtagsPolicy: string;
-  platformRules: string;
-};

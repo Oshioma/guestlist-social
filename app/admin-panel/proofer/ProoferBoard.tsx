@@ -643,94 +643,100 @@ export default function ProoferBoard({
 
     let grandTotal = 0;
     let totalEmpty = 0;
-    const MAX_PASSES = 8; // safety cap (~56 ideas max)
+    let errorMsg: string | null = null;
+    const MAX_PASSES = 3; // server now fills all slots per pass — 3 is plenty
 
-    for (let pass = 0; pass < MAX_PASSES; pass++) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 115_000);
-      let passCount = 0;
-      let passEmpty = 0;
-      let gotError = false;
+    try {
+      for (let pass = 0; pass < MAX_PASSES; pass++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60_000);
+        let passCount = 0;
+        let passEmpty = 0;
+        let passErrored = false;
 
-      try {
-        const res = await fetch("/api/generate-post-ideas", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({ clientId, month, platform: genPlatform, prompt: genPrompt }),
-        });
+        try {
+          const res = await fetch("/api/generate-post-ideas", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({ clientId, month, platform: genPlatform, prompt: genPrompt }),
+          });
 
-        if (!res.body) { setGenError("No response from server."); break; }
+          if (!res.body) { errorMsg = "No response from server."; break; }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
 
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const msg = JSON.parse(line) as { type: string; [k: string]: unknown };
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const msg = JSON.parse(line) as { type: string; [k: string]: unknown };
 
-              if (msg.type === "status") {
-                passEmpty = Number(msg.emptySlotsFound ?? 0);
-                if (pass === 0) totalEmpty = passEmpty;
+                if (msg.type === "status") {
+                  passEmpty = Number(msg.emptySlotsFound ?? 0);
+                  if (pass === 0) totalEmpty = passEmpty;
 
-              } else if (msg.type === "idea") {
-                const idea = msg.idea as PostIdea;
-                setPostIdeas((prev) => {
-                  if (prev.some((i) => i.id === idea.id)) return prev;
-                  return [...prev, idea];
-                });
-                const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
-                setDrafts((prev) => {
-                  if (prev[slotKey]) return prev;
-                  const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
-                    .filter(Boolean).join("\n\n");
-                  return {
-                    ...prev,
-                    [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00" },
-                  };
-                });
-                passCount++;
-                grandTotal++;
-                setGenResult({ count: grandTotal, emptySlots: totalEmpty });
+                } else if (msg.type === "idea") {
+                  const idea = msg.idea as PostIdea;
+                  setPostIdeas((prev) => {
+                    if (prev.some((i) => i.id === idea.id)) return prev;
+                    return [...prev, idea];
+                  });
+                  const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+                  setDrafts((prev) => {
+                    if (prev[slotKey]) return prev;
+                    const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
+                      .filter(Boolean).join("\n\n");
+                    return {
+                      ...prev,
+                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00" },
+                    };
+                  });
+                  passCount++;
+                  grandTotal++;
+                  setGenResult({ count: grandTotal, emptySlots: totalEmpty });
 
-              } else if (msg.type === "error") {
-                setGenError(String(msg.error ?? "Generation failed."));
-                gotError = true;
-              }
-            } catch { /* malformed line */ }
+                } else if (msg.type === "error") {
+                  errorMsg = String(msg.error ?? "Generation failed.");
+                  passErrored = true;
+                }
+              } catch { /* malformed line */ }
+            }
           }
+        } catch (err) {
+          if (err instanceof Error) {
+            if (err.name === "AbortError") {
+              // Our 60s timeout fired — stop retrying
+              if (grandTotal === 0) errorMsg = "Generation timed out — please try again.";
+            } else {
+              errorMsg = "Network error — please try again.";
+            }
+          }
+          passErrored = true;
+        } finally {
+          clearTimeout(timeout);
         }
-      } catch (err) {
-        if (err instanceof Error && err.name !== "AbortError") {
-          setGenError("Network error — please try again.");
-          gotError = true;
-        }
-        // AbortError = timeout, but we may have partial results — just stop
-      } finally {
-        clearTimeout(timeout);
+
+        if (passErrored || passEmpty === 0 || passCount === 0) break;
+        await new Promise<void>((r) => setTimeout(r, 300));
       }
 
-      // Stop if there was an error, no empty slots left, or this pass produced nothing
-      if (gotError || passEmpty === 0 || passCount === 0) break;
-
-      // Brief pause before the next pass
-      await new Promise<void>((r) => setTimeout(r, 400));
+      if (grandTotal === 0 && !errorMsg) {
+        errorMsg = "All slots already have ideas — click Clear AI to regenerate.";
+      }
+      if (errorMsg) setGenError(errorMsg);
+    } finally {
+      setGenLoading(false);
     }
-
-    if (grandTotal === 0 && !genError) {
-      setGenError("All slots already have ideas — click Clear AI to regenerate.");
-    }
-    setGenLoading(false);
   }
 
   async function handleRejectIdea(ideaId: string) {
@@ -1327,6 +1333,7 @@ export default function ProoferBoard({
 
       {/* ── Generate Month Ideas panel ──────────────────────────────────── */}
       {clients.length > 0 && (
+        <>
         <div
           style={{
             background: "linear-gradient(135deg, #f0f9ff 0%, #e8f0fe 100%)",
@@ -1412,7 +1419,23 @@ export default function ProoferBoard({
               Clear AI
             </button>
           )}
+
         </div>
+
+        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6, paddingLeft: 4 }}>
+          <span style={{ fontWeight: 600, color: "#475569" }}>AI uses: </span>
+          consultation answers
+          {" · "}
+          {initialPillars.length > 0
+            ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
+            : "no content pillars"}
+          {" · existing posts this month · "}
+          {PROOFER_PLATFORM_LABELS[genPlatform]}
+          {genPrompt.trim()
+            ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
+            : " · no direction prompt"}
+        </div>
+        </>
       )}
 
       {clients.length === 0 ? (
@@ -1916,6 +1939,7 @@ export default function ProoferBoard({
                                     onClick={() => {
                                       addMediaUrl(dateKey, activePlatform, img.publicUrl);
                                       setImgLibraryPostKey(null);
+                                      setHoverPreview(null);
                                     }}
                                     style={{
                                       position: "absolute", bottom: 4, right: 4,
@@ -2001,6 +2025,7 @@ export default function ProoferBoard({
                                     onClick={() => {
                                       addMediaUrl(dateKey, activePlatform, photo.full);
                                       setPexelsPostKey(null);
+                                      setHoverPreview(null);
                                     }}
                                     style={{
                                       position: "absolute", bottom: 4, right: 4,

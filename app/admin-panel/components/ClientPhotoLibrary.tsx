@@ -12,6 +12,9 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
+  const [driveUrl, setDriveUrl] = useState("");
+  const [driveLoading, setDriveLoading] = useState(false);
 
   useEffect(() => {
     fetch(`/api/client-images?clientId=${encodeURIComponent(clientId)}`)
@@ -106,6 +109,39 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
     }
   }
 
+  async function handleDriveImport() {
+    if (!driveUrl.trim() || driveLoading) return;
+    setDriveLoading(true);
+    setScanMsg(null);
+    try {
+      const res = await fetch("/api/client-images/drive-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, folderUrl: driveUrl.trim() }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        if (d.added > 0) {
+          setImages((prev) => {
+            const ids = new Set(prev.map((i) => i.id));
+            return [...d.images.filter((i: ClientImage) => !ids.has(i.id)), ...prev];
+          });
+          setScanMsg(`Imported ${d.added} photo${d.added !== 1 ? "s" : ""} from Drive${d.skipped > 0 ? ` (${d.skipped} already in library)` : ""}`);
+        } else {
+          setScanMsg(d.skipped > 0 ? "All photos already in library" : "No images found in that folder");
+        }
+        setDriveUrl("");
+        setDriveOpen(false);
+      } else {
+        setScanMsg(d.error ?? "Import failed");
+      }
+    } catch {
+      setScanMsg("Network error");
+    } finally {
+      setDriveLoading(false);
+    }
+  }
+
   const isError = scanMsg && (scanMsg.includes("failed") || scanMsg.includes("No website") || scanMsg.includes("error") || scanMsg.includes("Error"));
 
   return (
@@ -151,6 +187,22 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
             />
           </label>
 
+          {/* Google Drive folder import */}
+          <button
+            type="button"
+            onClick={() => { setDriveOpen((o) => !o); setScanMsg(null); }}
+            style={{
+              padding: "7px 14px", borderRadius: 8,
+              border: `1px solid ${driveOpen ? "#c4b5fd" : "#bae6fd"}`,
+              background: driveOpen ? "#ede9fe" : "#e0f2fe",
+              color: driveOpen ? "#5b21b6" : "#0369a1",
+              fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}
+            title="Import all images from a shared Google Drive folder"
+          >
+            ☁️ Drive folder
+          </button>
+
           {/* Scan website */}
           <button
             type="button"
@@ -189,6 +241,42 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
         </div>
       </div>
 
+      {driveOpen && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <input
+            type="url"
+            value={driveUrl}
+            onChange={(e) => setDriveUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleDriveImport(); }}
+            placeholder="Paste Google Drive folder link…"
+            autoFocus
+            style={{
+              flex: 1, minWidth: 260,
+              padding: "7px 12px", borderRadius: 8,
+              border: "1px solid #c4b5fd", background: "#faf5ff",
+              fontSize: 12, color: "#18181b", outline: "none",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleDriveImport}
+            disabled={driveLoading || !driveUrl.trim()}
+            style={{
+              padding: "7px 16px", borderRadius: 8,
+              border: "none", background: driveLoading ? "#a78bfa" : "#7c3aed",
+              color: "#fff", fontSize: 12, fontWeight: 700,
+              cursor: driveLoading || !driveUrl.trim() ? "wait" : "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {driveLoading ? "Importing…" : "Import"}
+          </button>
+          <span style={{ fontSize: 11, color: "#78716c" }}>
+            Folder must be shared as "Anyone with the link can view"
+          </span>
+        </div>
+      )}
+
       {scanMsg && (
         <div style={{ fontSize: 12, marginBottom: 12, color: isError ? "#991b1b" : "#065f46", fontWeight: 500 }}>
           {scanMsg}
@@ -215,7 +303,7 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
                 fontSize: 9, fontWeight: 700, color: "#fff",
                 background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "1px 4px",
               }}>
-                {img.table === "upload" ? "uploaded" : "website"}
+                {img.table === "upload" ? "uploaded" : img.publicUrl.includes("lh3.googleusercontent.com") ? "drive" : "website"}
               </div>
               <button
                 type="button"

@@ -27,7 +27,6 @@ import type {
   ContentPillar,
   PostIdea,
   PostIdeaStatus,
-  BrandContext,
 } from "./types";
 
 // The legacy `actions` table used to power the dashboard's "Today's Actions"
@@ -785,26 +784,6 @@ export async function getPostIdeas(
   }));
 }
 
-export async function getClientBrandContext(clientId: string): Promise<BrandContext> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("clients")
-    .select("brand_context")
-    .eq("id", clientId)
-    .single();
-
-  const raw = data?.brand_context ?? {};
-  return {
-    toneOfVoice: raw.toneOfVoice ?? "",
-    targetAudience: raw.targetAudience ?? "",
-    offers: raw.offers ?? "",
-    bannedWords: raw.bannedWords ?? "",
-    ctaStyle: raw.ctaStyle ?? "",
-    visualStyle: raw.visualStyle ?? "",
-    hashtagsPolicy: raw.hashtagsPolicy ?? "",
-    platformRules: raw.platformRules ?? "",
-  };
-}
 
 export async function getProoferPublishQueueData(): Promise<{
   readyPosts: Array<ProoferPost & { clientName: string }>;
