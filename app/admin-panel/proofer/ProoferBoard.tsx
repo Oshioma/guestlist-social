@@ -2388,7 +2388,7 @@ export default function ProoferBoard({
                       {["proofed", "check", "improve"].map((statusValue) => {
                         const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
                         const active = effectiveStatus === statusValue;
-                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve");
+                        const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve" && statusValue !== "check");
                         const isCheckBtn = statusValue === "check";
                         const isDisabled = disableThisButton || (isCheckBtn && !post && !hasDraft);
                         return (
