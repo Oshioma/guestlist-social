@@ -38,7 +38,7 @@ export default async function EditClientPage({ params }: Props) {
       .select("id, form_id, submitted_at, submitted_by")
       .eq("client_id", clientId)
       .order("submitted_at", { ascending: false })
-      .limit(100),
+      .limit(1),
   ]);
 
   const client = clientRes.data;
