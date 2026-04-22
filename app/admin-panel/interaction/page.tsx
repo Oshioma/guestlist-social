@@ -282,7 +282,7 @@ function PostCard({
             <div>
               <div className="text-base font-semibold tracking-tight text-gray-950">{post.author}</div>
               <div className="mt-1 text-xs text-gray-400">
-                {post.platform} - {post.time}
+                {post.platform} • {post.time}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -522,7 +522,7 @@ export default function InteractionEngineUI() {
               <div>
                 <div className="text-lg font-semibold tracking-tight">{active.author}</div>
                 <div className="text-sm text-gray-500">
-                  {active.platform} - {active.time}
+                  {active.platform} • {active.time}
                 </div>
               </div>
               <div className="text-xs text-gray-400">Detail panel</div>
@@ -542,7 +542,7 @@ export default function InteractionEngineUI() {
               <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Why this post</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-700">
                 {active.why.map((reason) => (
-                  <li key={reason}>- {reason}</li>
+                  <li key={reason}>• {reason}</li>
                 ))}
               </ul>
             </div>
@@ -634,7 +634,7 @@ export default function InteractionEngineUI() {
             <div className="text-sm font-semibold text-gray-900">Do</div>
             <ul className="mt-3 space-y-3 text-sm leading-6 text-gray-600">
               {PLAYBOOK.dos.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item}>• {item}</li>
               ))}
             </ul>
           </div>
@@ -642,7 +642,7 @@ export default function InteractionEngineUI() {
             <div className="text-sm font-semibold text-gray-900">Avoid</div>
             <ul className="mt-3 space-y-3 text-sm leading-6 text-gray-600">
               {PLAYBOOK.avoids.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item}>• {item}</li>
               ))}
             </ul>
           </div>
