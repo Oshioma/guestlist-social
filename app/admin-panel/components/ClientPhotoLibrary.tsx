@@ -15,6 +15,18 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
   const [driveOpen, setDriveOpen] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
   const [driveLoading, setDriveLoading] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("photoLibrary_collapsed") === "true";
+  });
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("photoLibrary_collapsed", String(next));
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch(`/api/client-images?clientId=${encodeURIComponent(clientId)}`)
@@ -126,7 +138,11 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
             const ids = new Set(prev.map((i) => i.id));
             return [...d.images.filter((i: ClientImage) => !ids.has(i.id)), ...prev];
           });
-          setScanMsg(`Imported ${d.added} photo${d.added !== 1 ? "s" : ""} from Drive${d.skipped > 0 ? ` (${d.skipped} already in library)` : ""}`);
+          const extras = [
+            d.skipped > 0 ? `${d.skipped} already in library` : null,
+            d.oversized > 0 ? `${d.oversized} over 80 MB skipped` : null,
+          ].filter(Boolean).join(", ");
+          setScanMsg(`Imported ${d.added} item${d.added !== 1 ? "s" : ""} from Drive${extras ? ` (${extras})` : ""}`);
         } else {
           setScanMsg(d.skipped > 0 ? "All photos already in library" : "No images found in that folder");
         }
@@ -152,14 +168,24 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
       padding: "20px 24px",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#18181b" }}>Photo library</div>
-          <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
-            Upload client photos or scan their website. These appear in the proofer 📁 Library.
+        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={toggleCollapsed}>
+          <span style={{ fontSize: 13, color: "#a1a1aa", userSelect: "none" }}>{collapsed ? "▶" : "▼"}</span>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#18181b" }}>Photo library</div>
+            {collapsed && (
+              <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
+                {images.length} photo{images.length !== 1 ? "s" : ""}
+              </div>
+            )}
+            {!collapsed && (
+              <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
+                Upload client photos or scan their website. These appear in the proofer 📁 Library.
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {!collapsed && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {/* Upload files */}
           <label style={{
             padding: "7px 14px", borderRadius: 8,
@@ -238,10 +264,10 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
               {deleting ? "Deleting…" : deleteConfirm ? "⚠️ Confirm delete?" : "🗑 Delete last scan"}
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
-      {driveOpen && (
+      {!collapsed && driveOpen && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
           <input
             type="url"
@@ -277,13 +303,13 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
         </div>
       )}
 
-      {scanMsg && (
+      {!collapsed && scanMsg && (
         <div style={{ fontSize: 12, marginBottom: 12, color: isError ? "#991b1b" : "#065f46", fontWeight: 500 }}>
           {scanMsg}
         </div>
       )}
 
-      {loading ? (
+      {!collapsed && (loading ? (
         <div style={{ fontSize: 13, color: "#94a3b8", padding: "16px 0" }}>Loading…</div>
       ) : images.length === 0 ? (
         <div style={{ fontSize: 13, color: "#94a3b8", padding: "16px 0" }}>
@@ -322,7 +348,7 @@ export default function ClientPhotoLibrary({ clientId }: { clientId: string }) {
             </div>
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }

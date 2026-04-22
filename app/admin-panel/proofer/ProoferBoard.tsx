@@ -977,7 +977,7 @@ export default function ProoferBoard({
           )}
         </div>
       )}
-      <DayScrubber days={days} postsByKey={postsByKey} />
+      <DayScrubber days={visibleDays} postsByKey={postsByKey} />
       <div
         style={{
           display: "flex",
@@ -2766,105 +2766,29 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
   );
 }
 
-function findScrollContainer(el: HTMLElement): HTMLElement | null {
-  // Walk up looking for an ancestor that actually scrolls. If none
-  // does, the window is the scroll container.
-  let node: HTMLElement | null = el.parentElement;
-  while (node && node !== document.body) {
-    const style = window.getComputedStyle(node);
-    const overflowY = style.overflowY;
-    const canScroll =
-      (overflowY === "auto" ||
-        overflowY === "scroll" ||
-        overflowY === "overlay") &&
-      node.scrollHeight > node.clientHeight + 1;
-    if (canScroll) return node;
-    node = node.parentElement;
-  }
-  return null;
-}
-
-function smoothScrollToTop() {
+function smoothScrollTo(targetY: number, duration = 650) {
   const easeInOutCubic = (t: number) =>
     t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  const duration = 650;
+  const startY = window.scrollY;
+  const distance = Math.max(0, targetY) - startY;
+  if (Math.abs(distance) < 2) return;
   const start = performance.now();
-
-  // Find whichever ancestor is actually scrolled.
-  let container: HTMLElement | null = null;
-  for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
-    if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 1) {
-      container = el;
-      break;
-    }
-  }
-
-  if (container) {
-    const startTop = container.scrollTop;
-    const step = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      container!.scrollTop = startTop * (1 - easeInOutCubic(t));
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    return;
-  }
-
-  const startTop =
-    window.scrollY ||
-    document.documentElement.scrollTop ||
-    document.body.scrollTop;
-  if (startTop < 1) return;
   const step = (now: number) => {
     const t = Math.min((now - start) / duration, 1);
-    window.scrollTo(0, startTop * (1 - easeInOutCubic(t)));
+    window.scrollTo(0, startY + distance * easeInOutCubic(t));
     if (t < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
+}
+
+function smoothScrollToTop() {
+  smoothScrollTo(0);
 }
 
 function smoothScrollDayInto(dateKey: string) {
   const el = document.getElementById(`day-${dateKey}`);
   if (!el) return;
-
-  const easeInOutCubic = (t: number) =>
-    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-  const duration = 650;
-  const topOffset = 72;
-  const start = performance.now();
-  const container = findScrollContainer(el);
-
-  if (container) {
-    const startTop = container.scrollTop;
-    const rect = el.getBoundingClientRect();
-    const cRect = container.getBoundingClientRect();
-    const target = startTop + (rect.top - cRect.top) - topOffset;
-    const distance = target - startTop;
-    if (Math.abs(distance) < 1) return;
-    const step = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      container.scrollTop = startTop + distance * easeInOutCubic(t);
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    return;
-  }
-
-  const startTop =
-    window.scrollY ||
-    document.documentElement.scrollTop ||
-    document.body.scrollTop;
-  const target = el.getBoundingClientRect().top + startTop - topOffset;
-  const distance = target - startTop;
-  if (Math.abs(distance) < 1) return;
-  const step = (now: number) => {
-    const t = Math.min((now - start) / duration, 1);
-    const y = startTop + distance * easeInOutCubic(t);
-    window.scrollTo(0, y);
-    if (t < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+  smoothScrollTo(el.getBoundingClientRect().top + window.scrollY - 72);
 }
 
 function DayScrubber({
@@ -2933,14 +2857,7 @@ function DayScrubber({
             title={formatDayLong(d)}
             onClick={(e) => {
               e.preventDefault();
-              if (i === 0) {
-                smoothScrollToTop();
-              } else {
-                smoothScrollDayInto(dateKey);
-              }
-              if (typeof window !== "undefined" && window.history.replaceState) {
-                window.history.replaceState(null, "", `#day-${dateKey}`);
-              }
+              smoothScrollDayInto(dateKey);
             }}
             style={{
               width: 36,

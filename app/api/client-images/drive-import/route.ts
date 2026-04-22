@@ -76,10 +76,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch image files from the Drive folder (one page, up to 1000)
+    const MAX_BYTES = 80 * 1024 * 1024; // 80 MB
+
+    // Fetch image + video files from the Drive folder (one page, up to 1000)
     const params = new URLSearchParams({
-      q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-      fields: "files(id,name,mimeType),nextPageToken",
+      q: `'${folderId}' in parents and (mimeType contains 'image/' or mimeType contains 'video/') and trashed = false`,
+      fields: "files(id,name,mimeType,size),nextPageToken",
       pageSize: String(PAGE_SIZE),
       key: apiKey,
     });
@@ -100,16 +102,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: `Drive API error: ${msg}` }, { status: 500 });
     }
 
-    const driveData = await driveRes.json() as { files: { id: string; name: string; mimeType: string }[] };
-    const files = driveData.files ?? [];
+    const driveData = await driveRes.json() as { files: { id: string; name: string; mimeType: string; size?: string }[] };
+    const allFiles = driveData.files ?? [];
+
+    // Filter out files over the size limit
+    const files = allFiles.filter((f) => {
+      const bytes = f.size ? parseInt(f.size, 10) : 0;
+      return bytes === 0 || bytes <= MAX_BYTES;
+    });
+    const oversized = allFiles.length - files.length;
 
     if (files.length === 0) {
-      return NextResponse.json({ ok: true, added: 0, skipped: 0, images: [] });
+      const msg = oversized > 0
+        ? `All ${oversized} file${oversized !== 1 ? "s" : ""} exceeded the 80 MB size limit.`
+        : undefined;
+      return NextResponse.json({ ok: true, added: 0, skipped: 0, oversized, images: [], ...(msg ? { error: msg } : {}) });
     }
 
     const db = getSupabase();
 
-    // Load existing image URLs to skip duplicates
+    // Load existing URLs to skip duplicates
     const { data: existing } = await db
       .from("client_site_images")
       .select("public_url")
@@ -124,6 +136,7 @@ export async function POST(req: Request) {
       .map(({ url }) => ({ client_id: clientId, public_url: url }));
 
     const skipped = files.length - toInsert.length;
+    const oversized2 = oversized;
 
     if (toInsert.length === 0) {
       return NextResponse.json({ ok: true, added: 0, skipped, images: [] });
@@ -144,7 +157,7 @@ export async function POST(req: Request) {
       table: "site" as const,
     }));
 
-    return NextResponse.json({ ok: true, added: images.length, skipped, images });
+    return NextResponse.json({ ok: true, added: images.length, skipped, oversized: oversized2, images });
   } catch (err) {
     console.error("drive-import error:", err);
     return NextResponse.json(
