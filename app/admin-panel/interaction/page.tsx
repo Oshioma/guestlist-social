@@ -282,7 +282,7 @@ function PostCard({
             <div>
               <div className="text-base font-semibold tracking-tight text-gray-950">{post.author}</div>
               <div className="mt-1 text-xs text-gray-400">
-                {post.platform} - {post.time}
+                {post.platform} • {post.time}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -522,7 +522,7 @@ export default function InteractionEngineUI() {
               <div>
                 <div className="text-lg font-semibold tracking-tight">{active.author}</div>
                 <div className="text-sm text-gray-500">
-                  {active.platform} - {active.time}
+                  {active.platform} • {active.time}
                 </div>
               </div>
               <div className="text-xs text-gray-400">Detail panel</div>
@@ -542,7 +542,7 @@ export default function InteractionEngineUI() {
               <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Why this post</div>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-700">
                 {active.why.map((reason) => (
-                  <li key={reason}>- {reason}</li>
+                  <li key={reason}>• {reason}</li>
                 ))}
               </ul>
             </div>
@@ -634,7 +634,7 @@ export default function InteractionEngineUI() {
             <div className="text-sm font-semibold text-gray-900">Do</div>
             <ul className="mt-3 space-y-3 text-sm leading-6 text-gray-600">
               {PLAYBOOK.dos.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item}>• {item}</li>
               ))}
             </ul>
           </div>
@@ -642,7 +642,7 @@ export default function InteractionEngineUI() {
             <div className="text-sm font-semibold text-gray-900">Avoid</div>
             <ul className="mt-3 space-y-3 text-sm leading-6 text-gray-600">
               {PLAYBOOK.avoids.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item}>• {item}</li>
               ))}
             </ul>
           </div>
@@ -683,71 +683,61 @@ export default function InteractionEngineUI() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] text-black">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-[300px] border-r border-gray-200 bg-white px-6 py-8 lg:block">
-          <div>
-            <div className="text-xs uppercase tracking-[0.3em] text-gray-400">Client</div>
-            <div className="mt-2 text-2xl font-semibold tracking-tight">{activeClient.name}</div>
-            <div className="text-sm text-gray-500">{activeClient.handle}</div>
-          </div>
-          <div className="mt-10 space-y-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`w-full rounded-lg px-4 py-3 text-left text-sm transition ${activeTab === tab ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </aside>
-        <main className="flex-1 px-6 py-8 md:px-10">
-          <div className="mb-8 flex items-start justify-between gap-4">
+      <main className="px-6 py-8 md:px-10">
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-4xl font-semibold tracking-tight">{activeTab}</h1>
-              <p className="mt-2 max-w-xl text-sm text-gray-500">
-                {activeTab === "Feed" &&
-                  "High-quality interaction opportunities ranked by intent, timing, and potential upside."}
-                {activeTab === "Saved Audiences" &&
-                  "Audience buckets that shape discovery and give the interaction engine sharper targets."}
-                {activeTab === "Competitors" &&
-                  "Competitor accounts worth mining for overlaps, comment trails, and audience signals."}
-                {activeTab === "Playbook" &&
-                  "Tone, engagement rules, and guardrails that keep comments on-brand."}
-                {activeTab === "Results" &&
-                  "Simple performance snapshots showing the impact of interaction work."}
-                {activeTab === "Learnings" &&
-                  "Patterns the team can use to get sharper over time."}
-              </p>
+              <div className="text-xs uppercase tracking-[0.3em] text-gray-400">Client</div>
+              <div className="mt-2 text-2xl font-semibold tracking-tight">{activeClient.name}</div>
+              <div className="text-sm text-gray-500">{activeClient.handle}</div>
             </div>
             <div className="flex items-center gap-3">
               <div className={`text-xs ${isLive ? "text-green-600" : "text-gray-400"}`}>
                 {isLive ? "● Live feed" : "Paused"}
               </div>
-              <button onClick={() => setIsLive((v) => !v)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs">
+              <button
+                onClick={() => setIsLive((v) => !v)}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-xs"
+              >
                 {isLive ? "Pause" : "Resume"}
               </button>
             </div>
           </div>
-          <div className="mb-8 lg:hidden">
-            <div className="overflow-x-auto pb-1">
-              <div className="flex min-w-max gap-2">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`rounded-lg px-4 py-2.5 text-sm whitespace-nowrap transition ${activeTab === tab ? "bg-black text-white shadow-sm" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+          <div className="mt-5 overflow-x-auto pb-1">
+            <div className="flex min-w-max gap-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded-lg px-4 py-2.5 text-sm whitespace-nowrap transition ${activeTab === tab ? "bg-black text-white shadow-sm" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
-          {renderActiveTab()}
-        </main>
-      </div>
+        </div>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-tight">{activeTab}</h1>
+            <p className="mt-2 max-w-xl text-sm text-gray-500">
+              {activeTab === "Feed" &&
+                "High-quality interaction opportunities ranked by intent, timing, and potential upside."}
+              {activeTab === "Saved Audiences" &&
+                "Audience buckets that shape discovery and give the interaction engine sharper targets."}
+              {activeTab === "Competitors" &&
+                "Competitor accounts worth mining for overlaps, comment trails, and audience signals."}
+              {activeTab === "Playbook" &&
+                "Tone, engagement rules, and guardrails that keep comments on-brand."}
+              {activeTab === "Results" &&
+                "Simple performance snapshots showing the impact of interaction work."}
+              {activeTab === "Learnings" &&
+                "Patterns the team can use to get sharper over time."}
+            </p>
+          </div>
+        </div>
+        {renderActiveTab()}
+      </main>
     </div>
   );
 }
