@@ -103,6 +103,10 @@ function prettyLabel(value: string | null | undefined): string {
   return DECISION_LABELS[value] ?? value.replaceAll("_", " ");
 }
 
+function prettyStatus(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "Unknown";
   const d = new Date(iso);
@@ -232,22 +236,35 @@ export default function EngineDecisionWorkbench({
     <>
       <section
         style={{
-          borderRadius: 16,
-          border: "1px solid rgba(16,24,40,0.08)",
-          background: "rgba(255,255,255,0.78)",
-          backdropFilter: "blur(8px)",
-          boxShadow: "0 10px 24px rgba(16, 24, 40, 0.05)",
-          padding: 14,
+          borderRadius: 18,
+          border: "1px solid rgba(16,24,40,0.1)",
+          background:
+            "linear-gradient(168deg, rgba(255,255,255,0.92) 0%, rgba(246,248,252,0.88) 100%)",
+          backdropFilter: "blur(10px)",
+          boxShadow: "0 14px 34px rgba(16, 24, 40, 0.08)",
+          padding: 15,
           display: "flex",
           flexDirection: "column",
-          gap: 10,
+          gap: 12,
         }}
       >
         <div>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#18181b" }}>
-            Insights rail
-          </h3>
-          <p style={{ margin: "3px 0 0", fontSize: 12, color: "#71717a" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span
+              aria-hidden
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#22c55e",
+                boxShadow: "0 0 0 4px rgba(34,197,94,0.16)",
+              }}
+            />
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#18181b" }}>
+              Insights rail
+            </h3>
+          </div>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#667085" }}>
             Live feed from ad_decisions, meta_execution_queue, and decision_outcomes.
           </p>
         </div>
@@ -261,13 +278,16 @@ export default function EngineDecisionWorkbench({
                 onClick={() => setActiveTab(tab)}
                 style={{
                   borderRadius: 999,
-                  border: isActive ? "1px solid #1d4ed8" : "1px solid #d4d4d8",
-                  background: isActive ? "#dbeafe" : "#fff",
-                  color: isActive ? "#1e3a8a" : "#52525b",
-                  padding: "5px 10px",
+                  border: isActive ? "1px solid #93c5fd" : "1px solid #d4d4d8",
+                  background: isActive ? "#eff6ff" : "#fff",
+                  color: isActive ? "#1e3a8a" : "#475467",
+                  padding: "6px 11px",
                   fontSize: 11,
                   fontWeight: 700,
                   cursor: "pointer",
+                  boxShadow: isActive
+                    ? "0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 14px rgba(37,99,235,0.16)"
+                    : "0 1px 0 rgba(255,255,255,0.8) inset",
                 }}
               >
                 {TAB_LABELS[tab]} ({counts[tab]})
@@ -281,82 +301,112 @@ export default function EngineDecisionWorkbench({
             style={{
               borderRadius: 10,
               border: "1px dashed #d4d4d8",
-              padding: 10,
+              padding: 12,
               fontSize: 12,
               color: "#71717a",
+              background: "rgba(255,255,255,0.7)",
             }}
           >
             No recent rows in this stream.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 11, color: "#71717a" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
+            <div style={{ fontSize: 11, color: "#667085", fontWeight: 600 }}>
               Click a row to open its drawer.
             </div>
-            {items.map((item) => {
-              const tone = toneForStatus(item.status);
-              const isActive = item.id === selectedId;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedId(item.id)}
-                  style={{
-                    borderRadius: 10,
-                    border: isActive ? "1px solid #1d4ed8" : "1px solid #e4e4e7",
-                    background: isActive ? "#eff6ff" : "#fff",
-                    textAlign: "left",
-                    padding: "9px 10px",
-                    cursor: "pointer",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                maxHeight: "min(58vh, 560px)",
+                overflowY: "auto",
+                paddingRight: 2,
+              }}
+            >
+              {items.map((item) => {
+                const tone = toneForStatus(item.status);
+                const isActive = item.id === selectedId;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSelectedId(item.id)}
+                    style={{
+                      borderRadius: 12,
+                      border: isActive ? "1px solid #93c5fd" : "1px solid #e4e4e7",
+                      background: isActive
+                        ? "linear-gradient(170deg, #eff6ff 0%, #f8fbff 100%)"
+                        : "#fff",
+                      textAlign: "left",
+                      padding: "10px 11px",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 7,
+                      boxShadow: isActive
+                        ? "0 8px 18px rgba(37,99,235,0.12)"
+                        : "0 1px 0 rgba(255,255,255,0.8) inset",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#18181b",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.title}
+                      </div>
+                      <span
+                        style={{
+                          borderRadius: 999,
+                          border: `1px solid ${tone.border}`,
+                          background: tone.bg,
+                          color: tone.fg,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "1px 7px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {prettyStatus(item.status)}
+                      </span>
+                    </div>
                     <div
                       style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#18181b",
+                        fontSize: 11,
+                        color: "#475467",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {item.title}
+                      {item.subtitle}
                     </div>
-                    <span
+                    <div
                       style={{
-                        borderRadius: 999,
-                        border: `1px solid ${tone.border}`,
-                        background: tone.bg,
-                        color: tone.fg,
                         fontSize: 10,
-                        fontWeight: 700,
-                        padding: "1px 7px",
-                        textTransform: "uppercase",
+                        color: "#98a2b3",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
                       }}
                     >
-                      {item.status}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#52525b",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.subtitle}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#a1a1aa" }}>
-                    {item.timestampLabel}: {formatDate(item.timestampValue)}
-                  </div>
-                </button>
-              );
-            })}
+                      <span>
+                        {item.timestampLabel}: {formatDate(item.timestampValue)}
+                      </span>
+                      <span style={{ color: isActive ? "#1d4ed8" : "#94a3b8" }}>
+                        Open →
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </section>
@@ -370,9 +420,10 @@ export default function EngineDecisionWorkbench({
               position: "fixed",
               inset: 0,
               border: "none",
-              background: "rgba(15, 23, 42, 0.3)",
+              background: "rgba(2, 6, 23, 0.44)",
               zIndex: 39,
               cursor: "pointer",
+              backdropFilter: "blur(2px)",
             }}
           />
           <aside
@@ -381,7 +432,7 @@ export default function EngineDecisionWorkbench({
               right: 12,
               top: 12,
               bottom: 12,
-              width: "min(460px, calc(100vw - 24px))",
+              width: "min(500px, calc(100vw - 24px))",
               borderRadius: 16,
               border: "1px solid rgba(16,24,40,0.12)",
               background: "#ffffff",
@@ -394,18 +445,29 @@ export default function EngineDecisionWorkbench({
           >
             <div
               style={{
-                padding: "12px 14px",
+                padding: "13px 14px",
                 borderBottom: "1px solid #e4e4e7",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                background:
+                  "linear-gradient(165deg, rgba(239,246,255,0.9) 0%, rgba(255,255,255,0.95) 100%)",
               }}
             >
-              <div>
-                <div style={{ fontSize: 11, color: "#71717a", textTransform: "uppercase" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: "#667085", textTransform: "uppercase" }}>
                   Decision drawer
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#18181b" }}>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 800,
+                    color: "#18181b",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                  }}
+                >
                   {selected.title}
                 </div>
               </div>
@@ -426,8 +488,26 @@ export default function EngineDecisionWorkbench({
               </button>
             </div>
 
-            <div style={{ padding: 14, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "flex", gap: 10 }}>
+            <div
+              style={{
+                padding: 14,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "#fff",
+                }}
+              >
                 <AdCreativeThumb
                   imageUrl={selected.creativeImageUrl}
                   videoUrl={selected.creativeVideoUrl}
@@ -443,14 +523,41 @@ export default function EngineDecisionWorkbench({
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>
                     {selected.adName ?? "Unknown ad"}
                   </div>
-                  <div style={{ marginTop: 2, fontSize: 12, color: "#71717a" }}>
+                  <div style={{ marginTop: 2, fontSize: 12, color: "#667085" }}>
                     {selected.timestampLabel}: {formatDate(selected.timestampValue)}
                   </div>
-                  {selected.confidence && (
-                    <div style={{ marginTop: 2, fontSize: 12, color: "#52525b" }}>
-                      Confidence: {selected.confidence}
-                    </div>
-                  )}
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <span
+                      style={{
+                        borderRadius: 999,
+                        border: `1px solid ${toneForStatus(selected.status).border}`,
+                        background: toneForStatus(selected.status).bg,
+                        color: toneForStatus(selected.status).fg,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {prettyStatus(selected.status)}
+                    </span>
+                    {selected.confidence && (
+                      <span
+                        style={{
+                          borderRadius: 999,
+                          border: "1px solid #bfdbfe",
+                          background: "#eff6ff",
+                          color: "#1e3a8a",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Confidence {selected.confidence}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -460,7 +567,7 @@ export default function EngineDecisionWorkbench({
                     border: "1px solid #e4e4e7",
                     borderRadius: 10,
                     padding: "10px 11px",
-                    background: "#fafafa",
+                    background: "#fff",
                   }}
                 >
                   <div style={{ fontSize: 11, color: "#71717a", textTransform: "uppercase" }}>
@@ -478,7 +585,7 @@ export default function EngineDecisionWorkbench({
                     border: "1px solid #dbeafe",
                     borderRadius: 10,
                     padding: "10px 11px",
-                    background: "#eff6ff",
+                    background: "#f0f7ff",
                   }}
                 >
                   <div style={{ fontSize: 11, color: "#1e3a8a", textTransform: "uppercase" }}>
@@ -495,7 +602,7 @@ export default function EngineDecisionWorkbench({
                   border: "1px solid #e4e4e7",
                   borderRadius: 10,
                   padding: "10px 11px",
-                  background: "#fff",
+                  background: "#ffffff",
                   display: "grid",
                   gap: 8,
                 }}
@@ -508,6 +615,8 @@ export default function EngineDecisionWorkbench({
                       justifyContent: "space-between",
                       gap: 12,
                       fontSize: 12,
+                      borderBottom: "1px solid #f2f4f7",
+                      paddingBottom: 6,
                     }}
                   >
                     <span style={{ color: "#71717a" }}>{row.label}</span>
@@ -524,6 +633,7 @@ export default function EngineDecisionWorkbench({
                 display: "flex",
                 justifyContent: "space-between",
                 gap: 10,
+                background: "#fff",
               }}
             >
               <Link

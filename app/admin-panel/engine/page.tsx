@@ -489,7 +489,17 @@ export default async function DashboardPage() {
             </div>
             <TopPriorities />
           </div>
-          <div style={{ position: "sticky", top: 14 }}>
+          <div
+            style={{
+              position: "sticky",
+              top: 14,
+              borderRadius: 18,
+              border: "1px solid rgba(16,24,40,0.08)",
+              background: "linear-gradient(160deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%)",
+              boxShadow: "0 12px 26px rgba(15, 23, 42, 0.08)",
+              padding: 8,
+            }}
+          >
             <EngineDecisionWorkbench data={workbenchData} />
           </div>
         </div>
