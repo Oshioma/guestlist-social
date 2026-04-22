@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth/permissions";
 import EmptyState from "../components/EmptyState";
 import StatusPill from "../components/StatusPill";
 import SectionCard from "../components/SectionCard";
+import DeleteClientButton from "../components/DeleteClientButton";
 import { formatCurrency } from "../lib/utils";
 import { mapClientStatus } from "../lib/mappers";
 
@@ -54,6 +56,7 @@ export default async function ClientsPage({ searchParams }: Props) {
   const selectedView = getClientView(
     typeof viewParam === "string" ? viewParam.toLowerCase() : undefined
   );
+  const admin = await isAdmin();
   const supabase = await createClient();
 
   const [clientsRes, campaignsRes, adsRes] = await Promise.all([
@@ -176,6 +179,7 @@ export default async function ClientsPage({ searchParams }: Props) {
     { view: "inactive", label: "Inactive", href: "/app/clients?view=inactive" },
     { view: "all", label: "All", href: "/app/clients?view=all" },
   ];
+  const canDeleteFromCurrentView = selectedView === "inactive" && admin;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -451,6 +455,12 @@ export default async function ClientsPage({ searchParams }: Props) {
                       >
                         New campaign
                       </Link>
+                      {canDeleteFromCurrentView ? (
+                        <DeleteClientButton
+                          clientId={String(client.id)}
+                          redirectTo="/app/clients?view=inactive"
+                        />
+                      ) : null}
                     </div>
                   </div>
 

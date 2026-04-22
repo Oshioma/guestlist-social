@@ -3,14 +3,20 @@
 import { useTransition } from "react";
 import { deleteClientAction } from "../lib/client-actions";
 
-export default function DeleteClientButton({ clientId }: { clientId: string }) {
+export default function DeleteClientButton({
+  clientId,
+  redirectTo,
+}: {
+  clientId: string;
+  redirectTo?: string;
+}) {
   const [isPending, startTransition] = useTransition();
 
   function handleDelete() {
     if (!confirm("Delete this client? This cannot be undone.")) return;
 
     startTransition(async () => {
-      await deleteClientAction(clientId);
+      await deleteClientAction(clientId, redirectTo);
     });
   }
 
