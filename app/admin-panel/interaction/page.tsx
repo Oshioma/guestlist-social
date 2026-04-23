@@ -6,11 +6,14 @@ type PostStatus = "new" | "approved" | "skipped" | "saved";
 type FetchState = "idle" | "loading" | "success" | "error";
 type Tab =
   | "Feed"
+  | "Discovery"
   | "Saved Audiences"
   | "Competitors"
   | "Playbook"
   | "Results"
   | "Learnings";
+
+type ClientOption = { id: string; name: string; handle: string };
 type Post = {
   id: string;
   clientId: string;
@@ -58,12 +61,26 @@ type InstagramCommentsApiResponse = {
   error?: string;
 };
 
-const CLIENTS = [
-  {
-    id: "client-organzibar",
-    name: "Organzibar",
-    handle: "@organzibar",
-  },
+const DISCOVERY_HASHTAGS = [
+  { tag: "#zanzibar", volume: "High", intent: "Tourism & travel" },
+  { tag: "#kendwa", volume: "Medium", intent: "Beach & location" },
+  { tag: "#nungwi", volume: "Medium", intent: "Beach & location" },
+  { tag: "#zanzibarfood", volume: "Medium", intent: "Food discovery" },
+  { tag: "#zanzibarrestaurant", volume: "Low", intent: "High buyer intent" },
+  { tag: "#eatzanzibar", volume: "Low", intent: "High buyer intent" },
+  { tag: "#zanzibarlife", volume: "High", intent: "Lifestyle & expats" },
+  { tag: "#zanzibartravel", volume: "High", intent: "Trip planning" },
+];
+
+const DISCOVERY_KEYWORDS = [
+  { keyword: "where to eat zanzibar", type: "Question", priority: "High" },
+  { keyword: "best restaurant kendwa", type: "Question", priority: "High" },
+  { keyword: "food nungwi", type: "Question", priority: "High" },
+  { keyword: "smoothie bowl zanzibar", type: "Question", priority: "Medium" },
+  { keyword: "healthy food zanzibar", type: "Question", priority: "Medium" },
+  { keyword: "lunch near kendwa", type: "Question", priority: "Medium" },
+  { keyword: "vegan zanzibar", type: "Question", priority: "Medium" },
+  { keyword: "zanzibar hidden gem", type: "Discovery", priority: "Medium" },
 ];
 
 const INITIAL_POSTS: Post[] = [
@@ -481,7 +498,8 @@ function PostCard({
 }
 
 export default function InteractionEngineUI() {
-  const [activeClientId, setActiveClientId] = useState("client-organzibar");
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [activeClientId, setActiveClientId] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
   const [selectedId, setSelectedId] = useState("post-1");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
@@ -490,13 +508,25 @@ export default function InteractionEngineUI() {
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
 
-  const tabs: Tab[] = ["Feed", "Saved Audiences", "Competitors", "Playbook", "Results", "Learnings"];
+  const tabs: Tab[] = ["Feed", "Discovery", "Saved Audiences", "Competitors", "Playbook", "Results", "Learnings"];
 
-  const activeClient = CLIENTS.find((c) => c.id === activeClientId) ?? CLIENTS[0];
+  const activeClient = clients.find((c) => c.id === activeClientId) ?? clients[0];
   const clientPosts = useMemo(
     () => posts.filter((p) => p.clientId === activeClient.id),
     [posts, activeClient.id]
   );
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && Array.isArray(d.clients) && d.clients.length > 0) {
+          setClients(d.clients);
+          setActiveClientId((prev) => prev || d.clients[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const firstClientPost = posts.find((post) => post.clientId === activeClientId);
@@ -518,9 +548,10 @@ export default function InteractionEngineUI() {
       setIngestionState((prev) => (prev === "idle" ? "loading" : prev));
       setIngestionError(null);
       try {
-        const res = await fetch("/api/interaction/instagram-comments?limit=10", {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/interaction/instagram-comments?clientId=${encodeURIComponent(activeClientId)}&limit=20`,
+          { cache: "no-store" }
+        );
         const payload: InstagramCommentsApiResponse = await res.json();
         if (!res.ok || !payload.ok) {
           throw new Error(payload.error ?? "Failed to fetch Instagram comments.");
@@ -557,7 +588,7 @@ export default function InteractionEngineUI() {
               : 62;
           return {
             id: String(comment.id ?? `ig-${Date.now()}`),
-            clientId: "client-organzibar",
+            clientId: activeClientId,
             author: `@${String(comment.username ?? "instagram_user").replace(/^@/, "")}`,
             platform: "Instagram",
             time: `${minutesAgo}m ago`,
@@ -609,20 +640,21 @@ export default function InteractionEngineUI() {
       }
     }
 
+    if (!activeClientId) return;
     ingestInstagramComments();
     const interval = setInterval(ingestInstagramComments, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [activeClientId]);
 
   useEffect(() => {
     if (!isLive) return;
     const interval = setInterval(() => {
       const newPost: Post = {
         id: `post-${Date.now()}`,
-        clientId: "client-organzibar",
+        clientId: activeClientId,
         author: "@newtraveller",
         platform: "Instagram",
         time: "2m ago",
@@ -945,7 +977,77 @@ export default function InteractionEngineUI() {
     </div>
   );
 
+  const renderDiscovery = () => (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div>
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-900">Hashtags to monitor</div>
+          <div className="mt-1 text-sm text-gray-500">
+            High-intent hashtags where tourists and food creators post about the area.
+          </div>
+        </div>
+        <div className="space-y-3">
+          {DISCOVERY_HASHTAGS.map((h) => (
+            <SectionCard key={h.tag} className="flex items-center justify-between gap-4 !p-4">
+              <div>
+                <div className="font-semibold tracking-tight text-indigo-700">{h.tag}</div>
+                <div className="mt-0.5 text-xs text-gray-500">{h.intent}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`rounded-full px-3 py-1 text-[11px] font-medium ${
+                  h.volume === "High" ? "bg-red-50 text-red-600 border border-red-200"
+                  : h.volume === "Medium" ? "bg-amber-50 text-amber-700 border border-amber-200"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}>{h.volume} volume</span>
+                <a
+                  href={`https://www.instagram.com/explore/tags/${h.tag.slice(1)}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  Browse ↗
+                </a>
+              </div>
+            </SectionCard>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-4">
+          <div className="text-sm font-semibold text-gray-900">Search queries to intercept</div>
+          <div className="mt-1 text-sm text-gray-500">
+            Questions people ask on Instagram and Facebook that match your offer.
+          </div>
+        </div>
+        <div className="space-y-3">
+          {DISCOVERY_KEYWORDS.map((k) => (
+            <SectionCard key={k.keyword} className="flex items-center justify-between gap-4 !p-4">
+              <div>
+                <div className="text-sm font-medium text-gray-900">"{k.keyword}"</div>
+                <div className="mt-0.5 text-xs text-gray-500">{k.type}</div>
+              </div>
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-medium ${
+                k.priority === "High" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-blue-50 text-blue-600 border-blue-200"
+              }`}>{k.priority} priority</span>
+            </SectionCard>
+          ))}
+        </div>
+        <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          <div className="font-semibold text-gray-900">How to use</div>
+          <ul className="mt-2 space-y-1.5 text-xs leading-5 text-gray-500">
+            <li>• Search these phrases on Instagram and Facebook</li>
+            <li>• Filter to posts from the last 24–48 hours</li>
+            <li>• Prioritise posts with questions or location mentions</li>
+            <li>• Reply with a helpful, specific recommendation</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderActiveTab = () => {
+    if (activeTab === "Discovery") return renderDiscovery();
     if (activeTab === "Saved Audiences") return renderSavedAudiences();
     if (activeTab === "Competitors") return renderCompetitors();
     if (activeTab === "Playbook") return renderPlaybook();
@@ -971,7 +1073,8 @@ export default function InteractionEngineUI() {
                   onChange={(event) => setActiveClientId(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-semibold tracking-tight text-gray-900 outline-none focus:border-black"
                 >
-                  {CLIENTS.map((client) => (
+                  {clients.length === 0 && <option value="">Loading clients…</option>}
+                  {clients.map((client) => (
                     <option key={client.id} value={client.id}>
                       {client.name}
                     </option>
@@ -1027,6 +1130,8 @@ export default function InteractionEngineUI() {
             <p className="mt-2 max-w-xl text-sm text-gray-500">
               {activeTab === "Feed" &&
                 "High-quality interaction opportunities ranked by intent, timing, user type, poster quality, and on-island-now signals."}
+              {activeTab === "Discovery" &&
+                "Hashtags and search queries to monitor for new tourist and food-intent conversations to intercept."}
               {activeTab === "Saved Audiences" &&
                 "Audience buckets that shape discovery and give the interaction engine sharper targets."}
               {activeTab === "Competitors" &&
