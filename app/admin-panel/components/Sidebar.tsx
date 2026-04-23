@@ -37,6 +37,10 @@ const PUBLISHER_ITEMS: NavItem[] = [
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [{ heading: "Dashboard", items: [], headingHref: "/app/dashboard" }];
 
+  if (canRunAds) {
+    groups.push({ heading: "Interaction", items: [], headingHref: "/app/interaction" });
+  }
+
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
   if (canRunAds) {
