@@ -95,6 +95,36 @@ function uid(): string {
   return Math.random().toString(36).slice(2);
 }
 
+function renderTextWithLinks(text: string): React.ReactNode[] {
+  const urlRegex = /https?:\/\/[^\s)>\]"']+/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
+    }
+    // Strip trailing punctuation that is unlikely to be part of the URL
+    const url = match[0].replace(/[.,;:!?)]+$/, "");
+    const afterUrl = match.index + match[0].length;
+    parts.push(
+      <a key={`u-${match.index}`} href={url} target="_blank" rel="noopener noreferrer" style={{ color:"#2563eb", textDecoration:"underline", wordBreak:"break-all" }}>
+        {url}
+      </a>
+    );
+    // If trailing punctuation was stripped, add it back as plain text
+    if (url.length < match[0].length) {
+      const trailing = match[0].slice(url.length);
+      parts.push(<span key={`t-${match.index}-trail`}>{trailing}</span>);
+    }
+    lastIndex = afterUrl;
+  }
+  if (lastIndex < text.length) {
+    parts.push(<span key={`t-${lastIndex}-end`}>{text.slice(lastIndex)}</span>);
+  }
+  return parts;
+}
+
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const inputStyle: React.CSSProperties = {
@@ -601,7 +631,7 @@ export default function TasksBoard({
                   {selectedTask.description && (
                     <div>
                       <div style={{ fontSize:11, fontWeight:600, color:"#71717a", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>Description</div>
-                      <p style={{ margin:0, fontSize:13, color:"#3f3f46", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{selectedTask.description}</p>
+                      <p style={{ margin:0, fontSize:13, color:"#3f3f46", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{renderTextWithLinks(selectedTask.description)}</p>
                     </div>
                   )}
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -732,7 +762,7 @@ export default function TasksBoard({
         </button>
         {isOpen && (
           <div style={{ padding:"0 12px 12px 44px", display:"flex", flexDirection:"column", gap:8 }}>
-            {task.description && <div style={{ fontSize:13, color:"#52525b", whiteSpace:"pre-wrap" }}>{task.description}</div>}
+            {task.description && <div style={{ fontSize:13, color:"#52525b", whiteSpace:"pre-wrap" }}>{renderTextWithLinks(task.description)}</div>}
             <div style={{ fontSize:12, color:"#71717a", display:"flex", flexWrap:"wrap", gap:10 }}>
               <span>Assignee: {task.assignee||"Unassigned"}</span>
               {task.createdBy && <><span>{"\xb7"}</span><span>From: {task.createdBy}</span></>}
