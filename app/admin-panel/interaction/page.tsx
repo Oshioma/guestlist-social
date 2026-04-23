@@ -10,13 +10,14 @@ async function getClients() {
 
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // Try with ig_handle first; fall back to just id+name if column doesn't exist yet
+  // Only return clients that have at least one connected Meta account
   const { data, error } = await db
     .from("clients")
-    .select("id, name, ig_handle")
+    .select("id, name, ig_handle, connected_meta_accounts!inner(client_id)")
     .order("name", { ascending: true });
 
   if (error) {
+    // Fallback: return all clients if the join or ig_handle column fails
     const fallback = await db
       .from("clients")
       .select("id, name")
