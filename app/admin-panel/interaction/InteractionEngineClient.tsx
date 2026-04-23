@@ -96,62 +96,9 @@ type InstagramCommentsApiResponse = {
   error?: string;
 };
 
-const DISCOVERY_HASHTAGS = [
-  // Location / General — all client types
-  { tag: "#zanzibar",          category: "Location",      volume: "High",   intent: "Tourism & discovery" },
-  { tag: "#zanzibartravel",    category: "Location",      volume: "High",   intent: "Trip planning" },
-  { tag: "#visitzanzibar",     category: "Location",      volume: "High",   intent: "Travel intent" },
-  { tag: "#zanzibarlife",      category: "Location",      volume: "High",   intent: "Lifestyle & expats" },
-  { tag: "#kendwa",            category: "Location",      volume: "Medium", intent: "Area-specific" },
-  { tag: "#nungwi",            category: "Location",      volume: "Medium", intent: "Area-specific" },
-  { tag: "#stonetown",         category: "Location",      volume: "Medium", intent: "Culture & heritage" },
-  { tag: "#islandlife",        category: "Location",      volume: "High",   intent: "Broad lifestyle" },
-  // Food & Drink
-  { tag: "#zanzibarfood",      category: "Food & Drink",  volume: "Medium", intent: "Food discovery" },
-  { tag: "#zanzibarrestaurant",category: "Food & Drink",  volume: "Low",    intent: "High buyer intent" },
-  { tag: "#eatzanzibar",       category: "Food & Drink",  volume: "Low",    intent: "High buyer intent" },
-  { tag: "#zanzibarcocktails", category: "Food & Drink",  volume: "Low",    intent: "Evening & nightlife" },
-  // Accommodation
-  { tag: "#zanzibarhotel",     category: "Accommodation", volume: "Medium", intent: "Booking intent" },
-  { tag: "#zanzibarresort",    category: "Accommodation", volume: "Medium", intent: "Booking intent" },
-  { tag: "#zanzibarvilla",     category: "Accommodation", volume: "Low",    intent: "Luxury booking" },
-  { tag: "#zanzibarairbnb",    category: "Accommodation", volume: "Low",    intent: "Booking intent" },
-  // Activities & Tours
-  { tag: "#zanzibarsnorkeling",category: "Activities",    volume: "Medium", intent: "Activity booking" },
-  { tag: "#zanzibarwatersports",category: "Activities",   volume: "Low",    intent: "Activity booking" },
-  { tag: "#zanzibarisland",    category: "Activities",    volume: "Medium", intent: "General exploration" },
-  { tag: "#zanzibarboattrip",  category: "Activities",    volume: "Low",    intent: "Activity booking" },
-  // Wellness & Spa
-  { tag: "#zanzibarspa",       category: "Wellness",      volume: "Low",    intent: "Wellness booking" },
-  { tag: "#zanzibarwellness",  category: "Wellness",      volume: "Low",    intent: "Wellness booking" },
-  // Nightlife
-  { tag: "#zanzibarnight",     category: "Nightlife",     volume: "Low",    intent: "Evening plans" },
-  { tag: "#zanzibarparty",     category: "Nightlife",     volume: "Low",    intent: "Nightlife intent" },
-];
+const DISCOVERY_HASHTAGS: { tag: string; category: string; volume: string; intent: string }[] = [];
 
-const DISCOVERY_KEYWORDS = [
-  // Food & Drink
-  { keyword: "where to eat zanzibar",    category: "Food",          priority: "High" },
-  { keyword: "best restaurant kendwa",   category: "Food",          priority: "High" },
-  { keyword: "food nungwi",              category: "Food",          priority: "High" },
-  { keyword: "healthy food zanzibar",    category: "Food",          priority: "Medium" },
-  { keyword: "vegan zanzibar",           category: "Food",          priority: "Medium" },
-  { keyword: "smoothie bowl zanzibar",   category: "Food",          priority: "Medium" },
-  // Accommodation
-  { keyword: "where to stay zanzibar",   category: "Accommodation", priority: "High" },
-  { keyword: "best hotel kendwa",        category: "Accommodation", priority: "High" },
-  { keyword: "villa zanzibar",           category: "Accommodation", priority: "Medium" },
-  { keyword: "budget accommodation nungwi", category: "Accommodation", priority: "Medium" },
-  // Activities
-  { keyword: "things to do zanzibar",    category: "Activities",    priority: "High" },
-  { keyword: "snorkeling zanzibar",      category: "Activities",    priority: "High" },
-  { keyword: "boat trip zanzibar",       category: "Activities",    priority: "Medium" },
-  { keyword: "zanzibar tour",            category: "Activities",    priority: "Medium" },
-  // General Discovery
-  { keyword: "zanzibar recommendations", category: "Discovery",     priority: "Medium" },
-  { keyword: "zanzibar hidden gem",      category: "Discovery",     priority: "Medium" },
-  { keyword: "zanzibar tips",            category: "Discovery",     priority: "Medium" },
-];
+const DISCOVERY_KEYWORDS: { keyword: string; category: string; priority: string }[] = [];
 
 const INITIAL_POSTS: Post[] = [];
 
@@ -559,13 +506,15 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [activeClientId, setActiveClientId] = useState(initialClients[0]?.id ?? "");
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
-  const [selectedId, setSelectedId] = useState("post-1");
+  const [selectedId, setSelectedId] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [isLive, setIsLive] = useState(true);
-  const [highValueOnly, setHighValueOnly] = useState(true);
+  const [highValueOnly, setHighValueOnly] = useState(false);
+  const [feedSearch, setFeedSearch] = useState("");
+  const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
-  const [query, setQuery] = useState("Find people asking about food in Zanzibar tonight");
+  const [query, setQuery] = useState("");
   const [selectedDiscoveryId, setSelectedDiscoveryId] = useState("disc-1");
   const [autoQueue, setAutoQueue] = useState(true);
   const [filterLowReplies, setFilterLowReplies] = useState(true);
@@ -786,14 +735,19 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
   }, [activeClientId, autoQueue, discoveryResults]);
 
   const visiblePosts = useMemo(() => {
-    const ranked = [...clientPosts].sort(
+    let list = [...clientPosts].sort(
       (a, b) =>
         getEngageScore(b) - getEngageScore(a) ||
         (b.posterScore ?? 0) - (a.posterScore ?? 0)
     );
-    if (!highValueOnly) return ranked;
-    return ranked.filter((post) => getEngageScore(post) >= 85);
-  }, [clientPosts, highValueOnly]);
+    if (highValueOnly) list = list.filter((p) => getEngageScore(p) >= 85);
+    if (feedPosterFilter !== "all") list = list.filter((p) => p.posterType === feedPosterFilter);
+    if (feedSearch.trim()) {
+      const q = feedSearch.trim().toLowerCase();
+      list = list.filter((p) => p.text.toLowerCase().includes(q) || p.author.toLowerCase().includes(q));
+    }
+    return list;
+  }, [clientPosts, highValueOnly, feedPosterFilter, feedSearch]);
 
   const ready = visiblePosts.filter((p) => p.status === "new");
   const saved = visiblePosts.filter((p) => p.status === "saved");
@@ -827,20 +781,32 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
   const renderFeed = () => (
     <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_420px]">
       <div>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium text-gray-900">Decision mode</div>
-            <div className="mt-1 text-sm text-gray-500">
-              Only surface the best opportunities first and act directly from the feed.
+        <div className="mb-5 space-y-3">
+          <input
+            type="text"
+            placeholder="Search comments..."
+            value={feedSearch}
+            onChange={(e) => setFeedSearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {(["all", "tourist", "creator"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFeedPosterFilter(f)}
+                className={`rounded-lg border px-3 py-1.5 text-sm transition ${feedPosterFilter === f ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                {f === "all" ? "All" : f === "tourist" ? "Tourists" : "Creators"}
+              </button>
+            ))}
+            <div className="ml-auto">
+              <button
+                onClick={() => setHighValueOnly((v) => !v)}
+                className={`rounded-lg border px-3 py-1.5 text-sm transition ${highValueOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                {highValueOnly ? "High value only" : "All scores"}
+              </button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setHighValueOnly((v) => !v)}
-              className={`rounded-lg border px-4 py-2 text-sm transition ${highValueOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
-            >
-              {highValueOnly ? "High value only" : "Show all"}
-            </button>
           </div>
         </div>
         <div className="mb-10">

@@ -16,6 +16,7 @@ async function getClients() {
     .select("client_id");
 
   const connectedIds = [...new Set((accountRows ?? []).map((r) => r.client_id))];
+  console.log("[interaction/getClients] accountRows:", accountRows, "connectedIds:", connectedIds);
   if (connectedIds.length === 0) return [];
 
   // Step 2: fetch only those clients (ig_handle may not exist in all envs)
@@ -26,11 +27,13 @@ async function getClients() {
     .order("name", { ascending: true });
 
   if (error) {
-    const { data: fallback } = await db
+    console.error("[interaction/getClients] step2 error:", error);
+    const { data: fallback, error: e2 } = await db
       .from("clients")
       .select("id, name")
       .in("id", connectedIds)
       .order("name", { ascending: true });
+    console.log("[interaction/getClients] fallback:", fallback, "fallbackError:", e2);
     return (fallback ?? []).map((c) => ({
       id: String(c.id),
       name: String(c.name),
@@ -38,6 +41,7 @@ async function getClients() {
     }));
   }
 
+  console.log("[interaction/getClients] clients found:", data?.length, data?.map((c) => c.name));
   return (data ?? []).map((c) => ({
     id: String(c.id),
     name: String(c.name),
