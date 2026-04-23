@@ -19,12 +19,19 @@ export async function GET() {
     .select("id, name, ig_handle, archived")
     .order("name", { ascending: true });
 
+  console.log("[admin/clients] error:", error);
+  console.log("[admin/clients] row count:", data?.length ?? 0);
+  console.log("[admin/clients] first row:", data?.[0] ?? null);
+
   if (error) {
     // ig_handle or archived column may not exist — retry with just id + name
     const fallback = await supabase
       .from("clients")
       .select("id, name")
       .order("name", { ascending: true });
+
+    console.log("[admin/clients] fallback error:", fallback.error);
+    console.log("[admin/clients] fallback count:", fallback.data?.length ?? 0);
 
     const clients = (fallback.data ?? []).map((c) => ({
       id: String(c.id),
