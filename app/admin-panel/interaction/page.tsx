@@ -10,24 +10,20 @@ async function getClients() {
 
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // Only return clients that have at least one connected Meta account
-  const { data, error } = await db
-    .from("clients")
-    .select("id, name, ig_handle, connected_meta_accounts!inner(client_id)")
-    .order("name", { ascending: true });
+  // Step 1: get distinct client IDs that have connected Meta accounts
+  const { data: accountRows } = await db
+    .from("connected_meta_accounts")
+    .select("client_id");
 
-  if (error) {
-    // Fallback: return all clients if the join or ig_handle column fails
-    const fallback = await db
-      .from("clients")
-      .select("id, name")
-      .order("name", { ascending: true });
-    return (fallback.data ?? []).map((c) => ({
-      id: String(c.id),
-      name: String(c.name),
-      handle: "",
-    }));
-  }
+  const connectedIds = [...new Set((accountRows ?? []).map((r) => r.client_id))];
+  if (connectedIds.length === 0) return [];
+
+  // Step 2: fetch only those clients
+  const { data } = await db
+    .from("clients")
+    .select("id, name, ig_handle")
+    .in("id", connectedIds)
+    .order("name", { ascending: true });
 
   return (data ?? []).map((c) => ({
     id: String(c.id),
