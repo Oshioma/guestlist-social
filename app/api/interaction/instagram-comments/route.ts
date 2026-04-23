@@ -353,14 +353,11 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
     if (err instanceof Error && err.message.startsWith("Instagram API error")) throw err;
     console.error(`[ig-comments] account ${acct.account_id} threw:`, err);
   }
-    }
-  }));
   console.log(`[ig-comments] total raw comments collected: ${raw.length}`);
 
   return raw
     .map((r, i) => normalizeComment(r, i))
     .filter((c): c is NormalizedComment => Boolean(c))
-    .filter((c) => keywords.length === 0 || keywords.some((kw) => c.text.toLowerCase().includes(kw)))
     .sort((a, b) => b.posterScore - a.posterScore)
     .slice(0, limit);
 }
