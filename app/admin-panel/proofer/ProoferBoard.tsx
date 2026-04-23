@@ -18,6 +18,8 @@ import {
   saveProoferPostAction,
   updateProoferStatusAction,
   deleteProoferPostAction,
+  propagateProoferPlatformForwardAction,
+  propagateProoferPillarForwardAction,
   addProoferCommentAction,
   toggleProoferCommentResolvedAction,
   createContentPillarAction,
@@ -352,6 +354,7 @@ export default function ProoferBoard({
   }, [initialPosts]);
 
   const days = useMemo(() => daysInMonth(month), [month]);
+  const monthValues = useMemo(() => months.map((m) => m.value), [months]);
 
   function getActivePlatform(dateKey: string): ProoferPlatform {
     const stored = activePlatformByDate[dateKey];
@@ -367,6 +370,52 @@ export default function ProoferBoard({
 
   function setActivePlatform(dateKey: string, platform: ProoferPlatform) {
     setActivePlatformByDate((prev) => ({ ...prev, [dateKey]: platform }));
+  }
+
+  function handlePlatformChange(dateKey: string, platform: ProoferPlatform) {
+    setActivePlatform(dateKey, platform);
+    if (!clientId) return;
+    startTransition(async () => {
+      try {
+        await propagateProoferPlatformForwardAction(
+          clientId,
+          dateKey,
+          platform,
+          monthValues
+        );
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Could not copy platform to future months."
+        );
+      }
+    });
+  }
+
+  function handlePillarPropagation(
+    dateKey: string,
+    platform: ProoferPlatform,
+    pillarId: string | null
+  ) {
+    if (!clientId) return;
+    startTransition(async () => {
+      try {
+        await propagateProoferPillarForwardAction(
+          clientId,
+          dateKey,
+          platform,
+          pillarId,
+          monthValues
+        );
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Could not copy pillar to future months."
+        );
+      }
+    });
   }
 
   function getDraftFor(dateKey: string, platform: ProoferPlatform): Draft {
@@ -1686,7 +1735,7 @@ export default function ProoferBoard({
                       <select
                         value={activePlatform}
                         onChange={(e) =>
-                          setActivePlatform(
+                          handlePlatformChange(
                             dateKey,
                             e.target.value as ProoferPlatform
                           )
@@ -1811,6 +1860,11 @@ export default function ProoferBoard({
                                     updateDraft(dateKey, activePlatform, {
                                       pillarId: null,
                                     });
+                                    handlePillarPropagation(
+                                      dateKey,
+                                      activePlatform,
+                                      null
+                                    );
                                     setOpenPillarPickerKey(null);
                                   }}
                                   style={{
@@ -1866,6 +1920,11 @@ export default function ProoferBoard({
                                               ? draft.linkedIdeaKind
                                               : null,
                                         });
+                                        handlePillarPropagation(
+                                          dateKey,
+                                          activePlatform,
+                                          pillar.id
+                                        );
                                         setOpenPillarPickerKey(null);
                                       }}
                                       title={pillar.description || pillar.name}
