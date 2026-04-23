@@ -30,6 +30,8 @@ export async function GET(req: Request) {
   const nonce = randomBytes(16).toString("hex");
   const state = `${clientId}:${nonce}`;
 
+  const returnTo = searchParams.get("returnTo") ?? "";
+
   const cookieStore = await cookies();
   cookieStore.set("meta_oauth_state", state, {
     httpOnly: true,
@@ -38,6 +40,15 @@ export async function GET(req: Request) {
     path: "/",
     maxAge: 600,
   });
+  if (returnTo) {
+    cookieStore.set("meta_oauth_return", `${returnTo}:${clientId}`, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 600,
+    });
+  }
 
   try {
     const authorizeUrl = metaAuthorizeUrl(state);

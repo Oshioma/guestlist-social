@@ -17,8 +17,8 @@ import {
 // `connected_meta_accounts` via the service-role client so they never touch
 // browser code.
 //
-// On success the user is bounced back to /app/proofer/publish?meta=connected.
-// On failure they land at /app/proofer/publish?meta_error=<message>.
+// On success redirects to the portal connect page (if returnTo=portal cookie
+// is set) or /admin-panel/proofer/publish (default).
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -27,39 +27,53 @@ export async function GET(req: Request) {
   const metaError = url.searchParams.get("error");
   const metaErrorDescription = url.searchParams.get("error_description");
 
-  if (metaError) {
-    return redirectWithError(
-      req,
-      metaErrorDescription || `Meta returned error: ${metaError}`
-    );
-  }
-  if (!code || !returnedState) {
-    return redirectWithError(req, "Missing code or state from Meta callback.");
-  }
-
   const cookieStore = await cookies();
   const storedState = cookieStore.get("meta_oauth_state")?.value;
+  const returnCookie = cookieStore.get("meta_oauth_return")?.value ?? "";
+  cookieStore.delete("meta_oauth_return");
+
+  const successBase = returnCookie.startsWith("portal:")
+    ? `/portal/${returnCookie.split(":")[1]}/connect`
+    : "/admin-panel/proofer/publish";
+  const errorBase = successBase;
+
+  function redirectSuccess(extra: Record<string, string>) {
+    const target = new URL(successBase, req.url);
+    for (const [k, v] of Object.entries(extra)) target.searchParams.set(k, v);
+    return NextResponse.redirect(target);
+  }
+
+  function redirectError(message: string) {
+    const target = new URL(errorBase, req.url);
+    target.searchParams.set("meta_error", message);
+    return NextResponse.redirect(target);
+  }
+
+  if (metaError) {
+    return redirectError(metaErrorDescription || `Meta returned error: ${metaError}`);
+  }
+  if (!code || !returnedState) {
+    return redirectError("Missing code or state from Meta callback.");
+  }
   if (!storedState || storedState !== returnedState) {
-    return redirectWithError(req, "OAuth state mismatch — please try again.");
+    cookieStore.delete("meta_oauth_state");
+    return redirectError("OAuth state mismatch — please try again.");
   }
   cookieStore.delete("meta_oauth_state");
 
   const clientIdPart = storedState.split(":")[0];
   const clientIdNum = Number(clientIdPart);
   if (!clientIdPart || Number.isNaN(clientIdNum)) {
-    return redirectWithError(req, "Invalid client id in OAuth state.");
+    return redirectError("Invalid client id in OAuth state.");
   }
 
   try {
     const shortLived = await exchangeCodeForUserToken(code);
-    const longLived = await exchangeForLongLivedUserToken(
-      shortLived.accessToken
-    );
+    const longLived = await exchangeForLongLivedUserToken(shortLived.accessToken);
 
     const pages = await fetchUserPages(longLived.accessToken);
     if (pages.length === 0) {
-      return redirectWithError(
-        req,
+      return redirectError(
         "No Facebook Pages found for this Meta account. Create or join a Page first, then retry."
       );
     }
@@ -115,20 +129,10 @@ export async function GET(req: Request) {
       }
     }
 
-    const target = new URL("/admin-panel/proofer/publish", req.url);
-    target.searchParams.set("meta", "connected");
-    target.searchParams.set("fb", String(fbCount));
-    target.searchParams.set("ig", String(igCount));
-    return NextResponse.redirect(target);
+    return redirectSuccess({ meta: "connected", fb: String(fbCount), ig: String(igCount) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("meta/callback error:", err);
-    return redirectWithError(req, message);
+    return redirectError(message);
   }
-}
-
-function redirectWithError(req: Request, message: string) {
-  const target = new URL("/admin-panel/proofer/publish", req.url);
-  target.searchParams.set("meta_error", message);
-  return NextResponse.redirect(target);
 }

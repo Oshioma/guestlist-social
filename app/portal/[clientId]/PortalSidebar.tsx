@@ -31,6 +31,7 @@ export default function PortalSidebar({
     { label: "Ads", href: `${base}/ads` },
     { label: "Reviews", href: `${base}/reviews` },
     { label: "Consultation", href: `${base}/consultation` },
+    { label: "Connect Meta", href: `${base}/connect` },
   ];
 
   return (
