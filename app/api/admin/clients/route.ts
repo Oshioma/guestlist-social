@@ -15,7 +15,7 @@ export async function GET() {
   const { data } = await supabase
     .from("clients")
     .select("id, name, ig_handle")
-    .eq("archived", false)
+    .neq("archived", true)
     .order("name", { ascending: true });
 
   const clients = (data ?? []).map((c) => ({

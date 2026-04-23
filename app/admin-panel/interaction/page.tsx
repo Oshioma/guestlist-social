@@ -815,9 +815,11 @@ export default function InteractionEngineUI() {
     fetch("/api/admin/clients")
       .then((r) => r.json())
       .then((d) => {
-        if (d.ok && Array.isArray(d.clients) && d.clients.length > 0) {
+        if (d.ok && Array.isArray(d.clients)) {
           setClients(d.clients);
-          setActiveClientId((prev) => prev || d.clients[0].id);
+          if (d.clients.length > 0) {
+            setActiveClientId((prev) => prev || d.clients[0].id);
+          }
         } else {
           console.error("Failed to load clients:", d);
         }
@@ -1740,7 +1742,7 @@ export default function InteractionEngineUI() {
                   onChange={(event) => setActiveClientId(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-semibold tracking-tight text-gray-900 outline-none focus:border-black"
                 >
-                  {clients.length === 0 && <option value="">Loading clients…</option>}
+                  {clients.length === 0 && <option value="">No clients found</option>}
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>
                       {client.name}
