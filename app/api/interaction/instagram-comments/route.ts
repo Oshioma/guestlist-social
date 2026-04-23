@@ -391,12 +391,11 @@ async function handleRequest(accountId: string, limit: number) {
   let response: Response;
   if (proxyMethod === "GET") {
     const url = new URL(proxyUrl);
-    if (clientId) url.searchParams.set("clientId", clientId);
-    if (handle) url.searchParams.set("handle", handle);
+    if (accountId) url.searchParams.set("accountId", accountId);
     url.searchParams.set("limit", String(limit));
     response = await fetch(url.toString(), { method: "GET", headers, cache: "no-store" });
   } else {
-    response = await fetch(proxyUrl, { method: "POST", headers, body: JSON.stringify({ clientId, handle, limit, platform: "instagram" }), cache: "no-store" });
+    response = await fetch(proxyUrl, { method: "POST", headers, body: JSON.stringify({ accountId, limit, platform: "instagram" }), cache: "no-store" });
   }
 
   const rawText = await response.text();
