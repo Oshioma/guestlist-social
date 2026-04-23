@@ -18,12 +18,25 @@ async function getClients() {
   const connectedIds = [...new Set((accountRows ?? []).map((r) => r.client_id))];
   if (connectedIds.length === 0) return [];
 
-  // Step 2: fetch only those clients
-  const { data } = await db
+  // Step 2: fetch only those clients (ig_handle may not exist in all envs)
+  const { data, error } = await db
     .from("clients")
     .select("id, name, ig_handle")
     .in("id", connectedIds)
     .order("name", { ascending: true });
+
+  if (error) {
+    const { data: fallback } = await db
+      .from("clients")
+      .select("id, name")
+      .in("id", connectedIds)
+      .order("name", { ascending: true });
+    return (fallback ?? []).map((c) => ({
+      id: String(c.id),
+      name: String(c.name),
+      handle: "",
+    }));
+  }
 
   return (data ?? []).map((c) => ({
     id: String(c.id),
