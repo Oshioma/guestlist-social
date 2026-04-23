@@ -11,6 +11,8 @@ const titles: Record<string, string> = {
   "/app/content": "Content Dashboard",
   "/app/clients": "Clients",
   "/app/engine": "Engine Dashboard",
+  "/app/engine-settings": "Engine Settings",
+  "/app/outcomes": "Outcomes",
   "/app/interaction": "Interaction",
   "/app/meta-queue": "Meta Queue",
   "/app/whats-working": "Playbook",

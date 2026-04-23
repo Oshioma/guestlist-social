@@ -24,6 +24,9 @@ const ADS_ITEMS: NavItem[] = [
 
 const ENGINE_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app/engine" },
+  { label: "Overview", href: "/app/overview" },
+  { label: "Decisions", href: "/app/decisions" },
+  { label: "Outcomes", href: "/app/outcomes" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
@@ -63,6 +66,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
 
 function buildUtilityItems(_isAdmin: boolean): NavItem[] {
   return [
+    { label: "Engine settings", href: "/app/engine-settings" },
     { label: "Settings", href: "/app/settings" },
     { label: "Consultation Template", href: "/app/settings/consultation" },
     { label: "Guide", href: "/app/guide" },

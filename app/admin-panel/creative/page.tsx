@@ -15,6 +15,9 @@ import { createClient } from "@/lib/supabase/server";
 import { capitalizeFirst } from "@/app/admin-panel/lib/utils";
 import CreativeLibrary, { type CreativeCard } from "./CreativeLibrary";
 import EngineNav from "@/app/admin-panel/components/EngineNav";
+import CreativeLabPageClient, {
+  type WeakAd,
+} from "./CreativeLabPageClient";
 
 export const dynamic = "force-dynamic";
 
@@ -254,6 +257,56 @@ export default async function CreativePage() {
     hooks: dedupeHooks(cards),
   };
 
+  // Weak-ad feed for the new Creative Lab surface.
+  const weakAds: WeakAd[] = cards
+    .filter((c) => {
+      const status = (c.status ?? "").toLowerCase();
+      return (
+        status === "losing" ||
+        (c.ctr > 0 && c.ctr < 0.9 && c.spend >= 20) ||
+        (c.conversions === 0 && c.spend >= 40)
+      );
+    })
+    .sort((a, b) => {
+      const scoreA = a.ctr * 10 - a.spend / 10;
+      const scoreB = b.ctr * 10 - b.spend / 10;
+      return scoreA - scoreB;
+    })
+    .slice(0, 12)
+    .map((c) => {
+      const hookFallback = c.hook ?? c.headline ?? "Hook needs work.";
+      const suggestionBase =
+        c.suggestedNextMove ??
+        "Refresh the opening line to be more scene-led and specific.";
+      return {
+        id: c.id,
+        name: c.name,
+        campaign:
+          c.clientName !== "—" ? `${c.clientName} campaign` : "Active campaign",
+        problem:
+          c.ctr < 0.6
+            ? "Weak hook"
+            : c.conversions === 0 && c.spend > 40
+            ? "Low conversion intent"
+            : "Too generic",
+        why:
+          c.reason ||
+          "Performance is soft enough to justify a creative refresh before pausing.",
+        currentHook: hookFallback,
+        image: c.imageUrl ?? "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+        primaryText:
+          c.body ??
+          "Current copy is underperforming relative to account benchmarks.",
+        headline: c.headline ?? c.name,
+        cta: c.cta ?? "Learn More",
+        suggestions: [
+          suggestionBase,
+          "Lead with a concrete scene or benefit in the first 6-10 words.",
+          "Tighten the opening to one clear promise and one clear CTA.",
+        ],
+      } satisfies WeakAd;
+    });
+
   return (
     <div
       style={{
@@ -305,6 +358,8 @@ export default async function CreativePage() {
 
       {/* Intelligence summary */}
       <CreativeIntelligence summary={summary} />
+
+      <CreativeLabPageClient weakAds={weakAds} />
 
       <CreativeLibrary cards={cards} filterUniverse={filterUniverse} />
     </div>
