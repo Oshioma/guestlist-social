@@ -120,6 +120,44 @@ function formatDate(dueDate: string) {
   });
 }
 
+function renderTextWithLinks(text: string): React.ReactNode[] {
+  const urlRegex = /https?:\/\/[^\s)>\]"']+/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>
+      );
+    }
+    // Strip trailing punctuation that is unlikely to be part of the URL
+    const url = match[0].replace(/[.,;:!?)]+$/, "");
+    const afterUrl = match.index + match[0].length;
+    parts.push(
+      <a
+        key={`u-${match.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#2563eb", textDecoration: "underline", wordBreak: "break-all" }}
+      >
+        {url}
+      </a>
+    );
+    // If trailing punctuation was stripped, add it back as plain text
+    if (url.length < match[0].length) {
+      const trailing = match[0].slice(url.length);
+      parts.push(<span key={`t-${match.index}-trail`}>{trailing}</span>);
+    }
+    lastIndex = afterUrl;
+  }
+  if (lastIndex < text.length) {
+    parts.push(<span key={`t-${lastIndex}-end`}>{text.slice(lastIndex)}</span>);
+  }
+  return parts;
+}
+
 const inputStyle: React.CSSProperties = {
   padding: "8px 10px",
   borderRadius: 8,
@@ -694,9 +732,10 @@ export default function TasksBoard({
                   whiteSpace: "pre-wrap",
                 }}
               >
-                {task.description}
+                {renderTextWithLinks(task.description)}
               </div>
             )}
+
             <div
               style={{
                 fontSize: 12,
