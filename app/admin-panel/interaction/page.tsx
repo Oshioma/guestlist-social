@@ -10,17 +10,29 @@ async function getClients() {
 
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data } = await db
+  // Try with ig_handle first; fall back to just id+name if column doesn't exist yet
+  const { data, error } = await db
     .from("clients")
     .select("id, name, ig_handle")
     .order("name", { ascending: true });
 
-  return (data ?? [])
-    .map((c) => ({
+  if (error) {
+    const fallback = await db
+      .from("clients")
+      .select("id, name")
+      .order("name", { ascending: true });
+    return (fallback.data ?? []).map((c) => ({
       id: String(c.id),
       name: String(c.name),
-      handle: c.ig_handle ? `@${String(c.ig_handle).replace(/^@/, "")}` : "",
+      handle: "",
     }));
+  }
+
+  return (data ?? []).map((c) => ({
+    id: String(c.id),
+    name: String(c.name),
+    handle: c.ig_handle ? `@${String(c.ig_handle).replace(/^@/, "")}` : "",
+  }));
 }
 
 export default async function InteractionPage() {
