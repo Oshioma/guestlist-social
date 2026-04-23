@@ -4,7 +4,6 @@ import SectionCard from "@/app/admin-panel/components/SectionCard";
 import MemoryForm from "@/app/admin-panel/components/MemoryForm";
 import DeleteMemoryButton from "@/app/admin-panel/components/DeleteMemoryButton";
 import { formatDate } from "@/app/admin-panel/lib/utils";
-import EngineNav from "@/app/admin-panel/components/EngineNav";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +40,6 @@ export default async function MemoryPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <EngineNav />
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Memory</h2>
         <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
