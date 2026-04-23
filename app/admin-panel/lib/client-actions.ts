@@ -362,8 +362,13 @@ export async function createClientAction(formData: FormData) {
   const monthlyBudget = Number(formData.get("monthlyBudget") ?? 0);
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
+  const igHandle = String(formData.get("igHandle") ?? "").trim().replace(/^@/, "");
   const notes = String(formData.get("notes") ?? "").trim();
   const industry = String(formData.get("industry") ?? "").trim();
+  let metaAdAccountId = String(formData.get("metaAdAccountId") ?? "").trim();
+  if (metaAdAccountId && !metaAdAccountId.startsWith("act_")) {
+    metaAdAccountId = `act_${metaAdAccountId}`;
+  }
   const consultationImport = String(formData.get("consultationRow") ?? "").trim();
 
   if (!name) {
@@ -387,11 +392,16 @@ export async function createClientAction(formData: FormData) {
     monthly_budget: monthlyBudget,
     status: dbStatus,
     website_url: websiteUrl || null,
+    ig_handle: igHandle || null,
     notes: notes || null,
   };
 
   if (industry) {
     insertPayload.industry = industry;
+  }
+
+  if (metaAdAccountId) {
+    insertPayload.meta_ad_account_id = metaAdAccountId;
   }
 
   let insertResult = await supabase
