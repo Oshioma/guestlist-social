@@ -321,9 +321,12 @@ function scorePill(
 }
 
 function MediaThumb({ post, className = "" }: { post: Post; className?: string }) {
-  const inner = post.mediaUrl ? (
+  const proxied = post.mediaUrl
+    ? `/api/admin/proxy-image?url=${encodeURIComponent(post.mediaUrl)}`
+    : null;
+  const inner = proxied ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={post.mediaUrl} alt="" className="h-full w-full object-cover" />
+    <img src={proxied} alt="" className="h-full w-full object-cover" />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-gray-300 text-2xl">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>

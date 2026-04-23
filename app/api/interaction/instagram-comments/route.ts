@@ -344,11 +344,12 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
     await Promise.all((mediaData.data ?? []).slice(0, 8).map(async (m) => {
       // VIDEO posts use thumbnail_url; IMAGE/CAROUSEL use media_url
       const postImageUrl = m.thumbnail_url ?? m.media_url ?? "";
-      const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
+      const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,from,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
       if (!res.ok) return;
-      const d = await res.json() as { data?: { id: string; text?: string; username?: string; timestamp?: string; like_count?: number }[] };
+      const d = await res.json() as { data?: { id: string; text?: string; username?: string; from?: { username?: string; name?: string }; timestamp?: string; like_count?: number }[] };
       for (const c of d.data ?? []) {
-        raw.push({ id: c.id, username: c.username, text: c.text, timestamp: c.timestamp, permalink: m.permalink, mediaUrl: postImageUrl });
+        const handle = c.username || c.from?.username || c.from?.name || null;
+        raw.push({ id: c.id, username: handle, text: c.text, timestamp: c.timestamp, permalink: m.permalink, mediaUrl: postImageUrl });
       }
     }));
   } catch (err) {
