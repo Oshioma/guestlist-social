@@ -818,9 +818,11 @@ export default function InteractionEngineUI() {
         if (d.ok && Array.isArray(d.clients) && d.clients.length > 0) {
           setClients(d.clients);
           setActiveClientId((prev) => prev || d.clients[0].id);
+        } else {
+          console.error("Failed to load clients:", d);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error("Client fetch error:", err));
   }, []);
 
   useEffect(() => {
