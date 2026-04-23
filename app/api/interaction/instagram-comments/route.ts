@@ -332,21 +332,23 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
   const raw: ProxyComment[] = [];
 
   try {
-    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink&limit=10&access_token=${acct.access_token}`);
+    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,media_url,thumbnail_url,media_type&limit=10&access_token=${acct.access_token}`);
     if (!mediaRes.ok) {
       const errBody = await mediaRes.text().catch(() => "");
       console.error(`[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
       throw new Error(`Instagram API error ${mediaRes.status}: ${errBody.slice(0, 120)}`);
     }
-    const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string }[] };
+    const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string; media_url?: string; thumbnail_url?: string; media_type?: string }[] };
     console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
 
     await Promise.all((mediaData.data ?? []).slice(0, 8).map(async (m) => {
+      // VIDEO posts use thumbnail_url; IMAGE/CAROUSEL use media_url
+      const postImageUrl = m.thumbnail_url ?? m.media_url ?? "";
       const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
       if (!res.ok) return;
       const d = await res.json() as { data?: { id: string; text?: string; username?: string; timestamp?: string; like_count?: number }[] };
       for (const c of d.data ?? []) {
-        raw.push({ id: c.id, username: c.username, text: c.text, timestamp: c.timestamp, permalink: m.permalink });
+        raw.push({ id: c.id, username: c.username, text: c.text, timestamp: c.timestamp, permalink: m.permalink, mediaUrl: postImageUrl });
       }
     }));
   } catch (err) {

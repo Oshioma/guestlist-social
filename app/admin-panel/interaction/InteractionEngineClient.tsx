@@ -320,12 +320,28 @@ function scorePill(
 }
 
 function MediaThumb({ post, className = "" }: { post: Post; className?: string }) {
-  return (
-    <div
-      className={`relative overflow-hidden rounded-lg border border-gray-200 bg-gray-100 ${className}`}
+  const inner = post.mediaUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={post.mediaUrl} alt="" className="h-full w-full object-cover" />
+  ) : (
+    <div className="flex h-full w-full items-center justify-center text-gray-300 text-2xl">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+    </div>
+  );
+
+  return post.permalink ? (
+    <a
+      href={post.permalink}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={`relative overflow-hidden rounded-lg border border-gray-200 bg-gray-100 block ${className}`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={post.mediaUrl} alt={post.text} className="h-full w-full object-cover" />
+      {inner}
+    </a>
+  ) : (
+    <div className={`relative overflow-hidden rounded-lg border border-gray-200 bg-gray-100 ${className}`}>
+      {inner}
     </div>
   );
 }
@@ -371,7 +387,13 @@ function PostCard({
         <div className="flex-1">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="text-base font-semibold tracking-tight text-gray-950">{post.author}</div>
+              <div className="text-base font-semibold tracking-tight text-gray-950">
+                {post.permalink ? (
+                  <a href={post.permalink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="hover:underline">
+                    {post.author}
+                  </a>
+                ) : post.author}
+              </div>
               <div className="mt-1 text-xs text-gray-400">
                 {post.platform} • {post.time}
               </div>
@@ -881,12 +903,22 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
           <>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-lg font-semibold tracking-tight">{active.author}</div>
+                <div className="text-lg font-semibold tracking-tight">
+                  {active.permalink ? (
+                    <a href={active.permalink} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {active.author}
+                    </a>
+                  ) : active.author}
+                </div>
                 <div className="text-sm text-gray-500">
                   {active.platform} • {active.time}
                 </div>
               </div>
-              <div className="text-xs text-gray-400">Detail panel</div>
+              {active.permalink && (
+                <a href={active.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-700 hover:underline">
+                  View post ↗
+                </a>
+              )}
             </div>
             <div className="mt-5">
               <MediaThumb post={active} className="h-52 w-full" />
