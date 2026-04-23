@@ -37,6 +37,7 @@ type Post = {
   risk: number;
   comment: string;
   mediaUrl: string;
+  permalink?: string | null;
   status: PostStatus;
   why: string[];
   posterType?: "tourist" | "creator" | "spam";
