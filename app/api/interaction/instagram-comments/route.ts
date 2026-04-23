@@ -330,8 +330,13 @@ async function fetchFromMetaGraph(clientId: string, keywords: string[], limit: n
     try {
       if (acct.platform === "instagram") {
         const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink&limit=8&access_token=${acct.access_token}`);
-        if (!mediaRes.ok) return;
+        if (!mediaRes.ok) {
+          const errBody = await mediaRes.text().catch(() => "");
+          console.error(`[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
+          return;
+        }
         const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string }[] };
+        console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
         await Promise.all((mediaData.data ?? []).slice(0, 6).map(async (m) => {
           const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
           if (!res.ok) return;
@@ -342,7 +347,11 @@ async function fetchFromMetaGraph(clientId: string, keywords: string[], limit: n
         }));
       } else if (acct.platform === "facebook") {
         const postsRes = await fetch(`${GRAPH}/${acct.account_id}/posts?fields=id,created_time&limit=8&access_token=${acct.access_token}`);
-        if (!postsRes.ok) return;
+        if (!postsRes.ok) {
+          const errBody = await postsRes.text().catch(() => "");
+          console.error(`[ig-comments] FB posts fetch failed ${postsRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
+          return;
+        }
         const postsData = await postsRes.json() as { data?: { id: string }[] };
         await Promise.all((postsData.data ?? []).slice(0, 6).map(async (post) => {
           const res = await fetch(`${GRAPH}/${post.id}/comments?fields=id,message,from,created_time,like_count&limit=25&access_token=${acct.access_token}`);
@@ -353,8 +362,11 @@ async function fetchFromMetaGraph(clientId: string, keywords: string[], limit: n
           }
         }));
       }
-    } catch { /* skip failed accounts */ }
+    } catch (err) {
+      console.error(`[ig-comments] account ${acct.account_id} threw:`, err);
+    }
   }));
+  console.log(`[ig-comments] total raw comments collected: ${raw.length}`);
 
   return raw
     .map((r, i) => normalizeComment(r, i))
@@ -376,12 +388,15 @@ async function handleRequest(clientId: string, handle: string, limit: number) {
   const keywordsRaw = String(process.env.INTERACTION_IG_KEYWORDS ?? "zanzibar,kendwa,nungwi,restaurant,lunch,dinner,smoothie,food").trim();
   const keywords = keywordsRaw.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean);
 
-  // Use Meta Graph API when no proxy URL is configured
+  // Use Meta Graph API when no proxy URL is configured.
+  // Skip keyword filtering — we're fetching comments on the client's own posts,
+  // not searching hashtags, so filtering by location/food keywords would exclude
+  // most legitimate comments.
   if (!proxyUrl) {
     if (!clientId) {
       return NextResponse.json({ ok: false, error: "clientId required when INTERACTION_IG_SOURCE_URL is not set." }, { status: 400 });
     }
-    const comments = await fetchFromMetaGraph(clientId, keywords, limit);
+    const comments = await fetchFromMetaGraph(clientId, [], limit);
     return NextResponse.json({ ok: true, comments, source: "meta-graph", fetched: comments.length, fetchedAt: new Date().toISOString() });
   }
 
