@@ -17,16 +17,8 @@ type Props = {
   canRunAds: boolean;
 };
 
-const ADS_ITEMS: NavItem[] = [
-  { label: "Clients", href: "/app/clients" },
-  { label: "Client view", href: "/portal" },
-];
-
 const ENGINE_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app/engine" },
-  { label: "Overview", href: "/app/overview" },
-  { label: "Decisions", href: "/app/decisions" },
-  { label: "Outcomes", href: "/app/outcomes" },
   { label: "Meta queue", href: "/app/meta-queue" },
   { label: "Playbook", href: "/app/whats-working" },
   { label: "Creative library", href: "/app/creative" },
@@ -35,6 +27,8 @@ const ENGINE_ITEMS: NavItem[] = [
 ];
 
 const PUBLISHER_ITEMS: NavItem[] = [
+  { label: "Clients", href: "/app/clients" },
+  { label: "Client view", href: "/portal" },
   { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
   { label: "Content Dashboard", href: "/app/content" },
@@ -43,14 +37,9 @@ const PUBLISHER_ITEMS: NavItem[] = [
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
   const groups: NavGroup[] = [{ heading: "Dashboard", items: [], headingHref: "/app/dashboard" }];
 
-  if (canRunAds) {
-    groups.push({ heading: "INTERACTION", items: [], headingHref: "/app/interaction" });
-  }
-
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
   if (canRunAds) {
-    groups.push({ heading: "ADS", items: ADS_ITEMS, collapsible: true });
     groups.push({
       heading: "Engine",
       items: ENGINE_ITEMS,
