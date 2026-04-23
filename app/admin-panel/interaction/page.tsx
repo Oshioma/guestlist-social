@@ -805,10 +805,10 @@ export default function InteractionEngineUI() {
     "Learnings",
   ];
 
-  const activeClient = clients.find((c) => c.id === activeClientId) ?? clients[0];
+  const activeClient = clients.find((c) => c.id === activeClientId) ?? clients[0] ?? null;
   const clientPosts = useMemo(
-    () => posts.filter((p) => p.clientId === activeClient.id),
-    [posts, activeClient.id]
+    () => (activeClient ? posts.filter((p) => p.clientId === activeClient.id) : []),
+    [posts, activeClient?.id]
   );
 
   useEffect(() => {
@@ -1746,7 +1746,7 @@ export default function InteractionEngineUI() {
                   ))}
                 </select>
               </div>
-              <div className="mt-1 text-sm text-gray-500">{activeClient.handle}</div>
+              <div className="mt-1 text-sm text-gray-500">{activeClient?.handle ?? ""}</div>
             </div>
             <div className="flex items-center gap-3">
               <div
