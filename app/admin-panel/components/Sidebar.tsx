@@ -38,7 +38,6 @@ const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
   { label: "Content Dashboard", href: "/app/content" },
-  { label: "Interactions", href: "/app/interactions" },
 ];
 
 function buildNavGroups(canRunAds: boolean): NavGroup[] {
