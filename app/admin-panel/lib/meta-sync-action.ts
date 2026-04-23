@@ -330,9 +330,9 @@ export async function syncMetaData(clientId: string) {
         followers_gained: 0,
       };
 
-      // Prefer full-size image_url, then try object_story_spec, fallback to thumbnail
+      // Use the best available image from the creative
       const storySpec = (metaAd.creative as any)?.object_story_spec;
-      const storyImage = storySpec?.link_data?.picture ?? storySpec?.link_data?.image_url ?? storySpec?.photo_data?.url ?? null;
+      const storyImage = storySpec?.link_data?.picture ?? storySpec?.photo_data?.url ?? null;
       const creative_image_url =
         metaAd.creative?.image_url ??
         storyImage ??

@@ -522,6 +522,15 @@ export default async function ClientDetailPage({
                 (ad) => String(ad.status) === "winner"
               ).length;
 
+              const campaignConversions = campaignAdsRaw.reduce(
+                (sum, ad) => sum + Number(ad.conversions ?? 0),
+                0
+              );
+              const campaignCostPerResult =
+                campaignConversions > 0
+                  ? (campaignSpend / campaignConversions)
+                  : 0;
+
               return (
                 <div
                   key={campaign.id}
@@ -695,44 +704,45 @@ export default async function ClientDetailPage({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                      gap: 12,
+                      gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+                      gap: 10,
                       marginTop: 14,
                     }}
                   >
                     <div style={miniStatStyle}>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Budget
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
-                        {formatCurrency(Number(campaign.budget ?? 0))}/day
-                      </div>
-                    </div>
-
-                    <div style={miniStatStyle}>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Spend
-                      </div>
+                      <div style={{ fontSize: 11, color: "#71717a" }}>Spend</div>
                       <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
                         {formatCurrency(campaignSpend)}
                       </div>
                     </div>
-
                     <div style={miniStatStyle}>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        CTR
+                      <div style={{ fontSize: 11, color: "#71717a" }}>Impressions</div>
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
+                        {campaignImpressions.toLocaleString()}
                       </div>
+                    </div>
+                    <div style={miniStatStyle}>
+                      <div style={{ fontSize: 11, color: "#71717a" }}>CTR</div>
                       <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600, color: Number(campaignCtr ?? 0) >= 2 ? "#166534" : "#18181b" }}>
                         {campaignCtr ? `${campaignCtr}%` : "—"}
                       </div>
                     </div>
-
                     <div style={miniStatStyle}>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        Ads
+                      <div style={{ fontSize: 11, color: "#71717a" }}>Results</div>
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600, color: campaignConversions > 0 ? "#166534" : "#18181b" }}>
+                        {campaignConversions || "—"}
                       </div>
+                    </div>
+                    <div style={miniStatStyle}>
+                      <div style={{ fontSize: 11, color: "#71717a" }}>Cost/Result</div>
                       <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
-                        {campaignAdsRaw.length}
+                        {campaignCostPerResult > 0 ? formatCurrency(campaignCostPerResult) : "—"}
+                      </div>
+                    </div>
+                    <div style={miniStatStyle}>
+                      <div style={{ fontSize: 11, color: "#71717a" }}>Budget</div>
+                      <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600 }}>
+                        {formatCurrency(Number(campaign.budget ?? 0))}/day
                       </div>
                     </div>
                   </div>
