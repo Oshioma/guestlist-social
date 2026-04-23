@@ -35,6 +35,71 @@ function normalizeMediaUrls(value: unknown): string[] {
     .filter((v) => v.length > 0);
 }
 
+function parseDateKey(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || !month || !day || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function buildDateKey(year: number, month: number, day: number): string | null {
+  if (!year || !month || !day) return null;
+  const maxDay = new Date(year, month, 0).getDate();
+  if (day > maxDay) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function buildForwardDateKeys(sourceDate: string, monthValues: string[]): string[] {
+  const parsed = parseDateKey(sourceDate);
+  if (!parsed) return [];
+  const sourceMonth = `${parsed.year}-${String(parsed.month).padStart(2, "0")}`;
+
+  const uniqueFutureMonths = Array.from(
+    new Set(
+      monthValues
+        .map((value) => value.trim())
+        .filter((value) => /^\d{4}-\d{2}$/.test(value))
+        .filter((value) => value > sourceMonth)
+    )
+  ).sort();
+
+  const targets: string[] = [];
+  for (const monthValue of uniqueFutureMonths) {
+    const [yearStr, monthStr] = monthValue.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const dateKey = buildDateKey(year, month, parsed.day);
+    if (dateKey) targets.push(dateKey);
+  }
+  return targets;
+}
+
+function isPlaceholderPostRow(row: {
+  caption: string | null;
+  media_urls: unknown;
+  status: string | null;
+  pillar_id: string | null;
+  linked_idea_id: string | null;
+  linked_idea_kind: string | null;
+}): boolean {
+  const caption = (row.caption ?? "").trim();
+  const hasMedia = Array.isArray(row.media_urls) && row.media_urls.length > 0;
+  const status = normalizeStatus(row.status ?? "none");
+  return (
+    caption.length === 0 &&
+    !hasMedia &&
+    status === "none" &&
+    !row.pillar_id &&
+    !row.linked_idea_id &&
+    !row.linked_idea_kind
+  );
+}
+
 const VALID_QUEUE_PLATFORMS = ["instagram", "facebook"] as const;
 type QueuePlatform = (typeof VALID_QUEUE_PLATFORMS)[number];
 
@@ -566,6 +631,222 @@ export async function updateProoferStatusAction(
     if (error) {
       console.error("updateProoferStatusAction insert error:", error);
       throw new Error("Could not update status.");
+    }
+  }
+
+  revalidateProoferPaths();
+}
+
+export async function propagateProoferPlatformForwardAction(
+  clientId: string,
+  sourceDate: string,
+  platform: string,
+  monthValues: string[]
+) {
+  if (!clientId) {
+    throw new Error("Client is required.");
+  }
+
+  const normalizedPlatform = normalizePlatform(platform);
+  const targetDates = buildForwardDateKeys(sourceDate, monthValues);
+  if (targetDates.length === 0) {
+    return;
+  }
+
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("proofer_posts")
+    .select(
+      "id, post_date, platform, caption, media_urls, status, pillar_id, linked_idea_id, linked_idea_kind"
+    )
+    .eq("client_id", clientId)
+    .in("post_date", targetDates);
+
+  if (existingError) {
+    console.error("propagateProoferPlatformForwardAction lookup error:", existingError);
+    throw new Error("Could not update future platform settings.");
+  }
+
+  const existingRowsSafe = existingRows ?? [];
+  const existingOnTargetPlatform = new Set<string>();
+  const conflictingPlaceholderIds: string[] = [];
+
+  for (const row of existingRowsSafe) {
+    if (row.platform === normalizedPlatform) {
+      existingOnTargetPlatform.add(row.post_date ?? "");
+      continue;
+    }
+    if (
+      row.id &&
+      isPlaceholderPostRow({
+        caption: row.caption ?? "",
+        media_urls: row.media_urls,
+        status: row.status ?? "none",
+        pillar_id: row.pillar_id ? String(row.pillar_id) : null,
+        linked_idea_id: row.linked_idea_id ? String(row.linked_idea_id) : null,
+        linked_idea_kind: row.linked_idea_kind ?? null,
+      })
+    ) {
+      conflictingPlaceholderIds.push(String(row.id));
+    }
+  }
+
+  if (conflictingPlaceholderIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("proofer_posts")
+      .delete()
+      .in("id", conflictingPlaceholderIds);
+    if (deleteError) {
+      console.error(
+        "propagateProoferPlatformForwardAction cleanup error:",
+        deleteError
+      );
+      throw new Error("Could not update future platform settings.");
+    }
+  }
+
+  const insertPayload = targetDates
+    .filter((dateKey) => !existingOnTargetPlatform.has(dateKey))
+    .map((dateKey) => ({
+      client_id: clientId,
+      post_date: dateKey,
+      platform: normalizedPlatform,
+      caption: "",
+      image_url: "",
+      media_urls: [],
+      status: "none",
+      pillar_id: null,
+      publish_time: "18:00",
+      created_by: authorEmail,
+    }));
+
+  if (insertPayload.length > 0) {
+    const { error: insertError } = await supabase
+      .from("proofer_posts")
+      .upsert(insertPayload, {
+        onConflict: "client_id,post_date,platform",
+        ignoreDuplicates: true,
+      });
+    if (insertError) {
+      console.error("propagateProoferPlatformForwardAction insert error:", insertError);
+      throw new Error("Could not update future platform settings.");
+    }
+  }
+
+  revalidateProoferPaths();
+}
+
+export async function propagateProoferPillarForwardAction(
+  clientId: string,
+  sourceDate: string,
+  platform: string,
+  pillarId: string | null,
+  monthValues: string[]
+) {
+  if (!clientId) {
+    throw new Error("Client is required.");
+  }
+
+  const normalizedPlatform = normalizePlatform(platform);
+  const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
+  const targetDates = buildForwardDateKeys(sourceDate, monthValues);
+  if (targetDates.length === 0) {
+    return;
+  }
+
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("proofer_posts")
+    .select(
+      "id, post_date, caption, media_urls, status, pillar_id, linked_idea_id, linked_idea_kind"
+    )
+    .eq("client_id", clientId)
+    .eq("platform", normalizedPlatform)
+    .in("post_date", targetDates);
+
+  if (existingError) {
+    console.error("propagateProoferPillarForwardAction lookup error:", existingError);
+    throw new Error("Could not update future pillar settings.");
+  }
+
+  const existingRowsSafe = existingRows ?? [];
+  const existingIds = existingRowsSafe
+    .map((row) => (row.id ? String(row.id) : null))
+    .filter((id): id is string => Boolean(id));
+
+  if (existingIds.length > 0) {
+    const { error: updateError } = await supabase
+      .from("proofer_posts")
+      .update({
+        pillar_id: normalizedPillarId,
+        updated_by: authorEmail,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", existingIds);
+    if (updateError) {
+      console.error("propagateProoferPillarForwardAction update error:", updateError);
+      throw new Error("Could not update future pillar settings.");
+    }
+  }
+
+  if (normalizedPillarId) {
+    const existingDates = new Set(
+      existingRowsSafe.map((row) => row.post_date ?? "").filter(Boolean)
+    );
+    const insertPayload = targetDates
+      .filter((dateKey) => !existingDates.has(dateKey))
+      .map((dateKey) => ({
+        client_id: clientId,
+        post_date: dateKey,
+        platform: normalizedPlatform,
+        caption: "",
+        image_url: "",
+        media_urls: [],
+        status: "none",
+        pillar_id: normalizedPillarId,
+        publish_time: "18:00",
+        created_by: authorEmail,
+      }));
+
+    if (insertPayload.length > 0) {
+      const { error: insertError } = await supabase
+        .from("proofer_posts")
+        .upsert(insertPayload, {
+          onConflict: "client_id,post_date,platform",
+          ignoreDuplicates: true,
+        });
+      if (insertError) {
+        console.error("propagateProoferPillarForwardAction insert error:", insertError);
+        throw new Error("Could not update future pillar settings.");
+      }
+    }
+  } else if (existingRowsSafe.length > 0) {
+    const deletableIds = existingRowsSafe
+      .filter((row) =>
+        isPlaceholderPostRow({
+          caption: row.caption ?? "",
+          media_urls: row.media_urls,
+          status: row.status ?? "none",
+          pillar_id: null,
+          linked_idea_id: row.linked_idea_id ? String(row.linked_idea_id) : null,
+          linked_idea_kind: row.linked_idea_kind ?? null,
+        })
+      )
+      .map((row) => String(row.id));
+
+    if (deletableIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("proofer_posts")
+        .delete()
+        .in("id", deletableIds);
+      if (deleteError) {
+        console.error("propagateProoferPillarForwardAction delete error:", deleteError);
+        throw new Error("Could not update future pillar settings.");
+      }
     }
   }
 
