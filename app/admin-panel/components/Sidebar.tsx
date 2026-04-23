@@ -17,15 +17,6 @@ type Props = {
   canRunAds: boolean;
 };
 
-const ENGINE_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/app/engine" },
-  { label: "Meta queue", href: "/app/meta-queue" },
-  { label: "Playbook", href: "/app/whats-working" },
-  { label: "Creative library", href: "/app/creative" },
-  { label: "Reports", href: "/app/reports" },
-  { label: "Memory", href: "/app/memory" },
-];
-
 const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Clients", href: "/app/clients" },
   { label: "Client view", href: "/portal" },
@@ -44,11 +35,7 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
   if (canRunAds) {
-    groups.push({
-      heading: "Engine",
-      items: ENGINE_ITEMS,
-      collapsible: true,
-    });
+    groups.push({ heading: "Engine", items: [], headingHref: "/app/engine" });
   }
 
   groups.push({ heading: "Tasks", items: [], headingHref: "/app/tasks" });
@@ -58,7 +45,6 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
 
 function buildUtilityItems(_isAdmin: boolean): NavItem[] {
   return [
-    { label: "Engine settings", href: "/app/engine-settings" },
     { label: "Settings", href: "/app/settings" },
     { label: "Consultation Template", href: "/app/settings/consultation" },
     { label: "Guide", href: "/app/guide" },
