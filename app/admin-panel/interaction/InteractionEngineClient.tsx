@@ -560,7 +560,7 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
       setIngestionError(null);
       try {
         const res = await fetch(
-          `/api/interaction/instagram-comments?clientId=${encodeURIComponent(activeClientId)}&limit=20`,
+          `/api/interaction/instagram-comments?accountId=${encodeURIComponent(activeClientId)}&limit=20`,
           { cache: "no-store" }
         );
         const payload: InstagramCommentsApiResponse = await res.json();

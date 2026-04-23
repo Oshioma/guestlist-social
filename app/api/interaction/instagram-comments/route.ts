@@ -313,57 +313,46 @@ function getServiceSupabase() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function fetchFromMetaGraph(clientId: string, keywords: string[], limit: number): Promise<NormalizedComment[]> {
+async function fetchFromMetaGraph(accountId: string, limit: number): Promise<NormalizedComment[]> {
   const db = getServiceSupabase();
-  const { data: accounts } = await db
-    .from("connected_meta_accounts")
-    .select("platform, account_id, access_token")
-    .eq("client_id", clientId);
 
-  if (!accounts || accounts.length === 0) {
-    throw new Error("No connected Meta accounts for this client. Connect a Facebook Page or Instagram account from the client page.");
+  // Look up by Instagram account_id directly — no client_id needed
+  const { data: rows } = await db
+    .from("connected_meta_accounts")
+    .select("account_id, access_token")
+    .eq("platform", "instagram")
+    .eq("account_id", accountId)
+    .limit(1);
+
+  const acct = rows?.[0];
+  if (!acct) {
+    throw new Error(`No connected Instagram account found for account_id: ${accountId}`);
   }
 
   const raw: ProxyComment[] = [];
 
-  await Promise.all(accounts.map(async (acct: { platform: string; account_id: string; access_token: string }) => {
-    try {
-      if (acct.platform === "instagram") {
-        const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink&limit=8&access_token=${acct.access_token}`);
-        if (!mediaRes.ok) {
-          const errBody = await mediaRes.text().catch(() => "");
-          console.error(`[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
-          return;
-        }
-        const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string }[] };
-        console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
-        await Promise.all((mediaData.data ?? []).slice(0, 6).map(async (m) => {
-          const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
-          if (!res.ok) return;
-          const d = await res.json() as { data?: { id: string; text?: string; username?: string; timestamp?: string; like_count?: number }[] };
-          for (const c of d.data ?? []) {
-            raw.push({ id: c.id, username: c.username, text: c.text, timestamp: c.timestamp, permalink: m.permalink });
-          }
-        }));
-      } else if (acct.platform === "facebook") {
-        const postsRes = await fetch(`${GRAPH}/${acct.account_id}/posts?fields=id,created_time&limit=8&access_token=${acct.access_token}`);
-        if (!postsRes.ok) {
-          const errBody = await postsRes.text().catch(() => "");
-          console.error(`[ig-comments] FB posts fetch failed ${postsRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
-          return;
-        }
-        const postsData = await postsRes.json() as { data?: { id: string }[] };
-        await Promise.all((postsData.data ?? []).slice(0, 6).map(async (post) => {
-          const res = await fetch(`${GRAPH}/${post.id}/comments?fields=id,message,from,created_time,like_count&limit=25&access_token=${acct.access_token}`);
-          if (!res.ok) return;
-          const d = await res.json() as { data?: { id: string; message?: string; from?: { name?: string }; created_time?: string; like_count?: number }[] };
-          for (const c of d.data ?? []) {
-            raw.push({ id: c.id, username: c.from?.name, text: c.message, timestamp: c.created_time, postUrl: `https://www.facebook.com/${post.id}` });
-          }
-        }));
+  try {
+    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink&limit=10&access_token=${acct.access_token}`);
+    if (!mediaRes.ok) {
+      const errBody = await mediaRes.text().catch(() => "");
+      console.error(`[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
+      throw new Error(`Instagram API error ${mediaRes.status}: ${errBody.slice(0, 120)}`);
+    }
+    const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string }[] };
+    console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
+
+    await Promise.all((mediaData.data ?? []).slice(0, 8).map(async (m) => {
+      const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
+      if (!res.ok) return;
+      const d = await res.json() as { data?: { id: string; text?: string; username?: string; timestamp?: string; like_count?: number }[] };
+      for (const c of d.data ?? []) {
+        raw.push({ id: c.id, username: c.username, text: c.text, timestamp: c.timestamp, permalink: m.permalink });
       }
-    } catch (err) {
-      console.error(`[ig-comments] account ${acct.account_id} threw:`, err);
+    }));
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Instagram API error")) throw err;
+    console.error(`[ig-comments] account ${acct.account_id} threw:`, err);
+  }
     }
   }));
   console.log(`[ig-comments] total raw comments collected: ${raw.length}`);
@@ -376,29 +365,27 @@ async function fetchFromMetaGraph(clientId: string, keywords: string[], limit: n
     .slice(0, limit);
 }
 
-async function handleRequest(clientId: string, handle: string, limit: number) {
+async function handleRequest(accountId: string, limit: number) {
   const proxyUrl = String(
     process.env.INTERACTION_IG_SOURCE_URL ?? process.env.INTERACTION_IG_PROXY_URL ?? ""
   ).trim();
+
+  // Use Meta Graph API when no proxy URL is configured.
+  if (!proxyUrl) {
+    if (!accountId) {
+      return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
+    }
+    const comments = await fetchFromMetaGraph(accountId, limit);
+    return NextResponse.json({ ok: true, comments, source: "meta-graph", fetched: comments.length, fetchedAt: new Date().toISOString() });
+  }
+
   const proxyMethod = String(
     process.env.INTERACTION_IG_SOURCE_METHOD ?? process.env.INTERACTION_IG_PROXY_METHOD ?? "POST"
   ).trim().toUpperCase();
   const sourceAuthHeader = String(process.env.INTERACTION_IG_SOURCE_AUTH_HEADER ?? "").trim();
   const proxyToken = String(process.env.INTERACTION_IG_PROXY_TOKEN ?? "").trim();
-  const keywordsRaw = String(process.env.INTERACTION_IG_KEYWORDS ?? "zanzibar,kendwa,nungwi,restaurant,lunch,dinner,smoothie,food").trim();
+  const keywordsRaw = String(process.env.INTERACTION_IG_KEYWORDS ?? "").trim();
   const keywords = keywordsRaw.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean);
-
-  // Use Meta Graph API when no proxy URL is configured.
-  // Skip keyword filtering — we're fetching comments on the client's own posts,
-  // not searching hashtags, so filtering by location/food keywords would exclude
-  // most legitimate comments.
-  if (!proxyUrl) {
-    if (!clientId) {
-      return NextResponse.json({ ok: false, error: "clientId required when INTERACTION_IG_SOURCE_URL is not set." }, { status: 400 });
-    }
-    const comments = await fetchFromMetaGraph(clientId, [], limit);
-    return NextResponse.json({ ok: true, comments, source: "meta-graph", fetched: comments.length, fetchedAt: new Date().toISOString() });
-  }
 
   const headers: HeadersInit = { Accept: "application/json", "Content-Type": "application/json" };
   if (sourceAuthHeader) headers.Authorization = sourceAuthHeader;
@@ -436,10 +423,9 @@ async function handleRequest(clientId: string, handle: string, limit: number) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
-    const clientId = String(body.clientId ?? "").trim();
-    const handle = String(body.handle ?? "").trim();
+    const accountId = String(body.accountId ?? body.clientId ?? "").trim();
     const limit = Math.min(100, Math.max(1, Math.floor(Number(body.limit ?? 20))));
-    return await handleRequest(clientId, handle, limit);
+    return await handleRequest(accountId, limit);
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
@@ -448,10 +434,9 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const clientId = url.searchParams.get("clientId") ?? "";
-    const handle = url.searchParams.get("handle") ?? "";
+    const accountId = url.searchParams.get("accountId") ?? url.searchParams.get("clientId") ?? "";
     const limit = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get("limit") ?? "20"))));
-    return await handleRequest(clientId, handle, limit);
+    return await handleRequest(accountId, limit);
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
