@@ -478,7 +478,7 @@ export async function syncMetaData(clientId: string) {
             impressions: t.impressions,
             clicks: t.clicks,
             conversions: conv?.conversions ?? 0,
-            cost_per_result: conv?.costPerResult ?? 0,
+            cost_per_result: conv && conv.conversions > 0 ? Number((t.spend / conv.conversions).toFixed(4)) : 0,
           };
           let { error: updateErr } = await supabase
             .from("ads")
