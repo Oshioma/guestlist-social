@@ -97,32 +97,44 @@ export async function importFromMeta() {
 }
 
 /**
- * Sync all clients: runs syncMetaData for every non-archived client.
+ * Sync all clients: runs syncMetaData for every active client.
+ * Continues through failures so one bad client doesn't block the rest.
  */
 export async function syncAllClients() {
   const supabase = adminClient();
 
   const { data: clients } = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, status")
     .eq("archived", false)
     .order("name", { ascending: true });
 
-  if (!clients || clients.length === 0) {
-    return { ok: false, error: "No clients found to sync." };
+  const activeClients = (clients ?? []).filter(
+    (c) => c.status === "growing" || c.status === "active"
+  );
+
+  if (activeClients.length === 0) {
+    return { ok: false, error: "No active clients found to sync." };
   }
 
   const log: string[] = [];
-  let allOk = true;
+  const successes: string[] = [];
+  const failures: { name: string; error: string }[] = [];
 
-  for (const client of clients) {
-    const result = await syncMetaData(String(client.id));
-    if (result.log) {
-      log.push(...result.log);
-    }
-    if (!result.ok) {
-      allOk = false;
-      log.push(`Failed for "${client.name}": ${result.error}`);
+  for (const client of activeClients) {
+    try {
+      const result = await syncMetaData(String(client.id));
+      if (result.ok) {
+        successes.push(client.name);
+        if (result.log) log.push(...result.log);
+      } else {
+        failures.push({ name: client.name, error: result.error ?? "unknown error" });
+        log.push(`✗ Failed "${client.name}": ${result.error}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      failures.push({ name: client.name, error: message });
+      log.push(`✗ Failed "${client.name}": ${message}`);
     }
     log.push("---");
   }
@@ -131,7 +143,25 @@ export async function syncAllClients() {
   revalidatePath("/admin-panel/clients");
   revalidatePath("/admin-panel/dashboard");
 
-  return { ok: allOk, log };
+  // Summary line at the top of the log
+  const summary = `Synced ${successes.length} of ${activeClients.length} clients`;
+  const summaryLog = [summary];
+  if (successes.length > 0) {
+    summaryLog.push(`✓ Success: ${successes.join(", ")}`);
+  }
+  if (failures.length > 0) {
+    summaryLog.push(`✗ Failed: ${failures.map((f) => `${f.name} (${f.error})`).join("; ")}`);
+  }
+  summaryLog.push("---");
+
+  // Return ok: true if any client succeeded so the UI shows the log
+  return {
+    ok: successes.length > 0,
+    log: [...summaryLog, ...log],
+    error: failures.length > 0 && successes.length === 0
+      ? `All ${failures.length} clients failed to sync`
+      : undefined,
+  };
 }
 
 export async function syncMetaData(clientId: string) {

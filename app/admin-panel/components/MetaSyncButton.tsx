@@ -55,34 +55,74 @@ export default function MetaSyncButton({
         {isPending ? (pendingLabel ?? "Syncing from Meta...") : (label ?? "Sync from Meta")}
       </button>
 
-      {result && (
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 12,
-            border: `1px solid ${result.ok ? "#bbf7d0" : "#fecaca"}`,
-            background: result.ok ? "#f0fdf4" : "#fef2f2",
-            fontSize: 13,
-          }}
-        >
-          {result.ok ? (
+      {result && (() => {
+        const hasPartialFailure =
+          result.ok && result.log?.some((line) => line.includes("✗ Failed"));
+        const borderColor = !result.ok
+          ? "#fecaca"
+          : hasPartialFailure
+          ? "#fde68a"
+          : "#bbf7d0";
+        const bgColor = !result.ok
+          ? "#fef2f2"
+          : hasPartialFailure
+          ? "#fffbeb"
+          : "#f0fdf4";
+        const headerColor = !result.ok
+          ? "#991b1b"
+          : hasPartialFailure
+          ? "#92400e"
+          : "#166534";
+        const headerText = !result.ok
+          ? "Sync failed"
+          : hasPartialFailure
+          ? "Sync finished with errors"
+          : "Sync complete";
+
+        return (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 12,
+              border: `1px solid ${borderColor}`,
+              background: bgColor,
+              fontSize: 13,
+            }}
+          >
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ fontWeight: 600, color: "#166534" }}>
-                Sync complete
+              <div style={{ fontWeight: 600, color: headerColor }}>
+                {headerText}
               </div>
-              {result.log?.map((line, i) => (
-                <div key={i} style={{ color: "#14532d" }}>
-                  {line}
+              {result.error && (
+                <div style={{ color: "#991b1b", fontWeight: 500 }}>
+                  {result.error}
                 </div>
-              ))}
+              )}
+              {result.log?.map((line, i) => {
+                const isFailure = line.startsWith("✗");
+                const isSuccess = line.startsWith("✓");
+                const isSeparator = line === "---";
+                if (isSeparator) {
+                  return (
+                    <div key={i} style={{ height: 1, background: "#e4e4e7", margin: "4px 0" }} />
+                  );
+                }
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      color: isFailure ? "#991b1b" : isSuccess ? "#166534" : "#52525b",
+                      fontWeight: isFailure || isSuccess ? 500 : 400,
+                    }}
+                  >
+                    {line}
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            <div style={{ color: "#991b1b", fontWeight: 500 }}>
-              {result.error}
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
