@@ -9,23 +9,23 @@ import { createClient } from "@supabase/supabase-js";
 
 const GRAPH_VERSION = "v19.0";
 
-// Note: do NOT add pages_read_engagement here. On our current Meta app it
-// is declared in a Use Case but not promoted to "Ready for testing" state,
-// and Meta's OAuth validator rejects it outright — "Invalid Scopes:
-// pages_read_engagement".
+// Note: do NOT add pages_read_engagement or instagram_manage_comments
+// here. Both are declared in a Use Case on our current Meta app but
+// neither is promoted to the "Ready for live" state the OAuth validator
+// requires — attempts to request them return "Invalid Scopes" and block
+// the entire OAuth flow, even though the app dashboard labels them
+// "Ready for testing". If we ever get instagram_manage_comments
+// genuinely granted, add it back here and Meta will start returning
+// `username` on public-user comments (currently nulled → "private user").
 //
 // instagram_manage_insights is needed for Business Discovery (looking up
-// competitor accounts by handle) and for /{ig-user-id}/tags — i.e. every
-// discovery feature beyond the owner's own comments.
-// instagram_manage_comments lets Meta return the `username` field on
-// comments; without it Meta strips the handle to "private user" for
-// anything except public business / creator commenters.
+// competitor accounts by handle) and for /{ig-user-id}/tags — every
+// discovery feature beyond the owner's own comments depends on it.
 export const META_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
   "instagram_basic",
   "instagram_content_publish",
-  "instagram_manage_comments",
   "instagram_manage_insights",
   "business_management",
 ].join(",");
