@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  saveInteractionDecision,
+  type DecisionKind,
+  type PersistedDecision,
+} from "./actions";
 
 type PostStatus = "new" | "approved" | "skipped" | "saved";
 type FetchState = "idle" | "loading" | "success" | "error";
@@ -13,7 +18,73 @@ type Tab =
   | "Results"
   | "Learnings";
 
-type ClientOption = { id: string; name: string; handle: string };
+type ClientOption = {
+  id: string;
+  name: string;
+  handle: string;
+  tokenExpiresAt?: string | null;
+  lastError?: string | null;
+  lastErrorAt?: string | null;
+};
+
+type SetupIssue =
+  | { kind: "missing-supabase" }
+  | { kind: "no-accounts" }
+  | null;
+
+function statusFromDecision(decision: DecisionKind): PostStatus {
+  return decision; // approved/saved/skipped line up 1:1
+}
+
+// Turn the real poster/island signals into the relevance/opportunity/risk
+// triplet the UI expects. Replaces the previous `80 + random()` scoring.
+function deriveScores(input: {
+  text: string;
+  posterType: "tourist" | "creator" | "spam";
+  posterScore: number;
+  onIslandNow: boolean;
+  islandSignals: string[];
+  followerCount: number | null;
+  engagementRate: number | null;
+  minutesAgo: number;
+}): { relevance: number; opportunity: number; risk: number } {
+  const text = input.text.toLowerCase();
+  const isQuestion = /\?|\b(any|where|how|what|which|recommend)\b/.test(text);
+  const hasLink = /https?:\/\//i.test(text);
+  const shortText = input.text.trim().length < 6;
+
+  // Relevance: does this comment match what we care about?
+  let relevance = 45;
+  if (input.islandSignals.length > 0) relevance += 20;
+  if (input.onIslandNow) relevance += 15;
+  if (isQuestion) relevance += 10;
+  if (input.posterType === "creator") relevance += 8;
+  if (input.posterType === "spam") relevance -= 30;
+  relevance = Math.max(1, Math.min(100, relevance));
+
+  // Opportunity: how valuable is replying here?
+  let opportunity = Math.round(input.posterScore * 0.6) + 25;
+  if (input.followerCount && input.followerCount > 1000) {
+    opportunity += Math.min(15, Math.log10(input.followerCount) * 4);
+  }
+  if (input.engagementRate && input.engagementRate > 2) opportunity += 6;
+  if (input.onIslandNow) opportunity += 8;
+  if (input.minutesAgo <= 60) opportunity += 6;
+  else if (input.minutesAgo > 360) opportunity -= 10;
+  if (input.posterType === "spam") opportunity = 5;
+  opportunity = Math.max(1, Math.min(100, Math.round(opportunity)));
+
+  // Risk: how badly could a reply go wrong?
+  let risk = 10;
+  if (input.posterType === "spam") risk += 60;
+  if (hasLink) risk += 20;
+  if (shortText) risk += 15;
+  if (!input.islandSignals.length && !isQuestion) risk += 8;
+  if (input.posterType === "creator" && !hasLink) risk -= 5;
+  risk = Math.max(1, Math.min(100, risk));
+
+  return { relevance, opportunity, risk };
+}
 
 type Tone = "safe" | "engaging" | "bold";
 type DiscoveryIntent = "buyer" | "browsing" | "low";
@@ -95,6 +166,7 @@ type InstagramCommentsApiResponse = {
   comments?: InstagramCommentApiItem[];
   fetched?: number;
   error?: string;
+  tokenExpired?: boolean;
 };
 
 const DISCOVERY_HASHTAGS: { tag: string; category: string; volume: string; intent: string }[] = [];
@@ -528,7 +600,15 @@ function PostCard({
   );
 }
 
-export default function InteractionEngineUI({ initialClients = [] }: { initialClients?: ClientOption[] }) {
+export default function InteractionEngineUI({
+  initialClients = [],
+  initialDecisions = [],
+  setupIssue = null,
+}: {
+  initialClients?: ClientOption[];
+  initialDecisions?: PersistedDecision[];
+  setupIssue?: SetupIssue;
+}) {
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [activeClientId, setActiveClientId] = useState(initialClients[0]?.id ?? "");
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
@@ -538,8 +618,54 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
   const [highValueOnly, setHighValueOnly] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
   const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
+  const [keywordFilter, setKeywordFilter] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
+  const [tokenExpired, setTokenExpired] = useState(false);
+
+  // commentId → decision, seeded from the DB so refresh doesn't lose triage.
+  const [decisionMap, setDecisionMap] = useState<Record<string, DecisionKind>>(
+    () => {
+      const map: Record<string, DecisionKind> = {};
+      for (const d of initialDecisions) map[d.commentId] = d.decision;
+      return map;
+    }
+  );
+
+  // When the operator switches accounts, pull the decision history for the
+  // new one so earlier approve/save/skip calls stay applied.
+  useEffect(() => {
+    if (!activeClientId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/interaction/decisions?accountId=${encodeURIComponent(activeClientId)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          decisions?: PersistedDecision[];
+        };
+        if (cancelled || !json?.ok) return;
+        const map: Record<string, DecisionKind> = {};
+        for (const d of json.decisions ?? []) map[d.commentId] = d.decision;
+        setDecisionMap(map);
+        setPosts((prev) =>
+          prev.map((p) =>
+            map[p.id] ? { ...p, status: statusFromDecision(map[p.id]) } : p
+          )
+        );
+      } catch {
+        // soft-fail: decision history just starts empty for this account
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClientId]);
   const [query, setQuery] = useState("");
   const [selectedDiscoveryId, setSelectedDiscoveryId] = useState("disc-1");
   const [autoQueue, setAutoQueue] = useState(true);
@@ -573,9 +699,47 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
   }, [activeClientId, posts]);
 
   const updatePost = (postId: string, patch: Partial<Post>) => {
-    setPosts((current) =>
-      current.map((post) => (post.id === postId ? { ...post, ...patch } : post))
-    );
+    setPosts((current) => {
+      let updated: Post | null = null;
+      const next = current.map((post) => {
+        if (post.id !== postId) return post;
+        updated = { ...post, ...patch };
+        return updated;
+      });
+
+      // When the status transitions into a terminal triage state, write
+      // it to the DB so refresh / account-switch keeps the decision.
+      if (
+        updated &&
+        patch.status &&
+        (patch.status === "approved" ||
+          patch.status === "saved" ||
+          patch.status === "skipped")
+      ) {
+        const decision = patch.status as DecisionKind;
+        const snapshot = updated;
+        setDecisionMap((prev) => ({ ...prev, [snapshot.id]: decision }));
+        // Fire-and-forget; UI already reflects the change optimistically.
+        void saveInteractionDecision({
+          accountId: snapshot.clientId,
+          commentId: snapshot.id,
+          decision,
+          commentText: snapshot.text,
+          commentAuthor: snapshot.author,
+          commentPermalink: snapshot.permalink ?? null,
+          posterType: snapshot.posterType ?? null,
+          posterScore: snapshot.posterScore ?? null,
+          followerCount: snapshot.followerCount ?? null,
+          engagementRate: snapshot.engagementRate ?? null,
+          relevance: snapshot.relevance,
+          opportunity: snapshot.opportunity,
+          risk: snapshot.risk,
+        }).catch((err) => {
+          console.error("[updatePost] persistDecision failed:", err);
+        });
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -585,14 +749,19 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
       setIngestionState((prev) => (prev === "idle" ? "loading" : prev));
       setIngestionError(null);
       try {
+        const keywordsParam = keywordFilter.trim();
         const res = await fetch(
-          `/api/interaction/instagram-comments?accountId=${encodeURIComponent(activeClientId)}&limit=20`,
+          `/api/interaction/instagram-comments?accountId=${encodeURIComponent(activeClientId)}&limit=20${
+            keywordsParam ? `&keywords=${encodeURIComponent(keywordsParam)}` : ""
+          }`,
           { cache: "no-store" }
         );
         const payload: InstagramCommentsApiResponse = await res.json();
         if (!res.ok || !payload.ok) {
+          if (payload.tokenExpired) setTokenExpired(true);
           throw new Error(payload.error ?? "Failed to fetch Instagram comments.");
         }
+        setTokenExpired(false);
 
         const incoming = (payload.comments ?? []).map((comment) => {
           const timestamp = String(comment.timestamp ?? "");
@@ -623,30 +792,54 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
               : posterType === "spam"
               ? 10
               : 62;
+          const cleanFollowerCount = Number.isFinite(followerCount)
+            ? Number(followerCount)
+            : null;
+          const cleanEngagementRate = Number.isFinite(engagementRate)
+            ? Number(engagementRate)
+            : null;
+          const islandSignals = Array.isArray(comment.islandSignals)
+            ? comment.islandSignals.map((signal) => String(signal))
+            : [];
+          const onIslandNow = Boolean(comment.onIslandNow);
+          const scores = deriveScores({
+            text,
+            posterType,
+            posterScore,
+            onIslandNow,
+            islandSignals,
+            followerCount: cleanFollowerCount,
+            engagementRate: cleanEngagementRate,
+            minutesAgo,
+          });
+          const commentId = String(comment.id ?? `ig-${Date.now()}`);
+          // Re-apply any prior triage decision so approved/saved/skipped
+          // comments don't re-appear in "Ready now" after refetch.
+          const priorDecision = decisionMap[commentId];
           return {
-            id: String(comment.id ?? `ig-${Date.now()}`),
+            id: commentId,
             clientId: activeClientId,
             author: `@${String(comment.username ?? "instagram_user").replace(/^@/, "")}`,
             platform: "Instagram",
             time: `${minutesAgo}m ago`,
             text,
-            relevance: 80 + Math.floor(Math.random() * 18),
-            opportunity: 70 + Math.floor(Math.random() * 22),
-            risk: 8 + Math.floor(Math.random() * 18),
+            relevance: scores.relevance,
+            opportunity: scores.opportunity,
+            risk: scores.risk,
             comment: "Helpful local recommendation based on their question and timing.",
             mediaUrl:
               "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
-            status: "new" as const,
+            status: priorDecision
+              ? (statusFromDecision(priorDecision) as PostStatus)
+              : ("new" as const),
             why: ["Live Instagram comment", "High intent signal", "Fresh opportunity window"],
             posterType,
-            followerCount: Number.isFinite(followerCount) ? Number(followerCount) : null,
-            engagementRate: Number.isFinite(engagementRate) ? Number(engagementRate) : null,
+            followerCount: cleanFollowerCount,
+            engagementRate: cleanEngagementRate,
             posterScore,
             posterReasons: comment.posterReasons ?? [],
-            onIslandNow: Boolean(comment.onIslandNow),
-            islandSignals: Array.isArray(comment.islandSignals)
-              ? comment.islandSignals.map((signal) => String(signal))
-              : [],
+            onIslandNow,
+            islandSignals,
           };
         });
 
@@ -679,34 +872,118 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeClientId]);
+  }, [activeClientId, keywordFilter]);
 
+  // Hydrate / persist keyword filter across sessions.
   useEffect(() => {
-    if (!isLive) return;
-    const interval = setInterval(() => {
-      const newPost: Post = {
-        id: `post-${Date.now()}`,
-        clientId: activeClientId,
-        author: "@newtraveller",
+    try {
+      const stored = window.localStorage.getItem("interaction-keywords");
+      if (stored !== null) setKeywordFilter(stored);
+    } catch {
+      // localStorage unavailable (SSR, privacy mode) — fall back to empty
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("interaction-keywords", keywordFilter);
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [keywordFilter]);
+
+  // Deterministic fixtures for demos — no randomness so screenshots and
+  // walkthroughs show the same data every time. Scored via deriveScores()
+  // so they follow the same rules as real comments.
+  useEffect(() => {
+    if (!demoMode) return;
+    const fixtures: Array<Omit<Post, "clientId" | "id" | "relevance" | "opportunity" | "risk"> & {
+      posterScoreSeed: number;
+    }> = [
+      {
+        author: "@kenzie.travels",
         platform: "Instagram",
-        time: "2m ago",
-        text: "Any must-visit food spots in Zanzibar right now?",
-        relevance: 82 + Math.floor(Math.random() * 17),
-        opportunity: 72 + Math.floor(Math.random() * 24),
-        risk: 5 + Math.floor(Math.random() * 18),
+        time: "3m ago",
+        text: "Any must-visit food spots in Zanzibar right now? 🍜",
         comment:
           "There are a couple of really fresh spots around Kendwa depending on what you are looking for 👀",
         mediaUrl:
           "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
         status: "new",
-        why: ["Live tourist intent", "Fresh post", "High reply potential"],
+        why: ["Tourist intent", "Fresh post", "High reply potential"],
+        posterType: "tourist",
+        followerCount: 1840,
+        engagementRate: 4.2,
         onIslandNow: true,
         islandSignals: ["Zanzibar"],
+        posterScoreSeed: 82,
+      },
+      {
+        author: "@creator.wanders",
+        platform: "Instagram",
+        time: "12m ago",
+        text: "Recommendations for a quiet beach near Nungwi this week?",
+        comment:
+          "Kendwa's north stretch is calm most mornings — happy to point you to a good sundowner.",
+        mediaUrl:
+          "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+        status: "new",
+        why: ["Creator footprint", "Local mention"],
+        posterType: "creator",
+        followerCount: 28400,
+        engagementRate: 3.1,
+        onIslandNow: true,
+        islandSignals: ["Nungwi", "Kendwa"],
+        posterScoreSeed: 88,
+      },
+      {
+        author: "@scrolly_spam",
+        platform: "Instagram",
+        time: "26m ago",
+        text: "Big discount! DM me for crypto promo 🚀 https://t.me/xyz",
+        comment: "",
+        mediaUrl:
+          "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80",
+        status: "new",
+        why: ["Spam patterns detected"],
+        posterType: "spam",
+        followerCount: 12,
+        engagementRate: 0,
+        onIslandNow: false,
+        islandSignals: [],
+        posterScoreSeed: 8,
+      },
+    ];
+    let cursor = 0;
+    const interval = setInterval(() => {
+      const f = fixtures[cursor % fixtures.length];
+      cursor++;
+      const minutesAgo = 2;
+      const scores = deriveScores({
+        text: f.text,
+        posterType: f.posterType ?? "tourist",
+        posterScore: f.posterScoreSeed,
+        onIslandNow: f.onIslandNow ?? false,
+        islandSignals: f.islandSignals ?? [],
+        followerCount: f.followerCount ?? null,
+        engagementRate: f.engagementRate ?? null,
+        minutesAgo,
+      });
+      const newPost: Post = {
+        ...f,
+        id: `demo-${cursor}-${f.author}`,
+        clientId: activeClientId,
+        relevance: scores.relevance,
+        opportunity: scores.opportunity,
+        risk: scores.risk,
+        posterScore: f.posterScoreSeed,
       };
-      setPosts((prev) => [newPost, ...prev].slice(0, 20));
+      setPosts((prev) => {
+        if (prev.some((p) => p.id === newPost.id)) return prev;
+        return [newPost, ...prev].slice(0, 30);
+      });
     }, 8000);
     return () => clearInterval(interval);
-  }, [isLive]);
+  }, [demoMode, activeClientId]);
 
   const discoveryResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -815,6 +1092,24 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
             onChange={(e) => setFeedSearch(e.target.value)}
             className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
           />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Server-side keyword filter (comma-separated, e.g. zanzibar, kendwa, nungwi)"
+              value={keywordFilter}
+              onChange={(e) => setKeywordFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs text-gray-700 placeholder-gray-400 outline-none focus:border-gray-400"
+            />
+            {keywordFilter && (
+              <button
+                onClick={() => setKeywordFilter("")}
+                className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-2 text-xs text-gray-600 hover:bg-gray-50"
+                title="Clear keywords"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {(["all", "tourist", "creator"] as const).map((f) => (
               <button
@@ -1490,9 +1785,68 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
     return renderFeed();
   };
 
+  const activeAccountMeta = clients.find((c) => c.id === activeClientId);
+  const bannerMessages: { tone: "warn" | "info"; title: string; body: string }[] = [];
+  if (setupIssue?.kind === "missing-supabase") {
+    bannerMessages.push({
+      tone: "warn",
+      title: "Missing Supabase credentials",
+      body: "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for the Interaction page to load connected accounts.",
+    });
+  } else if (setupIssue?.kind === "no-accounts") {
+    bannerMessages.push({
+      tone: "info",
+      title: "No Instagram accounts connected",
+      body: "Connect an Instagram account from the client settings page to start pulling live comments here.",
+    });
+  }
+  if (tokenExpired) {
+    bannerMessages.push({
+      tone: "warn",
+      title: "Instagram access token expired",
+      body: "The Meta access token for this account has expired or been revoked. Reconnect the account in client settings to resume ingestion.",
+    });
+  } else if (ingestionState === "error" && ingestionError) {
+    bannerMessages.push({
+      tone: "warn",
+      title: "Live feed error",
+      body: ingestionError,
+    });
+  }
+  if (activeAccountMeta?.tokenExpiresAt) {
+    const expiresAt = new Date(activeAccountMeta.tokenExpiresAt).getTime();
+    if (Number.isFinite(expiresAt)) {
+      const daysLeft = Math.round((expiresAt - Date.now()) / 86400000);
+      if (daysLeft <= 7 && daysLeft > 0) {
+        bannerMessages.push({
+          tone: "info",
+          title: `Token expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
+          body: "Refresh the Instagram connection before it expires to avoid an outage.",
+        });
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f5f7] text-black">
       <main className="px-6 py-8 md:px-10">
+        {bannerMessages.length > 0 && (
+          <div className="mb-4 flex flex-col gap-2">
+            {bannerMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`rounded-lg border px-4 py-3 text-sm ${
+                  msg.tone === "warn"
+                    ? "border-amber-200 bg-amber-50 text-amber-900"
+                    : "border-sky-200 bg-sky-50 text-sky-900"
+                }`}
+              >
+                <div className="font-semibold">{msg.title}</div>
+                <div className="mt-0.5 text-xs opacity-90">{msg.body}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1541,6 +1895,17 @@ export default function InteractionEngineUI({ initialClients = [] }: { initialCl
                 className="rounded-lg border border-gray-200 px-3 py-2 text-xs"
               >
                 {isLive ? "Pause" : "Resume"}
+              </button>
+              <button
+                onClick={() => setDemoMode((v) => !v)}
+                className={`rounded-lg border px-3 py-2 text-xs transition ${
+                  demoMode
+                    ? "border-black bg-black text-white"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+                title="Inject deterministic sample comments — useful for demos and screenshots"
+              >
+                {demoMode ? "● Demo on" : "Demo"}
               </button>
             </div>
           </div>
