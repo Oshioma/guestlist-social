@@ -1843,6 +1843,7 @@ export default function InteractionEngineUI({
           >
             <option value="handle">Competitor / creator handle</option>
             <option value="mentions">Posts that tag me</option>
+            <option value="location">IG location (RapidAPI)</option>
             <option value="keyword">Keyword (RapidAPI)</option>
             <option value="hashtag">Hashtag (gated by Meta)</option>
           </select>
@@ -1861,7 +1862,9 @@ export default function InteractionEngineUI({
                   ? "@competitor_handle"
                   : newSearchKind === "keyword"
                     ? "Keyword or topic (e.g. craft beer)"
-                    : "#hashtag"
+                    : newSearchKind === "location"
+                      ? "Location name (e.g. Kendwa Beach, Zanzibar)"
+                      : "#hashtag"
               }
               className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
@@ -1898,6 +1901,7 @@ export default function InteractionEngineUI({
                   {s.kind === "hashtag" && `#${s.value}`}
                   {s.kind === "mentions" && "Tagged me"}
                   {s.kind === "keyword" && `🔎 ${s.value}`}
+                  {s.kind === "location" && `📍 ${s.value}`}
                 </button>
                 <button
                   onClick={() => handleRemoveSearch(s.id)}

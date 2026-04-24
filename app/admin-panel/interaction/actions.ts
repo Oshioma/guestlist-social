@@ -80,7 +80,12 @@ export async function saveInteractionDecision(
   }
 }
 
-export type SearchKind = "handle" | "hashtag" | "mentions" | "keyword";
+export type SearchKind =
+  | "handle"
+  | "hashtag"
+  | "mentions"
+  | "keyword"
+  | "location";
 
 export type SavedSearch = {
   id: number;

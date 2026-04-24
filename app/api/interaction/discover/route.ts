@@ -530,6 +530,272 @@ function formatRelativeTime(ms: number | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// Instagram location discovery — finds real IG posts tagged at a
+// physical location (e.g. "Kendwa Beach"). Much fresher and
+// audience-relevant than Facebook keyword search, at the cost of
+// another RapidAPI call per search.
+//
+// Two-step flow:
+//   1. Resolve the location name to an ID via a search endpoint.
+//   2. Fetch recent posts for that ID.
+//
+// Both URLs are templated via env vars so you can swap providers
+// without touching code. Defaults aim at instagram-scraper-api2;
+// if your chosen scraper uses different paths just override:
+//   RAPIDAPI_IG_HOST
+//   RAPIDAPI_IG_LOCATION_SEARCH_PATH  (use {q} placeholder)
+//   RAPIDAPI_IG_LOCATION_POSTS_PATH   (use {id} placeholder)
+async function fetchLocationPosts(
+  query: string
+): Promise<{ ok: true; posts: DiscoveryPost[] } | { ok: false; error: string }> {
+  const clean = query.trim();
+  if (!clean) return { ok: false, error: "location required" };
+
+  const igKey = (
+    process.env.RAPIDAPI_IG_KEY ??
+    process.env.RAPIDAPI_FB_KEY ??
+    process.env.RAPIDAPI_KEY ??
+    ""
+  ).trim();
+  if (!igKey) {
+    return {
+      ok: false,
+      error:
+        "Location discovery needs a RapidAPI Instagram scraper key. Set " +
+        "RAPIDAPI_IG_KEY (+ optional RAPIDAPI_IG_HOST, RAPIDAPI_IG_LOCATION_SEARCH_PATH, " +
+        "RAPIDAPI_IG_LOCATION_POSTS_PATH) in your Vercel env vars.",
+    };
+  }
+  const host = (
+    process.env.RAPIDAPI_IG_HOST ?? "instagram-scraper-api2.p.rapidapi.com"
+  ).trim();
+  const searchPath = (
+    process.env.RAPIDAPI_IG_LOCATION_SEARCH_PATH ??
+    "/v1/location_search?query={q}"
+  ).trim();
+  const postsPath = (
+    process.env.RAPIDAPI_IG_LOCATION_POSTS_PATH ??
+    "/v1/location_posts?location_id={id}"
+  ).trim();
+
+  const headers: HeadersInit = {
+    "x-rapidapi-host": host,
+    "x-rapidapi-key": igKey,
+  };
+
+  // Step 1: resolve location name → id
+  const searchUrl = `https://${host}${searchPath.replace(
+    "{q}",
+    encodeURIComponent(clean)
+  )}`;
+  let searchJson: unknown = null;
+  try {
+    const res = await fetch(searchUrl, { cache: "no-store", headers });
+    const body = await res.text();
+    try {
+      searchJson = body ? JSON.parse(body) : null;
+    } catch {
+      searchJson = null;
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `Location search returned ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Location search failed (network error)",
+    };
+  }
+
+  const pickLocationId = (payload: unknown): string | null => {
+    if (!payload) return null;
+    const tryPaths = (val: unknown): string | null => {
+      if (!val) return null;
+      if (typeof val === "object") {
+        const rec = val as Record<string, unknown>;
+        for (const key of [
+          "id",
+          "pk",
+          "location_id",
+          "facebook_places_id",
+          "external_id",
+        ]) {
+          const v = rec[key];
+          if (typeof v === "string" || typeof v === "number") {
+            const str = String(v).trim();
+            if (str) return str;
+          }
+        }
+        if (rec.location && typeof rec.location === "object") {
+          return tryPaths(rec.location);
+        }
+      }
+      return null;
+    };
+    // First array-like shape we can find
+    const arrays: unknown[] = [
+      (payload as Record<string, unknown>).data,
+      (payload as Record<string, unknown>).results,
+      (payload as Record<string, unknown>).locations,
+      (payload as Record<string, unknown>).items,
+      Array.isArray(payload) ? payload : null,
+    ];
+    for (const arr of arrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        const id = tryPaths(arr[0]);
+        if (id) return id;
+      }
+    }
+    // Some APIs return the single best match at the top level
+    return tryPaths(payload);
+  };
+
+  const locationId = pickLocationId(searchJson);
+  if (!locationId) {
+    return {
+      ok: false,
+      error: `Couldn't resolve a location named "${clean}" via the RapidAPI scraper. Try a more specific name (e.g. "Kendwa Beach Zanzibar") or set RAPIDAPI_IG_LOCATION_SEARCH_PATH if your provider uses a different endpoint.`,
+    };
+  }
+
+  // Step 2: fetch posts at that location
+  const postsUrl = `https://${host}${postsPath.replace(
+    "{id}",
+    encodeURIComponent(locationId)
+  )}`;
+  let postsJson: unknown = null;
+  try {
+    const res = await fetch(postsUrl, { cache: "no-store", headers });
+    const body = await res.text();
+    try {
+      postsJson = body ? JSON.parse(body) : null;
+    } catch {
+      postsJson = null;
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `Location posts returned ${res.status}: ${body.slice(0, 160)}`,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Location posts fetch failed (network error)",
+    };
+  }
+
+  const rows = firstArrayField(
+    postsJson as Record<string, unknown> | null
+  ) as Record<string, unknown>[];
+
+  const BIG_ACCOUNT_FAN_LIMIT = 10000;
+  const posts: DiscoveryPost[] = rows
+    .map((row) => {
+      // IG scrapers nest a `media` object inside each row on some
+      // providers; others hoist it to the top. Try both.
+      const node = (row.media ?? row) as Record<string, unknown>;
+      const user = (node.user ??
+        node.owner ??
+        node.author ??
+        {}) as Record<string, unknown>;
+
+      const handle = String(user.username ?? "").trim();
+      const fullName = String(
+        user.full_name ?? user.name ?? ""
+      ).trim();
+      const display = handle ? `@${handle}` : fullName || "Unknown user";
+
+      const verified = Boolean(user.is_verified ?? user.verified);
+      const fans =
+        parseNumericField(user.follower_count) ??
+        parseNumericField(user.followers) ??
+        parseNumericField(user.fans);
+      if (verified) return null;
+      if (fans != null && fans > BIG_ACCOUNT_FAN_LIMIT) return null;
+
+      const captionField = node.caption;
+      const caption = String(
+        (captionField && typeof captionField === "object"
+          ? (captionField as Record<string, unknown>).text
+          : captionField) ??
+          node.text ??
+          ""
+      ).trim();
+      if (!caption && !node.image_url && !node.media_url) return null;
+
+      const code = String(
+        node.code ?? node.shortcode ?? node.short_code ?? ""
+      ).trim();
+      const rawLink = String(
+        node.permalink ?? node.link ?? node.url ?? ""
+      ).trim();
+      const permalink =
+        rawLink ||
+        (code ? `https://www.instagram.com/p/${code}/` : null);
+
+      // IG image URLs live under several keys depending on provider.
+      const imageCandidates =
+        (node.image_versions2 as Record<string, unknown> | undefined)
+          ?.candidates;
+      const firstImage =
+        Array.isArray(imageCandidates) && imageCandidates.length > 0
+          ? String(
+              (imageCandidates[0] as Record<string, unknown>).url ?? ""
+            )
+          : "";
+      const mediaUrl = (
+        String(node.thumbnail_url ?? "") ||
+        firstImage ||
+        String(node.media_url ?? "") ||
+        String(node.display_uri ?? "") ||
+        String(node.image_url ?? "") ||
+        ""
+      ).trim();
+
+      const taken =
+        node.taken_at_timestamp ??
+        node.taken_at ??
+        node.timestamp ??
+        node.created_at ??
+        null;
+      const postedAtMs = parseTimestampMs(taken);
+
+      const id = String(
+        node.pk ?? node.id ?? code ?? permalink ?? `${display}-${taken}`
+      );
+
+      return {
+        id,
+        author: display,
+        authorFollowers: fans ?? null,
+        text: caption.slice(0, 600),
+        time: formatRelativeTime(postedAtMs),
+        postedAtMs,
+        permalink,
+        mediaUrl,
+        likeCount: parseNumericField(node.like_count ?? node.likes),
+        commentCount: parseNumericField(node.comment_count ?? node.comments),
+        comments: [],
+        source: "hashtag",
+      } as DiscoveryPost;
+    })
+    .filter((p): p is DiscoveryPost => p !== null)
+    .sort((a, b) => (b.postedAtMs ?? 0) - (a.postedAtMs ?? 0))
+    .slice(0, 30);
+
+  return { ok: true, posts };
+}
+
 async function fetchKeywordPages(
   keyword: string
 ): Promise<{ ok: true; pages: DiscoveredPage[] } | { ok: false; error: string }> {
@@ -700,6 +966,13 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
       }
       return NextResponse.json({ ok: true, kind, value, pages: result.pages });
+    }
+    if (kind === "location") {
+      const result = await fetchLocationPosts(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
     }
     return NextResponse.json(
       { ok: false, error: `Unknown kind: ${kind}` },
