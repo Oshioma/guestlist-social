@@ -128,7 +128,8 @@ function shapePost(
 function explainGraphError(
   msg: string | undefined,
   code: number | undefined,
-  fallback: string
+  fallback: string,
+  context?: { kind?: "handle" | "mentions" | "hashtag"; value?: string }
 ): string {
   const base = msg ?? fallback;
   // Meta error code 10 = "Application does not have permission for this
@@ -146,6 +147,23 @@ function explainGraphError(
   }
   if (code === 190 || code === 463 || code === 467) {
     return "The Instagram access token has expired or been revoked. Reconnect the account in client settings.";
+  }
+  // "Invalid user id" / code 100 on Business Discovery means Meta can't
+  // resolve the target username. Usually the target is a personal account,
+  // private, doesn't exist, or the handle came from a Facebook page vanity
+  // that doesn't match the Instagram handle.
+  if (
+    code === 100 ||
+    /invalid user id/i.test(base) ||
+    /unknown path|does not exist/i.test(base)
+  ) {
+    const target = context?.value ? `"@${context.value}"` : "that handle";
+    return (
+      `Meta couldn't resolve ${target} via Business Discovery. That endpoint only works for ` +
+      "public Instagram business or creator accounts. If the handle came from a Facebook page " +
+      "search, the Facebook vanity URL often doesn't match the Instagram handle — try pasting " +
+      "the exact IG @handle instead."
+    );
   }
   return base;
 }
@@ -190,7 +208,8 @@ async function fetchHandle(
     const msg = explainGraphError(
       errorObj?.message,
       errorObj?.code,
-      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`
+      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`,
+      { kind: "handle", value: clean }
     );
     return { ok: false, error: msg };
   }
@@ -199,7 +218,7 @@ async function fetchHandle(
   if (!bd) {
     return {
       ok: false,
-      error: `@${clean} is not a public business or creator account, or Meta could not resolve the handle.`,
+      error: `Couldn't find @${clean} as a public Instagram business or creator account. Meta's Business Discovery only works on accounts that have switched to "Business" or "Creator" in IG settings. Personal accounts, private accounts, or Facebook-only pages won't resolve.`,
     };
   }
 
@@ -463,10 +482,26 @@ async function fetchKeywordPosts(
           null,
         text: text.slice(0, 600),
         time: (() => {
-          if (!posted) return "just now";
-          const d = new Date(String(posted));
-          if (Number.isNaN(d.getTime())) return String(posted);
-          const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+          if (posted == null) return "just now";
+          // RapidAPI vendors return timestamps as either ISO strings,
+          // milliseconds, or unix-seconds. Normalise all three before
+          // falling back to the raw value.
+          let ms: number | null = null;
+          if (typeof posted === "number") {
+            ms = posted > 1e12 ? posted : posted * 1000;
+          } else {
+            const str = String(posted).trim();
+            if (!str) return "just now";
+            const asNum = Number(str);
+            if (Number.isFinite(asNum)) {
+              ms = asNum > 1e12 ? asNum : asNum * 1000;
+            } else {
+              const parsed = new Date(str);
+              ms = Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+            }
+          }
+          if (ms == null || !Number.isFinite(ms)) return "recent";
+          const mins = Math.floor((Date.now() - ms) / 60000);
           if (mins < 1) return "just now";
           if (mins < 60) return `${mins}m ago`;
           const hours = Math.floor(mins / 60);
