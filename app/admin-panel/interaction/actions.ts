@@ -202,6 +202,129 @@ export async function removeInteractionSearch(
   }
 }
 
+// ----------------------------------------------------------------------------
+// Integration credentials (RapidAPI IG scraper — for Discovery "location"
+// and "keyword" kinds). Stored server-side so operators can paste their
+// RapidAPI key + endpoints via the Discovery UI without redeploying.
+// ----------------------------------------------------------------------------
+
+export type IgScraperSettings = {
+  hasApiKey: boolean;
+  host: string | null;
+  locationSearchPath: string | null;
+  locationPostsPath: string | null;
+  updatedAt: string | null;
+};
+
+export async function getIgScraperSettings(): Promise<IgScraperSettings> {
+  try {
+    const db = getServiceSupabase();
+    const { data } = await db
+      .from("interaction_integrations")
+      .select("api_key, host, location_search_path, location_posts_path, updated_at")
+      .eq("account_id", "default")
+      .eq("provider", "rapidapi_ig")
+      .limit(1)
+      .maybeSingle();
+    return {
+      // Never return the actual key to the browser — just whether one is set.
+      hasApiKey: Boolean(data?.api_key),
+      host: (data?.host as string | null) ?? null,
+      locationSearchPath: (data?.location_search_path as string | null) ?? null,
+      locationPostsPath: (data?.location_posts_path as string | null) ?? null,
+      updatedAt: (data?.updated_at as string | null) ?? null,
+    };
+  } catch (err) {
+    console.error("[getIgScraperSettings] failed:", err);
+    return {
+      hasApiKey: false,
+      host: null,
+      locationSearchPath: null,
+      locationPostsPath: null,
+      updatedAt: null,
+    };
+  }
+}
+
+export type SaveIgScraperInput = {
+  apiKey?: string;
+  host?: string;
+  locationSearchPath?: string;
+  locationPostsPath?: string;
+};
+
+export async function saveIgScraperSettings(
+  input: SaveIgScraperInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const db = getServiceSupabase();
+    // Build a patch that only touches fields the operator filled in, so
+    // clearing the key input by accident doesn't wipe their saved key.
+    const patch: Record<string, unknown> = {
+      account_id: "default",
+      provider: "rapidapi_ig",
+      updated_at: new Date().toISOString(),
+    };
+    if (input.apiKey && input.apiKey.trim()) patch.api_key = input.apiKey.trim();
+    if (input.host !== undefined)
+      patch.host = input.host.trim() || null;
+    if (input.locationSearchPath !== undefined)
+      patch.location_search_path = input.locationSearchPath.trim() || null;
+    if (input.locationPostsPath !== undefined)
+      patch.location_posts_path = input.locationPostsPath.trim() || null;
+
+    const { error } = await db
+      .from("interaction_integrations")
+      .upsert(patch, { onConflict: "account_id,provider" });
+    if (error) {
+      console.error("[saveIgScraperSettings] upsert failed:", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
+// Internal helper for the discover route — returns the full record
+// including the api_key so it can call RapidAPI.
+export type IgScraperCredentials = {
+  apiKey: string | null;
+  host: string | null;
+  locationSearchPath: string | null;
+  locationPostsPath: string | null;
+};
+
+export async function getIgScraperCredentialsInternal(): Promise<IgScraperCredentials> {
+  try {
+    const db = getServiceSupabase();
+    const { data } = await db
+      .from("interaction_integrations")
+      .select("api_key, host, location_search_path, location_posts_path")
+      .eq("account_id", "default")
+      .eq("provider", "rapidapi_ig")
+      .limit(1)
+      .maybeSingle();
+    return {
+      apiKey: (data?.api_key as string | null) ?? null,
+      host: (data?.host as string | null) ?? null,
+      locationSearchPath: (data?.location_search_path as string | null) ?? null,
+      locationPostsPath: (data?.location_posts_path as string | null) ?? null,
+    };
+  } catch (err) {
+    console.error("[getIgScraperCredentialsInternal] failed:", err);
+    return {
+      apiKey: null,
+      host: null,
+      locationSearchPath: null,
+      locationPostsPath: null,
+    };
+  }
+}
+
 export async function getInteractionDecisions(
   accountId: string
 ): Promise<PersistedDecision[]> {
