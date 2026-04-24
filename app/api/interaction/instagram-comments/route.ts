@@ -313,7 +313,51 @@ function getServiceSupabase() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function fetchFromMetaGraph(accountId: string, limit: number): Promise<NormalizedComment[]> {
+function isTokenError(status: number, body: string): boolean {
+  if (status === 401 || status === 403) return true;
+  return /\b(code|subcode)\b.*\b(190|460|463|467)\b/.test(body);
+}
+
+async function recordAccountError(
+  accountId: string,
+  message: string
+): Promise<void> {
+  try {
+    const db = getServiceSupabase();
+    await db
+      .from("connected_meta_accounts")
+      .update({
+        last_error: message.slice(0, 400),
+        last_error_at: new Date().toISOString(),
+      })
+      .eq("platform", "instagram")
+      .eq("account_id", accountId);
+  } catch (err) {
+    console.error("[ig-comments] failed to record account error:", err);
+  }
+}
+
+async function clearAccountError(accountId: string): Promise<void> {
+  try {
+    const db = getServiceSupabase();
+    await db
+      .from("connected_meta_accounts")
+      .update({ last_error: null, last_error_at: null })
+      .eq("platform", "instagram")
+      .eq("account_id", accountId);
+  } catch {
+    // non-critical
+  }
+}
+
+type MetaFetchResult =
+  | { ok: true; comments: NormalizedComment[] }
+  | { ok: false; error: string; tokenExpired: boolean };
+
+async function fetchFromMetaGraph(
+  accountId: string,
+  limit: number
+): Promise<MetaFetchResult> {
   const db = getServiceSupabase();
 
   // Look up by Instagram account_id directly — no client_id needed
@@ -326,7 +370,11 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
 
   const acct = rows?.[0];
   if (!acct) {
-    throw new Error(`No connected Instagram account found for account_id: ${accountId}`);
+    return {
+      ok: false,
+      error: `No connected Instagram account found for account_id: ${accountId}`,
+      tokenExpired: false,
+    };
   }
 
   const raw: ProxyComment[] = [];
@@ -335,8 +383,14 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
     const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,media_url,thumbnail_url,media_type&limit=10&access_token=${acct.access_token}`);
     if (!mediaRes.ok) {
       const errBody = await mediaRes.text().catch(() => "");
-      console.error(`[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`, errBody.slice(0, 300));
-      throw new Error(`Instagram API error ${mediaRes.status}: ${errBody.slice(0, 120)}`);
+      const tokenExpired = isTokenError(mediaRes.status, errBody);
+      console.error(
+        `[ig-comments] IG media fetch failed ${mediaRes.status} for account ${acct.account_id}:`,
+        errBody.slice(0, 300)
+      );
+      const message = `Instagram API error ${mediaRes.status}: ${errBody.slice(0, 160)}`;
+      await recordAccountError(accountId, message);
+      return { ok: false, error: message, tokenExpired };
     }
     const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string; media_url?: string; thumbnail_url?: string; media_type?: string }[] };
     console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
@@ -353,16 +407,19 @@ async function fetchFromMetaGraph(accountId: string, limit: number): Promise<Nor
       }
     }));
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Instagram API error")) throw err;
     console.error(`[ig-comments] account ${acct.account_id} threw:`, err);
   }
   console.log(`[ig-comments] total raw comments collected: ${raw.length}`);
 
-  return raw
+  const comments = raw
     .map((r, i) => normalizeComment(r, i))
     .filter((c): c is NormalizedComment => Boolean(c))
     .sort((a, b) => b.posterScore - a.posterScore)
     .slice(0, limit);
+
+  // Clear any previously recorded error now that the fetch worked.
+  await clearAccountError(accountId);
+  return { ok: true, comments };
 }
 
 async function handleRequest(accountId: string, limit: number) {
@@ -375,8 +432,25 @@ async function handleRequest(accountId: string, limit: number) {
     if (!accountId) {
       return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
     }
-    const comments = await fetchFromMetaGraph(accountId, limit);
-    return NextResponse.json({ ok: true, comments, source: "meta-graph", fetched: comments.length, fetchedAt: new Date().toISOString() });
+    const result = await fetchFromMetaGraph(accountId, limit);
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: result.error,
+          tokenExpired: result.tokenExpired,
+          source: "meta-graph",
+        },
+        { status: result.tokenExpired ? 401 : 502 }
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      comments: result.comments,
+      source: "meta-graph",
+      fetched: result.comments.length,
+      fetchedAt: new Date().toISOString(),
+    });
   }
 
   const proxyMethod = String(
