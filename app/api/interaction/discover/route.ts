@@ -463,10 +463,26 @@ async function fetchKeywordPosts(
           null,
         text: text.slice(0, 600),
         time: (() => {
-          if (!posted) return "just now";
-          const d = new Date(String(posted));
-          if (Number.isNaN(d.getTime())) return String(posted);
-          const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+          if (posted == null) return "just now";
+          // RapidAPI vendors return timestamps as either ISO strings,
+          // milliseconds, or unix-seconds. Normalise all three before
+          // falling back to the raw value.
+          let ms: number | null = null;
+          if (typeof posted === "number") {
+            ms = posted > 1e12 ? posted : posted * 1000;
+          } else {
+            const str = String(posted).trim();
+            if (!str) return "just now";
+            const asNum = Number(str);
+            if (Number.isFinite(asNum)) {
+              ms = asNum > 1e12 ? asNum : asNum * 1000;
+            } else {
+              const parsed = new Date(str);
+              ms = Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+            }
+          }
+          if (ms == null || !Number.isFinite(ms)) return "recent";
+          const mins = Math.floor((Date.now() - ms) / 60000);
           if (mins < 1) return "just now";
           if (mins < 60) return `${mins}m ago`;
           const hours = Math.floor(mins / 60);
