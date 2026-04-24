@@ -2083,20 +2083,49 @@ export default function InteractionEngineUI({
                     </span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-sm text-gray-700">{post.text}</p>
-                  {post.permalink && (
-                    <div className="mt-3">
-                      <a
-                        href={post.permalink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-md border border-black bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
-                      >
-                        {post.source === "business_discovery"
-                          ? "Open on Instagram ↗"
-                          : "Open on Facebook ↗"}
-                      </a>
-                    </div>
-                  )}
+                  {(() => {
+                    // Always surface a click-through. Prefer the post
+                    // permalink; fall back to the author's profile URL
+                    // derived from their @handle so there's never a dead
+                    // card.
+                    const authorHandleRaw = post.author.startsWith("@")
+                      ? post.author.slice(1)
+                      : "";
+                    const authorFallback =
+                      authorHandleRaw && /^[a-z0-9._-]+$/i.test(authorHandleRaw)
+                        ? post.source === "business_discovery" ||
+                          post.source === "hashtag"
+                          ? `https://www.instagram.com/${authorHandleRaw}/`
+                          : `https://www.facebook.com/${authorHandleRaw}`
+                        : null;
+                    const href = post.permalink ?? authorFallback;
+                    const platformLabel =
+                      post.source === "business_discovery" ||
+                      post.source === "hashtag"
+                        ? "Instagram"
+                        : "Facebook";
+                    if (!href) return null;
+                    const label = post.permalink
+                      ? `Open post on ${platformLabel} ↗`
+                      : `Open @${authorHandleRaw} on ${platformLabel} ↗`;
+                    return (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-black bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+                        >
+                          {label}
+                        </a>
+                        {!post.permalink && (
+                          <span className="text-[11px] italic text-gray-400">
+                            No direct post link — opens the author&rsquo;s profile instead.
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               {post.comments.length > 0 && (
