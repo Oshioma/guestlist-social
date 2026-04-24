@@ -695,7 +695,22 @@ export default function InteractionEngineUI({
   setupIssue?: SetupIssue;
 }) {
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
-  const [activeClientId, setActiveClientId] = useState(initialClients[0]?.id ?? "");
+  const [activeClientId, setActiveClientId] = useState(() => {
+    // Remember whichever account the operator had selected last time,
+    // but only if it still exists in the current list. Falls back to
+    // the first account so we never land on a broken selection.
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem("interaction-active-account");
+        if (stored && initialClients.some((c) => c.id === stored)) {
+          return stored;
+        }
+      } catch {
+        // localStorage unavailable — ignore
+      }
+    }
+    return initialClients[0]?.id ?? "";
+  });
   const [activeTab, setActiveTab] = useState<Tab>("Feed");
   const [selectedId, setSelectedId] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
@@ -1176,6 +1191,17 @@ export default function InteractionEngineUI({
       // ignore quota / privacy errors
     }
   }, [keywordFilter]);
+
+  // Remember the active account across reloads so the operator doesn't
+  // have to re-pick their client every time they open the page.
+  useEffect(() => {
+    if (!activeClientId) return;
+    try {
+      window.localStorage.setItem("interaction-active-account", activeClientId);
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [activeClientId]);
 
   // Deterministic fixtures for demos — no randomness so screenshots and
   // walkthroughs show the same data every time. Scored via deriveScores()
