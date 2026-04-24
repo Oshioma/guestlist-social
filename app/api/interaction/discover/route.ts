@@ -531,6 +531,52 @@ function formatRelativeTime(ms: number | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// Resolve an Instagram location name to its numeric ID using IG's
+// public web search. No authentication needed and no RapidAPI quota
+// burned — it's the same endpoint the IG app itself hits when you
+// type a place name. Returns null if IG blocks the request or there
+// are no place matches.
+async function resolveLocationIdViaInstagram(
+  name: string
+): Promise<string | null> {
+  const clean = name.trim();
+  if (!clean) return null;
+  const url =
+    "https://www.instagram.com/web/search/topsearch/?context=place&query=" +
+    encodeURIComponent(clean);
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "X-IG-App-ID": "936619743392459",
+        Referer: "https://www.instagram.com/",
+      },
+    });
+    if (!res.ok) {
+      console.warn(
+        `[resolveLocationIdViaInstagram] IG topsearch returned ${res.status}`
+      );
+      return null;
+    }
+    const data = (await res.json().catch(() => null)) as
+      | { places?: Array<{ place?: { location?: { pk?: string | number } } }> }
+      | null;
+    const first = data?.places?.[0]?.place?.location?.pk;
+    if (first == null) return null;
+    return String(first).trim() || null;
+  } catch (err) {
+    console.warn(
+      "[resolveLocationIdViaInstagram] fetch failed:",
+      err instanceof Error ? err.message : err
+    );
+    return null;
+  }
+}
+
 // Instagram location discovery — finds real IG posts tagged at a
 // physical location (e.g. "Kendwa Beach"). Much fresher and
 // audience-relevant than Facebook keyword search, at the cost of
@@ -598,6 +644,17 @@ async function fetchLocationPosts(
   // RapidAPI quota unit per lookup and works for scrapers that don't
   // expose a search-by-name endpoint.
   let locationId: string | null = /^\d+$/.test(clean) ? clean : null;
+
+  // If the operator gave us a name and the configured RapidAPI scraper
+  // doesn't do name search, try Instagram's own unauthenticated web
+  // topsearch endpoint first. It's free, fast, and returns the exact
+  // location IDs our posts endpoint expects. We prefer this over
+  // RapidAPI search when the host obviously won't handle it — keeps
+  // the operator's quota for the call that actually matters.
+  if (!locationId) {
+    const igResolved = await resolveLocationIdViaInstagram(clean);
+    if (igResolved) locationId = igResolved;
+  }
 
   // Step 1: resolve location name → id (only if we don't already have one)
   if (!locationId) {
