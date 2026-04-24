@@ -763,40 +763,36 @@ export default function InteractionEngineUI({
 
   const updatePost = (postId: string, patch: Partial<Post>) => {
     setPosts((current) => {
-      let updated: Post | null = null;
-      const next = current.map((post) => {
-        if (post.id !== postId) return post;
-        updated = { ...post, ...patch };
-        return updated;
-      });
+      const idx = current.findIndex((p) => p.id === postId);
+      if (idx === -1) return current;
+      const updated: Post = { ...current[idx], ...patch };
+      const next = [...current];
+      next[idx] = updated;
 
       // When the status transitions into a terminal triage state, write
       // it to the DB so refresh / account-switch keeps the decision.
       if (
-        updated &&
-        patch.status &&
-        (patch.status === "approved" ||
-          patch.status === "saved" ||
-          patch.status === "skipped")
+        patch.status === "approved" ||
+        patch.status === "saved" ||
+        patch.status === "skipped"
       ) {
-        const decision = patch.status as DecisionKind;
-        const snapshot = updated;
-        setDecisionMap((prev) => ({ ...prev, [snapshot.id]: decision }));
+        const decision: DecisionKind = patch.status;
+        setDecisionMap((prev) => ({ ...prev, [updated.id]: decision }));
         // Fire-and-forget; UI already reflects the change optimistically.
         void saveInteractionDecision({
-          accountId: snapshot.clientId,
-          commentId: snapshot.id,
+          accountId: updated.clientId,
+          commentId: updated.id,
           decision,
-          commentText: snapshot.text,
-          commentAuthor: snapshot.author,
-          commentPermalink: snapshot.permalink ?? null,
-          posterType: snapshot.posterType ?? null,
-          posterScore: snapshot.posterScore ?? null,
-          followerCount: snapshot.followerCount ?? null,
-          engagementRate: snapshot.engagementRate ?? null,
-          relevance: snapshot.relevance,
-          opportunity: snapshot.opportunity,
-          risk: snapshot.risk,
+          commentText: updated.text,
+          commentAuthor: updated.author,
+          commentPermalink: updated.permalink ?? null,
+          posterType: updated.posterType ?? null,
+          posterScore: updated.posterScore ?? null,
+          followerCount: updated.followerCount ?? null,
+          engagementRate: updated.engagementRate ?? null,
+          relevance: updated.relevance,
+          opportunity: updated.opportunity,
+          risk: updated.risk,
         }).catch((err) => {
           console.error("[updatePost] persistDecision failed:", err);
         });
