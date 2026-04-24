@@ -91,8 +91,10 @@ export async function POST(req: Request) {
       .join("")
       .trim()
       // Strip matched wrapping quotes if the model ignored the
-      // "no quotes" instruction.
-      .replace(/^["'“”‘’](.*)["'“”‘’]$/s, "$1")
+      // "no quotes" instruction. [\s\S] keeps the match cross-newline
+      // without needing the `s` flag (which needs an ES2018 target
+      // some of our build configs don't have).
+      .replace(/^["'“”‘’]([\s\S]*)["'“”‘’]$/, "$1")
       .trim();
 
     if (!reply) {
