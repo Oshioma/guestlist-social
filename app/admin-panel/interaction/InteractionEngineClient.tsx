@@ -2,10 +2,37 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  addInteractionSearch,
+  listInteractionSearches,
+  removeInteractionSearch,
   saveInteractionDecision,
   type DecisionKind,
   type PersistedDecision,
+  type SavedSearch,
+  type SearchKind,
 } from "./actions";
+
+type DiscoveredComment = {
+  id: string;
+  author: string;
+  text: string;
+  time: string;
+  likeCount: number | null;
+};
+
+type DiscoveredPost = {
+  id: string;
+  author: string;
+  authorFollowers: number | null;
+  text: string;
+  time: string;
+  permalink: string | null;
+  mediaUrl: string;
+  likeCount: number | null;
+  commentCount: number | null;
+  comments: DiscoveredComment[];
+  source: "business_discovery" | "mentions" | "hashtag";
+};
 
 type PostStatus = "new" | "approved" | "skipped" | "saved";
 type FetchState = "idle" | "loading" | "success" | "error";
@@ -620,6 +647,16 @@ export default function InteractionEngineUI({
   const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
   const [keywordFilter, setKeywordFilter] = useState("");
   const [demoMode, setDemoMode] = useState(false);
+
+  // Discovery tab state — saved searches persist per account; running one
+  // fires /api/interaction/discover and renders the posts + their comments.
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [newSearchKind, setNewSearchKind] = useState<SearchKind>("handle");
+  const [newSearchValue, setNewSearchValue] = useState("");
+  const [activeSearchId, setActiveSearchId] = useState<number | null>(null);
+  const [discoveryPosts, setDiscoveryPosts] = useState<DiscoveredPost[]>([]);
+  const [discoveryFetchState, setDiscoveryFetchState] = useState<FetchState>("idle");
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [tokenExpired, setTokenExpired] = useState(false);
@@ -873,6 +910,123 @@ export default function InteractionEngineUI({
       clearInterval(interval);
     };
   }, [activeClientId, keywordFilter]);
+
+  // Load saved discovery searches when the active account changes.
+  useEffect(() => {
+    if (!activeClientId) {
+      setSavedSearches([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const rows = await listInteractionSearches(activeClientId);
+      if (!cancelled) {
+        setSavedSearches(rows);
+        setActiveSearchId(null);
+        setDiscoveryPosts([]);
+        setDiscoveryFetchState("idle");
+        setDiscoveryError(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClientId]);
+
+  async function runDiscoverySearch(search: SavedSearch) {
+    setActiveSearchId(search.id);
+    setDiscoveryFetchState("loading");
+    setDiscoveryError(null);
+    try {
+      const params = new URLSearchParams({
+        accountId: search.accountId,
+        kind: search.kind,
+      });
+      if (search.value) params.set("value", search.value);
+      const res = await fetch(`/api/interaction/discover?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        posts?: DiscoveredPost[];
+        error?: string;
+        notSupported?: boolean;
+      };
+      if (!res.ok || !json.ok) {
+        setDiscoveryFetchState("error");
+        setDiscoveryError(json.error ?? "Discovery lookup failed");
+        setDiscoveryPosts([]);
+        return;
+      }
+      setDiscoveryPosts(json.posts ?? []);
+      setDiscoveryFetchState("success");
+    } catch (err) {
+      setDiscoveryFetchState("error");
+      setDiscoveryError(
+        err instanceof Error ? err.message : "Discovery lookup failed"
+      );
+      setDiscoveryPosts([]);
+    }
+  }
+
+  async function handleAddSearch() {
+    const value = newSearchValue.trim();
+    if (!activeClientId) return;
+    if (newSearchKind !== "mentions" && !value) return;
+    const result = await addInteractionSearch({
+      accountId: activeClientId,
+      kind: newSearchKind,
+      value: newSearchKind === "mentions" ? "me" : value,
+      label: null,
+    });
+    if (!result.ok) {
+      setDiscoveryError(result.error);
+      return;
+    }
+    setNewSearchValue("");
+    setSavedSearches((prev) => {
+      const without = prev.filter((s) => s.id !== result.search.id);
+      return [result.search, ...without];
+    });
+    await runDiscoverySearch(result.search);
+  }
+
+  async function handleRemoveSearch(id: number) {
+    const res = await removeInteractionSearch(id);
+    if (!res.ok) {
+      setDiscoveryError(res.error);
+      return;
+    }
+    setSavedSearches((prev) => prev.filter((s) => s.id !== id));
+    if (activeSearchId === id) {
+      setActiveSearchId(null);
+      setDiscoveryPosts([]);
+      setDiscoveryFetchState("idle");
+    }
+  }
+
+  function handleDiscoveryCommentDecision(
+    post: DiscoveredPost,
+    comment: DiscoveredComment,
+    decision: DecisionKind
+  ) {
+    void saveInteractionDecision({
+      accountId: activeClientId,
+      commentId: comment.id,
+      decision,
+      commentText: comment.text,
+      commentAuthor: comment.author,
+      commentPermalink: post.permalink,
+      posterType: null,
+      posterScore: null,
+      followerCount: post.authorFollowers,
+      engagementRate: null,
+      relevance: null,
+      opportunity: null,
+      risk: null,
+    }).catch((err) => console.error("[discovery decision] failed:", err));
+    setDecisionMap((prev) => ({ ...prev, [comment.id]: decision }));
+  }
 
   // Hydrate / persist keyword filter across sessions.
   useEffect(() => {
@@ -1397,289 +1551,192 @@ export default function InteractionEngineUI({
   };
 
   const renderDiscovery = () => (
-    <div>
-      <div className="mb-6 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 md:col-span-2">
-          <div className="text-sm font-semibold text-gray-900">Search conversations</div>
-          <div className="mt-1 text-sm text-gray-500">
-            Find posts outside your audience that your brand should jump into first.
-          </div>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Find people asking about food in Zanzibar tonight..."
-            className="mt-4 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-black"
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-xs">Last 1h</button>
-            <button
-              onClick={() => setFilterLowReplies((v) => !v)}
-              className={`rounded-lg border px-3 py-2 text-xs ${filterLowReplies ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              Low replies
-            </button>
-            <button
-              onClick={() => setFilterQuestionsOnly((v) => !v)}
-              className={`rounded-lg border px-3 py-2 text-xs ${filterQuestionsOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              Questions only
-            </button>
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-xs">Zanzibar now</button>
-            <button
-              onClick={() => {
-                setFilterTourists((v) => !v);
-                setFilterCreators(false);
-              }}
-              className={`rounded-lg border px-3 py-2 text-xs ${filterTourists ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              Tourists
-            </button>
-            <button
-              onClick={() => {
-                setFilterCreators((v) => !v);
-                setFilterTourists(false);
-              }}
-              className={`rounded-lg border px-3 py-2 text-xs ${filterCreators ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              Creators
-            </button>
-            <button
-              onClick={() => setFilterVerified((v) => !v)}
-              className={`rounded-lg border px-3 py-2 text-xs ${filterVerified ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              Verified
-            </button>
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-xs">
-              AI query translation
-            </button>
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-xs">Batch add</button>
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-xs">Live stream</button>
-          </div>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="text-sm font-semibold text-gray-900">Add a discovery source</div>
+        <div className="mt-1 text-xs text-gray-500">
+          Free, uses Meta Graph — no scraper service needed. Competitor and mentions work out of the box; hashtag requires Meta app review and will tell you if it is not enabled.
         </div>
-        <div className="rounded-2xl border border-black bg-black p-5 text-white">
-          <div className="text-xs uppercase tracking-[0.2em] text-white/60">Discovery engine</div>
-          <div className="mt-2 text-3xl font-semibold tracking-tight">{discoveryResults.length}</div>
-          <div className="mt-2 text-sm text-white/70">high-intent opportunities found</div>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-gray-400">Auto-queue</div>
-          <div className="mt-2 text-sm font-semibold text-gray-900">High-score posts</div>
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="text-sm text-gray-500">Auto-add discovery results scoring 90+</div>
-            <button
-              onClick={() => setAutoQueue((v) => !v)}
-              className={`rounded-full border px-3 py-1 text-xs ${autoQueue ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
-            >
-              {autoQueue ? "On" : "Off"}
-            </button>
-          </div>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-gray-400">Saved searches</div>
-          <div className="mt-2 text-sm font-semibold text-gray-900">Reusable discovery sets</div>
-          <div className="mt-2 text-sm text-gray-500">Concept shown in UI</div>
-        </div>
-      </div>
-      <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold text-gray-900">Discovery upgrades map</div>
-            <div className="mt-1 text-sm text-gray-500">
-              All 10 improvements are represented here. The first 3 are implemented in code.
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-black bg-black px-3 py-1.5 text-white">
-              1 Intent detection ✓
-            </span>
-            <span className="rounded-full border border-black bg-black px-3 py-1.5 text-white">
-              2 Reply competition ✓
-            </span>
-            <span className="rounded-full border border-black bg-black px-3 py-1.5 text-white">
-              3 Time decay ✓
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              4 Auto-queue
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              5 AI query translation
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              6 Source filtering
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              7 Why this is good
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              8 Batch add
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              9 Saved searches
-            </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-gray-700">
-              10 Live stream
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
-        <div className="space-y-3">
-          {discoveryResults.length ? (
-            discoveryResults.map((post) => renderDiscoveryCard(post))
-          ) : (
-            <div className="rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-              No discovery results right now.
-            </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            value={newSearchKind}
+            onChange={(e) => setNewSearchKind(e.target.value as SearchKind)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+          >
+            <option value="handle">Competitor / creator handle</option>
+            <option value="mentions">Posts that tag me</option>
+            <option value="hashtag">Hashtag (gated by Meta)</option>
+          </select>
+          {newSearchKind !== "mentions" && (
+            <input
+              value={newSearchValue}
+              onChange={(e) => setNewSearchValue(e.target.value)}
+              placeholder={newSearchKind === "handle" ? "@competitor_handle" : "#hashtag"}
+              className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+            />
           )}
-        </div>
-        <div className="sticky top-8 h-fit rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
-          {selectedDiscovery ? (
-            <>
-              <div className="text-lg font-semibold tracking-tight">Discovery preview</div>
-              <div className="mt-1 text-xs text-gray-400">
-                See the AI response before sending it into Operator mode.
-              </div>
-              <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">
-                  Found conversation
-                </div>
-                <div className="mt-2 text-sm font-semibold text-gray-900">{selectedDiscovery.author}</div>
-                <div className="mt-1 text-xs text-gray-400">
-                  {selectedDiscovery.platform} • {selectedDiscovery.time}
-                </div>
-                <div className="mt-3 text-sm leading-6 text-gray-800">"{selectedDiscovery.text}"</div>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
-                <div className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="text-gray-400">Intent</div>
-                  <div className="mt-1 font-semibold capitalize text-gray-900">
-                    {selectedDiscovery.intent}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="text-gray-400">Replies</div>
-                  <div className="mt-1 font-semibold text-gray-900">{selectedDiscovery.replyCount}</div>
-                </div>
-                <div className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="text-gray-400">Freshness</div>
-                  <div className="mt-1 font-semibold text-gray-900">
-                    {getFreshnessWeight(selectedDiscovery.time) > 0
-                      ? `+${getFreshnessWeight(selectedDiscovery.time)}`
-                      : getFreshnessWeight(selectedDiscovery.time)}
-                  </div>
-                </div>
-              </div>
-              {selectedDiscoveryBest ? (
-                <div className="mt-5 rounded-2xl border border-black bg-black p-4 text-white">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/60">
-                      Suggested response
-                    </div>
-                    <div className="rounded-full bg-white/10 px-2.5 py-1 text-[10px]">
-                      {selectedDiscoveryBest.winProbability}% win
-                    </div>
-                  </div>
-                  <div className="mt-3 text-base font-medium leading-7">{selectedDiscoveryBest.text}</div>
-                  <div className="mt-3 text-xs text-white/60">{selectedDiscoveryBest.why}</div>
-                </div>
-              ) : null}
-              <div className="mt-5 rounded-2xl border border-gray-200 p-4">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400">Why this is good</div>
-                <ul className="mt-3 space-y-2 text-sm text-gray-700">
-                  <li>• Strong intent signal from the wording.</li>
-                  <li>• Reply competition is still manageable.</li>
-                  <li>• Timing window is still open enough to matter.</li>
-                </ul>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <button className="rounded-xl border border-gray-200 py-3 text-sm hover:bg-gray-50">
-                  Batch add
-                </button>
-                <button className="rounded-xl border border-gray-200 py-3 text-sm hover:bg-gray-50">
-                  Save search
-                </button>
-              </div>
-              <button
-                onClick={() => addDiscoveryToQueue(selectedDiscovery)}
-                className="mt-5 w-full rounded-xl bg-black py-3 text-sm font-medium text-white hover:opacity-90"
-              >
-                Add to Operator queue →
-              </button>
-            </>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-              No discovery results right now.
-            </div>
-          )}
+          <button
+            onClick={handleAddSearch}
+            disabled={!activeClientId || (newSearchKind !== "mentions" && !newSearchValue.trim())}
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Save &amp; run
+          </button>
         </div>
       </div>
 
-      {/* Hashtag monitor & search queries */}
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">Hashtags to monitor</div>
-              <div className="mt-0.5 text-xs text-gray-500">Organised by client type — use filters above to match your client's offer.</div>
-            </div>
+      {savedSearches.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="text-sm font-semibold text-gray-900">Saved searches</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {savedSearches.map((s) => (
+              <div
+                key={s.id}
+                className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition ${
+                  activeSearchId === s.id
+                    ? "border-black bg-black text-white"
+                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <button onClick={() => runDiscoverySearch(s)}>
+                  {s.kind === "handle" && `@${s.value}`}
+                  {s.kind === "hashtag" && `#${s.value}`}
+                  {s.kind === "mentions" && "Tagged me"}
+                </button>
+                <button
+                  onClick={() => handleRemoveSearch(s.id)}
+                  className={`ml-1 rounded-full px-1 text-xs ${
+                    activeSearchId === s.id
+                      ? "text-white/70 hover:text-white"
+                      : "text-gray-400 hover:text-gray-700"
+                  }`}
+                  title="Remove saved search"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
-          {["Location", "Food & Drink", "Accommodation", "Activities", "Wellness", "Nightlife"].map((cat) => {
-            const tags = DISCOVERY_HASHTAGS.filter((h) => h.category === cat);
-            return (
-              <div key={cat} className="mb-4">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">{cat}</div>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((h) => (
+        </div>
+      )}
+
+      {discoveryFetchState === "loading" && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          Loading posts from Meta…
+        </div>
+      )}
+
+      {discoveryFetchState === "error" && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">Discovery lookup failed</div>
+          <div className="mt-1 text-xs opacity-90">{discoveryError}</div>
+        </div>
+      )}
+
+      {discoveryFetchState === "success" && discoveryPosts.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+          No posts found for this source yet.
+        </div>
+      )}
+
+      {discoveryPosts.length > 0 && (
+        <div className="space-y-4">
+          {discoveryPosts.map((post) => (
+            <div
+              key={post.id}
+              className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
+            >
+              <div className="flex items-start gap-4 p-5">
+                {post.mediaUrl ? (
+                  <img
+                    src={post.mediaUrl}
+                    alt=""
+                    className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="h-20 w-20 shrink-0 rounded-lg bg-gray-100" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <a
-                      key={h.tag}
-                      href={`https://www.instagram.com/explore/tags/${h.tag.slice(1)}/`}
+                      href={post.permalink ?? "#"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title={h.intent}
-                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium hover:opacity-80 ${
-                        h.volume === "High"
-                          ? "border-red-200 bg-red-50 text-red-700"
-                          : h.volume === "Medium"
-                          ? "border-amber-200 bg-amber-50 text-amber-800"
-                          : "border-gray-200 bg-white text-gray-700"
-                      }`}
+                      className="text-sm font-semibold hover:underline"
                     >
-                      {h.tag}
-                      <span className="text-[9px] opacity-50">↗</span>
+                      {post.author}
                     </a>
-                  ))}
+                    {post.authorFollowers != null && (
+                      <span className="text-xs text-gray-500">
+                        {post.authorFollowers.toLocaleString()} followers
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">{post.time}</span>
+                    <span className="ml-auto text-xs text-gray-400">
+                      {post.likeCount ?? 0} likes · {post.commentCount ?? post.comments.length} comments
+                    </span>
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-sm text-gray-700">{post.text}</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
-        <div>
-          <div className="mb-3">
-            <div className="text-sm font-semibold text-gray-900">Search queries to intercept</div>
-            <div className="mt-0.5 text-xs text-gray-500">Questions people ask that match common client offers across categories.</div>
-          </div>
-          {["Food", "Accommodation", "Activities", "Discovery"].map((cat) => {
-            const kws = DISCOVERY_KEYWORDS.filter((k) => k.category === cat);
-            return (
-              <div key={cat} className="mb-4">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">{cat}</div>
-                <div className="space-y-2">
-                  {kws.map((k) => (
-                    <div key={k.keyword} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-2.5">
-                      <span className="text-sm text-gray-800">"{k.keyword}"</span>
-                      <span className={`ml-3 shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
-                        k.priority === "High"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-blue-200 bg-blue-50 text-blue-700"
-                      }`}>{k.priority}</span>
-                    </div>
-                  ))}
+              {post.comments.length > 0 && (
+                <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Comments ({post.comments.length})
+                  </div>
+                  <div className="space-y-2">
+                    {post.comments.map((c) => {
+                      const decided = decisionMap[c.id];
+                      return (
+                        <div
+                          key={c.id}
+                          className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-gray-900">
+                              {c.author}
+                              <span className="ml-2 text-xs text-gray-400">{c.time}</span>
+                            </div>
+                            <div className="mt-0.5 text-sm text-gray-700">{c.text}</div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {decided ? (
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-600">
+                                {decided}
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleDiscoveryCommentDecision(post, c, "approved")}
+                                  className="rounded-md border border-black bg-black px-2 py-1 text-xs text-white"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleDiscoveryCommentDecision(post, c, "saved")}
+                                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => handleDiscoveryCommentDecision(post, c, "skipped")}
+                                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-400 hover:bg-gray-50"
+                                >
+                                  Skip
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              )}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 
