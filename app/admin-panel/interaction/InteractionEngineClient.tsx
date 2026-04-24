@@ -701,6 +701,17 @@ function PostCard({
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
+            {post.permalink && (
+              <a
+                href={post.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium text-black hover:bg-black hover:text-white"
+              >
+                View on {post.platform} ↗
+              </a>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -1010,6 +1021,11 @@ export default function InteractionEngineUI({
             // one. Empty string falls through to MediaThumb's SVG placeholder
             // so we don't flash a broken image.
             mediaUrl: String(comment.mediaUrl ?? "").trim(),
+            // Carry the post permalink through so the card can link back
+            // to the original IG post. This was silently dropped from the
+            // mapper which made every card's "View on Instagram" button
+            // invisible.
+            permalink: comment.permalink ? String(comment.permalink) : null,
             status: priorDecision
               ? (statusFromDecision(priorDecision) as PostStatus)
               : ("new" as const),
