@@ -623,11 +623,18 @@ async function fetchLocationPosts(
     process.env.RAPIDAPI_IG_HOST ??
     "instagram-scraper-api2.p.rapidapi.com"
   ).trim();
-  const searchPath = (
+  // Only use a RapidAPI search path that the operator explicitly set
+  // (in the Discovery panel or env vars). The old default
+  // "/v1/location_search?query={q}" was fine for instagram-scraper-api2
+  // but blows up with a 403 "not subscribed to this API" on scrapers
+  // like instagram191 that only expose posts-by-id. Better to return a
+  // clear "couldn't resolve" than to wrongly blame the subscription.
+  const configuredSearchPath = (
     stored.locationSearchPath ??
     process.env.RAPIDAPI_IG_LOCATION_SEARCH_PATH ??
-    "/v1/location_search?query={q}"
+    ""
   ).trim();
+  const searchPath = configuredSearchPath; // empty = disabled
   const postsPath = (
     stored.locationPostsPath ??
     process.env.RAPIDAPI_IG_LOCATION_POSTS_PATH ??
@@ -645,19 +652,17 @@ async function fetchLocationPosts(
   // expose a search-by-name endpoint.
   let locationId: string | null = /^\d+$/.test(clean) ? clean : null;
 
-  // If the operator gave us a name and the configured RapidAPI scraper
-  // doesn't do name search, try Instagram's own unauthenticated web
-  // topsearch endpoint first. It's free, fast, and returns the exact
-  // location IDs our posts endpoint expects. We prefer this over
-  // RapidAPI search when the host obviously won't handle it — keeps
-  // the operator's quota for the call that actually matters.
+  // Name → id resolution, in order of preference (each step free-ish
+  // and safe to skip):
+  // 1. Instagram's own public topsearch (no scraper quota burned)
+  // 2. The operator's configured RapidAPI search path, if any
   if (!locationId) {
     const igResolved = await resolveLocationIdViaInstagram(clean);
     if (igResolved) locationId = igResolved;
   }
 
   // Step 1: resolve location name → id (only if we don't already have one)
-  if (!locationId) {
+  if (!locationId && searchPath) {
     const searchUrl = `https://${host}${searchPath.replace(
       "{q}",
       encodeURIComponent(clean)
@@ -735,7 +740,7 @@ async function fetchLocationPosts(
   if (!locationId) {
     return {
       ok: false,
-      error: `Couldn't resolve a location named "${clean}" via the RapidAPI scraper. Options: (1) paste the location ID instead (numbers only — find it in the IG location URL, e.g. instagram.com/explore/locations/378081362682024/), (2) try a more specific name, or (3) set a Location search path in the RapidAPI panel if your scraper has one.`,
+      error: `Couldn't resolve a location named "${clean}". Instagram's public search returned no matches (or blocked the request from our server). Options: (1) paste the numeric location ID instead — find it in the IG URL at instagram.com/explore/locations/<ID>/<slug>/; (2) try a more specific name like "Kendwa Beach Zanzibar"; (3) add a Location search path in the RapidAPI panel if your scraper has one.`,
     };
   }
 
