@@ -1078,7 +1078,7 @@ export default function InteractionEngineUI({
     };
   }, [activeClientId]);
 
-  async function runDiscoverySearch(search: SavedSearch) {
+  async function runDiscoverySearch(search: SavedSearch): Promise<boolean> {
     setActiveSearchId(search.id);
     setDiscoveryFetchState("loading");
     setDiscoveryError(null);
@@ -1103,11 +1103,12 @@ export default function InteractionEngineUI({
         setDiscoveryError(json.error ?? "Discovery lookup failed");
         setDiscoveryPosts([]);
         setDiscoveryPages([]);
-        return;
+        return false;
       }
       setDiscoveryPosts(json.posts ?? []);
       setDiscoveryPages(json.pages ?? []);
       setDiscoveryFetchState("success");
+      return true;
     } catch (err) {
       setDiscoveryFetchState("error");
       setDiscoveryError(
@@ -1115,6 +1116,7 @@ export default function InteractionEngineUI({
       );
       setDiscoveryPosts([]);
       setDiscoveryPages([]);
+      return false;
     }
   }
 
@@ -1143,7 +1145,15 @@ export default function InteractionEngineUI({
       const without = prev.filter((s) => s.id !== result.search.id);
       return [result.search, ...without];
     });
-    await runDiscoverySearch(result.search);
+    const ok = await runDiscoverySearch(result.search);
+    // If the lookup failed (e.g. FB vanity doesn't resolve as an IG handle
+    // via Business Discovery), auto-remove the broken saved search so the
+    // operator doesn't have a pill that always errors. They keep the error
+    // banner explaining what to try next.
+    if (!ok) {
+      await removeInteractionSearch(result.search.id);
+      setSavedSearches((prev) => prev.filter((s) => s.id !== result.search.id));
+    }
   }
 
   async function handleAddSearch() {
@@ -1978,8 +1988,8 @@ export default function InteractionEngineUI({
                         className="rounded-md border border-black bg-black px-2.5 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
                         title={
                           canPromote
-                            ? "Save as a competitor-handle source and fetch its posts"
-                            : "No Instagram handle on this page — can't run Business Discovery"
+                            ? "Try this handle against Meta Business Discovery. The Facebook vanity sometimes doesn't match Instagram — if it fails, paste the real @handle in the box above."
+                            : "No handle on this page — can't run Business Discovery"
                         }
                       >
                         Use as source

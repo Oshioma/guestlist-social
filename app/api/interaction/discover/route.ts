@@ -128,7 +128,8 @@ function shapePost(
 function explainGraphError(
   msg: string | undefined,
   code: number | undefined,
-  fallback: string
+  fallback: string,
+  context?: { kind?: "handle" | "mentions" | "hashtag"; value?: string }
 ): string {
   const base = msg ?? fallback;
   // Meta error code 10 = "Application does not have permission for this
@@ -146,6 +147,23 @@ function explainGraphError(
   }
   if (code === 190 || code === 463 || code === 467) {
     return "The Instagram access token has expired or been revoked. Reconnect the account in client settings.";
+  }
+  // "Invalid user id" / code 100 on Business Discovery means Meta can't
+  // resolve the target username. Usually the target is a personal account,
+  // private, doesn't exist, or the handle came from a Facebook page vanity
+  // that doesn't match the Instagram handle.
+  if (
+    code === 100 ||
+    /invalid user id/i.test(base) ||
+    /unknown path|does not exist/i.test(base)
+  ) {
+    const target = context?.value ? `"@${context.value}"` : "that handle";
+    return (
+      `Meta couldn't resolve ${target} via Business Discovery. That endpoint only works for ` +
+      "public Instagram business or creator accounts. If the handle came from a Facebook page " +
+      "search, the Facebook vanity URL often doesn't match the Instagram handle — try pasting " +
+      "the exact IG @handle instead."
+    );
   }
   return base;
 }
@@ -190,7 +208,8 @@ async function fetchHandle(
     const msg = explainGraphError(
       errorObj?.message,
       errorObj?.code,
-      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`
+      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`,
+      { kind: "handle", value: clean }
     );
     return { ok: false, error: msg };
   }
@@ -199,7 +218,7 @@ async function fetchHandle(
   if (!bd) {
     return {
       ok: false,
-      error: `@${clean} is not a public business or creator account, or Meta could not resolve the handle.`,
+      error: `Couldn't find @${clean} as a public Instagram business or creator account. Meta's Business Discovery only works on accounts that have switched to "Business" or "Creator" in IG settings. Personal accounts, private accounts, or Facebook-only pages won't resolve.`,
     };
   }
 
