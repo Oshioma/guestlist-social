@@ -34,6 +34,16 @@ type DiscoveredPost = {
   source: "business_discovery" | "mentions" | "hashtag";
 };
 
+type DiscoveredPage = {
+  id: string;
+  name: string;
+  handle: string | null;
+  url: string | null;
+  fans: number | null;
+  avatar: string | null;
+  description: string | null;
+};
+
 type PostStatus = "new" | "approved" | "skipped" | "saved";
 type FetchState = "idle" | "loading" | "success" | "error";
 type Tab =
@@ -681,6 +691,7 @@ export default function InteractionEngineUI({
   const [newSearchValue, setNewSearchValue] = useState("");
   const [activeSearchId, setActiveSearchId] = useState<number | null>(null);
   const [discoveryPosts, setDiscoveryPosts] = useState<DiscoveredPost[]>([]);
+  const [discoveryPages, setDiscoveryPages] = useState<DiscoveredPage[]>([]);
   const [discoveryFetchState, setDiscoveryFetchState] = useState<FetchState>("idle");
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
@@ -948,6 +959,7 @@ export default function InteractionEngineUI({
         setSavedSearches(rows);
         setActiveSearchId(null);
         setDiscoveryPosts([]);
+        setDiscoveryPages([]);
         setDiscoveryFetchState("idle");
         setDiscoveryError(null);
       }
@@ -973,6 +985,7 @@ export default function InteractionEngineUI({
       const json = (await res.json()) as {
         ok: boolean;
         posts?: DiscoveredPost[];
+        pages?: DiscoveredPage[];
         error?: string;
         notSupported?: boolean;
       };
@@ -980,9 +993,11 @@ export default function InteractionEngineUI({
         setDiscoveryFetchState("error");
         setDiscoveryError(json.error ?? "Discovery lookup failed");
         setDiscoveryPosts([]);
+        setDiscoveryPages([]);
         return;
       }
       setDiscoveryPosts(json.posts ?? []);
+      setDiscoveryPages(json.pages ?? []);
       setDiscoveryFetchState("success");
     } catch (err) {
       setDiscoveryFetchState("error");
@@ -990,7 +1005,36 @@ export default function InteractionEngineUI({
         err instanceof Error ? err.message : "Discovery lookup failed"
       );
       setDiscoveryPosts([]);
+      setDiscoveryPages([]);
     }
+  }
+
+  // When a RapidAPI keyword result has a handle, let the operator add it
+  // as a handle-based search so it runs via the free Business Discovery
+  // path from then on.
+  async function promotePageToHandle(page: DiscoveredPage) {
+    const handle = (page.handle ?? "").replace(/^@+/, "").trim();
+    if (!activeClientId || !handle) {
+      setDiscoveryError("This page has no Instagram handle we can use.");
+      setDiscoveryFetchState("error");
+      return;
+    }
+    const result = await addInteractionSearch({
+      accountId: activeClientId,
+      kind: "handle",
+      value: handle,
+      label: page.name || null,
+    });
+    if (!result.ok) {
+      setDiscoveryError(result.error);
+      setDiscoveryFetchState("error");
+      return;
+    }
+    setSavedSearches((prev) => {
+      const without = prev.filter((s) => s.id !== result.search.id);
+      return [result.search, ...without];
+    });
+    await runDiscoverySearch(result.search);
   }
 
   async function handleAddSearch() {
@@ -1045,6 +1089,7 @@ export default function InteractionEngineUI({
     if (activeSearchId === id) {
       setActiveSearchId(null);
       setDiscoveryPosts([]);
+      setDiscoveryPages([]);
       setDiscoveryFetchState("idle");
     }
   }
@@ -1609,6 +1654,7 @@ export default function InteractionEngineUI({
           >
             <option value="handle">Competitor / creator handle</option>
             <option value="mentions">Posts that tag me</option>
+            <option value="keyword">Keyword (RapidAPI)</option>
             <option value="hashtag">Hashtag (gated by Meta)</option>
           </select>
           {newSearchKind !== "mentions" && (
@@ -1621,7 +1667,13 @@ export default function InteractionEngineUI({
                   void handleAddSearch();
                 }
               }}
-              placeholder={newSearchKind === "handle" ? "@competitor_handle" : "#hashtag"}
+              placeholder={
+                newSearchKind === "handle"
+                  ? "@competitor_handle"
+                  : newSearchKind === "keyword"
+                    ? "Keyword or topic (e.g. craft beer)"
+                    : "#hashtag"
+              }
               className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
           )}
@@ -1656,6 +1708,7 @@ export default function InteractionEngineUI({
                   {s.kind === "handle" && `@${s.value}`}
                   {s.kind === "hashtag" && `#${s.value}`}
                   {s.kind === "mentions" && "Tagged me"}
+                  {s.kind === "keyword" && `🔎 ${s.value}`}
                 </button>
                 <button
                   onClick={() => handleRemoveSearch(s.id)}
@@ -1690,7 +1743,87 @@ export default function InteractionEngineUI({
         </div>
       )}
 
-      {discoveryFetchState === "success" && discoveryPosts.length === 0 && (
+      {discoveryPages.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="text-sm font-semibold text-gray-900">
+            {discoveryPages.length} matching pages
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            RapidAPI search results. Click &ldquo;Use as source&rdquo; on any page with
+            an Instagram handle to run the free Business Discovery lookup on it.
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {discoveryPages.map((page) => {
+              const canPromote = Boolean(page.handle);
+              return (
+                <div
+                  key={page.id}
+                  className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3"
+                >
+                  {page.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={page.avatar}
+                      alt=""
+                      className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="h-12 w-12 shrink-0 rounded-lg bg-gray-100" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={page.url ?? "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-sm font-semibold hover:underline"
+                      >
+                        {page.name}
+                      </a>
+                      {page.fans != null && (
+                        <span className="shrink-0 text-xs text-gray-500">
+                          {page.fans.toLocaleString()} fans
+                        </span>
+                      )}
+                    </div>
+                    {page.handle && (
+                      <div className="mt-0.5 text-xs text-gray-500">
+                        @{page.handle}
+                      </div>
+                    )}
+                    {page.description && (
+                      <div className="mt-1 line-clamp-2 text-xs text-gray-600">
+                        {page.description}
+                      </div>
+                    )}
+                    <div className="mt-2">
+                      <button
+                        onClick={() => void promotePageToHandle(page)}
+                        disabled={!canPromote}
+                        className="rounded-md border border-black bg-black px-2.5 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        title={
+                          canPromote
+                            ? "Save as a competitor-handle source and fetch its posts"
+                            : "No Instagram handle on this page — can't run Business Discovery"
+                        }
+                      >
+                        Use as source
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {discoveryFetchState === "success" &&
+        discoveryPosts.length === 0 &&
+        discoveryPages.length === 0 && (
         <div className="rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
           No posts found for this source yet.
         </div>

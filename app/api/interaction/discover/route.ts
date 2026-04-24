@@ -284,6 +284,113 @@ async function fetchHashtag(
   return { ok: true, posts };
 }
 
+type DiscoveredPage = {
+  id: string;
+  name: string;
+  handle: string | null;
+  url: string | null;
+  fans: number | null;
+  avatar: string | null;
+  description: string | null;
+};
+
+async function fetchKeywordPages(
+  keyword: string
+): Promise<{ ok: true; pages: DiscoveredPage[] } | { ok: false; error: string }> {
+  const clean = keyword.replace(/^#+/, "").trim();
+  if (!clean) return { ok: false, error: "keyword required" };
+
+  const key = (process.env.RAPIDAPI_FB_KEY ?? process.env.RAPIDAPI_KEY ?? "").trim();
+  if (!key) {
+    return {
+      ok: false,
+      error:
+        "Keyword discovery needs a RapidAPI key. Set RAPIDAPI_FB_KEY in Vercel env vars (facebook-scraper3 on RapidAPI).",
+    };
+  }
+  const host = (
+    process.env.RAPIDAPI_FB_HOST ?? "facebook-scraper3.p.rapidapi.com"
+  ).trim();
+
+  const endpoint = `https://${host}/search/pages?query=${encodeURIComponent(clean)}`;
+  const res = await fetch(endpoint, {
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rapidapi-host": host,
+      "x-rapidapi-key": key,
+    },
+  });
+  const body = await res.text();
+  let json: unknown = null;
+  try {
+    json = body ? JSON.parse(body) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    const msg =
+      (json as { message?: string } | null)?.message ??
+      `RapidAPI returned ${res.status}: ${body.slice(0, 160)}`;
+    return { ok: false, error: msg };
+  }
+
+  // Different RapidAPI vendors nest results differently — try the common
+  // shapes in order and pick the first array we find.
+  const rows = (() => {
+    const obj = json as Record<string, unknown> | null;
+    if (!obj) return [];
+    const candidates = [
+      obj.results,
+      obj.data,
+      obj.pages,
+      (obj.results as Record<string, unknown> | undefined)?.pages,
+    ];
+    for (const c of candidates) {
+      if (Array.isArray(c)) return c;
+    }
+    return [];
+  })() as Record<string, unknown>[];
+
+  const pages: DiscoveredPage[] = rows
+    .map((row) => {
+      const name = String(row.name ?? row.title ?? row.page_name ?? "").trim();
+      if (!name) return null;
+      const handle = String(
+        row.username ?? row.handle ?? row.vanity ?? ""
+      ).trim() || null;
+      const idRaw = row.page_id ?? row.id ?? row.pageId ?? null;
+      return {
+        id: String(idRaw ?? name),
+        name,
+        handle,
+        url: String(row.url ?? row.page_url ?? row.link ?? "") || null,
+        fans:
+          typeof row.fans === "number"
+            ? row.fans
+            : typeof row.followers === "number"
+              ? (row.followers as number)
+              : typeof row.follower_count === "number"
+                ? (row.follower_count as number)
+                : null,
+        avatar:
+          String(
+            row.avatar ??
+              row.image ??
+              row.profile_picture ??
+              row.thumbnail ??
+              ""
+          ) || null,
+        description:
+          String(row.description ?? row.about ?? row.category ?? "") || null,
+      } as DiscoveredPage;
+    })
+    .filter((p): p is DiscoveredPage => p !== null)
+    .slice(0, 25);
+
+  return { ok: true, pages };
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const accountId = (url.searchParams.get("accountId") ?? "").trim();
@@ -345,6 +452,13 @@ export async function GET(req: NextRequest) {
         );
       }
       return NextResponse.json({ ok: true, kind, value, posts: result.posts });
+    }
+    if (kind === "keyword") {
+      const result = await fetchKeywordPages(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, pages: result.pages });
     }
     return NextResponse.json(
       { ok: false, error: `Unknown kind: ${kind}` },
