@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { getIgScraperCredentialsInternal } from "@/app/admin-panel/interaction/actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 45;
@@ -551,7 +552,12 @@ async function fetchLocationPosts(
   const clean = query.trim();
   if (!clean) return { ok: false, error: "location required" };
 
+  // Prefer DB-stored settings (pasted via the Discovery tab UI) so the
+  // operator doesn't need a redeploy to wire a new scraper. Fall back to
+  // env vars so existing deployments keep working.
+  const stored = await getIgScraperCredentialsInternal();
   const igKey = (
+    stored.apiKey ??
     process.env.RAPIDAPI_IG_KEY ??
     process.env.RAPIDAPI_FB_KEY ??
     process.env.RAPIDAPI_KEY ??
@@ -561,19 +567,23 @@ async function fetchLocationPosts(
     return {
       ok: false,
       error:
-        "Location discovery needs a RapidAPI Instagram scraper key. Set " +
-        "RAPIDAPI_IG_KEY (+ optional RAPIDAPI_IG_HOST, RAPIDAPI_IG_LOCATION_SEARCH_PATH, " +
-        "RAPIDAPI_IG_LOCATION_POSTS_PATH) in your Vercel env vars.",
+        "Location discovery needs a RapidAPI Instagram scraper key. " +
+        "Paste it into the RapidAPI integration panel on the Discovery tab, " +
+        "or set RAPIDAPI_IG_KEY in your Vercel env vars.",
     };
   }
   const host = (
-    process.env.RAPIDAPI_IG_HOST ?? "instagram-scraper-api2.p.rapidapi.com"
+    stored.host ??
+    process.env.RAPIDAPI_IG_HOST ??
+    "instagram-scraper-api2.p.rapidapi.com"
   ).trim();
   const searchPath = (
+    stored.locationSearchPath ??
     process.env.RAPIDAPI_IG_LOCATION_SEARCH_PATH ??
     "/v1/location_search?query={q}"
   ).trim();
   const postsPath = (
+    stored.locationPostsPath ??
     process.env.RAPIDAPI_IG_LOCATION_POSTS_PATH ??
     "/v1/location_posts?location_id={id}"
   ).trim();

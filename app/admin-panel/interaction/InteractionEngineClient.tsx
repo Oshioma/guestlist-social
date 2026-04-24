@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   addInteractionSearch,
+  getIgScraperSettings,
   listInteractionSearches,
   removeInteractionSearch,
+  saveIgScraperSettings,
   saveInteractionDecision,
   type DecisionKind,
+  type IgScraperSettings,
   type PersistedDecision,
   type SavedSearch,
   type SearchKind,
@@ -794,6 +797,24 @@ export default function InteractionEngineUI({
   const [discoveryPages, setDiscoveryPages] = useState<DiscoveredPage[]>([]);
   const [discoveryFetchState, setDiscoveryFetchState] = useState<FetchState>("idle");
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+
+  // RapidAPI IG scraper settings (for Keyword + Location discovery).
+  // Operator can paste these in a panel on the Discovery tab; the API
+  // key is never echoed back — we only surface whether one is set.
+  const [scraperSettings, setScraperSettings] = useState<IgScraperSettings>({
+    hasApiKey: false,
+    host: null,
+    locationSearchPath: null,
+    locationPostsPath: null,
+    updatedAt: null,
+  });
+  const [scraperPanelOpen, setScraperPanelOpen] = useState(false);
+  const [scraperKeyDraft, setScraperKeyDraft] = useState("");
+  const [scraperHostDraft, setScraperHostDraft] = useState("");
+  const [scraperSearchDraft, setScraperSearchDraft] = useState("");
+  const [scraperPostsDraft, setScraperPostsDraft] = useState("");
+  const [scraperSaveState, setScraperSaveState] = useState<FetchState>("idle");
+  const [scraperSaveError, setScraperSaveError] = useState<string | null>(null);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [tokenExpired, setTokenExpired] = useState(false);
@@ -1170,6 +1191,49 @@ export default function InteractionEngineUI({
     if (!ok) {
       await removeInteractionSearch(result.search.id);
       setSavedSearches((prev) => prev.filter((s) => s.id !== result.search.id));
+    }
+  }
+
+  // Hydrate scraper settings once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const current = await getIgScraperSettings();
+      if (cancelled) return;
+      setScraperSettings(current);
+      setScraperHostDraft(current.host ?? "");
+      setScraperSearchDraft(current.locationSearchPath ?? "");
+      setScraperPostsDraft(current.locationPostsPath ?? "");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSaveScraperSettings() {
+    setScraperSaveState("loading");
+    setScraperSaveError(null);
+    try {
+      const res = await saveIgScraperSettings({
+        apiKey: scraperKeyDraft.trim() || undefined,
+        host: scraperHostDraft,
+        locationSearchPath: scraperSearchDraft,
+        locationPostsPath: scraperPostsDraft,
+      });
+      if (!res.ok) {
+        setScraperSaveState("error");
+        setScraperSaveError(res.error);
+        return;
+      }
+      const fresh = await getIgScraperSettings();
+      setScraperSettings(fresh);
+      setScraperKeyDraft("");
+      setScraperSaveState("success");
+    } catch (err) {
+      setScraperSaveState("error");
+      setScraperSaveError(
+        err instanceof Error ? err.message : "Save failed"
+      );
     }
   }
 
@@ -1830,6 +1894,110 @@ export default function InteractionEngineUI({
 
   const renderDiscovery = () => (
     <div className="space-y-6">
+      <details
+        className="rounded-2xl border border-gray-200 bg-white"
+        open={scraperPanelOpen}
+        onToggle={(e) => setScraperPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 list-none">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">RapidAPI integration</div>
+            <div className="mt-0.5 text-xs text-gray-500">
+              Paste your RapidAPI Instagram scraper details here so Keyword
+              and Location discovery can reach the scraper.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={`rounded-full border px-2 py-0.5 ${
+                scraperSettings.hasApiKey
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }`}
+            >
+              {scraperSettings.hasApiKey ? "● API key saved" : "● No API key"}
+            </span>
+            <span className="text-gray-400">{scraperPanelOpen ? "Hide" : "Edit"}</span>
+          </div>
+        </summary>
+        <div className="border-t border-gray-100 px-5 py-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-700">
+                x-rapidapi-key
+              </span>
+              <input
+                type="password"
+                value={scraperKeyDraft}
+                onChange={(e) => setScraperKeyDraft(e.target.value)}
+                placeholder={
+                  scraperSettings.hasApiKey
+                    ? "••••••••  (leave blank to keep existing)"
+                    : "Paste your RapidAPI key"
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                autoComplete="off"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-700">
+                x-rapidapi-host
+              </span>
+              <input
+                type="text"
+                value={scraperHostDraft}
+                onChange={(e) => setScraperHostDraft(e.target.value)}
+                placeholder="instagram-scraper-api2.p.rapidapi.com"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+              />
+            </label>
+            <label className="flex flex-col gap-1 md:col-span-2">
+              <span className="text-xs font-medium text-gray-700">
+                Location search path <span className="text-gray-400">(use <code>{`{q}`}</code> for the query)</span>
+              </span>
+              <input
+                type="text"
+                value={scraperSearchDraft}
+                onChange={(e) => setScraperSearchDraft(e.target.value)}
+                placeholder="/v1/location_search?query={q}"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-black"
+              />
+            </label>
+            <label className="flex flex-col gap-1 md:col-span-2">
+              <span className="text-xs font-medium text-gray-700">
+                Location posts path <span className="text-gray-400">(use <code>{`{id}`}</code> for the location id)</span>
+              </span>
+              <input
+                type="text"
+                value={scraperPostsDraft}
+                onChange={(e) => setScraperPostsDraft(e.target.value)}
+                placeholder="/v1/location_posts?location_id={id}"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-black"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleSaveScraperSettings}
+              disabled={scraperSaveState === "loading"}
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {scraperSaveState === "loading" ? "Saving…" : "Save settings"}
+            </button>
+            {scraperSaveState === "success" && (
+              <span className="text-xs text-emerald-700">Saved.</span>
+            )}
+            {scraperSaveState === "error" && scraperSaveError && (
+              <span className="text-xs text-amber-700">{scraperSaveError}</span>
+            )}
+            <span className="ml-auto text-[11px] text-gray-400">
+              Stored server-side, never returned to the browser. Blank host /
+              path fields fall back to their defaults.
+            </span>
+          </div>
+        </div>
+      </details>
+
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="text-sm font-semibold text-gray-900">Add a discovery source</div>
         <div className="mt-1 text-xs text-gray-500">
