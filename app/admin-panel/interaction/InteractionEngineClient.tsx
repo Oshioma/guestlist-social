@@ -618,6 +618,8 @@ export default function InteractionEngineUI({
   const [highValueOnly, setHighValueOnly] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
   const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
+  const [keywordFilter, setKeywordFilter] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [tokenExpired, setTokenExpired] = useState(false);
@@ -747,8 +749,11 @@ export default function InteractionEngineUI({
       setIngestionState((prev) => (prev === "idle" ? "loading" : prev));
       setIngestionError(null);
       try {
+        const keywordsParam = keywordFilter.trim();
         const res = await fetch(
-          `/api/interaction/instagram-comments?accountId=${encodeURIComponent(activeClientId)}&limit=20`,
+          `/api/interaction/instagram-comments?accountId=${encodeURIComponent(activeClientId)}&limit=20${
+            keywordsParam ? `&keywords=${encodeURIComponent(keywordsParam)}` : ""
+          }`,
           { cache: "no-store" }
         );
         const payload: InstagramCommentsApiResponse = await res.json();
@@ -867,34 +872,118 @@ export default function InteractionEngineUI({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeClientId]);
+  }, [activeClientId, keywordFilter]);
 
+  // Hydrate / persist keyword filter across sessions.
   useEffect(() => {
-    if (!isLive) return;
-    const interval = setInterval(() => {
-      const newPost: Post = {
-        id: `post-${Date.now()}`,
-        clientId: activeClientId,
-        author: "@newtraveller",
+    try {
+      const stored = window.localStorage.getItem("interaction-keywords");
+      if (stored !== null) setKeywordFilter(stored);
+    } catch {
+      // localStorage unavailable (SSR, privacy mode) — fall back to empty
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("interaction-keywords", keywordFilter);
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [keywordFilter]);
+
+  // Deterministic fixtures for demos — no randomness so screenshots and
+  // walkthroughs show the same data every time. Scored via deriveScores()
+  // so they follow the same rules as real comments.
+  useEffect(() => {
+    if (!demoMode) return;
+    const fixtures: Array<Omit<Post, "clientId" | "id" | "relevance" | "opportunity" | "risk"> & {
+      posterScoreSeed: number;
+    }> = [
+      {
+        author: "@kenzie.travels",
         platform: "Instagram",
-        time: "2m ago",
-        text: "Any must-visit food spots in Zanzibar right now?",
-        relevance: 82 + Math.floor(Math.random() * 17),
-        opportunity: 72 + Math.floor(Math.random() * 24),
-        risk: 5 + Math.floor(Math.random() * 18),
+        time: "3m ago",
+        text: "Any must-visit food spots in Zanzibar right now? 🍜",
         comment:
           "There are a couple of really fresh spots around Kendwa depending on what you are looking for 👀",
         mediaUrl:
           "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
         status: "new",
-        why: ["Live tourist intent", "Fresh post", "High reply potential"],
+        why: ["Tourist intent", "Fresh post", "High reply potential"],
+        posterType: "tourist",
+        followerCount: 1840,
+        engagementRate: 4.2,
         onIslandNow: true,
         islandSignals: ["Zanzibar"],
+        posterScoreSeed: 82,
+      },
+      {
+        author: "@creator.wanders",
+        platform: "Instagram",
+        time: "12m ago",
+        text: "Recommendations for a quiet beach near Nungwi this week?",
+        comment:
+          "Kendwa's north stretch is calm most mornings — happy to point you to a good sundowner.",
+        mediaUrl:
+          "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+        status: "new",
+        why: ["Creator footprint", "Local mention"],
+        posterType: "creator",
+        followerCount: 28400,
+        engagementRate: 3.1,
+        onIslandNow: true,
+        islandSignals: ["Nungwi", "Kendwa"],
+        posterScoreSeed: 88,
+      },
+      {
+        author: "@scrolly_spam",
+        platform: "Instagram",
+        time: "26m ago",
+        text: "Big discount! DM me for crypto promo 🚀 https://t.me/xyz",
+        comment: "",
+        mediaUrl:
+          "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80",
+        status: "new",
+        why: ["Spam patterns detected"],
+        posterType: "spam",
+        followerCount: 12,
+        engagementRate: 0,
+        onIslandNow: false,
+        islandSignals: [],
+        posterScoreSeed: 8,
+      },
+    ];
+    let cursor = 0;
+    const interval = setInterval(() => {
+      const f = fixtures[cursor % fixtures.length];
+      cursor++;
+      const minutesAgo = 2;
+      const scores = deriveScores({
+        text: f.text,
+        posterType: f.posterType ?? "tourist",
+        posterScore: f.posterScoreSeed,
+        onIslandNow: f.onIslandNow ?? false,
+        islandSignals: f.islandSignals ?? [],
+        followerCount: f.followerCount ?? null,
+        engagementRate: f.engagementRate ?? null,
+        minutesAgo,
+      });
+      const newPost: Post = {
+        ...f,
+        id: `demo-${cursor}-${f.author}`,
+        clientId: activeClientId,
+        relevance: scores.relevance,
+        opportunity: scores.opportunity,
+        risk: scores.risk,
+        posterScore: f.posterScoreSeed,
       };
-      setPosts((prev) => [newPost, ...prev].slice(0, 20));
+      setPosts((prev) => {
+        if (prev.some((p) => p.id === newPost.id)) return prev;
+        return [newPost, ...prev].slice(0, 30);
+      });
     }, 8000);
     return () => clearInterval(interval);
-  }, [isLive]);
+  }, [demoMode, activeClientId]);
 
   const discoveryResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1003,6 +1092,24 @@ export default function InteractionEngineUI({
             onChange={(e) => setFeedSearch(e.target.value)}
             className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400"
           />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Server-side keyword filter (comma-separated, e.g. zanzibar, kendwa, nungwi)"
+              value={keywordFilter}
+              onChange={(e) => setKeywordFilter(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs text-gray-700 placeholder-gray-400 outline-none focus:border-gray-400"
+            />
+            {keywordFilter && (
+              <button
+                onClick={() => setKeywordFilter("")}
+                className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-2 text-xs text-gray-600 hover:bg-gray-50"
+                title="Clear keywords"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {(["all", "tourist", "creator"] as const).map((f) => (
               <button
@@ -1788,6 +1895,17 @@ export default function InteractionEngineUI({
                 className="rounded-lg border border-gray-200 px-3 py-2 text-xs"
               >
                 {isLive ? "Pause" : "Resume"}
+              </button>
+              <button
+                onClick={() => setDemoMode((v) => !v)}
+                className={`rounded-lg border px-3 py-2 text-xs transition ${
+                  demoMode
+                    ? "border-black bg-black text-white"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+                title="Inject deterministic sample comments — useful for demos and screenshots"
+              >
+                {demoMode ? "● Demo on" : "Demo"}
               </button>
             </div>
           </div>

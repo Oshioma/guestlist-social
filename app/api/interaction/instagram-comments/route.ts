@@ -422,7 +422,11 @@ async function fetchFromMetaGraph(
   return { ok: true, comments };
 }
 
-async function handleRequest(accountId: string, limit: number) {
+async function handleRequest(
+  accountId: string,
+  limit: number,
+  userKeywords: string[] = []
+) {
   const proxyUrl = String(
     process.env.INTERACTION_IG_SOURCE_URL ?? process.env.INTERACTION_IG_PROXY_URL ?? ""
   ).trim();
@@ -444,11 +448,25 @@ async function handleRequest(accountId: string, limit: number) {
         { status: result.tokenExpired ? 401 : 502 }
       );
     }
+    // Filter Graph results client-side by keywords too (env or user-supplied)
+    // so the UI-driven filter applies even when no proxy is in play.
+    const envKeywords = String(process.env.INTERACTION_IG_KEYWORDS ?? "")
+      .split(",")
+      .map((k) => k.trim().toLowerCase())
+      .filter(Boolean);
+    const effectiveKeywords = userKeywords.length > 0 ? userKeywords : envKeywords;
+    const filtered = effectiveKeywords.length
+      ? result.comments.filter((c) =>
+          effectiveKeywords.some((kw) =>
+            `${c.text} ${c.author}`.toLowerCase().includes(kw)
+          )
+        )
+      : result.comments;
     return NextResponse.json({
       ok: true,
-      comments: result.comments,
+      comments: filtered,
       source: "meta-graph",
-      fetched: result.comments.length,
+      fetched: filtered.length,
       fetchedAt: new Date().toISOString(),
     });
   }
@@ -458,8 +476,14 @@ async function handleRequest(accountId: string, limit: number) {
   ).trim().toUpperCase();
   const sourceAuthHeader = String(process.env.INTERACTION_IG_SOURCE_AUTH_HEADER ?? "").trim();
   const proxyToken = String(process.env.INTERACTION_IG_PROXY_TOKEN ?? "").trim();
-  const keywordsRaw = String(process.env.INTERACTION_IG_KEYWORDS ?? "").trim();
-  const keywords = keywordsRaw.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean);
+  // User-supplied keywords (from the UI input) override the env var so an
+  // operator can iterate on filters without a redeploy.
+  const envKeywordsRaw = String(process.env.INTERACTION_IG_KEYWORDS ?? "").trim();
+  const envKeywords = envKeywordsRaw
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean);
+  const keywords = userKeywords.length > 0 ? userKeywords : envKeywords;
 
   const headers: HeadersInit = { Accept: "application/json", "Content-Type": "application/json" };
   if (sourceAuthHeader) headers.Authorization = sourceAuthHeader;
@@ -493,12 +517,22 @@ async function handleRequest(accountId: string, limit: number) {
   return NextResponse.json({ ok: true, comments, source: "instagram-proxy", fetched: comments.length, fetchedAt: new Date().toISOString() });
 }
 
+function parseKeywords(input: unknown): string[] {
+  if (!input) return [];
+  const raw = Array.isArray(input) ? input.join(",") : String(input);
+  return raw
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const accountId = String(body.accountId ?? body.clientId ?? "").trim();
     const limit = Math.min(100, Math.max(1, Math.floor(Number(body.limit ?? 20))));
-    return await handleRequest(accountId, limit);
+    const keywords = parseKeywords(body.keywords);
+    return await handleRequest(accountId, limit, keywords);
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
@@ -509,7 +543,8 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const accountId = url.searchParams.get("accountId") ?? url.searchParams.get("clientId") ?? "";
     const limit = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get("limit") ?? "20"))));
-    return await handleRequest(accountId, limit);
+    const keywords = parseKeywords(url.searchParams.get("keywords"));
+    return await handleRequest(accountId, limit, keywords);
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
   }
