@@ -24,6 +24,7 @@ type DiscoveryPost = {
   authorFollowers: number | null;
   text: string;
   time: string;
+  postedAtMs: number | null;
   permalink: string | null;
   mediaUrl: string;
   likeCount: number | null;
@@ -116,6 +117,7 @@ function shapePost(
     authorFollowers,
     text: truncate(String(media.caption ?? ""), 600),
     time: toRelativeTime(media.timestamp),
+    postedAtMs: media.timestamp ? (new Date(media.timestamp).getTime() || null) : null,
     permalink: media.permalink ?? null,
     mediaUrl: media.thumbnail_url ?? media.media_url ?? "",
     likeCount: typeof media.like_count === "number" ? media.like_count : null,
@@ -466,6 +468,7 @@ async function fetchKeywordPosts(
         : authorName || "Unknown user";
       const posted =
         row.posted_at ?? row.created_time ?? row.timestamp ?? row.time ?? null;
+      const postedAtMs = parseTimestampMs(posted);
       const permalink = String(
         row.url ?? row.permalink ?? row.post_url ?? ""
       ).trim() || null;
@@ -481,33 +484,8 @@ async function fetchKeywordPosts(
           parseNumericField(author.fans) ??
           null,
         text: text.slice(0, 600),
-        time: (() => {
-          if (posted == null) return "just now";
-          // RapidAPI vendors return timestamps as either ISO strings,
-          // milliseconds, or unix-seconds. Normalise all three before
-          // falling back to the raw value.
-          let ms: number | null = null;
-          if (typeof posted === "number") {
-            ms = posted > 1e12 ? posted : posted * 1000;
-          } else {
-            const str = String(posted).trim();
-            if (!str) return "just now";
-            const asNum = Number(str);
-            if (Number.isFinite(asNum)) {
-              ms = asNum > 1e12 ? asNum : asNum * 1000;
-            } else {
-              const parsed = new Date(str);
-              ms = Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
-            }
-          }
-          if (ms == null || !Number.isFinite(ms)) return "recent";
-          const mins = Math.floor((Date.now() - ms) / 60000);
-          if (mins < 1) return "just now";
-          if (mins < 60) return `${mins}m ago`;
-          const hours = Math.floor(mins / 60);
-          if (hours < 24) return `${hours}h ago`;
-          return `${Math.floor(hours / 24)}d ago`;
-        })(),
+        time: formatRelativeTime(postedAtMs),
+        postedAtMs,
         permalink,
         mediaUrl: media,
         likeCount: parseNumericField(row.reaction_count ?? row.likes),
@@ -517,9 +495,39 @@ async function fetchKeywordPosts(
       } as DiscoveryPost;
     })
     .filter((p): p is DiscoveryPost => p !== null)
+    // Newest first. Posts with unknown timestamps sink to the bottom so
+    // the top of the list always has the freshest content.
+    .sort((a, b) => (b.postedAtMs ?? 0) - (a.postedAtMs ?? 0))
     .slice(0, 30);
 
   return { ok: true, posts };
+}
+
+function parseTimestampMs(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return value > 1e12 ? value : value * 1000;
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  const asNum = Number(str);
+  if (Number.isFinite(asNum)) {
+    return asNum > 1e12 ? asNum : asNum * 1000;
+  }
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function formatRelativeTime(ms: number | null): string {
+  if (ms == null) return "recent";
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 async function fetchKeywordPages(
