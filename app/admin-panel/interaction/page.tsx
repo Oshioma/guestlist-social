@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 export type IgAccount = {
   id: string;
+  clientId: number | null;
   name: string;
   handle: string;
   tokenExpiresAt: string | null;
@@ -30,7 +31,7 @@ async function getInstagramAccounts(): Promise<{
 
   const { data, error } = await db
     .from("connected_meta_accounts")
-    .select("account_id, account_name, token_expires_at, last_error, last_error_at")
+    .select("account_id, client_id, account_name, token_expires_at, last_error, last_error_at")
     .eq("platform", "instagram")
     .order("account_name", { ascending: true });
 
@@ -46,8 +47,16 @@ async function getInstagramAccounts(): Promise<{
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const name = String(row.account_name ?? id).trim();
+    const clientIdRaw = row.client_id;
+    const clientId =
+      typeof clientIdRaw === "number"
+        ? clientIdRaw
+        : typeof clientIdRaw === "string" && clientIdRaw.trim() !== ""
+          ? Number(clientIdRaw)
+          : null;
     accounts.push({
       id,
+      clientId: clientId != null && Number.isFinite(clientId) ? clientId : null,
       name,
       handle: `@${name.replace(/^@/, "")}`,
       tokenExpiresAt: (row.token_expires_at as string | null) ?? null,

@@ -326,12 +326,9 @@ type DiscoveredPage = {
   description: string | null;
 };
 
-async function fetchKeywordPages(
-  keyword: string
-): Promise<{ ok: true; pages: DiscoveredPage[] } | { ok: false; error: string }> {
-  const clean = keyword.replace(/^#+/, "").trim();
-  if (!clean) return { ok: false, error: "keyword required" };
-
+function getRapidApiConfig():
+  | { ok: true; key: string; host: string }
+  | { ok: false; error: string } {
   const key = (process.env.RAPIDAPI_FB_KEY ?? process.env.RAPIDAPI_KEY ?? "").trim();
   if (!key) {
     return {
@@ -343,6 +340,163 @@ async function fetchKeywordPages(
   const host = (
     process.env.RAPIDAPI_FB_HOST ?? "facebook-scraper3.p.rapidapi.com"
   ).trim();
+  return { ok: true, key, host };
+}
+
+function firstArrayField(obj: Record<string, unknown> | null): unknown[] {
+  if (!obj) return [];
+  const candidates: unknown[] = [
+    obj.results,
+    obj.data,
+    obj.posts,
+    obj.pages,
+    obj.items,
+    (obj.results as Record<string, unknown> | undefined)?.posts,
+    (obj.results as Record<string, unknown> | undefined)?.pages,
+  ];
+  for (const c of candidates) if (Array.isArray(c)) return c;
+  return [];
+}
+
+function parseNumericField(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value.replace(/[,\s]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+async function fetchKeywordPosts(
+  keyword: string
+): Promise<{ ok: true; posts: DiscoveryPost[] } | { ok: false; error: string }> {
+  const clean = keyword.replace(/^#+/, "").trim();
+  if (!clean) return { ok: false, error: "keyword required" };
+  const cfg = getRapidApiConfig();
+  if (!cfg.ok) return cfg;
+
+  const endpoint = `https://${cfg.host}/search/posts?query=${encodeURIComponent(clean)}`;
+  const res = await fetch(endpoint, {
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rapidapi-host": cfg.host,
+      "x-rapidapi-key": cfg.key,
+    },
+  });
+  const body = await res.text();
+  let json: unknown = null;
+  try {
+    json = body ? JSON.parse(body) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    const msg =
+      (json as { message?: string } | null)?.message ??
+      `RapidAPI returned ${res.status}: ${body.slice(0, 160)}`;
+    return { ok: false, error: msg };
+  }
+
+  const rows = firstArrayField(json as Record<string, unknown> | null) as Record<
+    string,
+    unknown
+  >[];
+
+  // Filter out big brand / page authors and keep what looks like real people.
+  // Different vendors flag pages differently — we check a few common shapes.
+  const BIG_ACCOUNT_FAN_LIMIT = 10000;
+  const isBrandAuthor = (row: Record<string, unknown>): boolean => {
+    const author = (row.author ?? row.user ?? row.owner ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const type = String(author.type ?? row.author_type ?? "").toLowerCase();
+    if (type === "page" || type === "business" || type === "brand") return true;
+    const verified =
+      Boolean(author.verified) ||
+      Boolean(row.verified) ||
+      Boolean(row.is_verified);
+    if (verified) return true;
+    const fans =
+      parseNumericField(author.fans) ??
+      parseNumericField(author.followers) ??
+      parseNumericField(row.fans) ??
+      parseNumericField(row.follower_count);
+    if (fans != null && fans > BIG_ACCOUNT_FAN_LIMIT) return true;
+    return false;
+  };
+
+  const posts: DiscoveryPost[] = rows
+    .filter((row) => !isBrandAuthor(row))
+    .map((row) => {
+      const author = (row.author ?? row.user ?? row.owner ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const text = String(
+        row.text ?? row.message ?? row.caption ?? row.content ?? ""
+      ).trim();
+      if (!text && !row.image && !row.media_url) return null;
+      const authorName = String(
+        author.name ?? author.full_name ?? author.username ?? row.author_name ?? ""
+      ).trim();
+      const authorHandle = String(author.username ?? author.handle ?? "").trim();
+      const display = authorHandle
+        ? `@${authorHandle.replace(/^@+/, "")}`
+        : authorName || "Unknown user";
+      const posted =
+        row.posted_at ?? row.created_time ?? row.timestamp ?? row.time ?? null;
+      const permalink = String(
+        row.url ?? row.permalink ?? row.post_url ?? ""
+      ).trim() || null;
+      const media = String(
+        row.image ?? row.media_url ?? row.thumbnail ?? ""
+      ).trim();
+      const id = String(row.post_id ?? row.id ?? permalink ?? `${display}-${posted}`);
+      return {
+        id,
+        author: display,
+        authorFollowers:
+          parseNumericField(author.followers) ??
+          parseNumericField(author.fans) ??
+          null,
+        text: text.slice(0, 600),
+        time: (() => {
+          if (!posted) return "just now";
+          const d = new Date(String(posted));
+          if (Number.isNaN(d.getTime())) return String(posted);
+          const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+          if (mins < 1) return "just now";
+          if (mins < 60) return `${mins}m ago`;
+          const hours = Math.floor(mins / 60);
+          if (hours < 24) return `${hours}h ago`;
+          return `${Math.floor(hours / 24)}d ago`;
+        })(),
+        permalink,
+        mediaUrl: media,
+        likeCount: parseNumericField(row.reaction_count ?? row.likes),
+        commentCount: parseNumericField(row.comment_count ?? row.comments),
+        comments: [],
+        source: "hashtag",
+      } as DiscoveryPost;
+    })
+    .filter((p): p is DiscoveryPost => p !== null)
+    .slice(0, 30);
+
+  return { ok: true, posts };
+}
+
+async function fetchKeywordPages(
+  keyword: string
+): Promise<{ ok: true; pages: DiscoveredPage[] } | { ok: false; error: string }> {
+  const clean = keyword.replace(/^#+/, "").trim();
+  if (!clean) return { ok: false, error: "keyword required" };
+
+  const cfg = getRapidApiConfig();
+  if (!cfg.ok) return cfg;
+  const host = cfg.host;
+  const key = cfg.key;
 
   const endpoint = `https://${host}/search/pages?query=${encodeURIComponent(clean)}`;
   const res = await fetch(endpoint, {
@@ -486,6 +640,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, kind, value, posts: result.posts });
     }
     if (kind === "keyword") {
+      // Posts first — real people talking about the topic, filtered down
+      // from big brand / verified accounts. This is what operators want
+      // to interact with.
+      const result = await fetchKeywordPosts(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
+    }
+    if (kind === "keyword_pages") {
+      // Opt-in pages search for operators who explicitly want to seed
+      // competitor handle watchlists from a topic.
       const result = await fetchKeywordPages(value);
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: 400 });

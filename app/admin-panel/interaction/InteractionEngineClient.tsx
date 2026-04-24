@@ -57,12 +57,21 @@ type Tab =
 
 type ClientOption = {
   id: string;
+  clientId?: number | null;
   name: string;
   handle: string;
   tokenExpiresAt?: string | null;
   lastError?: string | null;
   lastErrorAt?: string | null;
 };
+
+function reconnectUrl(clientOption: ClientOption | null | undefined): string | null {
+  if (!clientOption?.clientId) return null;
+  const returnTo = typeof window === "undefined" ? "/app/interaction" : window.location.pathname;
+  return `/api/meta/connect?clientId=${encodeURIComponent(
+    String(clientOption.clientId)
+  )}&returnTo=${encodeURIComponent(returnTo)}`;
+}
 
 type SetupIssue =
   | { kind: "missing-supabase" }
@@ -1735,8 +1744,21 @@ export default function InteractionEngineUI({
 
       {(discoveryFetchState === "error" || (discoveryError && discoveryFetchState !== "loading")) && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="font-semibold">Discovery lookup failed</div>
-          <div className="mt-1 text-xs opacity-90">{discoveryError}</div>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-semibold">Discovery lookup failed</div>
+              <div className="mt-1 text-xs opacity-90">{discoveryError}</div>
+            </div>
+            {/permission|token|expired|#10|scope/i.test(discoveryError ?? "") &&
+              reconnectUrl(activeAccountMeta) && (
+                <a
+                  href={reconnectUrl(activeAccountMeta) ?? "#"}
+                  className="shrink-0 rounded-md border border-amber-700 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  Reconnect Instagram
+                </a>
+              )}
+          </div>
         </div>
       )}
 
@@ -2082,19 +2104,37 @@ export default function InteractionEngineUI({
       <main className="px-6 py-8 md:px-10">
         {bannerMessages.length > 0 && (
           <div className="mb-4 flex flex-col gap-2">
-            {bannerMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={`rounded-lg border px-4 py-3 text-sm ${
-                  msg.tone === "warn"
-                    ? "border-amber-200 bg-amber-50 text-amber-900"
-                    : "border-sky-200 bg-sky-50 text-sky-900"
-                }`}
-              >
-                <div className="font-semibold">{msg.title}</div>
-                <div className="mt-0.5 text-xs opacity-90">{msg.body}</div>
-              </div>
-            ))}
+            {bannerMessages.map((msg, i) => {
+              const showReconnect =
+                /token|permission|expired|#10|scope/i.test(
+                  `${msg.title} ${msg.body}`
+                ) && Boolean(reconnectUrl(activeAccountMeta));
+              return (
+                <div
+                  key={i}
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    msg.tone === "warn"
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : "border-sky-200 bg-sky-50 text-sky-900"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{msg.title}</div>
+                      <div className="mt-0.5 text-xs opacity-90">{msg.body}</div>
+                    </div>
+                    {showReconnect && (
+                      <a
+                        href={reconnectUrl(activeAccountMeta) ?? "#"}
+                        className="shrink-0 rounded-md border border-current px-3 py-1 text-xs font-semibold hover:bg-white/40"
+                      >
+                        Reconnect Instagram
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
@@ -2157,6 +2197,15 @@ export default function InteractionEngineUI({
               >
                 {demoMode ? "● Demo on" : "Demo"}
               </button>
+              {reconnectUrl(activeAccountMeta) && (
+                <a
+                  href={reconnectUrl(activeAccountMeta) ?? "#"}
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                  title="Re-run OAuth to refresh the Instagram access token with current app scopes"
+                >
+                  Reconnect Instagram
+                </a>
+              )}
             </div>
           </div>
           <div className="mt-5 overflow-x-auto pb-1">
