@@ -196,7 +196,9 @@ type InstagramCommentApiItem = {
   id?: string;
   text?: string;
   username?: string;
-  timestamp?: string;
+  author?: string;
+  time?: string;
+  timestamp?: string | null;
   permalink?: string;
   mediaUrl?: string;
   posterType?: PosterType;
@@ -843,12 +845,25 @@ export default function InteractionEngineUI({
         setTokenExpired(false);
 
         const incoming = (payload.comments ?? []).map((comment) => {
-          const timestamp = String(comment.timestamp ?? "");
-          const parsed = timestamp ? new Date(timestamp) : null;
+          // Trust whichever timestamp the server sent. We used to
+          // recompute minutesAgo from a `timestamp` the API never
+          // returned, which pinned every card to "10m ago".
+          const timestampIso = comment.timestamp ?? null;
+          const parsed = timestampIso ? new Date(timestampIso) : null;
           const minutesAgo =
             parsed && Number.isFinite(parsed.getTime())
               ? Math.max(1, Math.round((Date.now() - parsed.getTime()) / 60000))
-              : 10;
+              : null;
+          const serverTime = typeof comment.time === "string" ? comment.time.trim() : "";
+          const displayTime =
+            serverTime ||
+            (minutesAgo != null
+              ? minutesAgo < 60
+                ? `${minutesAgo}m ago`
+                : minutesAgo < 1440
+                  ? `${Math.floor(minutesAgo / 60)}h ago`
+                  : `${Math.floor(minutesAgo / 1440)}d ago`
+              : "recent");
           const text = String(comment.text ?? "").trim() || "Instagram comment";
           const followerCount =
             typeof comment.followerCount === "number"
@@ -895,12 +910,17 @@ export default function InteractionEngineUI({
           // Re-apply any prior triage decision so approved/saved/skipped
           // comments don't re-appear in "Ready now" after refetch.
           const priorDecision = decisionMap[commentId];
+          // Meta only returns `username` when the commenter is a public
+          // business / creator IG account. For anonymous private commenters
+          // we show "private user" instead of a misleading @instagram_user.
+          const rawHandle = String(comment.username ?? "").replace(/^@+/, "").trim();
+          const author = rawHandle ? `@${rawHandle}` : "private user";
           return {
             id: commentId,
             clientId: activeClientId,
-            author: `@${String(comment.username ?? "instagram_user").replace(/^@/, "")}`,
+            author,
             platform: "Instagram",
-            time: `${minutesAgo}m ago`,
+            time: displayTime,
             text,
             relevance: scores.relevance,
             opportunity: scores.opportunity,
