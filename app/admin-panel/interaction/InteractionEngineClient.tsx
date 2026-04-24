@@ -2031,7 +2031,7 @@ export default function InteractionEngineUI({
                   : newSearchKind === "keyword"
                     ? "Keyword or topic (e.g. craft beer)"
                     : newSearchKind === "location"
-                      ? "Location name or IG location ID (e.g. 378081362682024)"
+                      ? "Location name (e.g. Kendwa Beach, Zanzibar)"
                       : "#hashtag"
               }
               className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
