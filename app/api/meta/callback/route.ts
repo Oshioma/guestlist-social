@@ -32,9 +32,20 @@ export async function GET(req: Request) {
   const returnCookie = cookieStore.get("meta_oauth_return")?.value ?? "";
   cookieStore.delete("meta_oauth_return");
 
-  const successBase = returnCookie.startsWith("portal:")
-    ? `/portal/${returnCookie.split(":")[1]}/connect`
-    : "/admin-panel/proofer/publish";
+  // The connect route writes `${returnTo}:${clientId}` into the cookie.
+  // "portal:<clientId>" is the old portal-specific shorthand; anything
+  // starting with "/" is an arbitrary admin-panel path like
+  // "/app/interaction" that we should send the user back to.
+  const successBase = (() => {
+    if (returnCookie.startsWith("portal:")) {
+      return `/portal/${returnCookie.split(":")[1]}/connect`;
+    }
+    if (returnCookie.startsWith("/")) {
+      const path = returnCookie.split(":")[0];
+      if (path) return path;
+    }
+    return "/admin-panel/proofer/publish";
+  })();
   const errorBase = successBase;
 
   function redirectSuccess(extra: Record<string, string>) {
