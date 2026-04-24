@@ -19,7 +19,7 @@ export type SetupIssue =
   | { kind: "no-accounts" }
   | null;
 
-async function getInstagramAccounts(): Promise<{
+export async function getInstagramAccounts(): Promise<{
   accounts: IgAccount[];
   setupIssue: SetupIssue;
 }> {
