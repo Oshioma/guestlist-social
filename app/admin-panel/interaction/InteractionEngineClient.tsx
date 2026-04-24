@@ -1802,19 +1802,25 @@ export default function InteractionEngineUI({
             />
           )}
           {newSearchKind === "location" && (
-            <div className="w-full text-[11px] text-gray-500">
-              Instagram blocks automatic location name lookups. 1) Open{" "}
+            <div className="flex w-full flex-wrap items-center gap-2 text-[11px] text-gray-500">
+              <span>
+                Instagram blocks automatic location name lookups. Fastest
+                workaround:
+              </span>
               <a
-                href="https://www.instagram.com/explore/"
+                href={`https://www.google.com/search?q=${encodeURIComponent(
+                  `site:instagram.com/explore/locations ${newSearchValue || "your place name"}`
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-black underline hover:text-gray-700"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-800 hover:border-black hover:text-black"
               >
-                instagram.com/explore
+                Search Google for IG locations ↗
               </a>
-              , search for the place, click a result. 2) Copy the URL
-              from your browser bar. 3) Paste it here — we extract the
-              numeric ID automatically.
+              <span>
+                → click any result → copy the URL → paste it here. Or paste
+                a raw numeric location ID.
+              </span>
             </div>
           )}
           <button
