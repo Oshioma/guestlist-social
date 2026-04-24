@@ -23,20 +23,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Meta CDN URLs are signed but sometimes reject requests without a
+    // browser-like Referer. Passing https://www.instagram.com/ consistently
+    // gets past that check without needing any tokens.
     const res = await fetch(decoded, {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: "https://www.instagram.com/",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      },
     });
-    if (!res.ok) return new NextResponse("Upstream error", { status: res.status });
+    if (!res.ok) {
+      console.error(`[proxy-image] upstream ${res.status} for`, decoded.slice(0, 120));
+      return new NextResponse("Upstream error", { status: res.status });
+    }
 
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
     const buffer = await res.arrayBuffer();
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600",
+        // Only cache successful responses, and for a short window since
+        // IG CDN signatures rotate.
+        "Cache-Control": "public, max-age=900, s-maxage=900",
       },
     });
-  } catch {
+  } catch (err) {
+    console.error("[proxy-image] fetch threw:", err);
     return new NextResponse("Failed to fetch image", { status: 502 });
   }
 }
