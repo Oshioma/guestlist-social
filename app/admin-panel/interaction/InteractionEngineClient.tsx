@@ -26,6 +26,7 @@ type DiscoveredPost = {
   authorFollowers: number | null;
   text: string;
   time: string;
+  postedAtMs?: number | null;
   permalink: string | null;
   mediaUrl: string;
   likeCount: number | null;
@@ -2078,6 +2079,20 @@ export default function InteractionEngineUI({
                     </span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-sm text-gray-700">{post.text}</p>
+                  {post.permalink && (
+                    <div className="mt-3">
+                      <a
+                        href={post.permalink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-black bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"
+                      >
+                        {post.source === "business_discovery"
+                          ? "Open on Instagram ↗"
+                          : "Open on Facebook ↗"}
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
               {post.comments.length > 0 && (
