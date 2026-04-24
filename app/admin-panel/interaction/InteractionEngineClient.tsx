@@ -544,8 +544,19 @@ function PostCard({
                   </a>
                 ) : post.author}
               </div>
-              <div className="mt-1 text-xs text-gray-400">
-                {post.platform} • {post.time}
+              <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                <span>{post.platform} • {post.time}</span>
+                {post.permalink && (
+                  <a
+                    href={post.permalink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:border-gray-400 hover:text-black"
+                  >
+                    Open on {post.platform} ↗
+                  </a>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1486,14 +1497,29 @@ export default function InteractionEngineUI({
                 </div>
               </div>
               {active.permalink && (
-                <a href={active.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-700 hover:underline">
-                  View post ↗
+                <a
+                  href={active.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-black bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                >
+                  Open on {active.platform} ↗
                 </a>
               )}
             </div>
             <div className="mt-5">
               <MediaThumb post={active} className="h-52 w-full" />
             </div>
+            {active.permalink && (
+              <a
+                href={active.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 block w-full rounded-lg border border-gray-200 bg-white py-2.5 text-center text-sm font-medium text-gray-700 hover:border-black hover:text-black"
+              >
+                Reply to this on {active.platform} ↗
+              </a>
+            )}
             <div className="mt-5 text-[17px] leading-relaxed text-gray-900">"{active.text}"</div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-black bg-black p-4 text-white">
