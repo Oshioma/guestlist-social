@@ -125,6 +125,31 @@ function shapePost(
   };
 }
 
+function explainGraphError(
+  msg: string | undefined,
+  code: number | undefined,
+  fallback: string
+): string {
+  const base = msg ?? fallback;
+  // Meta error code 10 = "Application does not have permission for this
+  // action" — Business Discovery and /tags both need the
+  // instagram_manage_insights (and sometimes pages_show_list) scope on
+  // the access token. If the IG account was connected before the scope
+  // was added to the app, the token needs to be refreshed.
+  if (code === 10 || /does not have permission/i.test(base)) {
+    return (
+      "Meta rejected the request with permission error #10. The connected Instagram token is missing the " +
+      "instagram_manage_insights (and/or pages_show_list) scope that Business Discovery and tagged-media " +
+      "lookups need. Fix: in Meta App Dashboard add those permissions, then reconnect the IG account from " +
+      "its client settings page so the token is reissued with the new scopes."
+    );
+  }
+  if (code === 190 || code === 463 || code === 467) {
+    return "The Instagram access token has expired or been revoked. Reconnect the account in client settings.";
+  }
+  return base;
+}
+
 async function fetchHandle(
   viewerId: string,
   token: string,
@@ -161,9 +186,12 @@ async function fetchHandle(
   }
 
   if (!res.ok || !json) {
-    const msg =
-      json?.error?.message ??
-      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`;
+    const errorObj = json?.error;
+    const msg = explainGraphError(
+      errorObj?.message,
+      errorObj?.code,
+      `Business Discovery lookup failed (${res.status}). Target must be a public IG business/creator account.`
+    );
     return { ok: false, error: msg };
   }
 
@@ -199,7 +227,7 @@ async function fetchMentions(
   const body = await res.text();
   let json: {
     data?: (MetaMedia & { username?: string })[];
-    error?: { message?: string };
+    error?: { message?: string; code?: number };
   } | null = null;
   try {
     json = body ? JSON.parse(body) : null;
@@ -210,7 +238,11 @@ async function fetchMentions(
   if (!res.ok || !json) {
     return {
       ok: false,
-      error: json?.error?.message ?? `Tagged media lookup failed (${res.status})`,
+      error: explainGraphError(
+        json?.error?.message,
+        json?.error?.code,
+        `Tagged media lookup failed (${res.status})`
+      ),
     };
   }
 

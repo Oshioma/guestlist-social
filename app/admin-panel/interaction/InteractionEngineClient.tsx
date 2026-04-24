@@ -1737,9 +1737,6 @@ export default function InteractionEngineUI({
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="font-semibold">Discovery lookup failed</div>
           <div className="mt-1 text-xs opacity-90">{discoveryError}</div>
-          <div className="mt-2 text-[11px] text-amber-800/80">
-            Common causes: the handle is a personal (not business / creator) IG account, the interaction_searches migration hasn&rsquo;t been applied, or the IG token has expired.
-          </div>
         </div>
       )}
 
