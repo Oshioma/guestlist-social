@@ -652,6 +652,19 @@ async function fetchLocationPosts(
   // expose a search-by-name endpoint.
   let locationId: string | null = /^\d+$/.test(clean) ? clean : null;
 
+  // Shortcut 2: if the operator pasted an Instagram location URL (from
+  // the browser after searching on instagram.com), extract the numeric
+  // id from the path. Handles both the raw URL and the trailing-slug
+  // variant:
+  //   https://www.instagram.com/explore/locations/378081362682024/
+  //   https://www.instagram.com/explore/locations/378081362682024/kendwa-beach/
+  if (!locationId) {
+    const urlMatch = clean.match(
+      /instagram\.com\/explore\/locations\/(\d+)(?:[\/?#]|$)/i
+    );
+    if (urlMatch) locationId = urlMatch[1];
+  }
+
   // Name → id resolution, in order of preference (each step free-ish
   // and safe to skip):
   // 1. Instagram's own public topsearch (no scraper quota burned)
@@ -740,7 +753,7 @@ async function fetchLocationPosts(
   if (!locationId) {
     return {
       ok: false,
-      error: `Couldn't resolve a location named "${clean}". Instagram's public search returned no matches (or blocked the request from our server). Options: (1) paste the numeric location ID instead — find it in the IG URL at instagram.com/explore/locations/<ID>/<slug>/; (2) try a more specific name like "Kendwa Beach Zanzibar"; (3) add a Location search path in the RapidAPI panel if your scraper has one.`,
+      error: `Couldn't resolve "${clean}" automatically — Instagram blocks server-side name lookups from our IP range. Easy fix: open instagram.com in your browser, search for the place, click a result, and paste the URL here (we'll extract the ID). Or paste the numeric ID directly.`,
     };
   }
 

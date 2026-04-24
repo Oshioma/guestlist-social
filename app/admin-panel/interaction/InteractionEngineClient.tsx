@@ -2031,11 +2031,27 @@ export default function InteractionEngineUI({
                   : newSearchKind === "keyword"
                     ? "Keyword or topic (e.g. craft beer)"
                     : newSearchKind === "location"
-                      ? "Location name (e.g. Kendwa Beach, Zanzibar)"
+                      ? "Paste an IG location URL, or the numeric location ID"
                       : "#hashtag"
               }
               className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
+          )}
+          {newSearchKind === "location" && (
+            <div className="w-full text-[11px] text-gray-500">
+              Instagram blocks automatic location name lookups. 1) Open{" "}
+              <a
+                href="https://www.instagram.com/explore/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-black underline hover:text-gray-700"
+              >
+                instagram.com/explore
+              </a>
+              , search for the place, click a result. 2) Copy the URL
+              from your browser bar. 3) Paste it here — we extract the
+              numeric ID automatically.
+            </div>
           )}
           <button
             onClick={handleAddSearch}
