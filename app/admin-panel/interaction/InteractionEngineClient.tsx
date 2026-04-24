@@ -995,24 +995,44 @@ export default function InteractionEngineUI({
 
   async function handleAddSearch() {
     const value = newSearchValue.trim();
-    if (!activeClientId) return;
-    if (newSearchKind !== "mentions" && !value) return;
-    const result = await addInteractionSearch({
-      accountId: activeClientId,
-      kind: newSearchKind,
-      value: newSearchKind === "mentions" ? "me" : value,
-      label: null,
-    });
-    if (!result.ok) {
-      setDiscoveryError(result.error);
+    if (!activeClientId) {
+      setDiscoveryError("Select an Instagram account first.");
+      setDiscoveryFetchState("error");
       return;
     }
-    setNewSearchValue("");
-    setSavedSearches((prev) => {
-      const without = prev.filter((s) => s.id !== result.search.id);
-      return [result.search, ...without];
-    });
-    await runDiscoverySearch(result.search);
+    if (newSearchKind !== "mentions" && !value) {
+      setDiscoveryError("Enter a handle or hashtag to save.");
+      setDiscoveryFetchState("error");
+      return;
+    }
+    setDiscoveryFetchState("loading");
+    setDiscoveryError(null);
+    try {
+      const result = await addInteractionSearch({
+        accountId: activeClientId,
+        kind: newSearchKind,
+        value: newSearchKind === "mentions" ? "me" : value,
+        label: null,
+      });
+      if (!result.ok) {
+        setDiscoveryError(result.error);
+        setDiscoveryFetchState("error");
+        return;
+      }
+      setNewSearchValue("");
+      setSavedSearches((prev) => {
+        const without = prev.filter((s) => s.id !== result.search.id);
+        return [result.search, ...without];
+      });
+      await runDiscoverySearch(result.search);
+    } catch (err) {
+      setDiscoveryError(
+        err instanceof Error
+          ? err.message
+          : "Save & run failed. Has the interaction_searches migration been applied?"
+      );
+      setDiscoveryFetchState("error");
+    }
   }
 
   async function handleRemoveSearch(id: number) {
@@ -1595,16 +1615,26 @@ export default function InteractionEngineUI({
             <input
               value={newSearchValue}
               onChange={(e) => setNewSearchValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleAddSearch();
+                }
+              }}
               placeholder={newSearchKind === "handle" ? "@competitor_handle" : "#hashtag"}
               className="min-w-[240px] flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
             />
           )}
           <button
             onClick={handleAddSearch}
-            disabled={!activeClientId || (newSearchKind !== "mentions" && !newSearchValue.trim())}
+            disabled={
+              discoveryFetchState === "loading" ||
+              !activeClientId ||
+              (newSearchKind !== "mentions" && !newSearchValue.trim())
+            }
             className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save &amp; run
+            {discoveryFetchState === "loading" ? "Running…" : "Save & run"}
           </button>
         </div>
       </div>
@@ -1650,10 +1680,13 @@ export default function InteractionEngineUI({
         </div>
       )}
 
-      {discoveryFetchState === "error" && (
+      {(discoveryFetchState === "error" || (discoveryError && discoveryFetchState !== "loading")) && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="font-semibold">Discovery lookup failed</div>
           <div className="mt-1 text-xs opacity-90">{discoveryError}</div>
+          <div className="mt-2 text-[11px] text-amber-800/80">
+            Common causes: the handle is a personal (not business / creator) IG account, the interaction_searches migration hasn&rsquo;t been applied, or the IG token has expired.
+          </div>
         </div>
       )}
 
