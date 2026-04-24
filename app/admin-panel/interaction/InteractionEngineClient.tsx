@@ -915,7 +915,10 @@ export default function InteractionEngineUI({
             islandSignals,
             followerCount: cleanFollowerCount,
             engagementRate: cleanEngagementRate,
-            minutesAgo,
+            // Freshness boost/decay needs a number; when Meta didn't send
+            // a timestamp assume the comment is 'recent enough' by using
+            // a 10-minute default so we don't penalise it for missing data.
+            minutesAgo: minutesAgo ?? 10,
           });
           const commentId = String(comment.id ?? `ig-${Date.now()}`);
           // Re-apply any prior triage decision so approved/saved/skipped
