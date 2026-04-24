@@ -593,84 +593,92 @@ async function fetchLocationPosts(
     "x-rapidapi-key": igKey,
   };
 
-  // Step 1: resolve location name → id
-  const searchUrl = `https://${host}${searchPath.replace(
-    "{q}",
-    encodeURIComponent(clean)
-  )}`;
-  let searchJson: unknown = null;
-  try {
-    const res = await fetch(searchUrl, { cache: "no-store", headers });
-    const body = await res.text();
+  // Shortcut: if the operator pasted a pure numeric string, treat it as
+  // a location id directly and skip the search call entirely. Saves a
+  // RapidAPI quota unit per lookup and works for scrapers that don't
+  // expose a search-by-name endpoint.
+  let locationId: string | null = /^\d+$/.test(clean) ? clean : null;
+
+  // Step 1: resolve location name → id (only if we don't already have one)
+  if (!locationId) {
+    const searchUrl = `https://${host}${searchPath.replace(
+      "{q}",
+      encodeURIComponent(clean)
+    )}`;
+    let searchJson: unknown = null;
     try {
-      searchJson = body ? JSON.parse(body) : null;
-    } catch {
-      searchJson = null;
-    }
-    if (!res.ok) {
+      const res = await fetch(searchUrl, { cache: "no-store", headers });
+      const body = await res.text();
+      try {
+        searchJson = body ? JSON.parse(body) : null;
+      } catch {
+        searchJson = null;
+      }
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: `Location search returned ${res.status}: ${body.slice(0, 160)}`,
+        };
+      }
+    } catch (err) {
       return {
         ok: false,
-        error: `Location search returned ${res.status}: ${body.slice(0, 160)}`,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Location search failed (network error)",
       };
     }
-  } catch (err) {
-    return {
-      ok: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : "Location search failed (network error)",
-    };
-  }
 
-  const pickLocationId = (payload: unknown): string | null => {
-    if (!payload) return null;
-    const tryPaths = (val: unknown): string | null => {
-      if (!val) return null;
-      if (typeof val === "object") {
-        const rec = val as Record<string, unknown>;
-        for (const key of [
-          "id",
-          "pk",
-          "location_id",
-          "facebook_places_id",
-          "external_id",
-        ]) {
-          const v = rec[key];
-          if (typeof v === "string" || typeof v === "number") {
-            const str = String(v).trim();
-            if (str) return str;
+    const pickLocationId = (payload: unknown): string | null => {
+      if (!payload) return null;
+      const tryPaths = (val: unknown): string | null => {
+        if (!val) return null;
+        if (typeof val === "object") {
+          const rec = val as Record<string, unknown>;
+          for (const key of [
+            "id",
+            "pk",
+            "location_id",
+            "facebook_places_id",
+            "external_id",
+          ]) {
+            const v = rec[key];
+            if (typeof v === "string" || typeof v === "number") {
+              const str = String(v).trim();
+              if (str) return str;
+            }
+          }
+          if (rec.location && typeof rec.location === "object") {
+            return tryPaths(rec.location);
           }
         }
-        if (rec.location && typeof rec.location === "object") {
-          return tryPaths(rec.location);
+        return null;
+      };
+      // First array-like shape we can find
+      const arrays: unknown[] = [
+        (payload as Record<string, unknown>).data,
+        (payload as Record<string, unknown>).results,
+        (payload as Record<string, unknown>).locations,
+        (payload as Record<string, unknown>).items,
+        Array.isArray(payload) ? payload : null,
+      ];
+      for (const arr of arrays) {
+        if (Array.isArray(arr) && arr.length > 0) {
+          const id = tryPaths(arr[0]);
+          if (id) return id;
         }
       }
-      return null;
+      return tryPaths(payload);
     };
-    // First array-like shape we can find
-    const arrays: unknown[] = [
-      (payload as Record<string, unknown>).data,
-      (payload as Record<string, unknown>).results,
-      (payload as Record<string, unknown>).locations,
-      (payload as Record<string, unknown>).items,
-      Array.isArray(payload) ? payload : null,
-    ];
-    for (const arr of arrays) {
-      if (Array.isArray(arr) && arr.length > 0) {
-        const id = tryPaths(arr[0]);
-        if (id) return id;
-      }
-    }
-    // Some APIs return the single best match at the top level
-    return tryPaths(payload);
-  };
 
-  const locationId = pickLocationId(searchJson);
+    locationId = pickLocationId(searchJson);
+  }
+
   if (!locationId) {
     return {
       ok: false,
-      error: `Couldn't resolve a location named "${clean}" via the RapidAPI scraper. Try a more specific name (e.g. "Kendwa Beach Zanzibar") or set RAPIDAPI_IG_LOCATION_SEARCH_PATH if your provider uses a different endpoint.`,
+      error: `Couldn't resolve a location named "${clean}" via the RapidAPI scraper. Options: (1) paste the location ID instead (numbers only — find it in the IG location URL, e.g. instagram.com/explore/locations/378081362682024/), (2) try a more specific name, or (3) set a Location search path in the RapidAPI panel if your scraper has one.`,
     };
   }
 
