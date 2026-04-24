@@ -37,6 +37,7 @@ type PosterType = "tourist" | "creator" | "spam";
 type NormalizedComment = {
   id: string;
   author: string;
+  username: string | null;
   text: string;
   time: string;
   mediaUrl: string;
@@ -51,8 +52,10 @@ type NormalizedComment = {
   islandSignals: string[];
 };
 
-const DEFAULT_MEDIA_URL =
-  "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=1200&q=80";
+// Empty string so the client's MediaThumb falls through to its SVG
+// placeholder instead of showing a stock photo that has nothing to do
+// with the comment.
+const DEFAULT_MEDIA_URL = "";
 
 function toDate(value: unknown): Date | null {
   if (value instanceof Date) return value;
@@ -266,9 +269,13 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     posterReasons.push(`${engagementRate.toFixed(1)}% engagement`);
   }
 
+  const rawHandle = String(row.author ?? row.username ?? row.handle ?? "")
+    .trim()
+    .replace(/^@+/, "");
   return {
     id: String(id),
-    author: normalizeAuthor(row.author ?? row.username ?? row.handle ?? null),
+    author: normalizeAuthor(rawHandle || null),
+    username: rawHandle || null,
     text,
     time: toRelativeTime(createdAt),
     mediaUrl: mediaUrl || DEFAULT_MEDIA_URL,
@@ -380,7 +387,10 @@ async function fetchFromMetaGraph(
   const raw: ProxyComment[] = [];
 
   try {
-    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,media_url,thumbnail_url,media_type&limit=10&access_token=${acct.access_token}`);
+    // CAROUSEL_ALBUM parents return null media_url; their image lives on
+    // the first child. Request children inline so a single call covers
+    // all three types (IMAGE, VIDEO, CAROUSEL_ALBUM).
+    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,media_url,thumbnail_url,media_type,children{media_url,thumbnail_url,media_type}&limit=10&access_token=${acct.access_token}`);
     if (!mediaRes.ok) {
       const errBody = await mediaRes.text().catch(() => "");
       const tokenExpired = isTokenError(mediaRes.status, errBody);
@@ -392,12 +402,31 @@ async function fetchFromMetaGraph(
       await recordAccountError(accountId, message);
       return { ok: false, error: message, tokenExpired };
     }
-    const mediaData = await mediaRes.json() as { data?: { id: string; permalink?: string; media_url?: string; thumbnail_url?: string; media_type?: string }[] };
+    const mediaData = await mediaRes.json() as {
+      data?: {
+        id: string;
+        permalink?: string;
+        media_url?: string;
+        thumbnail_url?: string;
+        media_type?: string;
+        children?: {
+          data?: { media_url?: string; thumbnail_url?: string; media_type?: string }[];
+        };
+      }[];
+    };
     console.log(`[ig-comments] IG account ${acct.account_id}: ${mediaData.data?.length ?? 0} posts`);
 
     await Promise.all((mediaData.data ?? []).slice(0, 8).map(async (m) => {
-      // VIDEO posts use thumbnail_url; IMAGE/CAROUSEL use media_url
-      const postImageUrl = m.thumbnail_url ?? m.media_url ?? "";
+      // VIDEO posts carry thumbnail_url; IMAGE carries media_url;
+      // CAROUSEL_ALBUM has neither on the parent — pull from the first
+      // child instead.
+      const firstChild = m.children?.data?.[0];
+      const postImageUrl =
+        m.thumbnail_url ??
+        m.media_url ??
+        firstChild?.thumbnail_url ??
+        firstChild?.media_url ??
+        "";
       const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,from,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
       if (!res.ok) return;
       const d = await res.json() as { data?: { id: string; text?: string; username?: string; from?: { username?: string; name?: string }; timestamp?: string; like_count?: number }[] };
