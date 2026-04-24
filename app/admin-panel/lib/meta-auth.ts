@@ -12,13 +12,21 @@ const GRAPH_VERSION = "v19.0";
 // Note: do NOT add pages_read_engagement here. On our current Meta app it
 // is declared in a Use Case but not promoted to "Ready for testing" state,
 // and Meta's OAuth validator rejects it outright — "Invalid Scopes:
-// pages_read_engagement". The 5 scopes below are sufficient for posting
-// to Facebook Pages and Instagram Business accounts.
+// pages_read_engagement".
+//
+// instagram_manage_insights is needed for Business Discovery (looking up
+// competitor accounts by handle) and for /{ig-user-id}/tags — i.e. every
+// discovery feature beyond the owner's own comments.
+// instagram_manage_comments lets Meta return the `username` field on
+// comments; without it Meta strips the handle to "private user" for
+// anything except public business / creator commenters.
 export const META_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
   "instagram_basic",
   "instagram_content_publish",
+  "instagram_manage_comments",
+  "instagram_manage_insights",
   "business_management",
 ].join(",");
 
@@ -48,6 +56,11 @@ export function metaAuthorizeUrl(state: string): string {
     state,
     scope: META_SCOPES,
     response_type: "code",
+    // rerequest forces Meta's consent dialog to re-ask for any scope the
+    // user hasn't granted yet. Without it, users who've previously
+    // connected with a smaller scope set silently reuse the old grant
+    // and new scopes never land on the token.
+    auth_type: "rerequest",
   });
   return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
 }

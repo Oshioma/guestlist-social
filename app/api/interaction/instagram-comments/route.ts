@@ -40,6 +40,7 @@ type NormalizedComment = {
   username: string | null;
   text: string;
   time: string;
+  timestamp: string | null;
   mediaUrl: string;
   permalink: string | null;
   platform: "Instagram";
@@ -272,12 +273,17 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
   const rawHandle = String(row.author ?? row.username ?? row.handle ?? "")
     .trim()
     .replace(/^@+/, "");
+  const timestampIso = (() => {
+    const d = toDate(createdAt);
+    return d ? d.toISOString() : null;
+  })();
   return {
     id: String(id),
     author: normalizeAuthor(rawHandle || null),
     username: rawHandle || null,
     text,
     time: toRelativeTime(createdAt),
+    timestamp: timestampIso,
     mediaUrl: mediaUrl || DEFAULT_MEDIA_URL,
     permalink,
     platform: "Instagram",
@@ -427,12 +433,55 @@ async function fetchFromMetaGraph(
         firstChild?.thumbnail_url ??
         firstChild?.media_url ??
         "";
-      const res = await fetch(`${GRAPH}/${m.id}/comments?fields=id,text,username,from,timestamp,like_count&limit=25&access_token=${acct.access_token}`);
-      if (!res.ok) return;
-      const d = await res.json() as { data?: { id: string; text?: string; username?: string; from?: { username?: string; name?: string }; timestamp?: string; like_count?: number }[] };
+      const commentFields =
+        "id,text,username,timestamp,like_count," +
+        // user{username,id} was renamed 'from' on the v11+ API but we
+        // request both so the code works across token generations.
+        "from{id,name,username}," +
+        "user{id,username}";
+      const res = await fetch(
+        `${GRAPH}/${m.id}/comments?fields=${encodeURIComponent(commentFields)}&limit=25&access_token=${acct.access_token}`
+      );
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        console.error(
+          `[ig-comments] comments fetch failed ${res.status} for media ${m.id}:`,
+          errBody.slice(0, 240)
+        );
+        return;
+      }
+      const d = await res.json() as {
+        data?: {
+          id: string;
+          text?: string;
+          username?: string;
+          from?: { username?: string; name?: string; id?: string };
+          user?: { username?: string; id?: string };
+          timestamp?: string;
+          like_count?: number;
+        }[];
+      };
+      if (process.env.INTERACTION_DEBUG === "true") {
+        console.log(
+          `[ig-comments] sample comment payload for ${m.id}:`,
+          JSON.stringify(d.data?.[0] ?? {}).slice(0, 400)
+        );
+      }
       for (const c of d.data ?? []) {
-        const handle = c.username || c.from?.username || c.from?.name || null;
-        raw.push({ id: c.id, username: handle, text: c.text, timestamp: c.timestamp, permalink: m.permalink, mediaUrl: postImageUrl });
+        const handle =
+          c.username ||
+          c.user?.username ||
+          c.from?.username ||
+          c.from?.name ||
+          null;
+        raw.push({
+          id: c.id,
+          username: handle,
+          text: c.text,
+          timestamp: c.timestamp,
+          permalink: m.permalink,
+          mediaUrl: postImageUrl,
+        });
       }
     }));
   } catch (err) {

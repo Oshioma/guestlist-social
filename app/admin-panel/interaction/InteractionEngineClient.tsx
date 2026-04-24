@@ -196,7 +196,9 @@ type InstagramCommentApiItem = {
   id?: string;
   text?: string;
   username?: string;
-  timestamp?: string;
+  author?: string;
+  time?: string;
+  timestamp?: string | null;
   permalink?: string;
   mediaUrl?: string;
   posterType?: PosterType;
@@ -542,8 +544,19 @@ function PostCard({
                   </a>
                 ) : post.author}
               </div>
-              <div className="mt-1 text-xs text-gray-400">
-                {post.platform} • {post.time}
+              <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                <span>{post.platform} • {post.time}</span>
+                {post.permalink && (
+                  <a
+                    href={post.permalink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:border-gray-400 hover:text-black"
+                  >
+                    Open on {post.platform} ↗
+                  </a>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -843,12 +856,25 @@ export default function InteractionEngineUI({
         setTokenExpired(false);
 
         const incoming = (payload.comments ?? []).map((comment) => {
-          const timestamp = String(comment.timestamp ?? "");
-          const parsed = timestamp ? new Date(timestamp) : null;
+          // Trust whichever timestamp the server sent. We used to
+          // recompute minutesAgo from a `timestamp` the API never
+          // returned, which pinned every card to "10m ago".
+          const timestampIso = comment.timestamp ?? null;
+          const parsed = timestampIso ? new Date(timestampIso) : null;
           const minutesAgo =
             parsed && Number.isFinite(parsed.getTime())
               ? Math.max(1, Math.round((Date.now() - parsed.getTime()) / 60000))
-              : 10;
+              : null;
+          const serverTime = typeof comment.time === "string" ? comment.time.trim() : "";
+          const displayTime =
+            serverTime ||
+            (minutesAgo != null
+              ? minutesAgo < 60
+                ? `${minutesAgo}m ago`
+                : minutesAgo < 1440
+                  ? `${Math.floor(minutesAgo / 60)}h ago`
+                  : `${Math.floor(minutesAgo / 1440)}d ago`
+              : "recent");
           const text = String(comment.text ?? "").trim() || "Instagram comment";
           const followerCount =
             typeof comment.followerCount === "number"
@@ -889,18 +915,26 @@ export default function InteractionEngineUI({
             islandSignals,
             followerCount: cleanFollowerCount,
             engagementRate: cleanEngagementRate,
-            minutesAgo,
+            // Freshness boost/decay needs a number; when Meta didn't send
+            // a timestamp assume the comment is 'recent enough' by using
+            // a 10-minute default so we don't penalise it for missing data.
+            minutesAgo: minutesAgo ?? 10,
           });
           const commentId = String(comment.id ?? `ig-${Date.now()}`);
           // Re-apply any prior triage decision so approved/saved/skipped
           // comments don't re-appear in "Ready now" after refetch.
           const priorDecision = decisionMap[commentId];
+          // Meta only returns `username` when the commenter is a public
+          // business / creator IG account. For anonymous private commenters
+          // we show "private user" instead of a misleading @instagram_user.
+          const rawHandle = String(comment.username ?? "").replace(/^@+/, "").trim();
+          const author = rawHandle ? `@${rawHandle}` : "private user";
           return {
             id: commentId,
             clientId: activeClientId,
-            author: `@${String(comment.username ?? "instagram_user").replace(/^@/, "")}`,
+            author,
             platform: "Instagram",
-            time: `${minutesAgo}m ago`,
+            time: displayTime,
             text,
             relevance: scores.relevance,
             opportunity: scores.opportunity,
@@ -1466,14 +1500,29 @@ export default function InteractionEngineUI({
                 </div>
               </div>
               {active.permalink && (
-                <a href={active.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-gray-700 hover:underline">
-                  View post ↗
+                <a
+                  href={active.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-black bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
+                >
+                  Open on {active.platform} ↗
                 </a>
               )}
             </div>
             <div className="mt-5">
               <MediaThumb post={active} className="h-52 w-full" />
             </div>
+            {active.permalink && (
+              <a
+                href={active.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 block w-full rounded-lg border border-gray-200 bg-white py-2.5 text-center text-sm font-medium text-gray-700 hover:border-black hover:text-black"
+              >
+                Reply to this on {active.platform} ↗
+              </a>
+            )}
             <div className="mt-5 text-[17px] leading-relaxed text-gray-900">"{active.text}"</div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-black bg-black p-4 text-white">
