@@ -153,14 +153,18 @@ type Post = {
   platform: string;
   time: string;
   text: string;
-  relevance: number;
-  opportunity: number;
-  risk: number;
-  comment: string;
+  comment: string; // AI-generated reply draft (filled lazily)
   mediaUrl: string;
   permalink?: string | null;
+  postCaption?: string | null; // parent-post caption for context
   status: PostStatus;
-  why: string[];
+  // Fields below are no longer rendered in the Feed UI but kept optional
+  // so the legacy Discovery / demo helpers that populate them still
+  // compile. Safe to delete once those helpers are removed too.
+  relevance?: number;
+  opportunity?: number;
+  risk?: number;
+  why?: string[];
   posterType?: "tourist" | "creator" | "spam";
   followerCount?: number | null;
   engagementRate?: number | null;
@@ -205,13 +209,7 @@ type InstagramCommentApiItem = {
   timestamp?: string | null;
   permalink?: string;
   mediaUrl?: string;
-  posterType?: PosterType;
-  followerCount?: number | null;
-  engagementRate?: number | null;
-  posterScore?: number;
-  posterReasons?: string[];
-  onIslandNow?: boolean;
-  islandSignals?: string[];
+  postCaption?: string | null;
 };
 
 // Meta's CDN (scontent.cdninstagram.com / fbcdn.net) blocks hotlinking
@@ -233,7 +231,8 @@ const ENGLISH_STOPWORDS = new Set([
   "so","if","or","because","while","there","here","just","about","into","over",
   "under","more","very","really","love","nice","good","great","thank","thanks",
   "please","today","tomorrow","week","month","year","holiday","trip","visit",
-  "stay","place","time",
+  "stay","place","time","would","like","looking","going","been","want","need",
+  "any","some","all","only","also","next","then","now","out","up","down",
 ]);
 
 function looksEnglish(text: string | null | undefined): boolean {
@@ -248,24 +247,34 @@ function looksEnglish(text: string | null | undefined): boolean {
     .trim();
   if (!stripped) return true;
 
-  // Very short content (≤2 words of actual letters) — assume English.
-  const letterWords =
-    stripped.match(/\b[\p{L}']+\b/gu) ?? [];
+  // Very short content (≤2 words of actual letters) — assume English so
+  // captions like "Zanzibar 2026 🎪 #kendwa" don't get filtered.
+  const letterWords = stripped.match(/\b[\p{L}']+\b/gu) ?? [];
   if (letterWords.length <= 2) return true;
 
-  // Non-ASCII letter ratio — Czech / Polish / Vietnamese drop out here.
+  // Non-ASCII letter ratio — Czech / Polish / Vietnamese / Lithuanian
+  // drop out here thanks to their diacritics. Tightened the threshold
+  // from 12% to 6% because Slovak & Lithuanian posts were sneaking
+  // through at ~8-10% ratios.
   const allLetters = stripped.replace(/[^\p{L}]/gu, "");
   if (allLetters.length >= 10) {
     const asciiLetters = allLetters.replace(/[^a-zA-Z]/g, "");
     const nonAsciiRatio = 1 - asciiLetters.length / allLetters.length;
-    if (nonAsciiRatio > 0.12) return false;
+    if (nonAsciiRatio > 0.06) return false;
   }
 
-  // Stopword hit rate — catches Italian, Portuguese, French, etc.
+  // Stopword hit rate — catches Italian, Portuguese, French, Spanish,
+  // Slovak etc. that share the Latin alphabet. Require at least one
+  // stopword per ~5 tokens AND a minimum of 2 hits on longer texts,
+  // so "Naują Anaya Hotel 5" doesn't pass just because "hotel" is a
+  // loanword.
   const tokens = stripped.toLowerCase().match(/\b[a-z']+\b/g) ?? [];
   if (tokens.length < 3) return true;
   const hits = tokens.filter((t) => ENGLISH_STOPWORDS.has(t)).length;
-  const threshold = Math.max(1, Math.floor(tokens.length / 10));
+  const threshold =
+    tokens.length >= 15
+      ? Math.max(2, Math.floor(tokens.length / 6))
+      : Math.max(1, Math.floor(tokens.length / 5));
   return hits >= threshold;
 }
 
@@ -429,15 +438,18 @@ function toOperatorPost(post: DiscoveryPost, clientId: string): Post {
 }
 
 function getEngageScore(post: Post) {
+  // Retained as a dead helper for the old Discovery code that still
+  // references scores on posts it converted via toOperatorPost. Feed
+  // cards no longer render this value.
   const posterWeight = post.posterScore != null ? post.posterScore : 60;
   const posterPenalty = post.posterType === "spam" ? 20 : 0;
   const onIslandBoost = post.onIslandNow ? 12 : 0;
   return Math.max(
     1,
     Math.round(
-      post.relevance * 0.33 +
-        post.opportunity * 0.34 +
-        (100 - post.risk) * 0.13 +
+      (post.relevance ?? 60) * 0.33 +
+        (post.opportunity ?? 60) * 0.34 +
+        (100 - (post.risk ?? 20)) * 0.13 +
         posterWeight * 0.2 -
         posterPenalty +
         onIslandBoost
@@ -567,6 +579,11 @@ function PostCard({
   onApprove,
   onSave,
   onSkip,
+  replyDraft,
+  replyLoading,
+  onChangeReply,
+  onGenerateReply,
+  accountName,
 }: {
   post: Post;
   selected: boolean;
@@ -574,17 +591,22 @@ function PostCard({
   onApprove: () => void;
   onSave: () => void;
   onSkip: () => void;
+  replyDraft: string;
+  replyLoading: boolean;
+  onChangeReply: (value: string) => void;
+  onGenerateReply: () => void;
+  accountName?: string;
 }) {
-  const engageScore = getEngageScore(post);
   const timing = getTimingBadge(post.time);
   const status = getStatusBadge(post.status);
-  const posterBadge = getPosterTypeBadge(post.posterType);
   const isHandled = post.status === "approved" || post.status === "skipped";
 
   return (
     <div
       onClick={onSelect}
-      className={`group cursor-pointer rounded-xl border bg-white p-5 transition hover:shadow-md ${selected ? "border-black shadow-sm" : "border-gray-200"} ${isHandled ? "opacity-60" : ""}`}
+      className={`group cursor-pointer rounded-xl border bg-white p-5 transition hover:shadow-md ${
+        selected ? "border-black shadow-sm" : "border-gray-200"
+      } ${isHandled ? "opacity-60" : ""}`}
     >
       <div className="flex flex-col gap-5 md:flex-row">
         <MediaThumb post={post} className="h-24 w-full md:w-24 md:flex-none" />
@@ -593,117 +615,84 @@ function PostCard({
             <div>
               <div className="text-base font-semibold tracking-tight text-gray-950">
                 {post.permalink ? (
-                  <a href={post.permalink} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="hover:underline">
-                    {post.author}
-                  </a>
-                ) : post.author}
-              </div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
-                <span>{post.platform} • {post.time}</span>
-                {post.permalink && (
                   <a
                     href={post.permalink}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:border-gray-400 hover:text-black"
+                    className="hover:underline"
                   >
-                    Open on {post.platform} ↗
+                    {post.author}
                   </a>
+                ) : (
+                  post.author
                 )}
+              </div>
+              <div className="mt-1 text-xs text-gray-400">
+                {post.platform} • {post.time} • {accountName ?? ""}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-3 py-1 text-[11px] font-medium ${timing.className}`}>
+              <span
+                className={`rounded-full border px-3 py-1 text-[11px] font-medium ${timing.className}`}
+              >
                 {timing.label}
               </span>
-              <span className={`rounded-full border px-3 py-1 text-[11px] font-medium ${status.className}`}>
+              <span
+                className={`rounded-full border px-3 py-1 text-[11px] font-medium ${status.className}`}
+              >
                 {status.label}
               </span>
-              <span
-                className={`rounded-full border px-3 py-1 text-[11px] font-medium ${posterBadge.className}`}
-              >
-                {posterBadge.label}
-              </span>
-              {post.onIslandNow && (
-                <span className="rounded-full border border-fuchsia-200 bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-700">
-                  On-island now
-                </span>
-              )}
             </div>
           </div>
-          <div className="mt-3 text-[17px] leading-snug text-gray-900">"{post.text}"</div>
-          <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Why this post</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {post.why.map((reason) => (
-                  <span key={reason} className="rounded-full bg-white px-3 py-1.5 text-xs text-gray-700 ring-1 ring-gray-200">
-                    {reason}
-                  </span>
-                ))}
+
+          {post.postCaption && (
+            <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">
+                In reply to this post
+              </div>
+              <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-600">
+                {post.postCaption}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-black bg-black p-4 text-white">
-                <div className="text-[10px] uppercase tracking-[0.25em] text-white/60">Engage score</div>
-                <div className="mt-1 text-3xl font-semibold tracking-tight">{engageScore}</div>
-              </div>
-              {scorePill("Poster rank", post.posterScore ?? 60, post.posterType === "spam" ? "risk" : "good")}
-            </div>
+          )}
+
+          <div className="mt-3 text-[17px] leading-snug text-gray-900">
+            &ldquo;{post.text}&rdquo;
           </div>
-          <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
-            <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Poster quality</div>
-            <div className="mt-2 grid grid-cols-2 gap-3 text-xs text-gray-600">
-              <div>
-                <span className="text-gray-400">Type:</span>{" "}
-                <span className="font-medium text-gray-900">{posterBadge.label}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">Followers:</span>{" "}
-                <span className="font-medium text-gray-900">
-                  {formatCompactCount(post.followerCount)}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-400">Engagement:</span>{" "}
-                <span className="font-medium text-gray-900">
-                  {post.engagementRate != null ? `${post.engagementRate.toFixed(1)}%` : "n/a"}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-400">Rank score:</span>{" "}
-                <span className="font-medium text-gray-900">{post.posterScore ?? 60}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-gray-400">Island intent:</span>{" "}
-                <span className="font-medium text-gray-900">
-                  {post.onIslandNow
-                    ? `On-island now${post.islandSignals?.length ? ` (${post.islandSignals.join(", ")})` : ""}`
-                    : post.islandSignals?.length
-                    ? `Island mention (${post.islandSignals.join(", ")})`
-                    : "No on-island signal"}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Suggested comment</div>
-                <div className="mt-2 text-sm leading-6 text-gray-700">{post.comment}</div>
+              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">
+                Draft reply
               </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelect();
+                  onGenerateReply();
                 }}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                disabled={replyLoading}
+                className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-black hover:text-black disabled:cursor-wait disabled:opacity-60"
               >
-                Edit
+                {replyLoading
+                  ? "Generating…"
+                  : replyDraft
+                    ? "Regenerate"
+                    : "Generate with AI"}
               </button>
             </div>
+            <textarea
+              value={replyDraft}
+              onChange={(e) => {
+                onChangeReply(e.target.value);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Click Generate to let AI draft a reply, or type your own here."
+              rows={3}
+              className="mt-2 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-black"
+            />
           </div>
+
           <div className="mt-4 flex flex-wrap gap-3">
             {post.permalink && (
               <a
@@ -713,7 +702,7 @@ function PostCard({
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium text-black hover:bg-black hover:text-white"
               >
-                View on {post.platform} ↗
+                Reply on {post.platform} ↗
               </a>
             )}
             <button
@@ -723,7 +712,7 @@ function PostCard({
               }}
               className="rounded-lg bg-black px-4 py-3 text-sm font-medium text-white"
             >
-              Approve now
+              Approve
             </button>
             <button
               onClick={(e) => {
@@ -732,7 +721,7 @@ function PostCard({
               }}
               className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
             >
-              Save for later
+              Save
             </button>
             <button
               onClick={(e) => {
@@ -780,12 +769,9 @@ export default function InteractionEngineUI({
   const [selectedId, setSelectedId] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [isLive, setIsLive] = useState(true);
-  const [highValueOnly, setHighValueOnly] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
-  const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
   const [englishOnly, setEnglishOnly] = useState(true);
   const [keywordFilter, setKeywordFilter] = useState("");
-  const [demoMode, setDemoMode] = useState(false);
 
   // Discovery tab state — saved searches persist per account; running one
   // fires /api/interaction/discover and renders the posts + their comments.
@@ -797,6 +783,12 @@ export default function InteractionEngineUI({
   const [discoveryPages, setDiscoveryPages] = useState<DiscoveredPage[]>([]);
   const [discoveryFetchState, setDiscoveryFetchState] = useState<FetchState>("idle");
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+
+  // AI-generated reply drafts, keyed by post id. Kept separate from the
+  // posts list so a draft persists across poll refetches and status
+  // changes without us having to rewrite the full post object.
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyLoading, setReplyLoading] = useState<Record<string, boolean>>({});
 
   // RapidAPI IG scraper settings (for Keyword + Location discovery).
   // Operator can paste these in a panel on the Discovery tab; the API
@@ -975,50 +967,6 @@ export default function InteractionEngineUI({
                   : `${Math.floor(minutesAgo / 1440)}d ago`
               : "recent");
           const text = String(comment.text ?? "").trim() || "Instagram comment";
-          const followerCount =
-            typeof comment.followerCount === "number"
-              ? comment.followerCount
-              : comment.followerCount != null
-              ? Number(comment.followerCount)
-              : null;
-          const engagementRate =
-            typeof comment.engagementRate === "number"
-              ? comment.engagementRate
-              : comment.engagementRate != null
-              ? Number(comment.engagementRate)
-              : null;
-          const posterType = comment.posterType ?? "tourist";
-          const posterScore =
-            typeof comment.posterScore === "number"
-              ? comment.posterScore
-              : posterType === "creator"
-              ? 78
-              : posterType === "spam"
-              ? 10
-              : 62;
-          const cleanFollowerCount = Number.isFinite(followerCount)
-            ? Number(followerCount)
-            : null;
-          const cleanEngagementRate = Number.isFinite(engagementRate)
-            ? Number(engagementRate)
-            : null;
-          const islandSignals = Array.isArray(comment.islandSignals)
-            ? comment.islandSignals.map((signal) => String(signal))
-            : [];
-          const onIslandNow = Boolean(comment.onIslandNow);
-          const scores = deriveScores({
-            text,
-            posterType,
-            posterScore,
-            onIslandNow,
-            islandSignals,
-            followerCount: cleanFollowerCount,
-            engagementRate: cleanEngagementRate,
-            // Freshness boost/decay needs a number; when Meta didn't send
-            // a timestamp assume the comment is 'recent enough' by using
-            // a 10-minute default so we don't penalise it for missing data.
-            minutesAgo: minutesAgo ?? 10,
-          });
           const commentId = String(comment.id ?? `ig-${Date.now()}`);
           // Re-apply any prior triage decision so approved/saved/skipped
           // comments don't re-appear in "Ready now" after refetch.
@@ -1035,30 +983,16 @@ export default function InteractionEngineUI({
             platform: "Instagram",
             time: displayTime,
             text,
-            relevance: scores.relevance,
-            opportunity: scores.opportunity,
-            risk: scores.risk,
-            comment: "Helpful local recommendation based on their question and timing.",
-            // Use the real Instagram post thumbnail when the API provided
-            // one. Empty string falls through to MediaThumb's SVG placeholder
-            // so we don't flash a broken image.
+            // Reply draft starts empty; AI fills it lazily on demand.
+            comment: "",
             mediaUrl: String(comment.mediaUrl ?? "").trim(),
-            // Carry the post permalink through so the card can link back
-            // to the original IG post. This was silently dropped from the
-            // mapper which made every card's "View on Instagram" button
-            // invisible.
             permalink: comment.permalink ? String(comment.permalink) : null,
+            postCaption: comment.postCaption
+              ? String(comment.postCaption)
+              : null,
             status: priorDecision
               ? (statusFromDecision(priorDecision) as PostStatus)
               : ("new" as const),
-            why: ["Live Instagram comment", "High intent signal", "Fresh opportunity window"],
-            posterType,
-            followerCount: cleanFollowerCount,
-            engagementRate: cleanEngagementRate,
-            posterScore,
-            posterReasons: comment.posterReasons ?? [],
-            onIslandNow,
-            islandSignals,
           };
         });
 
@@ -1237,6 +1171,43 @@ export default function InteractionEngineUI({
     }
   }
 
+  function handleChangeReply(postId: string, value: string) {
+    setReplyDrafts((prev) => ({ ...prev, [postId]: value }));
+  }
+
+  async function handleGenerateReply(post: Post) {
+    if (replyLoading[post.id]) return;
+    setReplyLoading((prev) => ({ ...prev, [post.id]: true }));
+    try {
+      const res = await fetch("/api/interaction/suggest-reply", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commentText: post.text,
+          commentAuthor: post.author,
+          postCaption: post.postCaption ?? null,
+          accountName: activeClient?.name ?? null,
+          previous: replyDrafts[post.id] ?? "",
+        }),
+      });
+      const json = (await res.json()) as { ok: boolean; reply?: string; error?: string };
+      if (!res.ok || !json.ok) {
+        alert(
+          `Could not generate a reply: ${json.error ?? "unknown error"}`
+        );
+        return;
+      }
+      setReplyDrafts((prev) => ({ ...prev, [post.id]: json.reply ?? "" }));
+    } catch (err) {
+      alert(
+        err instanceof Error ? err.message : "Could not generate a reply."
+      );
+    } finally {
+      setReplyLoading((prev) => ({ ...prev, [post.id]: false }));
+    }
+  }
+
   async function handleAddSearch() {
     const value = newSearchValue.trim();
     if (!activeClientId) {
@@ -1364,100 +1335,6 @@ export default function InteractionEngineUI({
     }
   }, [englishOnly]);
 
-  // Deterministic fixtures for demos — no randomness so screenshots and
-  // walkthroughs show the same data every time. Scored via deriveScores()
-  // so they follow the same rules as real comments.
-  useEffect(() => {
-    if (!demoMode) return;
-    const fixtures: Array<Omit<Post, "clientId" | "id" | "relevance" | "opportunity" | "risk"> & {
-      posterScoreSeed: number;
-    }> = [
-      {
-        author: "@kenzie.travels",
-        platform: "Instagram",
-        time: "3m ago",
-        text: "Any must-visit food spots in Zanzibar right now? 🍜",
-        comment:
-          "There are a couple of really fresh spots around Kendwa depending on what you are looking for 👀",
-        mediaUrl:
-          "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
-        status: "new",
-        why: ["Tourist intent", "Fresh post", "High reply potential"],
-        posterType: "tourist",
-        followerCount: 1840,
-        engagementRate: 4.2,
-        onIslandNow: true,
-        islandSignals: ["Zanzibar"],
-        posterScoreSeed: 82,
-      },
-      {
-        author: "@creator.wanders",
-        platform: "Instagram",
-        time: "12m ago",
-        text: "Recommendations for a quiet beach near Nungwi this week?",
-        comment:
-          "Kendwa's north stretch is calm most mornings — happy to point you to a good sundowner.",
-        mediaUrl:
-          "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
-        status: "new",
-        why: ["Creator footprint", "Local mention"],
-        posterType: "creator",
-        followerCount: 28400,
-        engagementRate: 3.1,
-        onIslandNow: true,
-        islandSignals: ["Nungwi", "Kendwa"],
-        posterScoreSeed: 88,
-      },
-      {
-        author: "@scrolly_spam",
-        platform: "Instagram",
-        time: "26m ago",
-        text: "Big discount! DM me for crypto promo 🚀 https://t.me/xyz",
-        comment: "",
-        mediaUrl:
-          "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80",
-        status: "new",
-        why: ["Spam patterns detected"],
-        posterType: "spam",
-        followerCount: 12,
-        engagementRate: 0,
-        onIslandNow: false,
-        islandSignals: [],
-        posterScoreSeed: 8,
-      },
-    ];
-    let cursor = 0;
-    const interval = setInterval(() => {
-      const f = fixtures[cursor % fixtures.length];
-      cursor++;
-      const minutesAgo = 2;
-      const scores = deriveScores({
-        text: f.text,
-        posterType: f.posterType ?? "tourist",
-        posterScore: f.posterScoreSeed,
-        onIslandNow: f.onIslandNow ?? false,
-        islandSignals: f.islandSignals ?? [],
-        followerCount: f.followerCount ?? null,
-        engagementRate: f.engagementRate ?? null,
-        minutesAgo,
-      });
-      const newPost: Post = {
-        ...f,
-        id: `demo-${cursor}-${f.author}`,
-        clientId: activeClientId,
-        relevance: scores.relevance,
-        opportunity: scores.opportunity,
-        risk: scores.risk,
-        posterScore: f.posterScoreSeed,
-      };
-      setPosts((prev) => {
-        if (prev.some((p) => p.id === newPost.id)) return prev;
-        return [newPost, ...prev].slice(0, 30);
-      });
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [demoMode, activeClientId]);
-
   const discoveryResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     return DISCOVERY_RESULTS.filter((p) => {
@@ -1511,20 +1388,20 @@ export default function InteractionEngineUI({
   }, [activeClientId, autoQueue, discoveryResults]);
 
   const visiblePosts = useMemo(() => {
-    let list = [...clientPosts].sort(
-      (a, b) =>
-        getEngageScore(b) - getEngageScore(a) ||
-        (b.posterScore ?? 0) - (a.posterScore ?? 0)
-    );
-    if (highValueOnly) list = list.filter((p) => getEngageScore(p) >= 85);
-    if (feedPosterFilter !== "all") list = list.filter((p) => p.posterType === feedPosterFilter);
+    // Rely on server-side newest-first ordering; no more derived-score
+    // sort (we removed the scores themselves).
+    let list = [...clientPosts];
     if (englishOnly) list = list.filter((p) => looksEnglish(p.text));
     if (feedSearch.trim()) {
       const q = feedSearch.trim().toLowerCase();
-      list = list.filter((p) => p.text.toLowerCase().includes(q) || p.author.toLowerCase().includes(q));
+      list = list.filter(
+        (p) =>
+          p.text.toLowerCase().includes(q) ||
+          p.author.toLowerCase().includes(q)
+      );
     }
     return list;
-  }, [clientPosts, highValueOnly, feedPosterFilter, feedSearch, englishOnly]);
+  }, [clientPosts, feedSearch, englishOnly]);
 
   const ready = visiblePosts.filter((p) => p.status === "new");
   const saved = visiblePosts.filter((p) => p.status === "saved");
@@ -1585,30 +1462,17 @@ export default function InteractionEngineUI({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {(["all", "tourist", "creator"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFeedPosterFilter(f)}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${feedPosterFilter === f ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-              >
-                {f === "all" ? "All" : f === "tourist" ? "Tourists" : "Creators"}
-              </button>
-            ))}
             <button
               onClick={() => setEnglishOnly((v) => !v)}
               title="Hide comments whose text looks like another language"
-              className={`rounded-lg border px-3 py-1.5 text-sm transition ${englishOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                englishOnly
+                  ? "border-black bg-black text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
             >
               {englishOnly ? "English only" : "Any language"}
             </button>
-            <div className="ml-auto">
-              <button
-                onClick={() => setHighValueOnly((v) => !v)}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${highValueOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
-              >
-                {highValueOnly ? "High value only" : "All scores"}
-              </button>
-            </div>
           </div>
         </div>
         <div className="mb-10">
@@ -1617,11 +1481,21 @@ export default function InteractionEngineUI({
             <div className="text-xs text-gray-400">{ready.length} items</div>
           </div>
           <div className="space-y-5">
+            {ready.length === 0 && (
+              <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+                Nothing new right now. The feed polls every 30 seconds.
+              </div>
+            )}
             {ready.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
                 selected={active?.id === post.id}
+                accountName={activeClient?.name}
+                replyDraft={replyDrafts[post.id] ?? ""}
+                replyLoading={Boolean(replyLoading[post.id])}
+                onChangeReply={(v) => handleChangeReply(post.id, v)}
+                onGenerateReply={() => void handleGenerateReply(post)}
                 onSelect={() => setSelectedId(post.id)}
                 onApprove={() => {
                   setSelectedId(post.id);
@@ -1633,173 +1507,63 @@ export default function InteractionEngineUI({
             ))}
           </div>
         </div>
-        <div className="mb-10">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="text-sm font-semibold text-gray-900">Saved for later</div>
-            <div className="text-xs text-gray-400">{saved.length} items</div>
+        {saved.length > 0 && (
+          <div className="mb-10">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Saved for later</div>
+              <div className="text-xs text-gray-400">{saved.length} items</div>
+            </div>
+            <div className="space-y-5">
+              {saved.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  selected={active?.id === post.id}
+                  accountName={activeClient?.name}
+                  replyDraft={replyDrafts[post.id] ?? ""}
+                  replyLoading={Boolean(replyLoading[post.id])}
+                  onChangeReply={(v) => handleChangeReply(post.id, v)}
+                  onGenerateReply={() => void handleGenerateReply(post)}
+                  onSelect={() => setSelectedId(post.id)}
+                  onApprove={() => {
+                    setSelectedId(post.id);
+                    updatePost(post.id, { status: "approved" });
+                  }}
+                  onSave={() => updatePost(post.id, { status: "saved" })}
+                  onSkip={() => updatePost(post.id, { status: "skipped" })}
+                />
+              ))}
+            </div>
           </div>
-          <div className="space-y-5">
-            {saved.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                selected={active?.id === post.id}
-                onSelect={() => setSelectedId(post.id)}
-                onApprove={() => {
-                  setSelectedId(post.id);
-                  updatePost(post.id, { status: "approved" });
-                }}
-                onSave={() => updatePost(post.id, { status: "saved" })}
-                onSkip={() => updatePost(post.id, { status: "skipped" })}
-              />
-            ))}
+        )}
+        {handled.length > 0 && (
+          <div>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Handled</div>
+              <div className="text-xs text-gray-400">{handled.length} items</div>
+            </div>
+            <div className="space-y-5">
+              {handled.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  selected={active?.id === post.id}
+                  accountName={activeClient?.name}
+                  replyDraft={replyDrafts[post.id] ?? ""}
+                  replyLoading={Boolean(replyLoading[post.id])}
+                  onChangeReply={(v) => handleChangeReply(post.id, v)}
+                  onGenerateReply={() => void handleGenerateReply(post)}
+                  onSelect={() => setSelectedId(post.id)}
+                  onApprove={() => {
+                    setSelectedId(post.id);
+                    updatePost(post.id, { status: "approved" });
+                  }}
+                  onSave={() => updatePost(post.id, { status: "saved" })}
+                  onSkip={() => updatePost(post.id, { status: "skipped" })}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <div className="text-sm font-semibold text-gray-900">Handled</div>
-            <div className="text-xs text-gray-400">{handled.length} items</div>
-          </div>
-          <div className="space-y-5">
-            {handled.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                selected={active?.id === post.id}
-                onSelect={() => setSelectedId(post.id)}
-                onApprove={() => {
-                  setSelectedId(post.id);
-                  updatePost(post.id, { status: "approved" });
-                }}
-                onSave={() => updatePost(post.id, { status: "saved" })}
-                onSkip={() => updatePost(post.id, { status: "skipped" })}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="sticky top-8 h-fit rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        {active && (
-          <>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-lg font-semibold tracking-tight">
-                  {active.permalink ? (
-                    <a href={active.permalink} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                      {active.author}
-                    </a>
-                  ) : active.author}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {active.platform} • {active.time}
-                </div>
-              </div>
-              {active.permalink && (
-                <a
-                  href={active.permalink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-black bg-black px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800"
-                >
-                  Open on {active.platform} ↗
-                </a>
-              )}
-            </div>
-            <div className="mt-5">
-              <MediaThumb post={active} className="h-52 w-full" />
-            </div>
-            {active.permalink && (
-              <a
-                href={active.permalink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 block w-full rounded-lg border border-gray-200 bg-white py-2.5 text-center text-sm font-medium text-gray-700 hover:border-black hover:text-black"
-              >
-                Reply to this on {active.platform} ↗
-              </a>
-            )}
-            <div className="mt-5 text-[17px] leading-relaxed text-gray-900">"{active.text}"</div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-black bg-black p-4 text-white">
-                <div className="text-[10px] uppercase tracking-[0.25em] text-white/60">Engage score</div>
-                <div className="mt-1 text-3xl font-semibold tracking-tight">{getEngageScore(active)}</div>
-              </div>
-              {scorePill(
-                "Poster rank",
-                active.posterScore ?? 60,
-                active.posterType === "spam" ? "risk" : "good"
-              )}
-            </div>
-            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">User ranking</div>
-              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-700">
-                <div>
-                  <span className="text-gray-400">Type:</span>{" "}
-                  <span className="font-medium">{getPosterTypeBadge(active.posterType).label}</span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Followers:</span>{" "}
-                  <span className="font-medium">{formatCompactCount(active.followerCount)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Engagement:</span>{" "}
-                  <span className="font-medium">
-                    {active.engagementRate != null ? `${active.engagementRate.toFixed(1)}%` : "n/a"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Rank score:</span>{" "}
-                  <span className="font-medium">{active.posterScore ?? 60}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-gray-400">Island intent:</span>{" "}
-                  <span className="font-medium">
-                    {active.onIslandNow
-                      ? `On-island now${active.islandSignals?.length ? ` (${active.islandSignals.join(", ")})` : ""}`
-                      : active.islandSignals?.length
-                      ? `Island mention (${active.islandSignals.join(", ")})`
-                      : "No on-island signal"}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="text-[10px] uppercase tracking-[0.25em] text-gray-400">Why this post</div>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-700">
-                {active.why.map((reason) => (
-                  <li key={reason}>• {reason}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-6">
-              <div className="text-xs uppercase tracking-[0.25em] text-gray-400">Comment</div>
-              <textarea
-                value={active.comment}
-                onChange={(e) => updatePost(active.id, { comment: e.target.value })}
-                className="mt-3 min-h-[160px] w-full rounded-lg border border-gray-200 p-4 text-sm leading-relaxed outline-none focus:border-black"
-              />
-            </div>
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <button
-                onClick={() => updatePost(active.id, { status: "approved" })}
-                className="rounded-lg bg-black px-4 py-3 text-sm font-medium text-white"
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => updatePost(active.id, { status: "saved" })}
-                className="rounded-lg border border-gray-200 px-4 py-3 text-sm"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => updatePost(active.id, { status: "skipped" })}
-                className="rounded-lg border border-gray-200 px-4 py-3 text-sm"
-              >
-                Skip
-              </button>
-            </div>
-          </>
         )}
       </div>
     </div>
@@ -2604,17 +2368,6 @@ export default function InteractionEngineUI({
                 className="rounded-lg border border-gray-200 px-3 py-2 text-xs"
               >
                 {isLive ? "Pause" : "Resume"}
-              </button>
-              <button
-                onClick={() => setDemoMode((v) => !v)}
-                className={`rounded-lg border px-3 py-2 text-xs transition ${
-                  demoMode
-                    ? "border-black bg-black text-white"
-                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-                title="Inject deterministic sample comments — useful for demos and screenshots"
-              >
-                {demoMode ? "● Demo on" : "Demo"}
               </button>
               {reconnectUrl(activeAccountMeta) && (
                 <a

@@ -30,9 +30,8 @@ type ProxyComment = {
   engagement?: number | string | null;
   engagementRate?: number | string | null;
   engagement_rate?: number | string | null;
+  postCaption?: string | null;
 };
-
-type PosterType = "tourist" | "creator" | "spam";
 
 type NormalizedComment = {
   id: string;
@@ -43,14 +42,8 @@ type NormalizedComment = {
   timestamp: string | null;
   mediaUrl: string;
   permalink: string | null;
+  postCaption: string | null;
   platform: "Instagram";
-  posterType: PosterType;
-  followerCount: number | null;
-  engagementRate: number | null;
-  posterScore: number;
-  posterReasons: string[];
-  onIslandNow: boolean;
-  islandSignals: string[];
 };
 
 // Empty string so the client's MediaThumb falls through to its SVG
@@ -98,136 +91,6 @@ function normalizeAuthor(value: string | null | undefined): string {
   return raw.startsWith("@") ? raw : `@${raw}`;
 }
 
-function parseCompactNumber(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  const raw = String(value).trim().toLowerCase();
-  if (!raw) return null;
-  const normalized = raw.replace(/,/g, "");
-  const match = normalized.match(/^(\d+(?:\.\d+)?)([km])?$/i);
-  if (!match) {
-    const asNum = Number(normalized);
-    return Number.isFinite(asNum) ? asNum : null;
-  }
-  const base = Number(match[1]);
-  if (!Number.isFinite(base)) return null;
-  const suffix = match[2];
-  if (suffix === "k") return Math.round(base * 1000);
-  if (suffix === "m") return Math.round(base * 1000000);
-  return Math.round(base);
-}
-
-function parsePercent(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  const raw = String(value).replace("%", "").trim();
-  if (!raw) return null;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function inferPosterType(args: {
-  explicitType: string | null;
-  text: string;
-  followerCount: number | null;
-  engagementRate: number | null;
-}): { posterType: PosterType; reasons: string[] } {
-  const reasons: string[] = [];
-  const explicit = String(args.explicitType ?? "").trim().toLowerCase();
-  if (explicit === "spam") {
-    reasons.push("Source labeled as spam");
-    return { posterType: "spam", reasons };
-  }
-  if (explicit === "creator") {
-    reasons.push("Source labeled as creator");
-    return { posterType: "creator", reasons };
-  }
-  if (explicit === "tourist") {
-    reasons.push("Source labeled as tourist");
-    return { posterType: "tourist", reasons };
-  }
-
-  const text = args.text.toLowerCase();
-  const linkCount = (args.text.match(/https?:\/\//gi) ?? []).length;
-  const spamTerms = /(dm me|promo|discount|giveaway|crypto|forex|airdrop|telegram|onlyfans)/i;
-  if (linkCount >= 2 || spamTerms.test(text)) {
-    reasons.push("Spam-like language or excessive links");
-    return { posterType: "spam", reasons };
-  }
-
-  const followerCount = args.followerCount ?? 0;
-  const engagementRate = args.engagementRate ?? 0;
-  if (followerCount >= 5000 || engagementRate >= 3.5) {
-    reasons.push("Strong creator footprint");
-    return { posterType: "creator", reasons };
-  }
-
-  reasons.push("Likely traveler/audience account");
-  return { posterType: "tourist", reasons };
-}
-
-const ON_ISLAND_PLACE_PATTERNS: Array<{ key: string; regex: RegExp }> = [
-  { key: "Zanzibar", regex: /\bzanzibar\b/i },
-  { key: "Kendwa", regex: /\bkendwa\b/i },
-  { key: "Nungwi", regex: /\bnungwi\b/i },
-];
-
-const ON_ISLAND_NOW_PATTERNS: RegExp[] = [
-  /\bnow\b/i,
-  /\bright now\b/i,
-  /\bcurrently\b/i,
-  /\btoday\b/i,
-  /\bthis week(end)?\b/i,
-  /\bon[-\s]?island\b/i,
-  /\bhere\b/i,
-  /\bin\s+(zanzibar|kendwa|nungwi)\b/i,
-  /\bnear\s+(kendwa|nungwi|zanzibar)\b/i,
-];
-
-function detectIslandIntent(text: string): {
-  onIslandNow: boolean;
-  islandSignals: string[];
-} {
-  const signals = ON_ISLAND_PLACE_PATTERNS.filter((item) => item.regex.test(text)).map(
-    (item) => item.key
-  );
-  const hasPlace = signals.length > 0;
-  const hasNowLanguage = ON_ISLAND_NOW_PATTERNS.some((pattern) => pattern.test(text));
-  return {
-    onIslandNow: hasPlace && hasNowLanguage,
-    islandSignals: signals,
-  };
-}
-
-function computePosterScore(args: {
-  posterType: PosterType;
-  followerCount: number | null;
-  engagementRate: number | null;
-  onIslandNow: boolean;
-}): number {
-  const baseByType: Record<PosterType, number> = {
-    tourist: 58,
-    creator: 76,
-    spam: 8,
-  };
-  let score = baseByType[args.posterType];
-  if (args.followerCount != null && args.followerCount > 0) {
-    const followerBoost = Math.min(14, Math.log10(args.followerCount + 1) * 4);
-    score += followerBoost;
-  }
-  if (args.engagementRate != null && args.engagementRate > 0) {
-    const engagementBoost = Math.min(14, args.engagementRate * 2.6);
-    score += engagementBoost;
-  }
-  if (args.posterType === "spam") {
-    score = Math.min(score, 12);
-  } else if (args.onIslandNow) {
-    // On-island-now comments are highest intent for this workflow.
-    score += 14;
-  }
-  return Math.max(1, Math.min(100, Math.round(score)));
-}
-
 function normalizeComment(row: ProxyComment, index: number): NormalizedComment | null {
   const id =
     row.id ?? row.commentId ?? `${String(row.username ?? row.author ?? "comment")}-${index}`;
@@ -238,37 +101,7 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     row.mediaUrl ?? row.imageUrl ?? row.postMediaUrl ?? DEFAULT_MEDIA_URL
   );
   const permalink = String(row.permalink ?? row.postUrl ?? "").trim() || null;
-  const followerCount = parseCompactNumber(
-    row.followerCount ?? row.followersCount ?? row.followers ?? null
-  );
-  const engagementRate = parsePercent(
-    row.engagementRate ?? row.engagement_rate ?? row.engagement ?? null
-  );
-  const inferred = inferPosterType({
-    explicitType: row.userType ?? row.accountType ?? null,
-    text,
-    followerCount,
-    engagementRate,
-  });
-  const islandIntent = detectIslandIntent(text);
-  const posterScore = computePosterScore({
-    posterType: inferred.posterType,
-    followerCount,
-    engagementRate,
-    onIslandNow: islandIntent.onIslandNow,
-  });
-  const posterReasons = [...inferred.reasons];
-  if (islandIntent.onIslandNow) {
-    posterReasons.push(`On-island intent now (${islandIntent.islandSignals.join(", ")})`);
-  } else if (islandIntent.islandSignals.length > 0) {
-    posterReasons.push(`Island mention (${islandIntent.islandSignals.join(", ")})`);
-  }
-  if (followerCount != null) {
-    posterReasons.push(`${followerCount.toLocaleString("en-GB")} followers`);
-  }
-  if (engagementRate != null) {
-    posterReasons.push(`${engagementRate.toFixed(1)}% engagement`);
-  }
+  const postCaption = String(row.postCaption ?? "").trim() || null;
 
   const rawHandle = String(row.author ?? row.username ?? row.handle ?? "")
     .trim()
@@ -286,14 +119,8 @@ function normalizeComment(row: ProxyComment, index: number): NormalizedComment |
     timestamp: timestampIso,
     mediaUrl: mediaUrl || DEFAULT_MEDIA_URL,
     permalink,
+    postCaption,
     platform: "Instagram",
-    posterType: inferred.posterType,
-    followerCount,
-    engagementRate,
-    posterScore,
-    posterReasons,
-    onIslandNow: islandIntent.onIslandNow,
-    islandSignals: islandIntent.islandSignals,
   };
 }
 
@@ -396,7 +223,7 @@ async function fetchFromMetaGraph(
     // CAROUSEL_ALBUM parents return null media_url; their image lives on
     // the first child. Request children inline so a single call covers
     // all three types (IMAGE, VIDEO, CAROUSEL_ALBUM).
-    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,media_url,thumbnail_url,media_type,children{media_url,thumbnail_url,media_type}&limit=10&access_token=${acct.access_token}`);
+    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,caption,media_url,thumbnail_url,media_type,children{media_url,thumbnail_url,media_type}&limit=10&access_token=${acct.access_token}`);
     if (!mediaRes.ok) {
       const errBody = await mediaRes.text().catch(() => "");
       const tokenExpired = isTokenError(mediaRes.status, errBody);
@@ -412,6 +239,7 @@ async function fetchFromMetaGraph(
       data?: {
         id: string;
         permalink?: string;
+        caption?: string;
         media_url?: string;
         thumbnail_url?: string;
         media_type?: string;
@@ -481,6 +309,7 @@ async function fetchFromMetaGraph(
           timestamp: c.timestamp,
           permalink: m.permalink,
           mediaUrl: postImageUrl,
+          postCaption: m.caption ?? null,
         });
       }
     }));
@@ -492,7 +321,13 @@ async function fetchFromMetaGraph(
   const comments = raw
     .map((r, i) => normalizeComment(r, i))
     .filter((c): c is NormalizedComment => Boolean(c))
-    .sort((a, b) => b.posterScore - a.posterScore)
+    // Newest first — we dropped poster-score sorting because it was
+    // derived from phantom metrics. Timestamp is honest.
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp ?? 0).getTime() -
+        new Date(a.timestamp ?? 0).getTime()
+    )
     .slice(0, limit);
 
   // Clear any previously recorded error now that the fetch worked.
@@ -589,7 +424,11 @@ async function handleRequest(
     .map(normalizeComment)
     .filter((c): c is NormalizedComment => Boolean(c))
     .filter((c) => keywords.length === 0 || keywords.some((kw) => `${c.text} ${c.author}`.toLowerCase().includes(kw)))
-    .sort((a, b) => b.posterScore - a.posterScore)
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp ?? 0).getTime() -
+        new Date(a.timestamp ?? 0).getTime()
+    )
     .slice(0, limit);
 
   return NextResponse.json({ ok: true, comments, source: "instagram-proxy", fetched: comments.length, fetchedAt: new Date().toISOString() });
