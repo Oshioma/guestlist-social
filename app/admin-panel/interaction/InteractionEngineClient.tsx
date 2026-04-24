@@ -215,6 +215,56 @@ type InstagramCommentApiItem = {
 // that fails the CDN signature check. We tunnel those through our own
 // proxy route which swaps the referer server-side. Non-Meta hosts (e.g.
 // Unsplash for demo fixtures) load directly.
+// Cheap language detector for filtering out non-English comments/posts.
+// No external libs — combines a non-ASCII-ratio signal (catches Czech,
+// Polish, Vietnamese, etc.) with an English-stopword hit-count (catches
+// languages that share the Latin alphabet like Italian / Portuguese /
+// French). Tuned to keep very short captions and emoji-only content so
+// we don't falsely reject things like "Zanzibar 2026 🎪 #kendwa".
+const ENGLISH_STOPWORDS = new Set([
+  "the","and","is","was","were","for","this","that","but","with","have","has",
+  "had","are","you","we","they","from","what","when","where","who","how","why",
+  "to","in","of","on","at","an","be","it","my","your","our","their","he","she",
+  "his","her","us","them","will","would","can","could","should","not","no","yes",
+  "so","if","or","because","while","there","here","just","about","into","over",
+  "under","more","very","really","love","nice","good","great","thank","thanks",
+  "please","today","tomorrow","week","month","year","holiday","trip","visit",
+  "stay","place","time",
+]);
+
+function looksEnglish(text: string | null | undefined): boolean {
+  const raw = (text ?? "").trim();
+  if (!raw) return true;
+
+  // Strip URLs, @mentions, #hashtags and emoji — they don't signal language.
+  const stripped = raw
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[@#][\w.]+/g, "")
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+    .trim();
+  if (!stripped) return true;
+
+  // Very short content (≤2 words of actual letters) — assume English.
+  const letterWords =
+    stripped.match(/\b[\p{L}']+\b/gu) ?? [];
+  if (letterWords.length <= 2) return true;
+
+  // Non-ASCII letter ratio — Czech / Polish / Vietnamese drop out here.
+  const allLetters = stripped.replace(/[^\p{L}]/gu, "");
+  if (allLetters.length >= 10) {
+    const asciiLetters = allLetters.replace(/[^a-zA-Z]/g, "");
+    const nonAsciiRatio = 1 - asciiLetters.length / allLetters.length;
+    if (nonAsciiRatio > 0.12) return false;
+  }
+
+  // Stopword hit rate — catches Italian, Portuguese, French, etc.
+  const tokens = stripped.toLowerCase().match(/\b[a-z']+\b/g) ?? [];
+  if (tokens.length < 3) return true;
+  const hits = tokens.filter((t) => ENGLISH_STOPWORDS.has(t)).length;
+  const threshold = Math.max(1, Math.floor(tokens.length / 10));
+  return hits >= threshold;
+}
+
 function proxiedMediaUrl(url: string | null | undefined): string {
   const raw = String(url ?? "").trim();
   if (!raw) return "";
@@ -718,6 +768,7 @@ export default function InteractionEngineUI({
   const [highValueOnly, setHighValueOnly] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
   const [feedPosterFilter, setFeedPosterFilter] = useState<"all" | "tourist" | "creator">("all");
+  const [englishOnly, setEnglishOnly] = useState(true);
   const [keywordFilter, setKeywordFilter] = useState("");
   const [demoMode, setDemoMode] = useState(false);
 
@@ -1203,6 +1254,25 @@ export default function InteractionEngineUI({
     }
   }, [activeClientId]);
 
+  // Hydrate / persist the English-only filter across sessions.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("interaction-english-only");
+      if (stored === "true" || stored === "false") {
+        setEnglishOnly(stored === "true");
+      }
+    } catch {
+      // localStorage unavailable — keep default
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("interaction-english-only", String(englishOnly));
+    } catch {
+      // ignore quota / privacy errors
+    }
+  }, [englishOnly]);
+
   // Deterministic fixtures for demos — no randomness so screenshots and
   // walkthroughs show the same data every time. Scored via deriveScores()
   // so they follow the same rules as real comments.
@@ -1357,12 +1427,13 @@ export default function InteractionEngineUI({
     );
     if (highValueOnly) list = list.filter((p) => getEngageScore(p) >= 85);
     if (feedPosterFilter !== "all") list = list.filter((p) => p.posterType === feedPosterFilter);
+    if (englishOnly) list = list.filter((p) => looksEnglish(p.text));
     if (feedSearch.trim()) {
       const q = feedSearch.trim().toLowerCase();
       list = list.filter((p) => p.text.toLowerCase().includes(q) || p.author.toLowerCase().includes(q));
     }
     return list;
-  }, [clientPosts, highValueOnly, feedPosterFilter, feedSearch]);
+  }, [clientPosts, highValueOnly, feedPosterFilter, feedSearch, englishOnly]);
 
   const ready = visiblePosts.filter((p) => p.status === "new");
   const saved = visiblePosts.filter((p) => p.status === "saved");
@@ -1432,6 +1503,13 @@ export default function InteractionEngineUI({
                 {f === "all" ? "All" : f === "tourist" ? "Tourists" : "Creators"}
               </button>
             ))}
+            <button
+              onClick={() => setEnglishOnly((v) => !v)}
+              title="Hide comments whose text looks like another language"
+              className={`rounded-lg border px-3 py-1.5 text-sm transition ${englishOnly ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}
+            >
+              {englishOnly ? "English only" : "Any language"}
+            </button>
             <div className="ml-auto">
               <button
                 onClick={() => setHighValueOnly((v) => !v)}
@@ -1923,9 +2001,16 @@ export default function InteractionEngineUI({
         </div>
       )}
 
-      {discoveryPosts.length > 0 && (
+      {(() => {
+        // Apply the same English filter the operator set on the Feed tab
+        // so discovery doesn't contradict their language preference.
+        const visibleDiscovery = englishOnly
+          ? discoveryPosts.filter((p) => looksEnglish(p.text))
+          : discoveryPosts;
+        if (visibleDiscovery.length === 0) return null;
+        return (
         <div className="space-y-4">
-          {discoveryPosts.map((post) => (
+          {visibleDiscovery.map((post) => (
             <div
               key={post.id}
               className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
@@ -2026,7 +2111,8 @@ export default function InteractionEngineUI({
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 
