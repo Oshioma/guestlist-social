@@ -348,6 +348,19 @@ type DiscoveredPage = {
   description: string | null;
 };
 
+// undici's "fetch failed" error is generic; the meaningful detail lives
+// on err.cause (e.g. "getaddrinfo ENOTFOUND host" or "socket hang up").
+// Pull whichever string looks most actionable.
+function describeFetchError(err: unknown): string {
+  if (!err) return "unknown error";
+  const e = err as { message?: string; cause?: { code?: string; message?: string } };
+  const causeBit = e.cause?.code
+    ? `${e.cause.code}${e.cause.message ? ` — ${e.cause.message}` : ""}`
+    : e.cause?.message ?? "";
+  const base = e.message ?? String(err);
+  return causeBit ? `${base} (${causeBit})` : base;
+}
+
 function getRapidApiConfig():
   | { ok: true; key: string; host: string }
   | { ok: false; error: string } {
@@ -622,7 +635,13 @@ async function fetchLocationPosts(
     stored.host ??
     process.env.RAPIDAPI_IG_HOST ??
     "instagram-scraper-api2.p.rapidapi.com"
-  ).trim();
+  )
+    .trim()
+    // Operators commonly paste the full URL (https://...) or a trailing
+    // slash into the host field. Strip both so the URL we build later
+    // doesn't end up as "https://https://host.com/..." or host//path.
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
   // Only use a RapidAPI search path that the operator explicitly set
   // (in the Discovery panel or env vars). The old default
   // "/v1/location_search?query={q}" was fine for instagram-scraper-api2
@@ -696,12 +715,15 @@ async function fetchLocationPosts(
         };
       }
     } catch (err) {
+      console.error("[location search] fetch threw", {
+        url: searchUrl,
+        message: err instanceof Error ? err.message : String(err),
+        cause: err instanceof Error ? (err as Error & { cause?: unknown }).cause : null,
+      });
+      const root = describeFetchError(err);
       return {
         ok: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : "Location search failed (network error)",
+        error: `Name-lookup search failed: ${root}. Hit URL: ${searchUrl}.`,
       };
     }
 
@@ -778,12 +800,15 @@ async function fetchLocationPosts(
       };
     }
   } catch (err) {
+    console.error("[location posts] fetch threw", {
+      url: postsUrl,
+      message: err instanceof Error ? err.message : String(err),
+      cause: err instanceof Error ? (err as Error & { cause?: unknown }).cause : null,
+    });
+    const root = describeFetchError(err);
     return {
       ok: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : "Location posts fetch failed (network error)",
+      error: `Posts fetch failed: ${root}. Hit URL: ${postsUrl}. Common causes: host field has "https://" in it, path template missing {id}, or upstream API is down.`,
     };
   }
 
