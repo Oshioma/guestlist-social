@@ -179,6 +179,7 @@ type InstagramCommentApiItem = {
   username?: string;
   timestamp?: string;
   permalink?: string;
+  mediaUrl?: string;
   posterType?: PosterType;
   followerCount?: number | null;
   engagementRate?: number | null;
@@ -187,6 +188,26 @@ type InstagramCommentApiItem = {
   onIslandNow?: boolean;
   islandSignals?: string[];
 };
+
+// Meta's CDN (scontent.cdninstagram.com / fbcdn.net) blocks hotlinking
+// from third-party domains — the image request carries a browser referer
+// that fails the CDN signature check. We tunnel those through our own
+// proxy route which swaps the referer server-side. Non-Meta hosts (e.g.
+// Unsplash for demo fixtures) load directly.
+function proxiedMediaUrl(url: string | null | undefined): string {
+  const raw = String(url ?? "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("/api/admin/proxy-image")) return raw;
+  try {
+    const host = new URL(raw).hostname;
+    if (/cdninstagram|fbcdn|instagram\.com|facebook\.com/i.test(host)) {
+      return `/api/admin/proxy-image?url=${encodeURIComponent(raw)}`;
+    }
+    return raw;
+  } catch {
+    return "";
+  }
+}
 
 type InstagramCommentsApiResponse = {
   ok: boolean;
@@ -420,12 +441,17 @@ function scorePill(
 }
 
 function MediaThumb({ post, className = "" }: { post: Post; className?: string }) {
-  const proxied = post.mediaUrl
-    ? `/api/admin/proxy-image?url=${encodeURIComponent(post.mediaUrl)}`
-    : null;
-  const inner = proxied ? (
+  const resolved = proxiedMediaUrl(post.mediaUrl);
+  const inner = resolved ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={proxied} alt="" className="h-full w-full object-cover" />
+    <img
+      src={resolved}
+      alt=""
+      className="h-full w-full object-cover"
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).style.display = "none";
+      }}
+    />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-gray-300 text-2xl">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -864,8 +890,10 @@ export default function InteractionEngineUI({
             opportunity: scores.opportunity,
             risk: scores.risk,
             comment: "Helpful local recommendation based on their question and timing.",
-            mediaUrl:
-              "https://images.unsplash.com/photo-1504674900247-ec6e0c6c1c9c?auto=format&fit=crop&w=1200&q=80",
+            // Use the real Instagram post thumbnail when the API provided
+            // one. Empty string falls through to MediaThumb's SVG placeholder
+            // so we don't flash a broken image.
+            mediaUrl: String(comment.mediaUrl ?? "").trim(),
             status: priorDecision
               ? (statusFromDecision(priorDecision) as PostStatus)
               : ("new" as const),
@@ -1648,10 +1676,16 @@ export default function InteractionEngineUI({
             >
               <div className="flex items-start gap-4 p-5">
                 {post.mediaUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={post.mediaUrl}
+                    src={proxiedMediaUrl(post.mediaUrl)}
                     alt=""
                     className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                    onError={(e) => {
+                      // Swap to a neutral placeholder when the Meta CDN URL
+                      // has expired or the proxy rejects the domain.
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                    }}
                   />
                 ) : (
                   <div className="h-20 w-20 shrink-0 rounded-lg bg-gray-100" />
