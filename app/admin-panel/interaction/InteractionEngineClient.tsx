@@ -743,19 +743,10 @@ export default function InteractionEngineUI({
   initialClients = [],
   initialDecisions = [],
   setupIssue = null,
-  experimentalDiscovery = false,
 }: {
   initialClients?: ClientOption[];
   initialDecisions?: PersistedDecision[];
   setupIssue?: SetupIssue;
-  /**
-   * Gates the scraper-backed Discovery surfaces (keyword, location,
-   * hashtag, RapidAPI integration panel, Google helper). The default
-   * page renders v1 only (Business-Discovery handles + tagged
-   * mentions). /app/interaction/v2 sets this true to expose the
-   * experimental stack.
-   */
-  experimentalDiscovery?: boolean;
 }) {
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [activeClientId, setActiveClientId] = useState(() => {
@@ -786,9 +777,28 @@ export default function InteractionEngineUI({
   // fires /api/interaction/discover and renders the posts + their comments.
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [newSearchKind, setNewSearchKind] = useState<SearchKind>("handle");
-  // When the operator flips between v1 and v2, snap the kind back to a
-  // supported value so the dropdown doesn't show a blank selection for
-  // a hidden option.
+  // Discovery has two flavours: the stable Meta-Graph-only surface and
+  // the experimental scraper-backed one. Toggle lives in state and
+  // persists across sessions so the operator stays where they were.
+  const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("stable");
+  const experimentalDiscovery = discoveryMode === "v2";
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("interaction-discovery-mode");
+      if (stored === "stable" || stored === "v2") setDiscoveryMode(stored);
+    } catch {
+      // ignore
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("interaction-discovery-mode", discoveryMode);
+    } catch {
+      // ignore
+    }
+  }, [discoveryMode]);
+  // When the operator flips modes, snap kind back to a supported value
+  // so the dropdown doesn't show a blank selection for a hidden option.
   useEffect(() => {
     const supported: SearchKind[] = experimentalDiscovery
       ? ["handle", "mentions", "location", "keyword", "hashtag"]
@@ -1676,50 +1686,37 @@ export default function InteractionEngineUI({
 
   const renderDiscovery = () => (
     <div className="space-y-6">
-      {!experimentalDiscovery && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">
-                Stable discovery
-              </div>
-              <div className="mt-1 text-xs text-gray-500">
-                Meta Graph only — competitor handles (Business Discovery)
-                and posts that tag this account. Nothing to configure.
-              </div>
-            </div>
-            <a
-              href="/app/interaction/v2"
-              className="rounded-lg border border-black bg-white px-3 py-2 text-xs font-semibold text-black hover:bg-black hover:text-white"
+      <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDiscoveryMode("stable")}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                !experimentalDiscovery
+                  ? "border-black bg-black text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
             >
-              Try Discovery v2 (experimental) →
-            </a>
+              Discovery
+            </button>
+            <button
+              onClick={() => setDiscoveryMode("v2")}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                experimentalDiscovery
+                  ? "border-amber-600 bg-amber-50 text-amber-900"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              Discovery V2 (experimental)
+            </button>
+          </div>
+          <div className="text-xs text-gray-500">
+            {experimentalDiscovery
+              ? "Scraper-backed sources. Flaky by design — switch back any time."
+              : "Meta Graph only. Free, reliable. Handles + tagged mentions."}
           </div>
         </div>
-      )}
-      {experimentalDiscovery && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-amber-900">
-                Discovery v2 — experimental
-              </div>
-              <div className="mt-1 text-xs text-amber-800">
-                Keyword, location and hashtag sources go through third-party
-                scrapers (RapidAPI) or Meta endpoints that require app review.
-                Flaky by design — if something doesn&rsquo;t resolve, the
-                stable page is a click away.
-              </div>
-            </div>
-            <a
-              href="/app/interaction"
-              className="rounded-lg border border-amber-700 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
-            >
-              ← Back to stable Discovery
-            </a>
-          </div>
-        </div>
-      )}
+      </div>
       {experimentalDiscovery && (
       <details
         className="rounded-2xl border border-gray-200 bg-white"
