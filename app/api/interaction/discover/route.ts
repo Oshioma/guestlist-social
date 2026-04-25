@@ -429,7 +429,7 @@ type ApifyInput = {
 
 function buildApifyInput(kind: ApifyKind, value: string): ApifyInput | null {
   const clean = value.trim();
-  if (!clean && kind !== "mentions") return null;
+  if (!clean) return null;
 
   if (kind === "handle") {
     const handle = clean.replace(/^@+/, "");
