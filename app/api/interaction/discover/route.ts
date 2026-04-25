@@ -162,10 +162,9 @@ function explainGraphError(
   ) {
     const target = context?.value ? `"@${context.value}"` : "that handle";
     return (
-      `Meta couldn't resolve ${target} via Business Discovery. That endpoint only works for ` +
-      "public Instagram business or creator accounts. If the handle came from a Facebook page " +
-      "search, the Facebook vanity URL often doesn't match the Instagram handle — try pasting " +
-      "the exact IG @handle instead."
+      `Meta returned "invalid user id" for ${target}. Two possible causes:\n` +
+      `1. ${target} isn't a public Instagram Business or Creator account (Business Discovery only works on those — personal/private accounts won't resolve).\n` +
+      `2. The Instagram account YOU connected to Guestlist isn't itself a Business/Creator account. Business Discovery requires the calling account to be Business or Creator — if it's personal, every lookup fails this way, even for handles like @nike. Open Instagram → Settings → Account type → switch to Business or Creator, then reconnect from client settings.`
     );
   }
   return base;
