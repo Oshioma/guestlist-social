@@ -325,6 +325,114 @@ export async function getIgScraperCredentialsInternal(): Promise<IgScraperCreden
   }
 }
 
+// ----------------------------------------------------------------------------
+// Apify integration (Discovery V2). One token unlocks the apify/instagram-scraper
+// actor for keyword, hashtag, location and handle searches. Stored alongside
+// the RapidAPI row in `interaction_integrations` under provider = "apify".
+// ----------------------------------------------------------------------------
+
+export type ApifySettings = {
+  hasToken: boolean;
+  actorId: string | null;
+  updatedAt: string | null;
+};
+
+const DEFAULT_APIFY_ACTOR_ID = "apify/instagram-scraper";
+
+export async function getApifySettings(): Promise<ApifySettings> {
+  // Either DB-stored or env-var APIFY_TOKEN counts. Operators on Vercel
+  // typically set the env var; pasting via the UI is the alternative.
+  const envTokenSet = Boolean((process.env.APIFY_TOKEN ?? "").trim());
+  try {
+    const db = getServiceSupabase();
+    const { data } = await db
+      .from("interaction_integrations")
+      .select("api_key, host, updated_at")
+      .eq("account_id", "default")
+      .eq("provider", "apify")
+      .limit(1)
+      .maybeSingle();
+    return {
+      hasToken: Boolean(data?.api_key) || envTokenSet,
+      actorId: ((data?.host as string | null) ?? null) || DEFAULT_APIFY_ACTOR_ID,
+      updatedAt: (data?.updated_at as string | null) ?? null,
+    };
+  } catch (err) {
+    console.error("[getApifySettings] failed:", err);
+    return {
+      hasToken: envTokenSet,
+      actorId: DEFAULT_APIFY_ACTOR_ID,
+      updatedAt: null,
+    };
+  }
+}
+
+export type SaveApifyInput = {
+  apiKey?: string;
+  actorId?: string;
+};
+
+export async function saveApifySettings(
+  input: SaveApifyInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const db = getServiceSupabase();
+    const patch: Record<string, unknown> = {
+      account_id: "default",
+      provider: "apify",
+      updated_at: new Date().toISOString(),
+    };
+    if (input.apiKey && input.apiKey.trim()) patch.api_key = input.apiKey.trim();
+    if (input.actorId !== undefined) patch.host = input.actorId.trim() || null;
+
+    const { error } = await db
+      .from("interaction_integrations")
+      .upsert(patch, { onConflict: "account_id,provider" });
+    if (error) {
+      console.error("[saveApifySettings] upsert failed:", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
+export type ApifyCredentials = {
+  token: string | null;
+  actorId: string;
+};
+
+export async function getApifyCredentialsInternal(): Promise<ApifyCredentials> {
+  try {
+    const db = getServiceSupabase();
+    const { data } = await db
+      .from("interaction_integrations")
+      .select("api_key, host")
+      .eq("account_id", "default")
+      .eq("provider", "apify")
+      .limit(1)
+      .maybeSingle();
+    const token =
+      (data?.api_key as string | null) ?? process.env.APIFY_TOKEN ?? null;
+    const actorId =
+      ((data?.host as string | null) ?? "").trim() ||
+      process.env.APIFY_ACTOR_ID ||
+      DEFAULT_APIFY_ACTOR_ID;
+    return { token: token && token.trim() ? token : null, actorId };
+  } catch (err) {
+    console.error("[getApifyCredentialsInternal] failed:", err);
+    const token = process.env.APIFY_TOKEN ?? null;
+    return {
+      token: token && token.trim() ? token : null,
+      actorId: process.env.APIFY_ACTOR_ID || DEFAULT_APIFY_ACTOR_ID,
+    };
+  }
+}
+
 export async function getInteractionDecisions(
   accountId: string
 ): Promise<PersistedDecision[]> {
