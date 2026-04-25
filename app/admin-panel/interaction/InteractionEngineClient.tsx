@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   addInteractionSearch,
+  getApifySettings,
   getIgScraperSettings,
   listInteractionSearches,
   removeInteractionSearch,
+  saveApifySettings,
   saveIgScraperSettings,
   saveInteractionDecision,
+  type ApifySettings,
   type DecisionKind,
   type IgScraperSettings,
   type PersistedDecision,
@@ -835,6 +838,19 @@ export default function InteractionEngineUI({
   const [scraperPostsDraft, setScraperPostsDraft] = useState("");
   const [scraperSaveState, setScraperSaveState] = useState<FetchState>("idle");
   const [scraperSaveError, setScraperSaveError] = useState<string | null>(null);
+
+  // Apify integration (Discovery V2). One token unlocks the
+  // apify/instagram-scraper actor for handle/keyword/hashtag/location.
+  const [apifySettings, setApifySettings] = useState<ApifySettings>({
+    hasToken: false,
+    actorId: "apify/instagram-scraper",
+    updatedAt: null,
+  });
+  const [apifyPanelOpen, setApifyPanelOpen] = useState(false);
+  const [apifyKeyDraft, setApifyKeyDraft] = useState("");
+  const [apifyActorDraft, setApifyActorDraft] = useState("");
+  const [apifySaveState, setApifySaveState] = useState<FetchState>("idle");
+  const [apifySaveError, setApifySaveError] = useState<string | null>(null);
   const [ingestionState, setIngestionState] = useState<FetchState>("idle");
   const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [tokenExpired, setTokenExpired] = useState(false);
@@ -1088,6 +1104,16 @@ export default function InteractionEngineUI({
         kind: search.kind,
       });
       if (search.value) params.set("value", search.value);
+      // V2 + Apify token + a kind Apify covers → route through Apify.
+      // V1 path is unchanged.
+      const apifyKinds: SearchKind[] = ["handle", "keyword", "hashtag", "location"];
+      if (
+        experimentalDiscovery &&
+        apifySettings.hasToken &&
+        apifyKinds.includes(search.kind)
+      ) {
+        params.set("via", "apify");
+      }
       const res = await fetch(`/api/interaction/discover?${params.toString()}`, {
         cache: "no-store",
       });
@@ -1160,17 +1186,45 @@ export default function InteractionEngineUI({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const current = await getIgScraperSettings();
+      const [current, apifyCurrent] = await Promise.all([
+        getIgScraperSettings(),
+        getApifySettings(),
+      ]);
       if (cancelled) return;
       setScraperSettings(current);
       setScraperHostDraft(current.host ?? "");
       setScraperSearchDraft(current.locationSearchPath ?? "");
       setScraperPostsDraft(current.locationPostsPath ?? "");
+      setApifySettings(apifyCurrent);
+      setApifyActorDraft(apifyCurrent.actorId ?? "");
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  async function handleSaveApifySettings() {
+    setApifySaveState("loading");
+    setApifySaveError(null);
+    try {
+      const res = await saveApifySettings({
+        apiKey: apifyKeyDraft.trim() || undefined,
+        actorId: apifyActorDraft,
+      });
+      if (!res.ok) {
+        setApifySaveState("error");
+        setApifySaveError(res.error);
+        return;
+      }
+      const fresh = await getApifySettings();
+      setApifySettings(fresh);
+      setApifyKeyDraft("");
+      setApifySaveState("success");
+    } catch (err) {
+      setApifySaveState("error");
+      setApifySaveError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
 
   async function handleSaveScraperSettings() {
     setScraperSaveState("loading");
@@ -1720,6 +1774,86 @@ export default function InteractionEngineUI({
       {experimentalDiscovery && (
       <details
         className="rounded-2xl border border-gray-200 bg-white"
+        open={apifyPanelOpen}
+        onToggle={(e) => setApifyPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 list-none">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">Apify integration</div>
+            <div className="mt-0.5 text-xs text-gray-500">
+              One token unlocks handle, keyword, hashtag and location
+              searches via the apify/instagram-scraper actor.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={`rounded-full border px-2 py-0.5 ${
+                apifySettings.hasToken
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }`}
+            >
+              {apifySettings.hasToken ? "● Token saved" : "● No token"}
+            </span>
+            <span className="text-gray-400">{apifyPanelOpen ? "Hide" : "Edit"}</span>
+          </div>
+        </summary>
+        <div className="border-t border-gray-100 px-5 py-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-700">
+                Apify API token
+              </span>
+              <input
+                type="password"
+                value={apifyKeyDraft}
+                onChange={(e) => setApifyKeyDraft(e.target.value)}
+                placeholder={
+                  apifySettings.hasToken
+                    ? "••••••••  (leave blank to keep existing)"
+                    : "Paste your apify.com token"
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-black"
+                autoComplete="off"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-700">
+                Actor ID <span className="text-gray-400">(default: apify/instagram-scraper)</span>
+              </span>
+              <input
+                type="text"
+                value={apifyActorDraft}
+                onChange={(e) => setApifyActorDraft(e.target.value)}
+                placeholder="apify/instagram-scraper"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-black"
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleSaveApifySettings}
+              disabled={apifySaveState === "loading"}
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {apifySaveState === "loading" ? "Saving…" : "Save settings"}
+            </button>
+            {apifySaveState === "success" && (
+              <span className="text-xs text-emerald-700">Saved.</span>
+            )}
+            {apifySaveState === "error" && apifySaveError && (
+              <span className="text-xs text-amber-700">{apifySaveError}</span>
+            )}
+            <span className="ml-auto text-[11px] text-gray-400">
+              Stored server-side, never returned to the browser.
+            </span>
+          </div>
+        </div>
+      </details>
+      )}
+      {experimentalDiscovery && (
+      <details
+        className="rounded-2xl border border-gray-200 bg-white"
         open={scraperPanelOpen}
         onToggle={(e) => setScraperPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
       >
@@ -1827,7 +1961,9 @@ export default function InteractionEngineUI({
         <div className="text-sm font-semibold text-gray-900">Add a discovery source</div>
         <div className="mt-1 text-xs text-gray-500">
           {experimentalDiscovery
-            ? "Experimental. Keyword + location go through RapidAPI (paid). Hashtag requires Meta app review. Competitor and mentions work out of the box via Meta Graph."
+            ? apifySettings.hasToken
+              ? "Experimental. Handle, keyword, hashtag and location all run through Apify (apify/instagram-scraper). Mentions still uses Meta Graph."
+              : "Experimental. Keyword + location go through RapidAPI (paid). Hashtag requires Meta app review. Competitor and mentions work out of the box via Meta Graph. Save an Apify token to unlock all four."
             : "Meta Graph only. Competitor handle runs Business Discovery; mentions shows posts that tag this account. Both free."}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1836,13 +1972,23 @@ export default function InteractionEngineUI({
             onChange={(e) => setNewSearchKind(e.target.value as SearchKind)}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
           >
-            <option value="handle">Competitor / creator handle</option>
+            <option value="handle">
+              {experimentalDiscovery && apifySettings.hasToken
+                ? "Competitor / creator handle (Apify)"
+                : "Competitor / creator handle"}
+            </option>
             <option value="mentions">Posts that tag me</option>
             {experimentalDiscovery && (
               <>
-                <option value="location">IG location (RapidAPI)</option>
-                <option value="keyword">Keyword (RapidAPI)</option>
-                <option value="hashtag">Hashtag (gated by Meta)</option>
+                <option value="location">
+                  {apifySettings.hasToken ? "IG location (Apify)" : "IG location (RapidAPI)"}
+                </option>
+                <option value="keyword">
+                  {apifySettings.hasToken ? "Keyword (Apify)" : "Keyword (RapidAPI)"}
+                </option>
+                <option value="hashtag">
+                  {apifySettings.hasToken ? "Hashtag (Apify)" : "Hashtag (gated by Meta)"}
+                </option>
               </>
             )}
           </select>

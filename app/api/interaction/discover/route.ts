@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { getIgScraperCredentialsInternal } from "@/app/admin-panel/interaction/actions";
+import {
+  getIgScraperCredentialsInternal,
+  getApifyCredentialsInternal,
+} from "@/app/admin-panel/interaction/actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 45;
@@ -399,6 +402,239 @@ function parseNumericField(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+// ============================================================================
+// Apify-backed Discovery V2. One token, one actor (apify/instagram-scraper),
+// covers handle / keyword / hashtag / location. Uses the run-sync endpoint so
+// we get back a dataset of items in a single HTTP call (no polling).
+//
+// Actor input shapes documented at:
+//   https://apify.com/apify/instagram-scraper/input-schema
+// ============================================================================
+
+type ApifyKind = "handle" | "keyword" | "hashtag" | "location";
+
+type ApifyInput = {
+  // The actor accepts EITHER directUrls (one or more IG URLs) OR a search
+  // query plus searchType. We pick whichever is appropriate for the kind.
+  directUrls?: string[];
+  search?: string;
+  searchType?: "user" | "hashtag" | "place";
+  searchLimit?: number;
+  resultsType?: "posts" | "comments" | "details" | "mentions" | "stories";
+  resultsLimit?: number;
+  addParentData?: boolean;
+};
+
+function buildApifyInput(kind: ApifyKind, value: string): ApifyInput | null {
+  const clean = value.trim();
+  if (!clean && kind !== "mentions") return null;
+
+  if (kind === "handle") {
+    const handle = clean.replace(/^@+/, "");
+    return {
+      directUrls: [`https://www.instagram.com/${handle}/`],
+      resultsType: "posts",
+      resultsLimit: 12,
+    };
+  }
+  if (kind === "hashtag") {
+    const tag = clean.replace(/^#+/, "");
+    return {
+      directUrls: [`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`],
+      resultsType: "posts",
+      resultsLimit: 30,
+    };
+  }
+  if (kind === "keyword") {
+    // Keyword search: try the hashtag-style search since that's what gives
+    // posts back. The actor maps "search" + searchType=hashtag to the
+    // canonical hashtag page so we get post results, not just a list of tags.
+    return {
+      search: clean,
+      searchType: "hashtag",
+      searchLimit: 1,
+      resultsType: "posts",
+      resultsLimit: 30,
+    };
+  }
+  if (kind === "location") {
+    // If the operator pasted a numeric id or an explore/locations URL, hit
+    // that location directly. Otherwise let Apify search by place name.
+    const numeric = /^\d+$/.test(clean) ? clean : null;
+    const urlMatch = clean.match(
+      /instagram\.com\/explore\/locations\/(\d+)(?:[\/?#]|$)/i
+    );
+    const id = numeric ?? (urlMatch ? urlMatch[1] : null);
+    if (id) {
+      return {
+        directUrls: [`https://www.instagram.com/explore/locations/${id}/`],
+        resultsType: "posts",
+        resultsLimit: 30,
+      };
+    }
+    return {
+      search: clean,
+      searchType: "place",
+      searchLimit: 1,
+      resultsType: "posts",
+      resultsLimit: 30,
+    };
+  }
+  return null;
+}
+
+function shapeApifyRow(
+  row: Record<string, unknown>,
+  kind: ApifyKind
+): DiscoveryPost | null {
+  // Apify's IG actor returns a fairly uniform shape regardless of input,
+  // but field names vary slightly across actor versions. We try the common
+  // ones and fall through.
+  const owner = (row.owner ?? row.user ?? {}) as Record<string, unknown>;
+  const handle = String(
+    row.ownerUsername ?? owner.username ?? row.username ?? ""
+  ).trim();
+  const fullName = String(
+    row.ownerFullName ?? owner.full_name ?? owner.fullName ?? ""
+  ).trim();
+  const display = handle ? `@${handle}` : fullName || "Unknown user";
+
+  const text = String(
+    row.caption ?? row.text ?? row.description ?? ""
+  ).trim();
+  const permalink = String(
+    row.url ?? row.postUrl ?? row.permalink ?? ""
+  ).trim() || null;
+  const mediaUrl = String(
+    row.displayUrl ?? row.thumbnailUrl ?? row.image_url ?? row.imageUrl ?? ""
+  ).trim();
+  if (!text && !mediaUrl) return null;
+
+  const taken =
+    row.timestamp ??
+    row.takenAtTimestamp ??
+    row.taken_at_timestamp ??
+    row.taken_at ??
+    null;
+  const postedAtMs = parseTimestampMs(taken);
+
+  const id = String(
+    row.id ?? row.shortCode ?? row.shortcode ?? permalink ?? `${display}-${taken}`
+  );
+
+  // Apify's actor exposes top-level comment objects on each post via
+  // `latestComments` (or `topComments` on older versions). Map them so the
+  // UI can show comment threads under each card just like the Meta path.
+  const rawComments = (row.latestComments ?? row.topComments ?? []) as unknown;
+  const comments: DiscoveryComment[] = Array.isArray(rawComments)
+    ? rawComments
+        .map((c) => {
+          const cc = c as Record<string, unknown>;
+          const author = String(
+            cc.ownerUsername ?? cc.username ?? ""
+          ).trim();
+          if (!author) return null;
+          return {
+            id: String(cc.id ?? `${author}-${cc.timestamp ?? ""}`),
+            author: `@${author.replace(/^@/, "")}`,
+            text: String(cc.text ?? ""),
+            time: formatRelativeTime(parseTimestampMs(cc.timestamp)),
+            likeCount:
+              typeof cc.likesCount === "number"
+                ? cc.likesCount
+                : typeof cc.like_count === "number"
+                  ? (cc.like_count as number)
+                  : null,
+          };
+        })
+        .filter((c): c is DiscoveryComment => c !== null)
+    : [];
+
+  const followers =
+    parseNumericField(owner.followers_count) ??
+    parseNumericField(owner.followersCount) ??
+    parseNumericField(row.ownerFollowersCount) ??
+    null;
+
+  return {
+    id,
+    author: display,
+    authorFollowers: followers,
+    text: text.slice(0, 600),
+    time: formatRelativeTime(postedAtMs),
+    postedAtMs,
+    permalink,
+    mediaUrl,
+    likeCount: parseNumericField(row.likesCount ?? row.like_count),
+    commentCount: parseNumericField(row.commentsCount ?? row.comments_count),
+    comments,
+    source: kind === "handle" ? "business_discovery" : "hashtag",
+  };
+}
+
+async function fetchViaApify(
+  kind: ApifyKind,
+  value: string
+): Promise<{ ok: true; posts: DiscoveryPost[] } | { ok: false; error: string }> {
+  const creds = await getApifyCredentialsInternal();
+  if (!creds.token) {
+    return {
+      ok: false,
+      error:
+        "Apify token not set. Open Discovery V2 → Apify integration and paste your apify.com token, " +
+        "or set APIFY_TOKEN as a Vercel env var.",
+    };
+  }
+  const input = buildApifyInput(kind, value);
+  if (!input) return { ok: false, error: "value required" };
+
+  // Actor IDs are stored either with a slash (apify/instagram-scraper) or
+  // with a tilde for the URL form (apify~instagram-scraper). Normalise.
+  const actorPath = creds.actorId.replace(/\//g, "~");
+  const url = `https://api.apify.com/v2/acts/${actorPath}/run-sync-get-dataset-items?token=${encodeURIComponent(
+    creds.token
+  )}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Apify call failed: ${describeFetchError(err)}`,
+    };
+  }
+  const body = await res.text();
+  if (!res.ok) {
+    let errMsg = `Apify returned ${res.status}`;
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } };
+      if (parsed.error?.message) errMsg = `Apify: ${parsed.error.message}`;
+    } catch {
+      errMsg += `: ${body.slice(0, 200)}`;
+    }
+    return { ok: false, error: errMsg };
+  }
+  let json: unknown;
+  try {
+    json = body ? JSON.parse(body) : [];
+  } catch {
+    return { ok: false, error: "Apify returned non-JSON response." };
+  }
+  const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+  const posts = rows
+    .map((row) => shapeApifyRow(row, kind))
+    .filter((p): p is DiscoveryPost => p !== null)
+    .sort((a, b) => (b.postedAtMs ?? 0) - (a.postedAtMs ?? 0))
+    .slice(0, 30);
+  return { ok: true, posts };
 }
 
 async function fetchKeywordPosts(
@@ -1008,9 +1244,40 @@ export async function GET(req: NextRequest) {
   const accountId = (url.searchParams.get("accountId") ?? "").trim();
   const kind = (url.searchParams.get("kind") ?? "handle").trim();
   const value = (url.searchParams.get("value") ?? "").trim();
+  // Discovery V2 sets via=apify when the operator has a token saved. V1
+  // never sets it, so the existing Meta + RapidAPI paths below are
+  // untouched.
+  const via = (url.searchParams.get("via") ?? "").trim().toLowerCase();
 
   if (!accountId) {
     return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
+  }
+
+  // Apify path bypasses the Meta token check entirely — the actor doesn't
+  // need a connected IG account, just the Apify token. We still require an
+  // accountId so saved-search persistence keeps working.
+  if (via === "apify") {
+    if (!["handle", "keyword", "hashtag", "location"].includes(kind)) {
+      return NextResponse.json(
+        { ok: false, error: `Apify path doesn't support kind=${kind}` },
+        { status: 400 }
+      );
+    }
+    try {
+      const result = await fetchViaApify(kind as ApifyKind, value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err instanceof Error ? err.message : "Apify error",
+        },
+        { status: 500 }
+      );
+    }
   }
 
   let account: { account_id: string; access_token: string } | null = null;
