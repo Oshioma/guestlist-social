@@ -743,10 +743,19 @@ export default function InteractionEngineUI({
   initialClients = [],
   initialDecisions = [],
   setupIssue = null,
+  experimentalDiscovery = false,
 }: {
   initialClients?: ClientOption[];
   initialDecisions?: PersistedDecision[];
   setupIssue?: SetupIssue;
+  /**
+   * Gates the scraper-backed Discovery surfaces (keyword, location,
+   * hashtag, RapidAPI integration panel, Google helper). The default
+   * page renders v1 only (Business-Discovery handles + tagged
+   * mentions). /app/interaction/v2 sets this true to expose the
+   * experimental stack.
+   */
+  experimentalDiscovery?: boolean;
 }) {
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [activeClientId, setActiveClientId] = useState(() => {
@@ -777,6 +786,15 @@ export default function InteractionEngineUI({
   // fires /api/interaction/discover and renders the posts + their comments.
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [newSearchKind, setNewSearchKind] = useState<SearchKind>("handle");
+  // When the operator flips between v1 and v2, snap the kind back to a
+  // supported value so the dropdown doesn't show a blank selection for
+  // a hidden option.
+  useEffect(() => {
+    const supported: SearchKind[] = experimentalDiscovery
+      ? ["handle", "mentions", "location", "keyword", "hashtag"]
+      : ["handle", "mentions"];
+    if (!supported.includes(newSearchKind)) setNewSearchKind("handle");
+  }, [experimentalDiscovery, newSearchKind]);
   const [newSearchValue, setNewSearchValue] = useState("");
   const [activeSearchId, setActiveSearchId] = useState<number | null>(null);
   const [discoveryPosts, setDiscoveryPosts] = useState<DiscoveredPost[]>([]);
@@ -1658,6 +1676,51 @@ export default function InteractionEngineUI({
 
   const renderDiscovery = () => (
     <div className="space-y-6">
+      {!experimentalDiscovery && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">
+                Stable discovery
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                Meta Graph only — competitor handles (Business Discovery)
+                and posts that tag this account. Nothing to configure.
+              </div>
+            </div>
+            <a
+              href="/app/interaction/v2"
+              className="rounded-lg border border-black bg-white px-3 py-2 text-xs font-semibold text-black hover:bg-black hover:text-white"
+            >
+              Try Discovery v2 (experimental) →
+            </a>
+          </div>
+        </div>
+      )}
+      {experimentalDiscovery && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-amber-900">
+                Discovery v2 — experimental
+              </div>
+              <div className="mt-1 text-xs text-amber-800">
+                Keyword, location and hashtag sources go through third-party
+                scrapers (RapidAPI) or Meta endpoints that require app review.
+                Flaky by design — if something doesn&rsquo;t resolve, the
+                stable page is a click away.
+              </div>
+            </div>
+            <a
+              href="/app/interaction"
+              className="rounded-lg border border-amber-700 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              ← Back to stable Discovery
+            </a>
+          </div>
+        </div>
+      )}
+      {experimentalDiscovery && (
       <details
         className="rounded-2xl border border-gray-200 bg-white"
         open={scraperPanelOpen}
@@ -1761,11 +1824,14 @@ export default function InteractionEngineUI({
           </div>
         </div>
       </details>
+      )}
 
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="text-sm font-semibold text-gray-900">Add a discovery source</div>
         <div className="mt-1 text-xs text-gray-500">
-          Free, uses Meta Graph — no scraper service needed. Competitor and mentions work out of the box; hashtag requires Meta app review and will tell you if it is not enabled.
+          {experimentalDiscovery
+            ? "Experimental. Keyword + location go through RapidAPI (paid). Hashtag requires Meta app review. Competitor and mentions work out of the box via Meta Graph."
+            : "Meta Graph only. Competitor handle runs Business Discovery; mentions shows posts that tag this account. Both free."}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <select
@@ -1775,9 +1841,13 @@ export default function InteractionEngineUI({
           >
             <option value="handle">Competitor / creator handle</option>
             <option value="mentions">Posts that tag me</option>
-            <option value="location">IG location (RapidAPI)</option>
-            <option value="keyword">Keyword (RapidAPI)</option>
-            <option value="hashtag">Hashtag (gated by Meta)</option>
+            {experimentalDiscovery && (
+              <>
+                <option value="location">IG location (RapidAPI)</option>
+                <option value="keyword">Keyword (RapidAPI)</option>
+                <option value="hashtag">Hashtag (gated by Meta)</option>
+              </>
+            )}
           </select>
           {newSearchKind !== "mentions" && (
             <input
@@ -1837,11 +1907,21 @@ export default function InteractionEngineUI({
         </div>
       </div>
 
-      {savedSearches.length > 0 && (
+      {(() => {
+        // Hide saved pills for kinds we no longer expose on this flavour
+        // of Discovery. They still live in the DB (and resurface on v2)
+        // so the operator's history isn't lost.
+        const visibleSearches = experimentalDiscovery
+          ? savedSearches
+          : savedSearches.filter(
+              (s) => s.kind === "handle" || s.kind === "mentions"
+            );
+        if (visibleSearches.length === 0) return null;
+        return (
         <div className="rounded-2xl border border-gray-200 bg-white p-5">
           <div className="text-sm font-semibold text-gray-900">Saved searches</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {savedSearches.map((s) => (
+            {visibleSearches.map((s) => (
               <div
                 key={s.id}
                 className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition ${
@@ -1872,7 +1952,8 @@ export default function InteractionEngineUI({
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {discoveryFetchState === "loading" && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
