@@ -148,6 +148,17 @@ export default async function PortalClientDashboard({
     | { id: number; period_label: string; approved_at: string }
     | null;
 
+  const consultationFormsRes = await supabase
+    .from("consultation_forms")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("is_active", true)
+    .limit(1);
+  const consultationFormsMissing = consultationFormsRes.error?.code === "42P01";
+  const hasActiveConsultationForm = consultationFormsMissing
+    ? false
+    : (consultationFormsRes.data?.length ?? 0) > 0;
+
   // ── "What we changed since last review" panel ──────────────────────────
   // Only renders for clients who have at least one signed-off review — the
   // whole point of the panel is to show a *returning* client what moved
@@ -363,6 +374,80 @@ export default async function PortalClientDashboard({
           </div>
         ))}
       </div>
+
+      {/* ── Consultation shortcut ──────────────────────────────────────── */}
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          padding: 20,
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: "#0f172a",
+          }}
+        >
+          Consultation questionnaire
+        </h2>
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: 13,
+            color: "#475569",
+            lineHeight: 1.6,
+            maxWidth: 760,
+          }}
+        >
+          Share your latest priorities, offers, and messaging. Your team uses this
+          form to shape campaigns, copy, and publishing focus.
+        </p>
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              padding: "3px 10px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              background: hasActiveConsultationForm ? "#dcfce7" : "#fef9c3",
+              color: hasActiveConsultationForm ? "#166534" : "#854d0e",
+            }}
+          >
+            {hasActiveConsultationForm ? "Ready to complete" : "Preparing form"}
+          </span>
+          <Link
+            href={`/portal/${clientId}/consultation`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#1e40af",
+              textDecoration: "none",
+              background: "#f8fafc",
+            }}
+          >
+            Open consultation form →
+          </Link>
+        </div>
+      </section>
 
       {/* ── Top priorities ─────────────────────────────────────────────── */}
       <section
