@@ -2,6 +2,8 @@
 
 import React, { useActionState, useEffect, useState } from "react";
 import AiInlineSuggestion from "./AiInlineSuggestion";
+import ImageUpload from "./ImageUpload";
+import CreativeLibraryPicker from "./CreativeLibraryPicker";
 
 type CampaignFormValues = {
   name: string;
@@ -14,9 +16,20 @@ type CampaignFormValues = {
   placement?: string;
 };
 
+const CTA_OPTIONS = [
+  { value: "learn_more", label: "Learn More" },
+  { value: "shop_now", label: "Shop Now" },
+  { value: "sign_up", label: "Sign Up" },
+  { value: "contact_us", label: "Contact Us" },
+  { value: "book_now", label: "Book Now" },
+];
+
 type Props = {
   clientId?: string;
   clientIndustry?: string;
+  clientWebsite?: string;
+  showAdFields?: boolean;
+  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   title?: string;
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
@@ -88,6 +101,9 @@ function getAudiencePresets(industry?: string): { label: string; value: string }
 export default function CampaignForm({
   clientId,
   clientIndustry,
+  clientWebsite,
+  showAdFields = false,
+  existingCreatives,
   title = "New Campaign",
   submitLabel = "Create campaign",
   action,
@@ -158,6 +174,13 @@ export default function CampaignForm({
     setNextLoadingField(field);
     fetchSuggestions()?.finally(() => setNextLoadingField(null));
   }
+
+  // Ad fields state (only used when showAdFields is true)
+  const [adImageUrl, setAdImageUrl] = useState("");
+  const [adHeadline, setAdHeadline] = useState("");
+  const [adBody, setAdBody] = useState("");
+  const [adCtaType, setAdCtaType] = useState("learn_more");
+  const [adDestinationUrl, setAdDestinationUrl] = useState(clientWebsite ?? "");
 
   return (
     <div
@@ -328,6 +351,94 @@ export default function CampaignForm({
           </select>
         </div>
 
+        {showAdFields && (
+          <>
+            <div style={{ borderTop: "2px solid #e4e4e7", paddingTop: 16, marginTop: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#18181b", marginBottom: 4 }}>
+                Add your first ad
+              </div>
+              <div style={{ fontSize: 12, color: "#71717a", marginBottom: 14 }}>
+                Optional — fill in below to create the campaign and ad in one go.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <input type="hidden" name="adImageUrl" value={adImageUrl} />
+                <input type="hidden" name="adHeadline" value={adHeadline} />
+                <input type="hidden" name="adBody" value={adBody} />
+                <input type="hidden" name="adCtaType" value={adCtaType} />
+                <input type="hidden" name="adDestinationUrl" value={adDestinationUrl} />
+
+                <div>
+                  <label style={labelStyle}>Ad image</label>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    {adImageUrl && (
+                      <div style={{ position: "relative" }}>
+                        <img src={adImageUrl} alt="" style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 8, border: "1px solid #e4e4e7" }} />
+                        <button type="button" onClick={() => setAdImageUrl("")} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", border: "none", background: "#18181b", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>x</button>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <ImageUpload bucket="postimages" folder="ad-creatives" onUploaded={(url) => setAdImageUrl(url)} label="Upload" accept="image/*" />
+                      {existingCreatives && existingCreatives.length > 0 && (
+                        <CreativeLibraryPicker creatives={existingCreatives} onPick={(url) => setAdImageUrl(url)} />
+                      )}
+                      <input value={adImageUrl} onChange={(e) => setAdImageUrl(e.target.value)} style={{ ...inputStyle, fontSize: 12 }} placeholder="Or paste URL..." />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Headline</label>
+                  <input value={adHeadline} onChange={(e) => setAdHeadline(e.target.value)} style={inputStyle} placeholder="Your headline" maxLength={255} />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Body text</label>
+                  <textarea value={adBody} onChange={(e) => setAdBody(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: "inherit" }} placeholder="Tell people what your ad is about..." maxLength={2200} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>CTA</label>
+                    <select value={adCtaType} onChange={(e) => setAdCtaType(e.target.value)} style={inputStyle}>
+                      {CTA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Destination URL</label>
+                    <input value={adDestinationUrl} onChange={(e) => setAdDestinationUrl(e.target.value)} style={inputStyle} placeholder="https://..." type="url" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live preview */}
+              <div style={{ position: "sticky", top: 80 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#71717a", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>Preview</div>
+                <div style={{ border: "1px solid #dbdbdb", borderRadius: 8, background: "#fff", overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>A</div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#262626" }}>Sponsored</div>
+                    </div>
+                  </div>
+                  {adBody && <div style={{ padding: "2px 12px 6px", fontSize: 12, color: "#262626", lineHeight: 1.4 }}>{adBody}</div>}
+                  {adImageUrl ? (
+                    <img src={adImageUrl} alt="" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: "100%", aspectRatio: "4/3", background: "#f4f4f5", display: "flex", alignItems: "center", justifyContent: "center", color: "#c7c7c7", fontSize: 12 }}>No image</div>
+                  )}
+                  <div style={{ padding: "8px 12px", background: "#f9fafb", borderTop: "1px solid #f4f4f5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#18181b", flex: 1, minWidth: 0 }}>{adHeadline || "Headline"}</div>
+                    <div style={{ padding: "4px 10px", borderRadius: 5, background: "#e4e4e7", color: "#18181b", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>{CTA_OPTIONS.find((o) => o.value === adCtaType)?.label ?? "Learn More"}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
         <button
           type="submit"
           disabled={pending}
@@ -343,7 +454,11 @@ export default function CampaignForm({
             opacity: pending ? 0.7 : 1,
           }}
         >
-          {pending ? (submitLabel === "Create campaign" ? "Creating..." : "Saving...") : submitLabel}
+          {pending
+            ? "Creating..."
+            : showAdFields && (adImageUrl || adHeadline || adBody)
+            ? "Create campaign + ad"
+            : submitLabel}
         </button>
       </form>
     </div>

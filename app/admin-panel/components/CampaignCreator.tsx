@@ -7,6 +7,8 @@ import type { CampaignSuggestionBundle, CampaignSuggestion } from "../lib/campai
 type Props = {
   clientId: string;
   clientIndustry?: string;
+  clientWebsite?: string;
+  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   title?: string;
   submitLabel?: string;
   action: (
@@ -16,13 +18,11 @@ type Props = {
   suggestions: CampaignSuggestionBundle;
 };
 
-// A light wrapper around <CampaignForm /> that adds a "suggestions from the
-// engine" sidebar. Clicking "Apply" on a suggestion re-mounts the form with
-// new initialValues (via the key prop) so the existing CampaignForm stays
-// untouched and continues to work for the edit page.
 export default function CampaignCreator({
   clientId,
   clientIndustry,
+  clientWebsite,
+  existingCreatives,
   title,
   submitLabel,
   action,
@@ -71,6 +71,9 @@ export default function CampaignCreator({
         key={formKey}
         clientId={clientId}
         clientIndustry={clientIndustry}
+        clientWebsite={clientWebsite}
+        showAdFields
+        existingCreatives={existingCreatives}
         title={title}
         submitLabel={submitLabel}
         action={action}

@@ -91,6 +91,35 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
+
+  // If ad fields were included, create the ad too (one-click flow)
+  const adImageUrl = String(formData.get("adImageUrl") ?? "").trim();
+  const adHeadline = String(formData.get("adHeadline") ?? "").trim();
+  const adBody = String(formData.get("adBody") ?? "").trim();
+  const adCtaType = String(formData.get("adCtaType") ?? "").trim();
+  const adDestinationUrl = String(formData.get("adDestinationUrl") ?? "").trim();
+
+  if (adImageUrl || adHeadline || adBody) {
+    try {
+      const { persistImageToStorage } = await import("@/lib/persist-image");
+      const persistedUrl = await persistImageToStorage(adImageUrl, `ad-creatives/${clientId}`) ?? adImageUrl;
+
+      await supabase.from("ads").insert({
+        client_id: clientId,
+        campaign_id: insertedId,
+        name: `${name} — ad 1`,
+        status: "testing",
+        creative_image_url: persistedUrl || null,
+        creative_headline: adHeadline || null,
+        creative_body: adBody || null,
+        creative_cta: adCtaType || "learn_more",
+        creative_destination_url: adDestinationUrl || null,
+      });
+    } catch (adErr) {
+      console.error("Ad creation in one-click flow failed:", adErr);
+    }
+  }
+
   redirect(`/app/clients/${clientId}/campaigns/${insertedId}`);
 }
 
