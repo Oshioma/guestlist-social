@@ -182,6 +182,48 @@ export default function CampaignForm({
   const [adCtaType, setAdCtaType] = useState("learn_more");
   const [adDestinationUrl, setAdDestinationUrl] = useState(clientWebsite ?? "");
 
+  // AI ad copy suggestions
+  type AdVariation = { headline: string; body: string; cta: string; reasoning: string };
+  const [adVariations, setAdVariations] = useState<AdVariation[]>([]);
+  const [adHIdx, setAdHIdx] = useState(0);
+  const [adBIdx, setAdBIdx] = useState(0);
+  const [adAiLoading, setAdAiLoading] = useState(false);
+  const [adNextHLoading, setAdNextHLoading] = useState(false);
+  const [adNextBLoading, setAdNextBLoading] = useState(false);
+
+  const adAiHeadline = adVariations[adHIdx]
+    ? { suggestion: adVariations[adHIdx].headline, reasoning: adVariations[adHIdx].reasoning }
+    : { suggestion: null, reasoning: null };
+  const adAiBody = adVariations[adBIdx]
+    ? { suggestion: adVariations[adBIdx].body, reasoning: adVariations[adBIdx].reasoning }
+    : { suggestion: null, reasoning: null };
+
+  function fetchAdCopy() {
+    if (!clientId) return;
+    return fetch("/api/ai-write-ad-copy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, objective: initialValues?.objective ?? "engagement", campaignName: initialValues?.name ?? "" }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.variations) {
+          setAdVariations(data.variations);
+          setAdHIdx(0);
+          setAdBIdx(0);
+        } else if (data.ok) {
+          setAdVariations([{ headline: data.headline, body: data.body, cta: data.cta, reasoning: data.reasoning }]);
+        }
+      })
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!clientId || !showAdFields) return;
+    setAdAiLoading(true);
+    fetchAdCopy()?.finally(() => setAdAiLoading(false));
+  }, [clientId, showAdFields]);
+
   return (
     <div
       style={{
@@ -390,12 +432,46 @@ export default function CampaignForm({
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Headline</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Headline</label>
+                    <AiInlineSuggestion
+                      suggestion={adAiHeadline.suggestion}
+                      reasoning={adAiHeadline.reasoning}
+                      loading={adAiLoading}
+                      onNextIdea={() => {
+                        if (adVariations.length > 1 && adHIdx < adVariations.length - 1) {
+                          setAdHIdx((i) => i + 1);
+                          return;
+                        }
+                        setAdNextHLoading(true);
+                        fetchAdCopy()?.finally(() => setAdNextHLoading(false));
+                      }}
+                      nextLoading={adNextHLoading}
+                      onApply={(v) => setAdHeadline(v)}
+                    />
+                  </div>
                   <input value={adHeadline} onChange={(e) => setAdHeadline(e.target.value)} style={inputStyle} placeholder="Your headline" maxLength={255} />
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Body text</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Body text</label>
+                    <AiInlineSuggestion
+                      suggestion={adAiBody.suggestion}
+                      reasoning={adAiBody.reasoning}
+                      loading={adAiLoading}
+                      onNextIdea={() => {
+                        if (adVariations.length > 1 && adBIdx < adVariations.length - 1) {
+                          setAdBIdx((i) => i + 1);
+                          return;
+                        }
+                        setAdNextBLoading(true);
+                        fetchAdCopy()?.finally(() => setAdNextBLoading(false));
+                      }}
+                      nextLoading={adNextBLoading}
+                      onApply={(v) => setAdBody(v)}
+                    />
+                  </div>
                   <textarea value={adBody} onChange={(e) => setAdBody(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: "inherit" }} placeholder="Tell people what your ad is about..." maxLength={2200} />
                 </div>
 
