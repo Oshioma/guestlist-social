@@ -9,6 +9,7 @@ type Props = {
   clientIndustry?: string;
   clientWebsite?: string;
   existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer" | "storage"; ctr?: number | null; spend?: number | null; status?: string | null }[];
+  winningAds?: { name: string; imageUrl: string | null; headline: string | null; body: string | null; cta: string | null; destinationUrl: string | null; ctr: number; spend: number }[];
   title?: string;
   submitLabel?: string;
   action: (
@@ -23,6 +24,7 @@ export default function CampaignCreator({
   clientIndustry,
   clientWebsite,
   existingCreatives,
+  winningAds,
   title,
   submitLabel,
   action,
@@ -74,6 +76,7 @@ export default function CampaignCreator({
         clientWebsite={clientWebsite}
         showAdFields
         existingCreatives={existingCreatives}
+        winningAds={winningAds}
         title={title}
         submitLabel={submitLabel}
         action={action}

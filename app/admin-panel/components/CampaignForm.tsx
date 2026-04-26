@@ -24,12 +24,24 @@ const CTA_OPTIONS = [
   { value: "book_now", label: "Book Now" },
 ];
 
+type WinningAd = {
+  name: string;
+  imageUrl: string | null;
+  headline: string | null;
+  body: string | null;
+  cta: string | null;
+  destinationUrl: string | null;
+  ctr: number;
+  spend: number;
+};
+
 type Props = {
   clientId?: string;
   clientIndustry?: string;
   clientWebsite?: string;
   showAdFields?: boolean;
   existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer" | "storage"; ctr?: number | null; spend?: number | null; status?: string | null }[];
+  winningAds?: WinningAd[];
   title?: string;
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
@@ -104,6 +116,7 @@ export default function CampaignForm({
   clientWebsite,
   showAdFields = false,
   existingCreatives,
+  winningAds,
   title = "New Campaign",
   submitLabel = "Create campaign",
   action,
@@ -403,6 +416,41 @@ export default function CampaignForm({
                 Optional — fill in below to create the campaign and ad in one go.
               </div>
             </div>
+
+            {winningAds && winningAds.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                {winningAds.slice(0, 3).map((w, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      if (w.imageUrl) setAdImageUrl(w.imageUrl);
+                      if (w.headline) setAdHeadline(w.headline);
+                      if (w.body) setAdBody(w.body);
+                      if (w.cta) setAdCtaType(w.cta);
+                      if (w.destinationUrl) setAdDestinationUrl(w.destinationUrl);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #bbf7d0",
+                      background: "#f0fdf4",
+                      color: "#166534",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {w.imageUrl && <img src={w.imageUrl} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: "cover" }} />}
+                    Clone: {w.name.slice(0, 30)}{w.name.length > 30 ? "..." : ""}
+                    <span style={{ color: "#15803d", fontSize: 11 }}>{w.ctr.toFixed(1)}% CTR</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

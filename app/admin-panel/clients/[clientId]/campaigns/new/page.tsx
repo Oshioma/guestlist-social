@@ -44,6 +44,28 @@ export default async function NewCampaignPage({ params }: Props) {
     creativeSources = await getCreativeSourcesForClient(clientId);
   } catch { /* degrade gracefully */ }
 
+  // Fetch winning ads for "Clone winner" buttons
+  const { data: winnerRows } = await supabase
+    .from("ads")
+    .select("name, creative_image_url, creative_headline, creative_body, creative_cta, creative_destination_url, ctr, spend")
+    .eq("client_id", clientId)
+    .eq("performance_status", "winner")
+    .order("ctr", { ascending: false })
+    .limit(3);
+
+  const winningAds = (winnerRows ?? [])
+    .filter((w) => w.creative_headline || w.creative_body || w.creative_image_url)
+    .map((w) => ({
+      name: w.name ?? "Winner",
+      imageUrl: (w.creative_image_url as string) ?? null,
+      headline: (w.creative_headline as string) ?? null,
+      body: (w.creative_body as string) ?? null,
+      cta: (w.creative_cta as string) ?? null,
+      destinationUrl: (w.creative_destination_url as string) ?? null,
+      ctr: Number(w.ctr ?? 0),
+      spend: Number(w.spend ?? 0),
+    }));
+
   async function action(
     _state: { error: string | null },
     formData: FormData
@@ -97,6 +119,7 @@ export default async function NewCampaignPage({ params }: Props) {
         clientIndustry={(client as any).industry ?? ""}
         clientWebsite={(client as any).website_url ?? ""}
         existingCreatives={creativeSources}
+        winningAds={winningAds}
         action={action}
         suggestions={suggestions}
       />
