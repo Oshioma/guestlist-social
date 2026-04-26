@@ -29,7 +29,7 @@ type Props = {
   clientIndustry?: string;
   clientWebsite?: string;
   showAdFields?: boolean;
-  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
+  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer" | "storage"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   title?: string;
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;

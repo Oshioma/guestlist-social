@@ -5,7 +5,7 @@ import { useState } from "react";
 type Creative = {
   url: string;
   name: string;
-  source: "meta" | "ads" | "proofer";
+  source: "meta" | "ads" | "proofer" | "storage";
   ctr?: number | null;
   spend?: number | null;
   status?: string | null;
@@ -20,6 +20,7 @@ const SOURCE_LABELS: Record<string, { label: string; bg: string; text: string }>
   ads: { label: "Past ad", bg: "#dbeafe", text: "#1e40af" },
   proofer: { label: "Organic", bg: "#fef3c7", text: "#92400e" },
   meta: { label: "Meta library", bg: "#f3e8ff", text: "#6b21a8" },
+  storage: { label: "Uploads", bg: "#ecfdf5", text: "#065f46" },
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -29,7 +30,7 @@ const STATUS_COLORS: Record<string, string> = {
   paused: "#71717a",
 };
 
-type Filter = "all" | "ads" | "proofer" | "meta";
+type Filter = "all" | "ads" | "proofer" | "meta" | "storage";
 
 function thumbUrl(url: string): string {
   if (!url) return url;
@@ -53,11 +54,10 @@ export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
     ? creatives
     : creatives.filter((c) => c.source === filter);
 
-  const sourceCounts = {
-    ads: creatives.filter((c) => c.source === "ads").length,
-    proofer: creatives.filter((c) => c.source === "proofer").length,
-    meta: creatives.filter((c) => c.source === "meta").length,
-  };
+  const sourceCounts: Record<string, number> = {};
+  for (const c of creatives) {
+    sourceCounts[c.source] = (sourceCounts[c.source] ?? 0) + 1;
+  }
 
   return (
     <div>
@@ -103,8 +103,8 @@ export default function CreativeLibraryPicker({ creatives, onPick }: Props) {
               flexWrap: "wrap",
             }}
           >
-            {(["all", "ads", "proofer", "meta"] as const).map((f) => {
-              const count = f === "all" ? creatives.length : sourceCounts[f];
+            {(["all", "ads", "proofer", "storage", "meta"] as const).map((f) => {
+              const count = f === "all" ? creatives.length : (sourceCounts[f] ?? 0);
               if (f !== "all" && count === 0) return null;
               const active = filter === f;
               return (

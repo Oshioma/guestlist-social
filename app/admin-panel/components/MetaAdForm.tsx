@@ -10,7 +10,7 @@ type Props = {
   clientId?: string;
   clientWebsite?: string;
   objective?: string;
-  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer"; ctr?: number | null; spend?: number | null; status?: string | null }[];
+  existingCreatives?: { url: string; name: string; source: "meta" | "ads" | "proofer" | "storage"; ctr?: number | null; spend?: number | null; status?: string | null }[];
   onSubmit: (data: {
     name: string;
     imageUrl: string;
