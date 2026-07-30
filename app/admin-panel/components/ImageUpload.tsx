@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import * as tus from "tus-js-client";
-import { createClient } from "../../../lib/supabase/client";
+import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
 
 type Props = {
   folder: string;
@@ -16,15 +15,6 @@ type Props = {
    */
   accept?: string;
 };
-
-const DEFAULT_BUCKET = "gsocial";
-
-// Supabase's resumable upload endpoint uses TUS under the hood. Files are
-// sent in 6 MB chunks straight from the browser to Supabase Storage, so we
-// never hit the Vercel 4.5 MB serverless body limit and very large files
-// (multi-GB videos) can resume on transient failures.
-const CHUNK_SIZE = 6 * 1024 * 1024;
-const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
 
 export default function ImageUpload({
   folder,
@@ -42,7 +32,7 @@ export default function ImageUpload({
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > UPLOAD_MAX_FILE_SIZE) {
       setError("File too large (max 30 MB)");
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -52,69 +42,11 @@ export default function ImageUpload({
     setUploading(true);
 
     try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        throw new Error("Not signed in");
-      }
-
-      const targetBucket = bucket || DEFAULT_BUCKET;
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-
-      const ext = file.name.split(".").pop() || "bin";
-      const timestamp = Date.now();
-      const safeName = file.name
-        .replace(/\.[^/.]+$/, "")
-        .replace(/[^a-zA-Z0-9_-]/g, "_")
-        .slice(0, 60);
-      const objectName = `${folder}/${timestamp}_${safeName}.${ext}`;
-
-      await new Promise<void>((resolve, reject) => {
-        const upload = new tus.Upload(file, {
-          endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          headers: {
-            authorization: `Bearer ${session.access_token}`,
-            "x-upsert": "true",
-          },
-          uploadDataDuringCreation: true,
-          removeFingerprintOnSuccess: true,
-          metadata: {
-            bucketName: targetBucket,
-            objectName,
-            contentType: file.type || "application/octet-stream",
-            cacheControl: "3600",
-          },
-          chunkSize: CHUNK_SIZE,
-          onError(err) {
-            reject(err);
-          },
-          onProgress(bytesUploaded, bytesTotal) {
-            if (bytesTotal > 0) {
-              setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
-            }
-          },
-          onSuccess() {
-            resolve();
-          },
-        });
-
-        upload.findPreviousUploads().then((previous) => {
-          if (previous.length > 0) {
-            upload.resumeFromPreviousUpload(previous[0]);
-          }
-          upload.start();
-        });
+      const publicUrl = await uploadToStorage(file, folder, {
+        bucket,
+        onProgress: setProgress,
       });
-
-      const { data } = supabase.storage
-        .from(targetBucket)
-        .getPublicUrl(objectName);
-
-      onUploaded(data.publicUrl);
+      onUploaded(publicUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
