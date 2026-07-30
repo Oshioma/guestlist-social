@@ -298,8 +298,17 @@ export default function ProoferBoard({
   };
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => {
     const initial: Record<string, Draft> = {};
+    // Slots that already have a saved post must NOT be pre-filled from an AI
+    // idea. A draft always wins over the saved post in the editor, so seeding
+    // one here would mask the real content — and the next status change would
+    // persist the AI draft over it. Only seed genuinely empty slots. (This
+    // mirrors the !existingPost guard already used in handleClearIdeas.)
+    const savedSlots = new Set(
+      initialPosts.map((p) => postKey(p.postDate.slice(0, 10), p.platform))
+    );
     for (const idea of initialPostIdeas) {
       const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+      if (savedSlots.has(slotKey)) continue;
       if (!initial[slotKey]) {
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
@@ -857,7 +866,9 @@ export default function ProoferBoard({
                   });
                   const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
                   setDrafts((prev) => {
-                    if (prev[slotKey]) return prev;
+                    // Never overlay a slot that already has a draft or a saved
+                    // post — an idea must not mask/overwrite real content.
+                    if (prev[slotKey] || postsByKey.has(slotKey)) return prev;
                     const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
                       .filter(Boolean).join("\n\n");
                     return {
