@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import SectionCard from "../components/SectionCard";
 import ImageUpload from "../components/ImageUpload";
 import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
+import { createClient } from "../../../lib/supabase/client";
 import type {
   ProoferPost,
   ProoferStatus,
@@ -150,6 +151,39 @@ function relativeDayLabel(d: Date): string | null {
   if (diffDays > 1 && diffDays <= 6) return `In ${diffDays} days`;
   if (diffDays < -1 && diffDays >= -6) return `${Math.abs(diffDays)} days ago`;
   return null;
+}
+
+// Map a raw proofer_posts row (snake_case, as delivered by Supabase Realtime)
+// into a ProoferPost. Mirrors the server mapping in queries.ts; comments and
+// the publish queue live in other tables, so callers preserve those.
+function rowToProoferPost(row: Record<string, unknown>): ProoferPost {
+  const mediaUrls = Array.isArray(row.media_urls)
+    ? (row.media_urls as unknown[]).filter(
+        (u): u is string => typeof u === "string" && u !== ""
+      )
+    : [];
+  const kind = row.linked_idea_kind;
+  const str = (v: unknown, fallback = "") =>
+    typeof v === "string" ? v : fallback;
+  return {
+    id: String(row.id),
+    clientId: String(row.client_id),
+    postDate: str(row.post_date),
+    platform: (row.platform ?? "instagram_feed") as ProoferPlatform,
+    pillarId: row.pillar_id ? String(row.pillar_id) : null,
+    linkedIdeaId: row.linked_idea_id ? String(row.linked_idea_id) : null,
+    linkedIdeaKind:
+      kind === "video" || kind === "carousel" || kind === "story" ? kind : null,
+    caption: str(row.caption),
+    imageUrl: str(row.image_url),
+    mediaUrls,
+    publishTime: str(row.publish_time, "18:00"),
+    status: (row.status ?? "none") as ProoferStatus,
+    createdBy: str(row.created_by),
+    updatedBy: row.updated_by ? String(row.updated_by) : null,
+    createdAt: str(row.created_at),
+    updatedAt: str(row.updated_at),
+  };
 }
 
 function formatCommentTime(value: string) {
@@ -368,13 +402,124 @@ export default function ProoferBoard({
     return map;
   }, [initialPillars]);
 
+  // Posts are seeded from the server and then kept live via Supabase Realtime,
+  // so a teammate's saved changes appear without a refresh. Re-seed whenever the
+  // server sends fresh data (month/client switch, or our own save's refresh).
+  const [livePosts, setLivePosts] = useState<ProoferPost[]>(initialPosts);
+  // Slots where a remote change landed while the user had unsaved edits. We
+  // surface a "load their version" nudge instead of clobbering their draft.
+  const [staleKeys, setStaleKeys] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setLivePosts(initialPosts);
+    setStaleKeys(new Set());
+  }, [initialPosts]);
+
+  // Live view of the current drafts for the realtime callback, without making
+  // the subscription tear down and re-subscribe on every keystroke.
+  const draftsRef = useRef<Record<string, unknown>>({});
+
   const postsByKey = useMemo(() => {
     const map = new Map<string, ProoferPost>();
-    initialPosts.forEach((p) =>
+    livePosts.forEach((p) =>
       map.set(postKey(p.postDate.slice(0, 10), p.platform), p)
     );
     return map;
-  }, [initialPosts]);
+  }, [livePosts]);
+
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
+
+  // ── Realtime: reflect other people's saved changes without a refresh ────────
+  useEffect(() => {
+    if (!clientId) return;
+    const supabase = createClient();
+    let myEmail: string | null = null;
+    supabase.auth.getUser().then(({ data }) => {
+      myEmail = data.user?.email ?? null;
+    });
+
+    const channel = supabase
+      .channel(`proofer-posts:${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "proofer_posts",
+          filter: `client_id=eq.${clientId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldId = payload.old?.id ? String(payload.old.id) : null;
+            if (oldId) setLivePosts((prev) => prev.filter((p) => p.id !== oldId));
+            return;
+          }
+
+          const incoming = rowToProoferPost(
+            payload.new as Record<string, unknown>
+          );
+          // Only the month currently on screen is relevant.
+          if (incoming.postDate.slice(0, 7) !== month) return;
+          // Our own saves already refresh the board — skip the echo so we don't
+          // flag our own edits as "changed elsewhere".
+          if (myEmail && incoming.updatedBy === myEmail) return;
+
+          setLivePosts((prev) => {
+            const idx = prev.findIndex((p) => p.id === incoming.id);
+            if (idx === -1) return [...prev, incoming];
+            const next = prev.slice();
+            // Preserve comments / publish queue loaded from their own tables.
+            next[idx] = {
+              ...incoming,
+              comments: prev[idx].comments,
+              publishQueue: prev[idx].publishQueue,
+            };
+            return next;
+          });
+
+          // If the user is mid-edit on this slot, don't overwrite their draft —
+          // flag it so they can choose to pull in the newer version.
+          const key = postKey(incoming.postDate.slice(0, 10), incoming.platform);
+          if (draftsRef.current[key]) {
+            setStaleKeys((prev) => {
+              if (prev.has(key)) return prev;
+              const next = new Set(prev);
+              next.add(key);
+              return next;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientId, month]);
+
+  function loadRemoteUpdate(key: string) {
+    // Discard the local draft so the editor falls back to the (now newer)
+    // saved post, and clear the nudge.
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setStaleKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  function dismissStale(key: string) {
+    setStaleKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
 
   const postIdeasByKey = useMemo(() => {
     const map = new Map<string, PostIdea[]>();
@@ -1843,6 +1988,59 @@ export default function ProoferBoard({
                   scrollMarginTop: 80,
                 }}
               >
+              {staleKeys.has(key) && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    padding: "8px 12px",
+                    marginBottom: 8,
+                    borderRadius: 10,
+                    border: "1px solid #fde68a",
+                    background: "#fffbeb",
+                    fontSize: 12,
+                    color: "#92400e",
+                  }}
+                >
+                  <span style={{ fontWeight: 700 }}>
+                    🔄 {post?.updatedBy ? post.updatedBy.split("@")[0] : "Someone"} saved a newer version while you were editing.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => loadRemoteUpdate(key)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 7,
+                      border: "none",
+                      background: "#92400e",
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Load their version
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissStale(key)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 7,
+                      border: "1px solid #fcd34d",
+                      background: "#fff",
+                      color: "#92400e",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Keep mine
+                  </button>
+                </div>
+              )}
               <div
                 style={{
                   background: "#fff",
