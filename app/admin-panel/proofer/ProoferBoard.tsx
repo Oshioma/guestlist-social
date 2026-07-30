@@ -1987,6 +1987,13 @@ export default function ProoferBoard({
                           bucket="postimages"
                           folder={`proofer/${clientId}/${month}`}
                           onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                          label="🖼️ Image"
+                          accept="image/*"
+                        />
+                        <ImageUpload
+                          bucket="postimages"
+                          folder={`proofer/${clientId}/${month}`}
+                          onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
                           label="🎬"
                           accept="video/*"
                         />
