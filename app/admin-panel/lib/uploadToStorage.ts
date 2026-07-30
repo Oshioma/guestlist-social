@@ -10,6 +10,13 @@ import { createClient } from "../../../lib/supabase/client";
 export const UPLOAD_CHUNK_SIZE = 6 * 1024 * 1024;
 export const UPLOAD_MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
 
+// Files at or below this size go through Supabase's standard one-shot upload —
+// a single request straight to Storage. The resumable (TUS) endpoint's
+// handshake, and especially its 3s/5s/10s/20s retry back-off on any transient
+// hiccup, make small uploads (e.g. a 3 MB photo) feel like they hang. TUS only
+// earns its overhead for large files, where resumability actually matters.
+const RESUMABLE_THRESHOLD = UPLOAD_CHUNK_SIZE; // 6 MB (one chunk)
+
 const DEFAULT_BUCKET = "gsocial";
 
 type UploadOptions = {
@@ -46,6 +53,25 @@ export async function uploadToStorage(
       .replace(/[^a-zA-Z0-9_-]/g, "_")
       .slice(0, 60) || "file";
   const objectName = `${folder}/${timestamp}_${safeName}.${ext}`;
+
+  // Fast path for small files: one direct request, no resumable handshake or
+  // retry back-off. This is what makes a 3 MB photo upload feel instant.
+  if (file.size <= RESUMABLE_THRESHOLD) {
+    onProgress?.(0);
+    const { error } = await supabase.storage
+      .from(targetBucket)
+      .upload(objectName, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+    if (error) throw error;
+    onProgress?.(100);
+    const { data } = supabase.storage
+      .from(targetBucket)
+      .getPublicUrl(objectName);
+    return data.publicUrl;
+  }
 
   await new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(file, {
