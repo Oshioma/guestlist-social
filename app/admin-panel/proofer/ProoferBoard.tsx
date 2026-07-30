@@ -123,6 +123,35 @@ function formatDayLong(d: Date): string {
   });
 }
 
+// Local midnight today, for comparing whole calendar days.
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// "YYYY-MM" key for the month a date falls in.
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// A short relative label ("Today" / "Tomorrow" / "In 3 days" …) to orient each
+// day card. Returns null once the day is far enough away that the weekday and
+// date shown alongside it are orientation enough on their own.
+function relativeDayLabel(d: Date): string | null {
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.round(
+    (target.getTime() - startOfToday().getTime()) / 86_400_000
+  );
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  if (diffDays > 1 && diffDays <= 6) return `In ${diffDays} days`;
+  if (diffDays < -1 && diffDays >= -6) return `${Math.abs(diffDays)} days ago`;
+  return null;
+}
+
 function formatCommentTime(value: string) {
   if (!value) return "";
   const date = new Date(value);
@@ -246,6 +275,18 @@ export default function ProoferBoard({
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
   const [postFrequency, setPostFrequency] = useState<"every-day" | "every-other-day">("every-other-day");
+  // Whether elapsed days of the current month are shown ("View history").
+  const [showPast, setShowPast] = useState(false);
+  // Whether the floating "Jump to today" button is shown (today off-screen).
+  const [showJumpToday, setShowJumpToday] = useState(false);
+  // Date-based behaviour ("today") is client-only: the server's clock/timezone
+  // can disagree with the browser's, so we defer it until after mount to keep
+  // the first render identical to the server's and avoid hydration mismatches.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Is the board currently looking at the month that contains today?
+  const isCurrentMonth = mounted && month === monthKey(startOfToday());
 
   type Draft = {
     caption: string;
@@ -1023,6 +1064,17 @@ export default function ProoferBoard({
     let filtered = postFrequency === "every-other-day"
       ? days.filter((_, i) => i % 2 === 0)
       : days;
+    // In the current month, collapse elapsed days by default so the board
+    // opens on today. "View history" (showPast) reveals them. Past/future
+    // months are shown in full — they're history or planning by definition.
+    if (isCurrentMonth && !showPast) {
+      const todayTime = startOfToday().getTime();
+      filtered = filtered.filter((d) => {
+        const dd = new Date(d);
+        dd.setHours(0, 0, 0, 0);
+        return dd.getTime() >= todayTime;
+      });
+    }
     if (hideEmpty) {
       filtered = filtered.filter((d) => {
         const dateKey = toDateKey(d);
@@ -1042,18 +1094,71 @@ export default function ProoferBoard({
       });
     }
     return filtered;
-  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency]);
+  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, showPast]);
 
   const scrolledRef = useRef(false);
   useEffect(() => {
-    if (scrolledRef.current) return;
+    if (!mounted || scrolledRef.current) return;
     scrolledRef.current = true;
     const todayKey = toDateKey(new Date());
     const el = document.getElementById(`day-${todayKey}`);
     if (el) {
       el.scrollIntoView({ behavior: "instant", block: "start" });
     }
+  }, [mounted]);
+
+  // Remember the view toggles across visits. Load once after mount (so the
+  // first client render matches the server and we don't fight hydration),
+  // then persist on every change.
+  const viewHydrated = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("proofer_view");
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (v.postFrequency === "every-day" || v.postFrequency === "every-other-day") {
+          setPostFrequency(v.postFrequency);
+        }
+        if (typeof v.hideEmpty === "boolean") setHideEmpty(v.hideEmpty);
+        if (typeof v.showPast === "boolean") setShowPast(v.showPast);
+      }
+    } catch {
+      // ignore malformed / unavailable storage
+    }
+    viewHydrated.current = true;
   }, []);
+  useEffect(() => {
+    if (!viewHydrated.current) return;
+    try {
+      localStorage.setItem(
+        "proofer_view",
+        JSON.stringify({ postFrequency, hideEmpty, showPast })
+      );
+    } catch {
+      // ignore storage failures (private mode, quota, …)
+    }
+  }, [postFrequency, hideEmpty, showPast]);
+
+  // Show the floating "Jump to today" button whenever today's card is off
+  // screen (scrolled away in either direction). Only relevant in the current
+  // month, where a "today" card exists.
+  useEffect(() => {
+    if (!isCurrentMonth) {
+      setShowJumpToday(false);
+      return;
+    }
+    const el = document.getElementById(`day-${toDateKey(new Date())}`);
+    if (!el) {
+      setShowJumpToday(false);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowJumpToday(!entry.isIntersecting),
+      { root: null, threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isCurrentMonth, visibleDays, showPast, month]);
 
   const totalWithContent = useMemo(
     () =>
@@ -1109,6 +1214,30 @@ export default function ProoferBoard({
         </div>
       )}
       <DayScrubber days={visibleDays} postsByKey={postsByKey} />
+      {showJumpToday && (
+        <button
+          type="button"
+          onClick={() => smoothScrollDayInto(toDateKey(new Date()))}
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "calc(50% - 8px)",
+            transform: "translateX(-50%)",
+            zIndex: 40,
+            padding: "10px 18px",
+            borderRadius: 99,
+            border: "none",
+            background: "#18181b",
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 700,
+            boxShadow: "0 6px 20px rgba(0,0,0,0.28)",
+            cursor: "pointer",
+          }}
+        >
+          ↓ Jump to today
+        </button>
+      )}
       <div
         style={{
           display: "flex",
@@ -1220,9 +1349,27 @@ export default function ProoferBoard({
         </div>
         <span style={{ fontSize: 11, color: "#a1a1aa" }}>
           {postFrequency === "every-other-day"
-            ? `${visibleDays.length} slots this month`
-            : `${visibleDays.length} days this month`}
+            ? `${visibleDays.length} slots ${isCurrentMonth && !showPast ? "from today" : "this month"}`
+            : `${visibleDays.length} days ${isCurrentMonth && !showPast ? "from today" : "this month"}`}
         </span>
+        {isCurrentMonth && (
+          <button
+            type="button"
+            onClick={() => setShowPast((v) => !v)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "1px solid #e4e4e7",
+              background: showPast ? "#eef2ff" : "#fff",
+              color: showPast ? "#4338ca" : "#52525b",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {showPast ? "Hide past days" : "🕓 View history"}
+          </button>
+        )}
       </div>
 
       <SectionCard title="Settings">
@@ -1709,6 +1856,30 @@ export default function ProoferBoard({
                 }}
               >
                 <div>
+                  {(() => {
+                    if (!mounted) return null;
+                    const rel = relativeDayLabel(d);
+                    if (!rel) return null;
+                    const isToday = rel === "Today";
+                    return (
+                      <div
+                        style={{
+                          display: "inline-block",
+                          marginBottom: 5,
+                          padding: "1px 8px",
+                          borderRadius: 99,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: 0.3,
+                          textTransform: "uppercase",
+                          background: isToday ? "#dcfce7" : "#f4f4f5",
+                          color: isToday ? "#166534" : "#a1a1aa",
+                        }}
+                      >
+                        {rel}
+                      </div>
+                    );
+                  })()}
                   <div
                     style={{
                       fontSize: 13,
