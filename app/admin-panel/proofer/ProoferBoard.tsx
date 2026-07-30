@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SectionCard from "../components/SectionCard";
 import ImageUpload from "../components/ImageUpload";
+import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
 import type {
   ProoferPost,
   ProoferStatus,
@@ -308,6 +309,9 @@ export default function ProoferBoard({
   const [imgUploading, setImgUploading] = useState(false);
   const [imgScanning, setImgScanning] = useState(false);
   const [imgScanMsg, setImgScanMsg] = useState<string | null>(null);
+  // Slot key currently receiving a pasted-from-clipboard image (for the inline
+  // "Uploading pasted image…" hint), or null when nothing is uploading.
+  const [pasteUploadKey, setPasteUploadKey] = useState<string | null>(null);
 
   // ── Pexels stock photo picker ──────────────────────────────────────────────
   const [pexelsPostKey, setPexelsPostKey] = useState<string | null>(null);
@@ -453,6 +457,48 @@ export default function ProoferBoard({
     updateDraft(dateKey, platform, {
       mediaUrls: [...current.mediaUrls, url],
     });
+  }
+
+  // Paste an image straight from the clipboard (Cmd/Ctrl+V) into a post. Only
+  // intercepts when the clipboard actually carries image data — plain text
+  // pastes fall through to the caption as normal.
+  async function handlePasteMedia(
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+    dateKey: string,
+    platform: ProoferPlatform,
+    slotKey: string
+  ) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return; // no image — let the normal text paste happen
+    e.preventDefault();
+    if (pasteUploadKey) return; // an upload is already in flight
+
+    setPasteUploadKey(slotKey);
+    try {
+      for (const file of files) {
+        if (file.size > UPLOAD_MAX_FILE_SIZE) {
+          alert("Pasted image is too large (max 30 MB).");
+          continue;
+        }
+        const url = await uploadToStorage(file, `proofer/${clientId}/${month}`, {
+          bucket: "postimages",
+        });
+        addMediaUrl(dateKey, platform, url);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not upload pasted image.");
+    } finally {
+      setPasteUploadKey(null);
+    }
   }
 
   function removeMediaAt(
@@ -2419,7 +2465,8 @@ export default function ProoferBoard({
                         <textarea
                           value={draft.caption}
                           onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
-                          placeholder="Write a caption..."
+                          onPaste={(e) => { if (!isLocked) handlePasteMedia(e, dateKey, activePlatform, postKey(dateKey, activePlatform)); }}
+                          placeholder="Write a caption... (or paste an image to attach it)"
                           disabled={isLocked}
                           rows={12}
                           style={{
@@ -2439,6 +2486,11 @@ export default function ProoferBoard({
                             boxSizing: "border-box",
                           }}
                         />
+                        {pasteUploadKey === postKey(dateKey, activePlatform) && (
+                          <div style={{ padding: "0 12px 8px", fontSize: 11, fontWeight: 600, color: "#5b21b6" }}>
+                            Uploading pasted image…
+                          </div>
+                        )}
                       </div>
 
                       {/* Modifier buttons + Clear */}
