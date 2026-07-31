@@ -17,6 +17,8 @@ type ClientRow = {
   name: string;
   platform?: string | null;
   monthly_budget?: number | string | null;
+  monthly_price?: number | string | null;
+  direct_debit?: boolean | null;
   status?: string | null;
   website_url?: string | null;
   industry?: string | null;
@@ -62,7 +64,7 @@ export default async function ClientsPage({ searchParams }: Props) {
   const [clientsRes, campaignsRes, adsRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name, platform, monthly_budget, status, website_url, industry, notes, archived, created_at")
+      .select("id, name, platform, monthly_budget, monthly_price, direct_debit, status, website_url, industry, notes, archived, created_at")
       .eq("archived", false)
       .order("created_at", { ascending: false }),
     supabase.from("campaigns").select("client_id"),
@@ -141,6 +143,18 @@ export default async function ClientsPage({ searchParams }: Props) {
     0
   );
 
+  // Admin-only: total monthly retainer (what clients pay us) across the
+  // currently-visible clients, and how much of it is on direct debit.
+  const totalRetainers = clients.reduce(
+    (sum, client) => sum + Number(client.monthly_price ?? 0),
+    0
+  );
+  const ddRetainers = clients.reduce(
+    (sum, client) =>
+      sum + (client.direct_debit ? Number(client.monthly_price ?? 0) : 0),
+    0
+  );
+
   const unassignedCampaigns = unassignedCampaignCount;
   const viewLabel =
     selectedView === "active"
@@ -172,6 +186,16 @@ export default async function ClientsPage({ searchParams }: Props) {
             } overall`
           : "All campaigns assigned",
     },
+    // Admin-only revenue view — what these clients pay us each month.
+    ...(admin
+      ? [
+          {
+            label: "Retainers (MRR)",
+            value: formatCurrency(totalRetainers),
+            subtext: `${formatCurrency(ddRetainers)} on direct debit`,
+          },
+        ]
+      : []),
   ];
 
   const viewLinks: Array<{ view: ClientView; label: string; href: string }> = [
@@ -271,7 +295,7 @@ export default async function ClientsPage({ searchParams }: Props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
           gap: 16,
         }}
       >
@@ -375,6 +399,39 @@ export default async function ClientsPage({ searchParams }: Props) {
                           {client.name}
                         </h2>
                         <StatusPill status={mapClientStatus(client.status ?? "")} />
+                        {admin && client.monthly_price != null ? (
+                          <span
+                            title={
+                              client.direct_debit
+                                ? "Pays by direct debit"
+                                : "Invoiced / other"
+                            }
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "2px 10px",
+                              borderRadius: 999,
+                              border: "1px solid #e9d5ff",
+                              background: "#f5f3ff",
+                              color: "#6b21a8",
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {formatCurrency(Number(client.monthly_price))}/mo
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: "0.03em",
+                                color: client.direct_debit ? "#15803d" : "#a16207",
+                              }}
+                            >
+                              {client.direct_debit ? "DD" : "INV"}
+                            </span>
+                          </span>
+                        ) : null}
                       </div>
 
                       <p

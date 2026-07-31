@@ -15,7 +15,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { requireAdmin, isAdmin } from "@/lib/auth/permissions";
 import {
   type CashflowData,
   type CashflowKind,
@@ -73,6 +73,78 @@ export async function getActiveClientRetainers(): Promise<number> {
     const price = Number((row as { monthly_price: unknown }).monthly_price);
     return total + (Number.isFinite(price) ? price : 0);
   }, 0);
+}
+
+// Distinct years that have forecast data, ascending.
+export async function getCashflowYears(): Promise<number[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("cashflow_lines").select("year");
+  const years = new Set<number>();
+  for (const row of data ?? []) {
+    const y = Number((row as { year: unknown }).year);
+    if (Number.isFinite(y)) years.add(y);
+  }
+  return Array.from(years).sort((a, b) => a - b);
+}
+
+// Copy every line (and the opening balance) from one year into another. Guards
+// against overwriting a year that already has data.
+export async function duplicateCashflowYear(
+  fromYear: number,
+  toYear: number
+): Promise<{ error: string | null }> {
+  if (!(await isAdmin())) return { error: "Not authorized." };
+  if (!Number.isFinite(fromYear) || !Number.isFinite(toYear)) {
+    return { error: "Invalid year." };
+  }
+  if (fromYear === toYear) return { error: "Pick a different target year." };
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("cashflow_lines")
+    .select("id")
+    .eq("year", toYear)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { error: `${toYear} already has data — nothing copied.` };
+  }
+
+  const { data: rows, error: readErr } = await supabase
+    .from("cashflow_lines")
+    .select("section, label, kind, sort_order, amounts")
+    .eq("year", fromYear);
+  if (readErr) return { error: readErr.message };
+  if (!rows || rows.length === 0) {
+    return { error: `${fromYear} has nothing to copy.` };
+  }
+
+  const insertRows = rows.map((r) => ({
+    year: toYear,
+    section: r.section as string,
+    label: r.label as string,
+    kind: (r.kind as CashflowKind) ?? "cost",
+    sort_order: r.sort_order as number,
+    amounts: r.amounts,
+  }));
+
+  const { error: insErr } = await supabase
+    .from("cashflow_lines")
+    .insert(insertRows);
+  if (insErr) return { error: "Could not duplicate the year." };
+
+  const { data: setting } = await supabase
+    .from("cashflow_settings")
+    .select("opening_balance")
+    .eq("year", fromYear)
+    .maybeSingle<{ opening_balance: number }>();
+  await supabase.from("cashflow_settings").upsert(
+    { year: toYear, opening_balance: Number(setting?.opening_balance ?? 0) },
+    { onConflict: "year" }
+  );
+
+  revalidatePath(CASHFLOW_PATH);
+  return { error: null };
 }
 
 // ── Mutations ──────────────────────────────────────────────────────────────
