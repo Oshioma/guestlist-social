@@ -29,7 +29,7 @@ const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Content Dashboard", href: "/app/content" },
 ];
 
-function buildNavGroups(canRunAds: boolean): NavGroup[] {
+function buildNavGroups(canRunAds: boolean, isAdmin: boolean): NavGroup[] {
   const groups: NavGroup[] = [{ heading: "Dashboard", items: [], headingHref: "/app/dashboard" }];
 
   if (canRunAds) {
@@ -48,6 +48,11 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
 
   groups.push({ heading: "Tasks", items: [], headingHref: "/app/tasks" });
 
+  // Owner-level financials — gated to admins (the page enforces this too).
+  if (isAdmin) {
+    groups.push({ heading: "Cashflow", items: [], headingHref: "/app/cashflow" });
+  }
+
   return groups;
 }
 
@@ -61,7 +66,7 @@ function buildUtilityItems(_isAdmin: boolean): NavItem[] {
 
 export default function Sidebar({ isAdmin, canRunAds, open, onClose }: Props) {
   const pathname = usePathname();
-  const navGroups = buildNavGroups(canRunAds);
+  const navGroups = buildNavGroups(canRunAds, isAdmin);
   const utilityItems = buildUtilityItems(isAdmin);
 
   function isActive(href: string): boolean {
