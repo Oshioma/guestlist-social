@@ -5,7 +5,14 @@ import {
   REGION_OPTIONS,
   DEFAULT_TIMEZONE,
   formatDateTimeInZone,
+  formatUtcOffset,
+  getAllTimeZones,
 } from "@/lib/timezone";
+
+// Pretty-print an IANA name: "Africa/Dar_es_Salaam" → "Africa / Dar es Salaam".
+function prettyZone(value: string): string {
+  return value.replace(/_/g, " ").replace(/\//g, " / ");
+}
 
 type Props = {
   initial: string;
@@ -14,11 +21,43 @@ type Props = {
 
 export default function TimezoneForm({ initial, onSave }: Props) {
   const [timeZone, setTimeZone] = useState(initial);
+  const [filter, setFilter] = useState("");
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dirty = timeZone !== initial;
+
+  // Full IANA list, each tagged with its current UTC offset for the label.
+  // Built once — the list is static and offsets are only a rough guide (the
+  // exact converted time is shown in the preview below).
+  const allZones = useMemo(() => {
+    const now = new Date();
+    return getAllTimeZones().map((value) => ({
+      value,
+      pretty: prettyZone(value),
+      offset: formatUtcOffset(value, now),
+    }));
+  }, []);
+
+  // Apply the search box to both the curated and full lists. Matches the
+  // IANA name, the pretty name, and the curated label, case-insensitively.
+  const q = filter.trim().toLowerCase();
+  const common = q
+    ? REGION_OPTIONS.filter(
+        (o) =>
+          o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q)
+      )
+    : REGION_OPTIONS;
+  const filteredAll = q
+    ? allZones.filter(
+        (z) =>
+          z.value.toLowerCase().includes(q) || z.pretty.toLowerCase().includes(q)
+      )
+    : allZones;
+  const currentInList =
+    common.some((o) => o.value === timeZone) ||
+    filteredAll.some((z) => z.value === timeZone);
 
   // Live preview of a fixed reference instant so the operator can see
   // exactly how times will read in the chosen region before saving. A
@@ -48,21 +87,24 @@ export default function TimezoneForm({ initial, onSave }: Props) {
         Choose the region used to display publish times across the app —
         the publish queue and scheduled/published posts. Times are always{" "}
         <em>stored</em> in GMT; this only changes how they&rsquo;re shown, so
-        you can read them in your own time. Set it to Tanzania to see times in
-        East Africa Time (EAT).
+        you can read them in your own time. The default is UK time, which
+        follows GMT/BST automatically — or pick any timezone in the world
+        from the list below.
       </p>
 
       <div>
         <label
-          htmlFor="display-timezone"
+          htmlFor="timezone-filter"
           style={{ display: "block", fontSize: 12, color: "#71717a", marginBottom: 6 }}
         >
           Region / timezone
         </label>
-        <select
-          id="display-timezone"
-          value={timeZone}
-          onChange={(e) => setTimeZone(e.target.value)}
+        <input
+          id="timezone-filter"
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Search all timezones (e.g. Tanzania, Tokyo, +05:30)…"
           style={{
             padding: "8px 12px",
             borderRadius: 8,
@@ -70,18 +112,51 @@ export default function TimezoneForm({ initial, onSave }: Props) {
             fontSize: 14,
             background: "#fff",
             minWidth: 280,
+            width: "100%",
+            maxWidth: 360,
+            marginBottom: 8,
+          }}
+        />
+        <select
+          id="display-timezone"
+          value={timeZone}
+          onChange={(e) => setTimeZone(e.target.value)}
+          size={q ? 8 : undefined}
+          style={{
+            display: "block",
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #e4e4e7",
+            fontSize: 14,
+            background: "#fff",
+            minWidth: 280,
+            width: "100%",
+            maxWidth: 360,
           }}
         >
-          {/* If the stored value isn't in the curated list, still show it so
-              the current selection is never silently lost. */}
-          {!REGION_OPTIONS.some((o) => o.value === timeZone) && (
-            <option value={timeZone}>{timeZone}</option>
+          {/* If the current value matches nothing in the (possibly filtered)
+              lists, still show it so the selection is never silently lost. */}
+          {!currentInList && (
+            <option value={timeZone}>{prettyZone(timeZone)}</option>
           )}
-          {REGION_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          {common.length > 0 && (
+            <optgroup label="Common">
+              {common.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {filteredAll.length > 0 && (
+            <optgroup label="All timezones">
+              {filteredAll.map((z) => (
+                <option key={z.value} value={z.value}>
+                  {z.pretty} ({z.offset})
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 

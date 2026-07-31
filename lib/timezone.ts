@@ -22,13 +22,18 @@ export const DISPLAY_TIMEZONE_KEY = "display_timezone";
 // means to the team. Storage stays UTC; this only affects display.
 export const DEFAULT_TIMEZONE = "Europe/London";
 
-// Curated list of regions an operator can pick. IANA `value` drives the
-// actual conversion; `label` is the human-facing option text. `abbrev` is
-// the clean short label shown next to times (GMT, EAT…). We hardcode it
-// only for fixed-offset zones — where it never changes and where runtime
-// ICU data is inconsistent (some environments render "GMT+3" instead of
-// "EAT"). DST zones leave it empty and fall back to a date-aware Intl
-// lookup so "BST" vs "GMT" resolves correctly for the actual instant.
+// Curated "quick pick" regions shown at the top of the picker. IANA
+// `value` drives the actual conversion; `label` is the human-facing option
+// text. `abbrev` is the clean short label shown next to times (GMT, EAT…).
+// We hardcode it only for fixed-offset zones — where it never changes and
+// where runtime ICU data is inconsistent (some environments render "GMT+3"
+// instead of "EAT"). DST zones leave it empty and fall back to a date-aware
+// Intl lookup so "BST" vs "GMT" resolves correctly for the actual instant.
+//
+// This is no longer the *only* list an operator can choose from — the
+// settings picker also offers every IANA zone via getAllTimeZones() — but
+// it stays the source of truth for curated abbreviations and the handful of
+// regions worth surfacing first.
 export const REGION_OPTIONS: { value: string; label: string; abbrev: string }[] = [
   { value: "Europe/London", label: "United Kingdom — auto GMT/BST (default)", abbrev: "" },
   { value: "Etc/GMT", label: "GMT — fixed UTC+0 year-round (no summer time)", abbrev: "GMT" },
@@ -76,6 +81,39 @@ function zoneOffsetMinutes(date: Date, timeZone: string): number {
     Number(map.second)
   );
   return Math.round((asUTC - date.getTime()) / 60000);
+}
+
+// "UTC+03:00" / "UTC-05:30" / "UTC" for a zone at a given instant. Shown
+// alongside every option in the full timezone picker so an operator can
+// tell zones apart without knowing IANA names by heart. DST-aware, since
+// it's derived from the actual offset on `date`.
+export function formatUtcOffset(timeZone: string, date?: Date): string {
+  const mins = zoneOffsetMinutes(date ?? ABBREV_REFERENCE, normalizeTimeZone(timeZone));
+  if (mins === 0) return "UTC";
+  const sign = mins > 0 ? "+" : "-";
+  const abs = Math.abs(mins);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `UTC${sign}${hh}:${mm}`;
+}
+
+// Every IANA timezone the runtime knows about, sorted. This is the "all
+// timezones" list behind the settings picker. `Intl.supportedValuesOf` is
+// available in every modern browser and in the Node version we deploy on;
+// if it's ever missing we fall back to the curated regions so the picker
+// still works rather than throwing.
+export function getAllTimeZones(): string[] {
+  const supported = (
+    Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+  ).supportedValuesOf;
+  if (typeof supported === "function") {
+    try {
+      return supported("timeZone").slice().sort();
+    } catch {
+      // fall through to the curated fallback
+    }
+  }
+  return REGION_OPTIONS.map((o) => o.value).sort();
 }
 
 /**
