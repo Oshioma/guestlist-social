@@ -20,10 +20,11 @@ type Props = {
   onClose?: () => void;
 };
 
+// Proofer is promoted out of Publisher to a top-level destination — it's the
+// day-to-day writing tool and shouldn't need a group expanded to reach it.
 const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Clients", href: "/app/clients" },
   { label: "Client view", href: "/portal" },
-  { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
   { label: "Content Dashboard", href: "/app/content" },
 ];
@@ -34,6 +35,10 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   if (canRunAds) {
     groups.push({ heading: "Interaction", items: [], headingHref: "/app/interaction" });
   }
+
+  // Sits immediately above Publisher, where it used to live, so it's still
+  // where the eye looks for it.
+  groups.push({ heading: "Proofer", items: [], headingHref: "/app/proofer" });
 
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
