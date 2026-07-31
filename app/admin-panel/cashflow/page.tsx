@@ -1,5 +1,8 @@
 import { requireAdmin } from "@/lib/auth/permissions";
-import { getCashflow } from "@/app/admin-panel/lib/cashflow-actions";
+import {
+  getCashflow,
+  getActiveClientRetainers,
+} from "@/app/admin-panel/lib/cashflow-actions";
 import CashflowGrid from "@/app/admin-panel/components/CashflowGrid";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +12,10 @@ export default async function CashflowPage() {
   await requireAdmin();
 
   const year = 2026;
-  const { lines, openingBalance } = await getCashflow(year);
+  const [{ lines, openingBalance }, clientRetainers] = await Promise.all([
+    getCashflow(year),
+    getActiveClientRetainers(),
+  ]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -27,6 +33,7 @@ export default async function CashflowPage() {
         year={year}
         initialLines={lines}
         initialOpeningBalance={openingBalance}
+        clientRetainersMonthly={clientRetainers}
       />
     </div>
   );

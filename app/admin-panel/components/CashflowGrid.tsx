@@ -32,6 +32,9 @@ type Props = {
   year: number;
   initialLines: CashflowLine[];
   initialOpeningBalance: number;
+  // Live monthly run-rate from active clients' retainers. Rendered as a
+  // read-only auto row inside Revenue and folded into every revenue total.
+  clientRetainersMonthly: number;
 };
 
 // ── Formatting ──────────────────────────────────────────────────────────────
@@ -74,6 +77,7 @@ export default function CashflowGrid({
   year,
   initialLines,
   initialOpeningBalance,
+  clientRetainersMonthly,
 }: Props) {
   const [lines, setLines] = useState<CashflowLine[]>(initialLines);
   const [openingBalance, setOpening] = useState<number>(initialOpeningBalance);
@@ -122,7 +126,11 @@ export default function CashflowGrid({
     const revenueLines = lines.filter((l) => l.kind === "revenue");
 
     const costsByMonth = MONTHS.map((_, m) => sumMonths(costLines, m));
-    const revenueByMonth = MONTHS.map((_, m) => sumMonths(revenueLines, m));
+    // Revenue = editable revenue lines + the read-only client-retainers
+    // run-rate (same each month).
+    const revenueByMonth = MONTHS.map(
+      (_, m) => sumMonths(revenueLines, m) + clientRetainersMonthly
+    );
     const netByMonth = MONTHS.map((_, m) => revenueByMonth[m] - costsByMonth[m]);
 
     const runningBalance: number[] = [];
@@ -155,7 +163,7 @@ export default function CashflowGrid({
       avgNet,
       runwayMonths,
     };
-  }, [lines, openingBalance]);
+  }, [lines, openingBalance, clientRetainersMonthly]);
 
   // Visible (non-collapsed) line ids, in render order — used for Enter-to-move.
   const visibleLineIds = useMemo(() => {
@@ -408,8 +416,9 @@ export default function CashflowGrid({
               tone="cost"
             />
 
-            {/* Revenue sections */}
-            {revenueSections.map((section) => (
+            {/* Revenue sections. The client-retainers auto row attaches to
+                the first revenue section so it appears exactly once. */}
+            {revenueSections.map((section, i) => (
               <SectionBlock
                 key={section}
                 section={section}
@@ -424,6 +433,15 @@ export default function CashflowGrid({
                 onRemoveRow={removeRow}
                 onFillRight={doFillRight}
                 onCellKeyDown={onCellKeyDown}
+                autoRow={
+                  i === 0 && clientRetainersMonthly > 0
+                    ? {
+                        label: "Client retainers",
+                        monthly: MONTHS.map(() => clientRetainersMonthly),
+                        hint: "auto — sum of active clients",
+                      }
+                    : undefined
+                }
               />
             ))}
             {revenueSections.length === 0 && (
@@ -575,6 +593,7 @@ function SectionBlock({
   onRemoveRow,
   onFillRight,
   onCellKeyDown,
+  autoRow,
 }: {
   section: string;
   kind: CashflowKind;
@@ -592,9 +611,15 @@ function SectionBlock({
     id: number,
     m: number
   ) => void;
+  // Optional read-only, computed row (e.g. client retainers) that lives in
+  // this section: counted in the subtotal but not editable/deletable.
+  autoRow?: { label: string; monthly: number[]; hint?: string };
 }) {
-  const subtotal = MONTHS.map((_, m) => sumMonths(lines, m));
+  const subtotal = MONTHS.map(
+    (_, m) => sumMonths(lines, m) + (autoRow?.monthly[m] ?? 0)
+  );
   const subtotalYear = subtotal.reduce((a, b) => a + b, 0);
+  const rowCount = lines.length + (autoRow ? 1 : 0);
 
   return (
     <>
@@ -630,7 +655,7 @@ function SectionBlock({
             </span>
             {section}
             <span style={{ fontSize: 11, color: "#a1a1aa", fontWeight: 500 }}>
-              ({lines.length})
+              ({rowCount})
             </span>
           </button>
         </StickyLabelCell>
@@ -663,6 +688,9 @@ function SectionBlock({
           {money(subtotalYear)}
         </td>
       </tr>
+
+      {/* Read-only computed row (client retainers) */}
+      {!collapsed && autoRow && <AutoRow autoRow={autoRow} />}
 
       {/* Line rows */}
       {!collapsed &&
@@ -704,6 +732,71 @@ function SectionBlock({
         </tr>
       )}
     </>
+  );
+}
+
+// A read-only, computed line inside a section (e.g. client retainers). Looks
+// like a line row but shows plain figures with an "auto" badge — no inputs,
+// no fill-right, no delete.
+function AutoRow({
+  autoRow,
+}: {
+  autoRow: { label: string; monthly: number[]; hint?: string };
+}) {
+  const total = autoRow.monthly.reduce((a, b) => a + (b || 0), 0);
+  return (
+    <tr>
+      <StickyLabelCell>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontWeight: 500, color: "#3f3f46" }}>
+            {autoRow.label}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.03em",
+              textTransform: "uppercase",
+              color: "#0369a1",
+              background: "#e0f2fe",
+              borderRadius: 999,
+              padding: "1px 7px",
+            }}
+            title={autoRow.hint}
+          >
+            Auto
+          </span>
+        </span>
+      </StickyLabelCell>
+      {autoRow.monthly.map((v, m) => (
+        <td
+          key={m}
+          style={{
+            textAlign: "right",
+            padding: "6px 8px",
+            borderBottom: "1px solid #f1f1f3",
+            color: "#0369a1",
+            fontStyle: "italic",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {v === 0 ? "" : money(v)}
+        </td>
+      ))}
+      <td
+        style={{
+          textAlign: "right",
+          padding: "6px 10px",
+          borderBottom: "1px solid #f1f1f3",
+          fontWeight: 600,
+          color: "#0369a1",
+          whiteSpace: "nowrap",
+          background: "#fafafa",
+        }}
+      >
+        {money(total)}
+      </td>
+    </tr>
   );
 }
 

@@ -58,6 +58,23 @@ export async function getCashflow(year: number): Promise<CashflowData> {
   };
 }
 
+// Sum of the monthly retainer across clients that are actually paying —
+// status active/growing, not archived. Drives the auto "Client retainers"
+// revenue row in the forecast. Returns a single monthly run-rate figure.
+export async function getActiveClientRetainers(): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clients")
+    .select("monthly_price, status, archived")
+    .in("status", ["active", "growing"])
+    .eq("archived", false);
+
+  return (data ?? []).reduce((total, row) => {
+    const price = Number((row as { monthly_price: unknown }).monthly_price);
+    return total + (Number.isFinite(price) ? price : 0);
+  }, 0);
+}
+
 // ── Mutations ──────────────────────────────────────────────────────────────
 
 // Set a single month's value on a row. `monthIndex` is 0 (Jan) … 11 (Dec).
