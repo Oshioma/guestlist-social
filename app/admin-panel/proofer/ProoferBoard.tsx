@@ -1529,7 +1529,9 @@ export default function ProoferBoard({
       )}
       <div
         style={{
-          display: "flex",
+          // The topbar already shows "Proofer" on mobile — this whole row is a
+          // duplicate title plus a button that moves into the toolbar below.
+          display: isNarrow ? "none" : "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: 12,
@@ -1622,13 +1624,29 @@ export default function ProoferBoard({
             onClick={() => setMobileSettingsOpen(true)}
             style={mobileToolbarButtonStyle(false)}
           >
-            <span style={{ fontWeight: 700 }}>
+            <span
+              style={{
+                fontWeight: 700,
+                flexShrink: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               {clients.find((c) => c.id === clientId)?.name ?? "Client"}
             </span>
-            <span style={{ color: "#a1a1aa", fontWeight: 600 }}>
+            {/* Month is the first thing to give way when the row is tight. */}
+            <span
+              style={{
+                color: "#a1a1aa",
+                fontWeight: 600,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               {months.find((m) => m.value === month)?.label ?? month}
             </span>
-            <span style={{ color: "#a1a1aa" }}>⚙</span>
+            <span style={{ color: "#a1a1aa", marginLeft: "auto", flexShrink: 0 }}>⚙</span>
           </button>
           <button
             type="button"
@@ -1636,6 +1654,18 @@ export default function ProoferBoard({
             style={mobileToolbarButtonStyle(true)}
           >
             ✦ Ideas
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/app/proofer/publish")}
+            style={{
+              ...mobileToolbarButtonStyle(true),
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+            }}
+          >
+            Queue →
           </button>
         </div>
       )}

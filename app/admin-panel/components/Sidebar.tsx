@@ -15,12 +15,16 @@ type NavGroup = {
 type Props = {
   isAdmin: boolean;
   canRunAds: boolean;
+  /** Drawer state. Only meaningful below the 1100px breakpoint. */
+  open?: boolean;
+  onClose?: () => void;
 };
 
+// Proofer is promoted out of Publisher to a top-level destination — it's the
+// day-to-day writing tool and shouldn't need a group expanded to reach it.
 const PUBLISHER_ITEMS: NavItem[] = [
   { label: "Clients", href: "/app/clients" },
   { label: "Client view", href: "/portal" },
-  { label: "Proofer", href: "/app/proofer" },
   { label: "Ideas", href: "/app/ideas" },
   { label: "Content Dashboard", href: "/app/content" },
 ];
@@ -31,6 +35,10 @@ function buildNavGroups(canRunAds: boolean): NavGroup[] {
   if (canRunAds) {
     groups.push({ heading: "Interaction", items: [], headingHref: "/app/interaction" });
   }
+
+  // Sits immediately above Publisher, where it used to live, so it's still
+  // where the eye looks for it.
+  groups.push({ heading: "Proofer", items: [], headingHref: "/app/proofer" });
 
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
@@ -51,7 +59,7 @@ function buildUtilityItems(_isAdmin: boolean): NavItem[] {
   ];
 }
 
-export default function Sidebar({ isAdmin, canRunAds }: Props) {
+export default function Sidebar({ isAdmin, canRunAds, open, onClose }: Props) {
   const pathname = usePathname();
   const navGroups = buildNavGroups(canRunAds);
   const utilityItems = buildUtilityItems(isAdmin);
@@ -69,7 +77,7 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
   }
 
   return (
-    <aside className="app-sidebar">
+    <aside className={`app-sidebar${open ? " app-sidebar-open" : ""}`}>
       <div className="app-sidebar-brand">
         <img
           src="/gslogo.jpg"
@@ -82,9 +90,22 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
           <div className="app-sidebar-brand-title">Guestlist Social</div>
           <div className="app-sidebar-brand-subtitle">Vibing!</div>
         </div>
+        <button
+          type="button"
+          className="app-sidebar-close"
+          onClick={onClose}
+          aria-label="Close menu"
+        >
+          ✕
+        </button>
       </div>
 
-      <nav className="app-sidebar-nav">
+      <nav
+        className="app-sidebar-nav"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) onClose?.();
+        }}
+      >
         {navGroups.map((group, gi) => (
           <NavSection
             key={gi}
