@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
+import ClientBillingForm from "../../../components/ClientBillingForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientConsultationAnswersManager from "../../../components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
@@ -11,6 +12,7 @@ import PortalVisibilityForm from "../../../components/PortalVisibilityForm";
 import { ensureDefaultConsultationFormForClient } from "../../../lib/consultation-actions";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
+import { getMemberAccess } from "@/lib/auth/permissions";
 
 type Props = {
   params: Promise<{ clientId: string }>;
@@ -57,6 +59,9 @@ export default async function EditClientPage({ params }: Props) {
   if (error || !client) {
     notFound();
   }
+
+  const access = await getMemberAccess();
+  const isAdmin = access?.role === "admin";
 
   const activeClients = (activeClientsRes.data ?? [])
     .filter((row) =>
@@ -264,6 +269,16 @@ export default async function EditClientPage({ params }: Props) {
           metaAdAccountId: client.meta_ad_account_id ?? "",
         }}
       />
+
+      {isAdmin ? (
+        <ClientBillingForm
+          clientId={clientId}
+          initialMonthlyPrice={
+            client.monthly_price != null ? Number(client.monthly_price) : null
+          }
+          initialDirectDebit={client.direct_debit === true}
+        />
+      ) : null}
 
       <PortalVisibilityForm
         clientId={clientId}

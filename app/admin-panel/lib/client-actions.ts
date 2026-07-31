@@ -577,6 +577,44 @@ export async function updatePortalVisibilityAction(
   return { error: null };
 }
 
+// Admin-only billing: what this client pays the agency (retainer) and whether
+// they pay by direct debit. Kept off the portal entirely.
+export async function updateClientBillingAction(
+  clientIdValue: string,
+  billing: { monthlyPrice: number | null; directDebit: boolean }
+): Promise<{ error: string | null }> {
+  const clientId = Number(clientIdValue);
+  if (!Number.isFinite(clientId)) {
+    return { error: "Invalid client." };
+  }
+
+  if (!(await isAdmin())) {
+    return { error: "Not authorized." };
+  }
+
+  const price =
+    billing.monthlyPrice != null && Number.isFinite(billing.monthlyPrice)
+      ? billing.monthlyPrice
+      : null;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      monthly_price: price,
+      direct_debit: billing.directDebit,
+    })
+    .eq("id", clientId);
+
+  if (error) {
+    console.error("updateClientBillingAction error:", error);
+    return { error: "Could not update billing." };
+  }
+
+  revalidatePath(`/admin-panel/clients/${clientId}/edit`);
+  return { error: null };
+}
+
 export async function archiveClientAction(clientId: string) {
   const supabase = await createClient();
 
