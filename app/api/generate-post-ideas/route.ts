@@ -20,7 +20,29 @@ import Anthropic from "@anthropic-ai/sdk";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const BATCH_SIZE = 7; // one week at a time
+const BATCH_SIZE = 4; // smaller batches stream in sooner and more incrementally
+
+// Retry an Anthropic call on transient failures (rate limits / overload) with
+// exponential backoff, so a throttled batch doesn't silently drop its ideas.
+async function createWithRetry(
+  anthropic: Anthropic,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  tries = 3
+): Promise<Anthropic.Message> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      return await anthropic.messages.create(params);
+    } catch (err) {
+      lastErr = err;
+      const status = (err as { status?: number })?.status;
+      const transient = status === 429 || status === 500 || status === 503 || status === 529;
+      if (!transient || attempt === tries - 1) throw err;
+      await new Promise((r) => setTimeout(r, 800 * 2 ** attempt)); // 0.8s, 1.6s
+    }
+  }
+  throw lastErr;
+}
 
 const CONTENT_MIX = [
   { type: "engagement",        pct: 30, description: "questions, polls, conversation starters, relatable moments" },
@@ -276,7 +298,7 @@ Return EXACTLY this JSON (no markdown, no code fences):
 Generate ${batch.length} ideas total.`;
 
           try {
-            const message = await anthropic.messages.create({
+            const message = await createWithRetry(anthropic, {
               model: "claude-haiku-4-5-20251001",
               max_tokens: batch.length * 350 + 300,
               messages: [{ role: "user", content: systemPrompt + "\n\n" + userMessage }],

@@ -1130,6 +1130,33 @@ export default function ProoferBoard({
 
   // ── AI idea handlers ───────────────────────────────────────────────────────
 
+  // Best-effort: pull a royalty-free stock photo matching a generated idea's
+  // visual concept and set it as the card's image, unless the user already has
+  // media there. Failures (no Pexels key, no match, network) are swallowed —
+  // the idea's caption still stands on its own.
+  async function attachSuggestedImage(slotKey: string, idea: PostIdea) {
+    const query = (idea.imageIdea || idea.title || idea.captionIdea || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
+    if (!query) return;
+    try {
+      const res = await fetch(`/api/suggest-images?q=${encodeURIComponent(query)}&per_page=1`);
+      const data = await res.json();
+      const url: string | undefined = data?.photos?.[0]?.full;
+      if (!url) return;
+      setDrafts((prev) => {
+        const d = prev[slotKey];
+        // Only fill the idea's own freshly-seeded draft, and never overwrite
+        // media the user (or a real post) already put there.
+        if (!d || (d.mediaUrls && d.mediaUrls.length > 0)) return prev;
+        return { ...prev, [slotKey]: { ...d, mediaUrls: [url] } };
+      });
+    } catch {
+      /* best-effort — leave the card image empty */
+    }
+  }
+
   async function handleGenerateIdeas() {
     if (!clientId || !month) return;
     setGenLoading(true);
@@ -1203,6 +1230,9 @@ export default function ProoferBoard({
                       [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] },
                     };
                   });
+                  // Fetch a suggested stock photo for this idea in the background
+                  // and drop it into the card (best-effort — never blocks the stream).
+                  void attachSuggestedImage(slotKey, idea);
                   passCount++;
                   grandTotal++;
                   setGenResult({ count: grandTotal, emptySlots: totalEmpty });
