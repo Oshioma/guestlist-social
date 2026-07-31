@@ -191,6 +191,10 @@ export default function PublishQueueBoard({
   const [failureNoteDrafts, setFailureNoteDrafts] = useState<
     Record<string, string>
   >({});
+  // Bulk selection of queued items (by queue item id).
+  const [selectedQueueIds, setSelectedQueueIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const clientNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -387,6 +391,71 @@ export default function PublishQueueBoard({
         alert(
           err instanceof Error ? err.message : "Could not delete post"
         );
+      }
+    });
+  }
+
+  // ── Bulk selection of queued items ──────────────────────────────────────────
+  function toggleQueueSelected(id: string) {
+    setSelectedQueueIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllQueued(select: boolean) {
+    setSelectedQueueIds(
+      select ? new Set(queuedItems.map((i) => i.id)) : new Set()
+    );
+  }
+
+  // Only count selections that still exist in the current queued list.
+  const selectedQueued = useMemo(
+    () => queuedItems.filter((i) => selectedQueueIds.has(i.id)),
+    [queuedItems, selectedQueueIds]
+  );
+
+  function handleBulkRemove() {
+    if (selectedQueued.length === 0) return;
+    if (
+      !confirm(
+        `Remove ${selectedQueued.length} item${selectedQueued.length === 1 ? "" : "s"} from the publish queue?`
+      )
+    )
+      return;
+
+    const ids = selectedQueued.map((i) => i.id);
+    startTransition(async () => {
+      try {
+        await Promise.all(ids.map((id) => removeProoferQueueItemAction(id)));
+        setSelectedQueueIds(new Set());
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not remove items");
+      }
+    });
+  }
+
+  function handleBulkDeletePosts() {
+    if (selectedQueued.length === 0) return;
+    // Multiple queue items can point at the same post — delete each post once.
+    const postIds = Array.from(new Set(selectedQueued.map((i) => i.postId)));
+    if (
+      !confirm(
+        `Delete ${postIds.length} post${postIds.length === 1 ? "" : "s"}? This removes the queued item(s) and cannot be undone.`
+      )
+    )
+      return;
+
+    startTransition(async () => {
+      try {
+        await Promise.all(postIds.map((pid) => deleteProoferPostByIdAction(pid)));
+        setSelectedQueueIds(new Set());
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not delete posts");
       }
     });
   }
@@ -883,19 +952,91 @@ export default function PublishQueueBoard({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Bulk selection toolbar */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+                paddingBottom: 10,
+                borderBottom: "1px solid #f4f4f5",
+              }}
+            >
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#3f3f46",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    queuedItems.length > 0 &&
+                    selectedQueued.length === queuedItems.length
+                  }
+                  ref={(el) => {
+                    if (el)
+                      el.indeterminate =
+                        selectedQueued.length > 0 &&
+                        selectedQueued.length < queuedItems.length;
+                  }}
+                  onChange={(e) => toggleSelectAllQueued(e.target.checked)}
+                />
+                Select all
+              </label>
+              <span style={{ fontSize: 12, color: "#71717a" }}>
+                {selectedQueued.length} selected
+              </span>
+              <div style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={handleBulkRemove}
+                disabled={selectedQueued.length === 0 || isPending}
+                style={{
+                  ...buttonBase,
+                  color: "#991b1b",
+                  opacity: selectedQueued.length === 0 ? 0.5 : 1,
+                  cursor: selectedQueued.length === 0 ? "not-allowed" : "pointer",
+                }}
+              >
+                Remove from queue
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeletePosts}
+                disabled={selectedQueued.length === 0 || isPending}
+                style={{
+                  ...buttonBase,
+                  background: "#991b1b",
+                  border: "1px solid #991b1b",
+                  color: "#fff",
+                  opacity: selectedQueued.length === 0 ? 0.5 : 1,
+                  cursor: selectedQueued.length === 0 ? "not-allowed" : "pointer",
+                }}
+              >
+                Delete posts
+              </button>
+            </div>
             {queuedItems.map((item) => {
               const scheduleValue =
                 scheduleDrafts[item.id] ??
                 toDateTimeLocalInputValue(item.scheduledFor, default6pm);
+              const selected = selectedQueueIds.has(item.id);
 
               return (
                 <div
                   key={item.id}
                   style={{
-                    border: "1px solid #e4e4e7",
+                    border: `1px solid ${selected ? "#a5b4fc" : "#e4e4e7"}`,
                     borderRadius: 12,
                     padding: 14,
-                    background: "#fff",
+                    background: selected ? "#eef2ff" : "#fff",
                     display: "flex",
                     flexDirection: "column",
                     gap: 10,
@@ -909,18 +1050,27 @@ export default function PublishQueueBoard({
                       flexWrap: "wrap",
                     }}
                   >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 800,
-                          color: "#18181b",
-                        }}
-                      >
-                        {item.clientName} · {platformLabel(item.platform)}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#71717a" }}>
-                        {formatDate(item.postDate)}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleQueueSelected(item.id)}
+                        aria-label={`Select ${item.clientName} ${formatDate(item.postDate)}`}
+                        style={{ marginTop: 3, cursor: "pointer" }}
+                      />
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 800,
+                            color: "#18181b",
+                          }}
+                        >
+                          {item.clientName} · {platformLabel(item.platform)}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#71717a" }}>
+                          {formatDate(item.postDate)}
+                        </div>
                       </div>
                     </div>
 
