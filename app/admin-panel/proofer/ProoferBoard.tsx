@@ -604,6 +604,31 @@ export default function ProoferBoard({
     setStaleKeys(new Set());
   }, [initialPosts]);
 
+  // Ideas have no realtime channel, and navigating to a new month/client feeds
+  // fresh initialPostIdeas WITHOUT remounting the board — so without this the
+  // board keeps showing the previous view's ideas (or none) while the new
+  // month's ideas sit unseen in the database, making empty-looking slots that
+  // still report "all full" on generate. Re-sync ideas and re-seed their draft
+  // captions here, never clobbering a saved post or an already-edited draft.
+  useEffect(() => {
+    setPostIdeas(initialPostIdeas);
+    const savedSlots = new Set(
+      initialPosts.map((p) => postKey(p.postDate.slice(0, 10), p.platform))
+    );
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const idea of initialPostIdeas) {
+        const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+        if (savedSlots.has(slotKey)) continue;
+        if (next[slotKey]) continue;
+        const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
+          .filter(Boolean).join("\n\n");
+        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] };
+      }
+      return next;
+    });
+  }, [initialPostIdeas, initialPosts]);
+
   // Live view of the current drafts for the realtime callback, without making
   // the subscription tear down and re-subscribe on every keystroke.
   const draftsRef = useRef<Record<string, unknown>>({});
