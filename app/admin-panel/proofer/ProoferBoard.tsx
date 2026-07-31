@@ -460,14 +460,10 @@ export default function ProoferBoard({
     draftsRef.current = drafts;
   }, [drafts]);
 
-  // ── Realtime: reflect other people's saved changes without a refresh ────────
+  // ── Realtime: reflect saved changes without a refresh ───────────────────────
   useEffect(() => {
     if (!clientId) return;
     const supabase = createClient();
-    let myEmail: string | null = null;
-    supabase.auth.getUser().then(({ data }) => {
-      myEmail = data.user?.email ?? null;
-    });
 
     const channel = supabase
       .channel(`proofer-posts:${clientId}`)
@@ -491,9 +487,11 @@ export default function ProoferBoard({
           );
           // Only the month currently on screen is relevant.
           if (incoming.postDate.slice(0, 7) !== month) return;
-          // Our own saves already refresh the board — skip the echo so we don't
-          // flag our own edits as "changed elsewhere".
-          if (myEmail && incoming.updatedBy === myEmail) return;
+          // NOTE: we intentionally do NOT skip changes authored by the current
+          // user. The same account is often open on two devices (phone +
+          // desktop), and a save on one must still appear live on the other.
+          // Applying our own tab's echo is harmless — it's idempotent with the
+          // router.refresh() that save handlers already trigger.
 
           setLivePosts((prev) => {
             const idx = prev.findIndex((p) => p.id === incoming.id);
