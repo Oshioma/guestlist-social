@@ -2529,6 +2529,29 @@ export default function ProoferBoard({
                           }}
                         >
                           Approved and locked
+                          {/* Once a post is locked the editable time input is
+                              hidden, so surface the scheduled publish time here
+                              (in the agency display zone) — otherwise a scheduled
+                              post shows no time at all. */}
+                          {(() => {
+                            const when = formatUtcClockInZone(
+                              dateKey,
+                              draft.publishTime,
+                              timeZone
+                            );
+                            return when ? (
+                              <div
+                                style={{
+                                  marginTop: 2,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  color: "#0369a1",
+                                }}
+                              >
+                                Scheduled for {when}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       )}
                     </>
