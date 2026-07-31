@@ -1346,7 +1346,7 @@ export async function markIdeaWeakAction(ideaId: string, isWeak: boolean) {
   revalidateProoferPaths();
 }
 
-export async function clearPostIdeasAction(clientId: string, month: string, platform: string) {
+export async function clearPostIdeasAction(clientId: string, month: string, _platform?: string) {
   if (!clientId || !month) throw new Error("clientId and month required.");
   const supabase = await createClient();
   const [yearStr, monthStr] = month.split("-");
@@ -1355,11 +1355,12 @@ export async function clearPostIdeasAction(clientId: string, month: string, plat
   const start = `${yearStr}-${monthStr}-01`;
   const nextMonth = new Date(year, m, 1);
   const end = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+  // Ideas are one-per-day and platform-agnostic, so clear the whole month
+  // regardless of which platform key a row was stored under.
   const { error } = await supabase
     .from("post_ideas")
     .delete()
     .eq("client_id", clientId)
-    .eq("platform", platform)
     .gte("post_slot_date", start)
     .lt("post_slot_date", end)
     .neq("status", "promoted"); // never delete ideas already linked to a real post

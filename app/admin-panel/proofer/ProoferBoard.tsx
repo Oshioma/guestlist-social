@@ -552,7 +552,10 @@ export default function ProoferBoard({
 
   // ── AI post ideas ──────────────────────────────────────────────────────────
   const [postIdeas, setPostIdeas] = useState<PostIdea[]>(initialPostIdeas);
-  const [genPlatform, setGenPlatform] = useState<ProoferPlatform>("instagram_feed");
+  // Ideas are platform-agnostic — one per day, shown in the day's single view.
+  // The canonical Instagram Feed key is where they're stored/seeded so they land
+  // in the default view; the format + publish targets are chosen per post later.
+  const genPlatform: ProoferPlatform = "instagram_feed";
   const [genPrompt, setGenPrompt] = useState("");
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -1363,23 +1366,25 @@ export default function ProoferBoard({
 
   async function handleClearIdeas() {
     if (!clientId || !month) return;
-    if (!confirm("Clear all AI ideas for this month and platform? This cannot be undone.")) return;
+    if (!confirm("Clear all AI ideas for this month? This cannot be undone.")) return;
     startTransition(async () => {
       try {
         await clearPostIdeasAction(clientId, month, genPlatform);
-        setPostIdeas((prev) => prev.filter(
-          (i) => !(i.platform === genPlatform && i.postSlotDate.startsWith(month))
-        ));
-        // Clear unsaved caption drafts that came from AI
+        // Ideas are one-per-day and platform-agnostic — clear them all for the
+        // month, whatever platform key they happen to be stored under.
+        const ideaSlots = new Set(
+          postIdeas
+            .filter((i) => i.postSlotDate.startsWith(month))
+            .map((i) => postKey(i.postSlotDate.slice(0, 10), i.platform))
+        );
+        setPostIdeas((prev) => prev.filter((i) => !i.postSlotDate.startsWith(month)));
+        // Clear unsaved caption drafts that came from AI (any platform lane),
+        // but never touch a slot that already has a saved post.
         setDrafts((prev) => {
           const next = { ...prev };
           for (const key of Object.keys(next)) {
-            if (key.endsWith(`|${genPlatform}`)) {
-              const dateStr = key.split("|")[0];
-              const existingPost = postsByKey.get(key);
-              if (dateStr.startsWith(month) && !existingPost) {
-                delete next[key];
-              }
+            if (ideaSlots.has(key) && !postsByKey.get(key)) {
+              delete next[key];
             }
           }
           return next;
@@ -2210,16 +2215,6 @@ export default function ProoferBoard({
             ✦ Generate ideas
           </span>
 
-          <select
-            value={genPlatform}
-            onChange={(e) => setGenPlatform(e.target.value as ProoferPlatform)}
-            style={{ ...inputStyle, fontSize: 12, flexShrink: 0, width: "auto" }}
-          >
-            {PROOFER_PLATFORMS.map((p) => (
-              <option key={p} value={p}>{PROOFER_PLATFORM_LABELS[p]}</option>
-            ))}
-          </select>
-
           <input
             type="text"
             value={genPrompt}
@@ -2259,7 +2254,7 @@ export default function ProoferBoard({
             <span style={{ fontSize: 12, color: "#991b1b", flexShrink: 0 }}>{genError}</span>
           )}
 
-          {postIdeas.filter((i) => i.platform === genPlatform && i.postSlotDate.startsWith(month)).length > 0 && (
+          {postIdeas.filter((i) => i.postSlotDate.startsWith(month)).length > 0 && (
             <button
               type="button"
               onClick={handleClearIdeas}
@@ -2289,8 +2284,7 @@ export default function ProoferBoard({
           {initialPillars.length > 0
             ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
             : "no content pillars"}
-          {" · existing posts this month · "}
-          {PROOFER_PLATFORM_LABELS[genPlatform]}
+          {" · existing posts this month"}
           {genPrompt.trim()
             ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
             : " · no direction prompt"}
