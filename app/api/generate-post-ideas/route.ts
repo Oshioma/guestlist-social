@@ -244,6 +244,10 @@ RULES:
 
         const anthropic = new Anthropic({ apiKey });
         let totalGenerated = 0;
+        // Capture real failures (AI call errors, DB insert errors) so a run that
+        // produces nothing reports WHY, instead of the misleading
+        // "all slots already have ideas".
+        const failures: string[] = [];
 
         // Build all weekly batches
         const batches: string[][] = [];
@@ -309,7 +313,8 @@ Generate ${batch.length} ideas total.`;
               };
             });
 
-            const { data: inserted } = await supabase.from("post_ideas").insert(toInsert).select("*");
+            const { data: inserted, error: insertErr } = await supabase.from("post_ideas").insert(toInsert).select("*");
+            if (insertErr) { failures.push(`database insert failed: ${insertErr.message}`); return; }
 
             for (const row of inserted ?? []) {
               const idea = {
@@ -336,10 +341,19 @@ Generate ${batch.length} ideas total.`;
               send(controller, encoder, { type: "idea", idea });
               totalGenerated++;
             }
-          } catch {
-            // One batch failing shouldn't kill the whole stream — skip and continue
+          } catch (err) {
+            // One batch failing shouldn't kill the whole stream — record why and
+            // continue; we surface it below if nothing at all got generated.
+            failures.push(err instanceof Error ? err.message : String(err));
           }
         }));
+
+        // Empty slots existed but nothing was produced — that's a real failure,
+        // not "all slots are full". Tell the client what actually went wrong.
+        if (totalGenerated === 0 && emptySlots.length > 0) {
+          const detail = failures[0] ?? "the AI returned no usable ideas";
+          send(controller, encoder, { type: "error", error: `Couldn't generate ideas — ${detail}. Please try again.` });
+        }
 
         // Update run with final count
         if (runId) {
