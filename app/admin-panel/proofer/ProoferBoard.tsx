@@ -690,6 +690,13 @@ export default function ProoferBoard({
         if (variants.has(p)) return p;
       }
     }
+    // No saved post drives the tab — fall back to a platform that has a
+    // generated idea or seeded draft, so freshly generated ideas surface on
+    // the right tab instead of being hidden behind the default platform.
+    for (const p of PROOFER_PLATFORMS) {
+      const k = postKey(dateKey, p);
+      if ((postIdeasByKey.get(k) ?? []).length > 0 || drafts[k]) return p;
+    }
     return DEFAULT_PLATFORM;
   }
 
