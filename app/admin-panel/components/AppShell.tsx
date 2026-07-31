@@ -15,7 +15,7 @@ export default function AppShell({ children, isAdmin, canRunAds }: Props) {
       <Sidebar isAdmin={isAdmin} canRunAds={canRunAds} />
       <div className="app-main">
         <Topbar />
-        <main style={{ flex: 1, padding: 24 }}>{children}</main>
+        <main className="app-content">{children}</main>
       </div>
     </div>
   );
