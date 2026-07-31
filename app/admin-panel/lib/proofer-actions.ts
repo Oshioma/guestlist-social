@@ -613,7 +613,7 @@ export async function updateProoferStatusAction(
 
   const { data: existing } = await supabase
     .from("proofer_posts")
-    .select("id")
+    .select("id, platform, publish_targets")
     .eq("client_id", clientId)
     .eq("post_date", postDate)
     .eq("platform", normalizedPlatform)
@@ -637,6 +637,51 @@ export async function updateProoferStatusAction(
     // Marking a post as "improve" or "check" removes it from the publish queue
     if (normalized === "improve" || normalized === "check") {
       await supabase.from("proofer_publish_queue").delete().eq("post_id", existing.id);
+    }
+
+    // Approving a post now drops it straight into the publish queue (status
+    // "queued", awaiting a send time) — no separate "add to queue" step. A
+    // post can publish to more than one destination, so we queue a row per
+    // publish target (mirroring queueProoferPostToTargetsAction). We only
+    // insert targets that aren't already in the queue, so re-approving a post
+    // whose Instagram slot is already scheduled or published never resets it.
+    if (normalized === "proofed" || normalized === "approved") {
+      let targets = normalizePublishTargets(existing.publish_targets);
+      // Posts predating publish_targets fall back to what their platform
+      // implied, so an un-migrated post still queues correctly.
+      if (targets.length === 0) {
+        targets = existing.platform === "facebook" ? ["facebook"] : ["instagram"];
+      }
+
+      const { data: existingRows } = await supabase
+        .from("proofer_publish_queue")
+        .select("platform")
+        .eq("post_id", existing.id);
+      const alreadyQueued = new Set(
+        (existingRows ?? []).map((row) => row.platform)
+      );
+
+      const rowsToInsert = targets
+        .filter((target) => !alreadyQueued.has(target))
+        .map((platform) => ({
+          post_id: existing.id,
+          platform,
+          status: "queued",
+          created_by: authorEmail,
+          updated_at: new Date().toISOString(),
+        }));
+
+      if (rowsToInsert.length > 0) {
+        const { error: queueError } = await supabase
+          .from("proofer_publish_queue")
+          .insert(rowsToInsert);
+
+        // Non-fatal: the status change already succeeded. Log and move on so
+        // the operator isn't blocked by a queue hiccup.
+        if (queueError) {
+          console.error("updateProoferStatusAction auto-queue error:", queueError);
+        }
+      }
     }
   } else {
     const { error } = await supabase.from("proofer_posts").insert({

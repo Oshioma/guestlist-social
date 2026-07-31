@@ -7,7 +7,6 @@ import SectionCard from "../../components/SectionCard";
 import CarouselPreview from "../../components/CarouselPreview";
 import BoostPostButton from "../../components/BoostPostButton";
 import type {
-  ProoferPost,
   ProoferPublishQueueItem,
   ProoferStatus,
   PublishQueuePlatform,
@@ -15,13 +14,11 @@ import type {
 } from "../../lib/types";
 import { PUBLISH_TARGET_LABELS } from "../../lib/types";
 import {
-  queueProoferPostAction,
   scheduleProoferQueueItemAction,
   markProoferQueueItemPublishedAction,
   markProoferQueueItemFailedAction,
   removeProoferQueueItemAction,
   deleteProoferPostByIdAction,
-  queueProoferPostToTargetsAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
 import { describeZone, formatDateTimeInZone } from "../../../../lib/timezone";
@@ -33,10 +30,6 @@ type ConnectedAccount = {
   platform: "facebook" | "instagram";
   accountId: string;
   accountName: string;
-};
-
-type ReadyPost = ProoferPost & {
-  clientName: string;
 };
 
 type QueueItem = ProoferPublishQueueItem & {
@@ -218,7 +211,6 @@ function getDefault6pmGmt(): string {
 }
 
 export default function PublishQueueBoard({
-  readyPosts,
   queueItems,
   defaultScheduleValue,
   clients = [],
@@ -226,7 +218,6 @@ export default function PublishQueueBoard({
   metaConnectionError = null,
   timeZone = "Etc/GMT",
 }: {
-  readyPosts: ReadyPost[];
   queueItems: QueueItem[];
   defaultScheduleValue: string;
   clients?: ClientLite[];
@@ -333,28 +324,6 @@ export default function PublishQueueBoard({
   // Queue rows are grouped per post in the UI, so an action may target several.
   const idList = (queueId: string | string[]) =>
     Array.isArray(queueId) ? queueId : [queueId];
-
-  function handleQueueTargets(postId: string) {
-    startTransition(async () => {
-      try {
-        await queueProoferPostToTargetsAction(postId);
-        refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not add to queue");
-      }
-    });
-  }
-
-  function handleQueue(postId: string, platform: PublishQueuePlatform) {
-    startTransition(async () => {
-      try {
-        await queueProoferPostAction(postId, platform);
-        refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not add to queue");
-      }
-    });
-  }
 
   function handleSchedule(queueId: string | string[]) {
     const ids = idList(queueId);
@@ -815,7 +784,6 @@ export default function PublishQueueBoard({
         }}
       >
         {[
-          { label: "Ready", value: readyPosts.length, color: "#6b7280" },
           { label: "Queued", value: queuedItems.length, color: "#b45309" },
           { label: "Scheduled", value: scheduledItems.length, color: "#4338ca" },
           { label: "Published", value: publishedItems.length, color: "#166534" },
@@ -849,286 +817,6 @@ export default function PublishQueueBoard({
           </div>
         ))}
       </div>
-
-      <SectionCard title="Ready to queue">
-        {readyPosts.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#71717a" }}>
-            No approved posts waiting to be queued.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            {(() => {
-              const grouped = new Map<string, typeof readyPosts>();
-              for (const post of readyPosts) {
-                const key = post.clientName;
-                if (!grouped.has(key)) grouped.set(key, []);
-                grouped.get(key)!.push(post);
-              }
-              return Array.from(grouped.entries()).map(([clientName, posts]) => (
-                <div key={clientName}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 12,
-                      paddingBottom: 8,
-                      borderBottom: "1px solid #e4e4e7",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#fff",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {clientName[0].toUpperCase()}
-                    </div>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "#18181b" }}>
-                      {clientName}
-                    </span>
-                    <span style={{ fontSize: 12, color: "#a1a1aa" }}>
-                      {posts.length} post{posts.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-            {posts.map((post) => {
-              const images = post.mediaUrls.length > 0
-                ? post.mediaUrls
-                : post.imageUrl
-                ? [post.imageUrl]
-                : [];
-
-              return (
-              <div
-                key={post.id}
-                style={{
-                  border: "1px solid #dbdbdb",
-                  borderRadius: 8,
-                  background: "#fff",
-                  overflow: "hidden",
-                  maxWidth: 470,
-                }}
-              >
-                  {/* Header — like Instagram */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "10px 14px",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "50%",
-                          background: "linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#fff",
-                          fontSize: 14,
-                          fontWeight: 700,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {(post.clientName ?? "?")[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#262626" }}>
-                          {post.clientName}
-                        </div>
-                        <div style={{ fontSize: 11, color: "#8e8e8e" }}>
-                          {formatDate(post.postDate)}
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        padding: "3px 8px",
-                        borderRadius: 4,
-                        background: "#e0f2fe",
-                        color: "#075985",
-                        fontSize: 11,
-                        fontWeight: 700,
-                      }}
-                    >
-                      Proofed
-                    </div>
-                  </div>
-
-                  {/* Image — full width like Instagram */}
-                  {images.length > 0 ? (
-                    images.length === 1 ? (
-                      <img
-                        src={images[0]}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          aspectRatio: "1/1",
-                          objectFit: "cover",
-                          display: "block",
-                          background: "#fafafa",
-                        }}
-                      />
-                    ) : (
-                      <div style={{ position: "relative" }}>
-                        <CarouselPreview urls={images} />
-                      </div>
-                    )
-                  ) : (
-                    <div
-                      style={{
-                        width: "100%",
-                        aspectRatio: "1/1",
-                        background: "#fafafa",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#c7c7c7",
-                        fontSize: 14,
-                      }}
-                    >
-                      No image
-                    </div>
-                  )}
-
-                  {/* Engagement icons row */}
-                  <div style={{ padding: "10px 14px 4px", display: "flex", gap: 16 }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#262626" strokeWidth="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                  </div>
-
-                  {/* Caption */}
-                  <div style={{ padding: "4px 14px 14px" }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#262626",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <span style={{ fontWeight: 600 }}>{post.clientName}</span>{" "}
-                      <span style={{ whiteSpace: "pre-wrap" }}>{post.caption || "No caption"}</span>
-                    </div>
-                  </div>
-
-                  {/* Action bar */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      flexWrap: "wrap",
-                      padding: "8px 14px 12px",
-                      borderTop: "1px solid #efefef",
-                    }}
-                  >
-                    {/* Destinations are chosen in the Proofer while writing —
-                        this page shows what was chosen and acts on it. */}
-                    {(() => {
-                      const targets = post.publishTargets ?? [];
-                      const needsImage =
-                        targets.includes("instagram") && images.length === 0;
-                      const blocked = targets.length === 0 || needsImage;
-                      return (
-                        <>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              flexWrap: "wrap",
-                              marginRight: "auto",
-                              fontSize: 12,
-                              color: "#52525b",
-                            }}
-                          >
-                            <span style={{ color: "#a1a1aa" }}>Publishing to</span>
-                            {targets.length === 0 ? (
-                              <strong style={{ color: "#b45309" }}>
-                                nothing selected — set it in the Proofer
-                              </strong>
-                            ) : (
-                              targets.map((t) => (
-                                <span
-                                  key={t}
-                                  style={{
-                                    padding: "2px 9px",
-                                    borderRadius: 999,
-                                    background: t === "facebook" ? "#e0f2fe" : "#fdf2f8",
-                                    border: `1px solid ${t === "facebook" ? "#bae6fd" : "#fbcfe8"}`,
-                                    color: t === "facebook" ? "#075985" : "#9d174d",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {PUBLISH_TARGET_LABELS[t]}
-                                </span>
-                              ))
-                            )}
-                            {needsImage && (
-                              <span style={{ color: "#b45309", fontWeight: 600 }}>
-                                · Instagram needs an image
-                              </span>
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleQueueTargets(post.id)}
-                            disabled={isPending || blocked}
-                            title={
-                              targets.length === 0
-                                ? "No platforms selected for this post"
-                                : needsImage
-                                ? "Instagram posts need at least one image"
-                                : undefined
-                            }
-                            style={{
-                              ...darkButton,
-                              opacity: blocked ? 0.45 : 1,
-                              cursor: blocked ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            Add to queue
-                          </button>
-                        </>
-                      );
-                    })()}
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePost(post.id)}
-                      disabled={isPending}
-                      style={{
-                        ...buttonBase,
-                        color: "#991b1b",
-                        borderColor: "#fecaca",
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-              </div>
-              );
-            })}
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
-        )}
-      </SectionCard>
 
       <SectionCard title="Queued">
         {queuedItems.length === 0 ? (
