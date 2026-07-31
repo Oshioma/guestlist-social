@@ -560,6 +560,10 @@ export default function ProoferBoard({
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ count: number; emptySlots: number } | null>(null);
+  // True when a generate run produced nothing because every day is already
+  // taken by (clearable) AI ideas — lets us offer a one-click clear+regenerate
+  // instead of the dead-end "click Clear AI" message.
+  const [genNeedsClear, setGenNeedsClear] = useState(false);
   const [captionModifying, setCaptionModifying] = useState<Record<string, string | null>>({});
   const [previewIdxMap, setPreviewIdxMap] = useState<Record<string, number>>({});
   // ── Client media library ───────────────────────────────────────────────────
@@ -1131,6 +1135,7 @@ export default function ProoferBoard({
     setGenLoading(true);
     setGenError(null);
     setGenResult(null);
+    setGenNeedsClear(false);
 
     let grandTotal = 0;
     let totalEmpty = 0;
@@ -1228,7 +1233,18 @@ export default function ProoferBoard({
       }
 
       if (grandTotal === 0 && !errorMsg) {
-        errorMsg = "All slots already have ideas — click Clear AI to regenerate.";
+        // Nothing generated. If it's because leftover AI ideas fill the month,
+        // offer a one-click clear+regenerate rather than a dead-end message.
+        // Real posts (or promoted ideas tied to posts) are never cleared, so
+        // only non-promoted ideas count as "clearable".
+        const hasClearableIdeas = postIdeas.some(
+          (i) => i.postSlotDate.startsWith(month) && i.status !== "promoted"
+        );
+        if (hasClearableIdeas) {
+          setGenNeedsClear(true);
+        } else {
+          errorMsg = "Every slot already has a post — nothing to generate.";
+        }
       }
       if (errorMsg) setGenError(errorMsg);
     } finally {
@@ -1364,35 +1380,56 @@ export default function ProoferBoard({
     setClientImages((prev) => prev.filter((i) => i.id !== imageId));
   }
 
+  // Delete every idea for the month (server + local mirror). Ideas are
+  // one-per-day and platform-agnostic, so clear them whatever platform key
+  // they're stored under — but never touch a slot that has a saved post.
+  async function clearMonthIdeasNow() {
+    if (!clientId || !month) return;
+    await clearPostIdeasAction(clientId, month, genPlatform);
+    const ideaSlots = new Set(
+      postIdeas
+        .filter((i) => i.postSlotDate.startsWith(month))
+        .map((i) => postKey(i.postSlotDate.slice(0, 10), i.platform))
+    );
+    setPostIdeas((prev) => prev.filter((i) => !i.postSlotDate.startsWith(month)));
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (ideaSlots.has(key) && !postsByKey.get(key)) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+  }
+
   async function handleClearIdeas() {
     if (!clientId || !month) return;
     if (!confirm("Clear all AI ideas for this month? This cannot be undone.")) return;
+    setGenNeedsClear(false);
     startTransition(async () => {
       try {
-        await clearPostIdeasAction(clientId, month, genPlatform);
-        // Ideas are one-per-day and platform-agnostic — clear them all for the
-        // month, whatever platform key they happen to be stored under.
-        const ideaSlots = new Set(
-          postIdeas
-            .filter((i) => i.postSlotDate.startsWith(month))
-            .map((i) => postKey(i.postSlotDate.slice(0, 10), i.platform))
-        );
-        setPostIdeas((prev) => prev.filter((i) => !i.postSlotDate.startsWith(month)));
-        // Clear unsaved caption drafts that came from AI (any platform lane),
-        // but never touch a slot that already has a saved post.
-        setDrafts((prev) => {
-          const next = { ...prev };
-          for (const key of Object.keys(next)) {
-            if (ideaSlots.has(key) && !postsByKey.get(key)) {
-              delete next[key];
-            }
-          }
-          return next;
-        });
+        await clearMonthIdeasNow();
       } catch (err) {
         notify(err instanceof Error ? err.message : "Could not clear ideas.", "error");
       }
     });
+  }
+
+  // One-click recovery when a generate run found every day already taken by
+  // leftover ideas: wipe them and immediately regenerate a fresh month. Real
+  // posts are never cleared, so this only ever replaces AI ideas.
+  async function handleClearAndRegenerate() {
+    if (!clientId || !month) return;
+    setGenNeedsClear(false);
+    setGenError(null);
+    try {
+      await clearMonthIdeasNow();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Could not clear ideas.", "error");
+      return;
+    }
+    await handleGenerateIdeas();
   }
 
   const visibleDays = useMemo(() => {
@@ -2252,6 +2289,34 @@ export default function ProoferBoard({
 
           {genError && (
             <span style={{ fontSize: 12, color: "#991b1b", flexShrink: 0 }}>{genError}</span>
+          )}
+
+          {genNeedsClear && (
+            <>
+              <span style={{ fontSize: 12, color: "#92400e", flexShrink: 0 }}>
+                Every day already has an AI idea.
+              </span>
+              <button
+                type="button"
+                onClick={handleClearAndRegenerate}
+                disabled={genLoading || isPending}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 9,
+                  border: "none",
+                  background: genLoading
+                    ? "#93c5fd"
+                    : "linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%)",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: genLoading ? "wait" : "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                {genLoading ? "Regenerating..." : "Clear & regenerate"}
+              </button>
+            </>
           )}
 
           {postIdeas.filter((i) => i.postSlotDate.startsWith(month)).length > 0 && (
