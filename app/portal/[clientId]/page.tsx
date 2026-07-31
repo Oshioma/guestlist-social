@@ -87,15 +87,15 @@ export default async function PortalClientDashboard({
 
   const supabase = await createClient();
 
-  // Clients land on Content first (when it's enabled for them). Admins
-  // previewing keep the dashboard so they can inspect the trust surfaces.
-  if (viewer?.role === "client") {
+  // Everyone lands on Content first when it's enabled — clients and admins
+  // previewing alike. Falls through to the dashboard only when Content is
+  // toggled off (or the column can't be read pre-migration).
+  {
     const { data: toggle, error: toggleError } = await supabase
       .from("clients")
       .select("portal_show_content")
       .eq("id", clientId)
       .maybeSingle();
-    // Only redirect when we could actually read the flag (post-migration).
     if (!toggleError) {
       const showContent =
         (toggle as { portal_show_content?: boolean } | null)?.portal_show_content !== false;
