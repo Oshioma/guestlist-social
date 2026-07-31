@@ -3137,20 +3137,27 @@ export default function ProoferBoard({
                         />
                         <span style={{ fontSize: isNarrow ? 11 : 9, color: "#a1a1aa" }}>
                           Publish (GMT)
-                          {timeZone !== DEFAULT_TIMEZONE &&
-                            (() => {
-                              const local = formatUtcClockInZone(
-                                dateKey,
-                                draft.publishTime,
-                                timeZone
-                              );
-                              return local ? (
-                                <span style={{ color: "#6366f1", fontWeight: 600 }}>
-                                  {" · "}
-                                  {local}
-                                </span>
-                              ) : null;
-                            })()}
+                          {(() => {
+                            // Show the local equivalent whenever the display
+                            // zone renders a different clock than plain GMT —
+                            // e.g. UK summer time (BST) or another region.
+                            const local = formatUtcClockInZone(
+                              dateKey,
+                              draft.publishTime,
+                              timeZone
+                            );
+                            const gmt = formatUtcClockInZone(
+                              dateKey,
+                              draft.publishTime,
+                              "Etc/GMT"
+                            );
+                            return local && local !== gmt ? (
+                              <span style={{ color: "#6366f1", fontWeight: 600 }}>
+                                {" · "}
+                                {local}
+                              </span>
+                            ) : null;
+                          })()}
                         </span>
                       </div>
                     </div>
