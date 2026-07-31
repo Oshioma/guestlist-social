@@ -893,6 +893,22 @@ export async function deleteProoferPostAction(
     throw new Error("Could not delete post.");
   }
 
+  // Also reject any AI post idea for this slot. Otherwise the idea survives,
+  // re-seeds a draft on the next load, and the "post" the user just cleared
+  // reappears as AI content. Rejected ideas are excluded when the board loads.
+  const { error: ideaError } = await supabase
+    .from("post_ideas")
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("client_id", clientId)
+    .eq("post_slot_date", postDate)
+    .eq("platform", normalizedPlatform)
+    .neq("status", "rejected");
+
+  if (ideaError) {
+    // Non-fatal: the post is already deleted. Log and continue.
+    console.error("deleteProoferPostAction idea-cleanup error:", ideaError);
+  }
+
   revalidatePillarConsumers();
 }
 
