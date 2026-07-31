@@ -78,7 +78,12 @@ export async function POST(req: Request) {
         const body = await req.json();
         const clientId      = String(body.clientId ?? "").trim();
         const month         = String(body.month ?? "").trim();
-        const platform      = String(body.platform ?? "instagram_feed").trim();
+        // Ideas are platform-agnostic. Each day has a single slot on the board;
+        // the format (Feed/Story/Reel) and publish targets are chosen per post
+        // later — they are not a content lane. Always generate against the
+        // canonical Instagram Feed key so every idea lands in the one view the
+        // board shows by default, regardless of what the client sent.
+        const platform      = "instagram_feed";
         const userPrompt    = String(body.prompt ?? "").trim();
         const postFrequency = String(body.postFrequency ?? "every-other-day").trim();
         // Use the client's local today if provided, otherwise fall back to UTC
@@ -110,9 +115,10 @@ export async function POST(req: Request) {
           supabase.from("clients").select("id, name, industry, notes, ai_instructions").eq("id", clientId).single(),
           supabase.from("content_pillars").select("id, name, description, color").eq("client_id", clientId).eq("archived", false).order("sort_order", { ascending: true }),
           supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", monthStart).lt("post_date", nextMonthStr).order("post_date", { ascending: true }),
-          // Exclude rejected ideas — they're hidden in the UI, so they must not
-          // count as filling a slot (otherwise regeneration silently no-ops).
-          supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).eq("platform", platform).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr).neq("status", "rejected"),
+          // A day is filled if it has ANY non-rejected idea, on any platform —
+          // ideas are one-per-day, not per-format. Rejected ideas are hidden in
+          // the UI, so they must not count (otherwise regeneration no-ops).
+          supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr).neq("status", "rejected"),
           // Most recent consultation submission answers for this client
           supabase.from("consultation_submissions")
             .select("id, consultation_answers(question_prompt, answer_text)")
@@ -138,10 +144,11 @@ export async function POST(req: Request) {
             ?.consultation_answers ?? []
         ).filter((a) => a.answer_text?.trim());
 
-        // Find empty slots — a slot is filled if it has a post OR an existing idea
+        // Find empty slots — a day is filled if it has a post (any format) OR an
+        // existing idea (any format). One slot per day, platform-agnostic.
         const filledSlots = new Set<string>();
         for (const p of postsRes.data ?? []) {
-          if (p.platform === platform) filledSlots.add(p.post_date?.slice(0, 10) ?? "");
+          filledSlots.add(p.post_date?.slice(0, 10) ?? "");
         }
         for (const i of ideasRes.data ?? []) {
           filledSlots.add((i.post_slot_date as string)?.slice(0, 10) ?? "");
