@@ -22,6 +22,7 @@ import {
   deleteProoferPostByIdAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
+import { describeZone, formatDateTimeInZone } from "../../../../lib/timezone";
 
 type ClientLite = { id: string; name: string };
 
@@ -58,17 +59,11 @@ function formatDate(value: string) {
   });
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+// Render in the agency's configured region with an explicit zone label
+// (e.g. "31 Jul 2026, 9:00 PM EAT") so the going-out time is never
+// ambiguous. Storage stays UTC; only the display shifts.
+function formatDateTime(value: string | null, timeZone: string) {
+  return formatDateTimeInZone(value, timeZone);
 }
 
 function toDateTimeLocalInputValue(value: string | null, fallback: string) {
@@ -166,6 +161,7 @@ export default function PublishQueueBoard({
   clients = [],
   connectedAccounts = [],
   metaConnectionError = null,
+  timeZone = "Etc/GMT",
 }: {
   readyPosts: ReadyPost[];
   queueItems: QueueItem[];
@@ -173,6 +169,7 @@ export default function PublishQueueBoard({
   clients?: ClientLite[];
   connectedAccounts?: ConnectedAccount[];
   metaConnectionError?: string | null;
+  timeZone?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -181,6 +178,7 @@ export default function PublishQueueBoard({
   );
 
   const default6pm = useMemo(() => getDefault6pmGmt(), []);
+  const zone = useMemo(() => describeZone(timeZone), [timeZone]);
 
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>(
     {}
@@ -461,7 +459,7 @@ export default function PublishQueueBoard({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <Link
           href="/app/proofer"
@@ -470,33 +468,79 @@ export default function PublishQueueBoard({
             color: "#71717a",
             textDecoration: "none",
             display: "inline-block",
-            marginBottom: 8,
+            marginBottom: 6,
           }}
         >
           &larr; Back to Proofer
         </Link>
-        <h1
+        <div
           style={{
-            margin: 0,
-            fontSize: 30,
-            lineHeight: 1.05,
-            fontWeight: 700,
-            color: "#18181b",
-            letterSpacing: "-0.03em",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
-          Publish Queue
-        </h1>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 26,
+              lineHeight: 1.05,
+              fontWeight: 700,
+              color: "#18181b",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Publish Queue
+          </h1>
+          {/* One prominent, unambiguous statement of which clock every time
+              on this page is shown in. */}
+          <div
+            title={`Times shown in ${zone.label} (${timeZone})`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 12px",
+              borderRadius: 999,
+              background: "#eef2ff",
+              border: "1px solid #c7d2fe",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#3730a3",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 13 }}>&#128337;</span>
+            All times in {zone.label}
+            <span
+              style={{
+                padding: "1px 7px",
+                borderRadius: 6,
+                background: "#e0e7ff",
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.02em",
+              }}
+            >
+              {zone.abbrev}
+            </span>
+          </div>
+        </div>
         <p
           style={{
-            margin: "8px 0 0",
-            fontSize: 14,
+            margin: "6px 0 0",
+            fontSize: 13,
             color: "#71717a",
             maxWidth: 900,
           }}
         >
-          Proofed posts move here for delivery. Queue them for Instagram or
-          Facebook, schedule them, then mark them published or failed.
+          Queue proofed posts, schedule them, then mark them published or
+          failed.{" "}
+          <Link href="/app/settings" style={{ color: "#6366f1", textDecoration: "none", fontWeight: 600 }}>
+            Change region &rarr;
+          </Link>
         </p>
       </div>
 
@@ -642,55 +686,54 @@ export default function PublishQueueBoard({
         </div>
       </details>
 
-      <SectionCard title="Overview">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 12,
-          }}
-        >
-          {[
-            { label: "Ready to queue", value: readyPosts.length },
-            { label: "Queued", value: queuedItems.length },
-            { label: "Scheduled", value: scheduledItems.length },
-            { label: "Published", value: publishedItems.length },
-            { label: "Failed", value: failedItems.length },
-          ].map((item) => (
-            <div
-              key={item.label}
+      {/* Compact counts strip — the same five totals, one slim row instead
+          of five tall cards, so the actual queue sits higher on the page. */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          padding: "10px 12px",
+          borderRadius: 12,
+          border: "1px solid #e4e4e7",
+          background: "#fff",
+        }}
+      >
+        {[
+          { label: "Ready", value: readyPosts.length, color: "#6b7280" },
+          { label: "Queued", value: queuedItems.length, color: "#b45309" },
+          { label: "Scheduled", value: scheduledItems.length, color: "#4338ca" },
+          { label: "Published", value: publishedItems.length, color: "#166534" },
+          { label: "Failed", value: failedItems.length, color: "#991b1b" },
+        ].map((item, idx) => (
+          <div
+            key={item.label}
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 6,
+              padding: "2px 10px",
+              borderLeft: idx === 0 ? "none" : "1px solid #f0f0f0",
+              flex: "1 1 auto",
+            }}
+          >
+            <span style={{ fontSize: 20, fontWeight: 800, color: item.color }}>
+              {item.value}
+            </span>
+            <span
               style={{
-                border: "1px solid #e4e4e7",
-                borderRadius: 12,
-                padding: 14,
-                background: "#fff",
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                color: "#71717a",
+                fontWeight: 700,
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                  color: "#71717a",
-                  fontWeight: 700,
-                }}
-              >
-                {item.label}
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: "#18181b",
-                }}
-              >
-                {item.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </div>
 
       <SectionCard title="Ready to queue">
         {readyPosts.length === 0 ? (
@@ -1129,8 +1172,14 @@ export default function PublishQueueBoard({
                         }
                         style={inputStyle}
                       />
-                      <span style={{ fontSize: 10, color: "#a1a1aa" }}>
-                        Default: 6 PM GMT
+                      <span style={{ fontSize: 10, color: "#71717a" }}>
+                        {(() => {
+                          const iso = fromDateTimeLocalInputValue(scheduleValue);
+                          const shown = iso ? formatDateTime(iso, timeZone) : "";
+                          return shown
+                            ? `Goes out: ${shown}`
+                            : "Default 6 PM GMT";
+                        })()}
                       </span>
                     </div>
 
@@ -1224,7 +1273,7 @@ export default function PublishQueueBoard({
                     </div>
                     <div style={{ fontSize: 12, color: "#71717a" }}>
                       {formatDate(item.postDate)} · Scheduled for{" "}
-                      {formatDateTime(item.scheduledFor)}
+                      {formatDateTime(item.scheduledFor, timeZone)}
                     </div>
                   </div>
 
@@ -1375,7 +1424,7 @@ export default function PublishQueueBoard({
                   </div>
                   <div style={{ fontSize: 12, color: "#71717a" }}>
                     {formatDate(item.postDate)} · Published{" "}
-                    {formatDateTime(item.publishedAt)}
+                    {formatDateTime(item.publishedAt, timeZone)}
                   </div>
                 </div>
 
@@ -1568,17 +1617,28 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <input
-                      type="datetime-local"
-                      value={scheduleValue}
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      style={inputStyle}
-                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <input
+                        type="datetime-local"
+                        value={scheduleValue}
+                        onChange={(e) =>
+                          setScheduleDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                      <span style={{ fontSize: 10, color: "#71717a" }}>
+                        {(() => {
+                          const iso = fromDateTimeLocalInputValue(scheduleValue);
+                          const shown = iso ? formatDateTime(iso, timeZone) : "";
+                          return shown
+                            ? `Goes out: ${shown}`
+                            : "Default 6 PM GMT";
+                        })()}
+                      </span>
+                    </div>
 
                     <button
                       type="button"

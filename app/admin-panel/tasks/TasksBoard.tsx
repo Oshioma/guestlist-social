@@ -33,6 +33,7 @@ import {
   updateTaskStatusAction,
   deleteTaskAction,
 } from "../lib/tasks/actions";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,7 +70,13 @@ function formatDate(dueDate: string) {
   if (!dueDate) return "No due date";
   const d = new Date(dueDate);
   if (Number.isNaN(d.getTime())) return dueDate;
-  return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric",timeZone:DEFAULT_TIMEZONE});
+}
+
+// Comment/activity timestamps — shown in the site default zone (GMT) with
+// a zone label so everyone reads the same clock.
+function formatMoment(iso: string) {
+  return formatDateTimeInZone(iso, DEFAULT_TIMEZONE);
 }
 
 function recurrenceSummary(recurrence: TaskRecurrence, dueDate: string) {
@@ -681,7 +688,7 @@ export default function TasksBoard({
                 <div key={c.id} style={{ borderRadius:8, border:"1px solid #e4e4e7", padding:"10px 12px", background:"#fafafa" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                     <span style={{ fontSize:11, fontWeight:700, color:"#18181b" }}>{c.author}</span>
-                    <span style={{ fontSize:11, color:"#a1a1aa" }}>{new Date(c.createdAt).toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                    <span style={{ fontSize:11, color:"#a1a1aa" }}>{formatMoment(c.createdAt)}</span>
                   </div>
                   <p style={{ margin:0, fontSize:13, color:"#3f3f46", lineHeight:1.5 }}>{c.text}</p>
                 </div>
@@ -703,7 +710,7 @@ export default function TasksBoard({
                       <span style={{ width:6, height:6, borderRadius:999, background:a.type==="status_change"?"#3b82f6":a.type==="edit"?"#eab308":"#22c55e", flexShrink:0, marginTop:5 }} />
                       <div>
                         <div style={{ fontSize:12, color:"#18181b" }}>{a.description}</div>
-                        <div style={{ fontSize:11, color:"#a1a1aa" }}>{new Date(a.at).toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+                        <div style={{ fontSize:11, color:"#a1a1aa" }}>{formatMoment(a.at)}</div>
                       </div>
                     </div>
                   ))

@@ -18,6 +18,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../../../admin-panel/lib/viewer";
+import { DEFAULT_TIMEZONE, zoneAbbrev } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -101,16 +102,20 @@ function relativeDate(iso: string): string {
     month: "short",
     day: "numeric",
     ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: DEFAULT_TIMEZONE,
   });
 }
 
 function exactTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+  const d = new Date(iso);
+  const base = d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: DEFAULT_TIMEZONE,
   });
+  return `${base} ${zoneAbbrev(DEFAULT_TIMEZONE, d)}`;
 }
 
 function num(v: unknown): number | null {

@@ -13,6 +13,58 @@
  * be negative to actually retire it.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  DISPLAY_TIMEZONE_KEY,
+  DEFAULT_TIMEZONE,
+  normalizeTimeZone,
+} from "./timezone";
+
+// ── Display timezone (region) ─────────────────────────────────────────────
+//
+// Agency-wide region for showing publish times. Storage stays UTC; this
+// only changes how times are rendered in the UI. Defaults to GMT so the
+// out-of-the-box behaviour matches how the pipeline already stores times.
+
+export async function getDisplayTimezone(
+  supabase: SupabaseClient
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", DISPLAY_TIMEZONE_KEY)
+    .maybeSingle<{ value: unknown }>();
+
+  // Fall back silently — a missing/malformed row just means "use GMT",
+  // never a hard failure on a page that only wants to render a time.
+  if (error || data?.value == null) return DEFAULT_TIMEZONE;
+
+  // The value may be stored either as a bare string ("Africa/Dar_es_Salaam")
+  // or wrapped ({ timeZone: "..." }); accept both and validate.
+  const raw = data.value;
+  const candidate =
+    typeof raw === "string"
+      ? raw
+      : typeof (raw as { timeZone?: unknown }).timeZone === "string"
+      ? (raw as { timeZone: string }).timeZone
+      : "";
+  return normalizeTimeZone(candidate);
+}
+
+export async function setDisplayTimezone(
+  supabase: SupabaseClient,
+  timeZone: string
+): Promise<void> {
+  const value = normalizeTimeZone(timeZone);
+  const { error } = await supabase.from("app_settings").upsert(
+    {
+      key: DISPLAY_TIMEZONE_KEY,
+      value,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "key" }
+  );
+  if (error) throw new Error(`save display timezone: ${error.message}`);
+}
 
 // ── AI suggestion source settings ────────────────────────────────────────
 

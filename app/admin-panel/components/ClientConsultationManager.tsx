@@ -10,6 +10,7 @@ import {
   updateConsultationFormAction,
   updateConsultationQuestionAction,
 } from "../lib/consultation-actions";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
 
 type ConsultationQuestion = {
   id: number;
@@ -54,13 +55,7 @@ function formatSubmittedAt(dateString: string) {
   if (Number.isNaN(date.getTime())) {
     return "Unknown date";
   }
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeInZone(date, DEFAULT_TIMEZONE);
 }
 
 export default function ClientConsultationManager({ clientId, forms }: Props) {

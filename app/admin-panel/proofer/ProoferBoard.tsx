@@ -30,6 +30,11 @@ import type {
   PostIdea,
 } from "../lib/types";
 import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
+import {
+  DEFAULT_TIMEZONE,
+  formatUtcClockInZone,
+  formatDateTimeInZone,
+} from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import {
   saveProoferPostAction,
@@ -205,12 +210,7 @@ function formatCommentTime(value: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeInZone(date, DEFAULT_TIMEZONE);
 }
 
 function renderCommentText(text: string): React.ReactNode {
@@ -344,6 +344,7 @@ export default function ProoferBoard({
   initialPillars,
   initialIdeas,
   initialPostIdeas,
+  timeZone = "Etc/GMT",
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -353,6 +354,7 @@ export default function ProoferBoard({
   initialPillars: ContentPillar[];
   initialIdeas: ProoferIdeaLite[];
   initialPostIdeas: PostIdea[];
+  timeZone?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -3056,6 +3058,20 @@ export default function ProoferBoard({
                         />
                         <span style={{ fontSize: isNarrow ? 11 : 9, color: "#a1a1aa" }}>
                           Publish (GMT)
+                          {timeZone !== DEFAULT_TIMEZONE &&
+                            (() => {
+                              const local = formatUtcClockInZone(
+                                dateKey,
+                                draft.publishTime,
+                                timeZone
+                              );
+                              return local ? (
+                                <span style={{ color: "#6366f1", fontWeight: 600 }}>
+                                  {" · "}
+                                  {local}
+                                </span>
+                              ) : null;
+                            })()}
                         </span>
                       </div>
                     </div>

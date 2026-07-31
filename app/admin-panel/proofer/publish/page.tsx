@@ -1,5 +1,7 @@
 import { getProoferPublishQueueData } from "../../lib/queries";
 import { createClient } from "../../../../lib/supabase/server";
+import { createAdminClient } from "../../../../lib/supabase/admin";
+import { getDisplayTimezone } from "../../../../lib/app-settings";
 import { metaServiceClient } from "../../lib/meta-auth";
 import PublishQueueBoard from "./PublishQueueBoard";
 import TokenExpiryBanner from "../../components/TokenExpiryBanner";
@@ -27,6 +29,15 @@ export default async function ProoferPublishPage() {
     id: String(c.id),
     name: c.name ?? "Client",
   }));
+
+  // Agency-wide display region. Reads via the service role so it works
+  // regardless of RLS, and falls back to GMT if unset.
+  let displayTimezone = "Etc/GMT";
+  try {
+    displayTimezone = await getDisplayTimezone(createAdminClient());
+  } catch (err) {
+    console.error("Display timezone load error:", err);
+  }
 
   // Connected Meta accounts per client. Reads via the service role because
   // the connected_meta_accounts table has RLS enabled with no policies. We
@@ -71,6 +82,7 @@ export default async function ProoferPublishPage() {
       clients={clients}
       connectedAccounts={connectedAccounts}
       metaConnectionError={metaConnectionError}
+      timeZone={displayTimezone}
     />
     </>
   );

@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/server";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import SectionCard from "@/app/admin-panel/components/SectionCard";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
+import { DEFAULT_TIMEZONE, zoneAbbrev } from "@/lib/timezone";
 import {
   getAppPerformanceStatus,
   getPerformanceScore,
@@ -131,16 +132,20 @@ function relativeDate(iso: string): string {
     month: "short",
     day: "numeric",
     ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: DEFAULT_TIMEZONE,
   });
 }
 
 function exactTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+  const d = new Date(iso);
+  const base = d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: DEFAULT_TIMEZONE,
   });
+  return `${base} ${zoneAbbrev(DEFAULT_TIMEZONE, d)}`;
 }
 
 // Pull a clean number out of the JSON snapshots Meta sync writes. We accept
