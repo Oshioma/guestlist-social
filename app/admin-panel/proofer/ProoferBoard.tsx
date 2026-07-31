@@ -1,9 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SectionCard from "../components/SectionCard";
 import ImageUpload from "../components/ImageUpload";
+import {
+  useIsNarrow,
+  useToasts,
+  ToastStack,
+  BottomSheet,
+  AutoGrowTextarea,
+  haptic,
+} from "../components/mobile";
 import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
 import { createClient } from "../../../lib/supabase/client";
 import type {
@@ -32,26 +47,6 @@ import {
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
-
-// Phones and small tablets: the board drops to a single column so the caption
-// editor gets the full width instead of being squeezed off-screen.
-const NARROW_BREAKPOINT = 820;
-
-/**
- * True once mounted on a viewport narrower than the breakpoint. Starts false so
- * the first client render matches the server's and hydration stays clean.
- */
-function useIsNarrow(breakpoint = NARROW_BREAKPOINT): boolean {
-  const [isNarrow, setIsNarrow] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
-    const apply = () => setIsNarrow(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [breakpoint]);
-  return isNarrow;
-}
 
 function postKey(dateKey: string, platform: ProoferPlatform): string {
   return `${dateKey}|${platform}`;
@@ -283,6 +278,44 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
+function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
+  return {
+    flex: accent ? "0 0 auto" : 1,
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: `1px solid ${accent ? "#bfdbfe" : "#e4e4e7"}`,
+    background: accent ? "#eff6ff" : "#fff",
+    color: accent ? "#1d4ed8" : "#3f3f46",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+  };
+}
+
+function dayArrowStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: 40,
+    height: 40,
+    flexShrink: 0,
+    borderRadius: 12,
+    border: "1px solid #e4e4e7",
+    background: "#fff",
+    color: disabled ? "#d4d4d8" : "#3f3f46",
+    fontSize: 22,
+    lineHeight: 1,
+    cursor: disabled ? "default" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+}
+
 const labelStyle: React.CSSProperties = {
   fontSize: 11,
   color: "#71717a",
@@ -339,6 +372,10 @@ export default function ProoferBoard({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const isNarrow = useIsNarrow();
+  const { toasts, notify, dismiss } = useToasts();
+  // Mobile only: the settings card and the idea generator live in sheets.
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+  const [mobileIdeasOpen, setMobileIdeasOpen] = useState(false);
 
   // Is the board currently looking at the month that contains today?
   const isCurrentMonth = mounted && month === monthKey(startOfToday());
@@ -602,10 +639,11 @@ export default function ProoferBoard({
           monthValues
         );
       } catch (err) {
-        alert(
+        notify(
           err instanceof Error
             ? err.message
-            : "Could not copy platform to future months."
+            : "Could not copy platform to future months.",
+          "error"
         );
       }
     });
@@ -627,10 +665,11 @@ export default function ProoferBoard({
           monthValues
         );
       } catch (err) {
-        alert(
+        notify(
           err instanceof Error
             ? err.message
-            : "Could not copy pillar to future months."
+            : "Could not copy pillar to future months.",
+          "error"
         );
       }
     });
@@ -700,7 +739,7 @@ export default function ProoferBoard({
     try {
       for (const file of files) {
         if (file.size > UPLOAD_MAX_FILE_SIZE) {
-          alert("Pasted image is too large (max 30 MB).");
+          notify("Pasted image is too large (max 30 MB).", "error");
           continue;
         }
         const url = await uploadToStorage(file, `proofer/${clientId}/${month}`, {
@@ -709,7 +748,7 @@ export default function ProoferBoard({
         addMediaUrl(dateKey, platform, url);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not upload pasted image.");
+      notify(err instanceof Error ? err.message : "Could not upload pasted image.", "error");
     } finally {
       setPasteUploadKey(null);
     }
@@ -762,33 +801,8 @@ export default function ProoferBoard({
     navigate(clientId, value);
   }
 
-  function handleSave(dateKey: string, platform: ProoferPlatform) {
-    const draft = getDraftFor(dateKey, platform);
-    const key = postKey(dateKey, platform);
-    startTransition(async () => {
-      try {
-        await saveProoferPostAction(
-          clientId,
-          dateKey,
-          platform,
-          draft.caption,
-          draft.mediaUrls,
-          draft.pillarId,
-          draft.linkedIdeaId,
-          draft.linkedIdeaKind,
-          draft.publishTime
-        );
-        setDrafts((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        router.refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not save");
-      }
-    });
-  }
+  // Note: there is no standalone save. Setting a status via the dots is what
+  // commits a draft (see handleStatus) — that's the flow everyone is used to.
 
   function handleStatus(
     dateKey: string,
@@ -808,7 +822,10 @@ export default function ProoferBoard({
             draft.mediaUrls,
             draft.pillarId,
             draft.linkedIdeaId,
-            draft.linkedIdeaKind
+            draft.linkedIdeaKind,
+            // Without this the action falls back to its "18:00" default and
+            // silently discards whatever time was set on the draft.
+            draft.publishTime
           );
           setDrafts((prev) => {
             const next = { ...prev };
@@ -819,7 +836,7 @@ export default function ProoferBoard({
         await updateProoferStatusAction(clientId, dateKey, platform, status);
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not update status");
+        notify(err instanceof Error ? err.message : "Could not update status", "error");
       }
     });
   }
@@ -852,7 +869,7 @@ export default function ProoferBoard({
         );
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not delete");
+        notify(err instanceof Error ? err.message : "Could not delete", "error");
       }
     });
   }
@@ -867,11 +884,11 @@ export default function ProoferBoard({
   function handleAddComment(key: string, postId?: string) {
     const value = (commentDrafts[key] ?? "").trim();
     if (!postId) {
-      alert("Save the post first before adding comments.");
+      notify("Save the post first before adding comments.", "error");
       return;
     }
     if (!value) {
-      alert("Write a comment first.");
+      notify("Write a comment first.", "error");
       return;
     }
 
@@ -888,7 +905,7 @@ export default function ProoferBoard({
         }));
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not add comment");
+        notify(err instanceof Error ? err.message : "Could not add comment", "error");
       }
     });
   }
@@ -896,7 +913,7 @@ export default function ProoferBoard({
   function handleCreatePillar() {
     const name = newPillarName.trim();
     if (!name) {
-      alert("Pillar name is required.");
+      notify("Pillar name is required.", "error");
       return;
     }
     startTransition(async () => {
@@ -912,7 +929,7 @@ export default function ProoferBoard({
         setNewPillarColor("#6366f1");
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not create pillar");
+        notify(err instanceof Error ? err.message : "Could not create pillar", "error");
       }
     });
   }
@@ -929,7 +946,7 @@ export default function ProoferBoard({
   function handleSavePillar(pillarId: string) {
     const name = pillarEditDraft.name.trim();
     if (!name) {
-      alert("Pillar name is required.");
+      notify("Pillar name is required.", "error");
       return;
     }
     startTransition(async () => {
@@ -943,7 +960,7 @@ export default function ProoferBoard({
         setEditingPillarId(null);
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not update pillar");
+        notify(err instanceof Error ? err.message : "Could not update pillar", "error");
       }
     });
   }
@@ -958,7 +975,7 @@ export default function ProoferBoard({
         if (editingPillarId === pillarId) setEditingPillarId(null);
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not archive pillar");
+        notify(err instanceof Error ? err.message : "Could not archive pillar", "error");
       }
     });
   }
@@ -969,8 +986,9 @@ export default function ProoferBoard({
         await toggleProoferCommentResolvedAction(commentId, resolved);
         router.refresh();
       } catch (err) {
-        alert(
-          err instanceof Error ? err.message : "Could not update comment status"
+        notify(
+          err instanceof Error ? err.message : "Could not update comment status",
+          "error"
         );
       }
     });
@@ -1094,7 +1112,7 @@ export default function ProoferBoard({
         await rejectPostIdeaAction(ideaId);
         setPostIdeas((prev) => prev.filter((i) => i.id !== ideaId));
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not dismiss idea.");
+        notify(err instanceof Error ? err.message : "Could not dismiss idea.", "error");
       }
     });
   }
@@ -1111,10 +1129,10 @@ export default function ProoferBoard({
         body: JSON.stringify({ clientId, text: currentCaption, modifier }),
       });
       const data = await res.json();
-      if (!data.ok) { alert(data.error ?? "Failed."); return; }
+      if (!data.ok) { notify(data.error ?? "Failed.", "error"); return; }
       updateDraft(dateKey, platform, { caption: data.value });
     } catch {
-      alert("Network error.");
+      notify("Network error.", "error");
     } finally {
       setCaptionModifying((prev) => { const n = { ...prev }; delete n[key]; return n; });
     }
@@ -1150,10 +1168,10 @@ export default function ProoferBoard({
       if (data.ok) {
         setClientImages((prev) => [data.image, ...prev]);
       } else {
-        alert(data.error ?? "Upload failed");
+        notify(data.error ?? "Upload failed", "error");
       }
     } catch {
-      alert("Network error uploading image.");
+      notify("Network error uploading image.", "error");
     } finally {
       setImgUploading(false);
     }
@@ -1240,7 +1258,7 @@ export default function ProoferBoard({
           return next;
         });
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Could not clear ideas.");
+        notify(err instanceof Error ? err.message : "Could not clear ideas.", "error");
       }
     });
   }
@@ -1281,16 +1299,77 @@ export default function ProoferBoard({
     return filtered;
   }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, showPast]);
 
+  // ── Mobile: one day per screen ─────────────────────────────────────────────
+  // Scrolling past a month of full-size editors is hopeless on a phone, so the
+  // narrow layout focuses a single day and pages between them via the date
+  // strip, the arrows, or a horizontal swipe.
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+
+  const visibleKeys = useMemo(
+    () => visibleDays.map((d) => toDateKey(d)),
+    [visibleDays]
+  );
+
+  // Keep the focus on a day that still exists — filters and month changes can
+  // pull the focused day out from under us.
+  useEffect(() => {
+    if (visibleKeys.length === 0) return;
+    if (focusedKey && visibleKeys.includes(focusedKey)) return;
+    const todayKey = toDateKey(new Date());
+    setFocusedKey(
+      visibleKeys.includes(todayKey) ? todayKey : visibleKeys[0]
+    );
+  }, [visibleKeys, focusedKey]);
+
+  const focusedIndex = focusedKey ? visibleKeys.indexOf(focusedKey) : -1;
+
+  const stepDay = useCallback(
+    (delta: number) => {
+      if (focusedIndex < 0) return;
+      const next = focusedIndex + delta;
+      if (next < 0 || next >= visibleKeys.length) return;
+      setFocusedKey(visibleKeys[next]);
+      haptic(8);
+    },
+    [focusedIndex, visibleKeys]
+  );
+
+  // On a phone render only the focused day; desktop keeps the full list.
+  const renderedDays = useMemo(() => {
+    if (!isNarrow) return visibleDays;
+    if (focusedIndex < 0) return visibleDays.slice(0, 1);
+    return [visibleDays[focusedIndex]];
+  }, [isNarrow, visibleDays, focusedIndex]);
+
+  // Horizontal swipe to page between days. Vertical drags are left alone so the
+  // page still scrolls normally.
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || !isNarrow) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    stepDay(dx < 0 ? 1 : -1);
+  };
+
   const scrolledRef = useRef(false);
   useEffect(() => {
-    if (!mounted || scrolledRef.current) return;
+    // On mobile the focused day *is* the view — there is nothing to scroll to.
+    if (!mounted || isNarrow || scrolledRef.current) return;
     scrolledRef.current = true;
     const todayKey = toDateKey(new Date());
     const el = document.getElementById(`day-${todayKey}`);
     if (el) {
       el.scrollIntoView({ behavior: "instant", block: "start" });
     }
-  }, [mounted]);
+  }, [mounted, isNarrow]);
 
   // Remember the view toggles across visits. Load once after mount (so the
   // first client render matches the server and we don't fight hydration),
@@ -1332,7 +1411,17 @@ export default function ProoferBoard({
       setShowJumpToday(false);
       return;
     }
-    const el = document.getElementById(`day-${toDateKey(new Date())}`);
+    const todayKey = toDateKey(new Date());
+    // On mobile only one day is mounted, so "off screen" means "not focused".
+    if (isNarrow) {
+      setShowJumpToday(
+        Boolean(focusedKey) &&
+          focusedKey !== todayKey &&
+          visibleKeys.includes(todayKey)
+      );
+      return;
+    }
+    const el = document.getElementById(`day-${todayKey}`);
     if (!el) {
       setShowJumpToday(false);
       return;
@@ -1343,7 +1432,7 @@ export default function ProoferBoard({
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [isCurrentMonth, visibleDays, showPast, month]);
+  }, [isCurrentMonth, visibleDays, showPast, month, isNarrow, focusedKey, visibleKeys]);
 
   const totalWithContent = useMemo(
     () =>
@@ -1400,30 +1489,42 @@ export default function ProoferBoard({
           )}
         </div>
       )}
-      {/* The scrubber overlays the board on a phone — "Jump to today" covers it */}
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
+
+      {/* The scrubber overlays the board on a phone — the date strip replaces it */}
       {!isNarrow && <DayScrubber days={visibleDays} postsByKey={postsByKey} />}
       {showJumpToday && (
         <button
           type="button"
-          onClick={() => smoothScrollDayInto(toDateKey(new Date()))}
+          onClick={() => {
+            const todayKey = toDateKey(new Date());
+            if (isNarrow) {
+              setFocusedKey(todayKey);
+              haptic(8);
+              return;
+            }
+            smoothScrollDayInto(todayKey);
+          }}
           style={{
             position: "fixed",
-            bottom: 24,
-            left: "calc(50% - 8px)",
+            bottom: isNarrow
+              ? "calc(20px + env(safe-area-inset-bottom, 0px))"
+              : 24,
+            left: isNarrow ? "50%" : "calc(50% - 8px)",
             transform: "translateX(-50%)",
             zIndex: 40,
-            padding: "10px 18px",
+            padding: isNarrow ? "12px 22px" : "10px 18px",
             borderRadius: 99,
             border: "none",
             background: "#18181b",
             color: "#fff",
-            fontSize: 13,
+            fontSize: isNarrow ? 14 : 13,
             fontWeight: 700,
             boxShadow: "0 6px 20px rgba(0,0,0,0.28)",
             cursor: "pointer",
           }}
         >
-          ↓ Jump to today
+          {isNarrow ? "Today" : "↓ Jump to today"}
         </button>
       )}
       <div
@@ -1439,7 +1540,7 @@ export default function ProoferBoard({
           <h1
             style={{
               margin: 0,
-              fontSize: 30,
+              fontSize: isNarrow ? 22 : 30,
               lineHeight: 1.05,
               fontWeight: 700,
               color: "#18181b",
@@ -1450,8 +1551,10 @@ export default function ProoferBoard({
           </h1>
           <div
             style={{
+              // The legend is redundant on mobile — the status buttons under
+              // the composer carry their own labels there.
+              display: isNarrow ? "none" : "flex",
               marginTop: 10,
-              display: "flex",
               flexWrap: "wrap",
               gap: 16,
             }}
@@ -1495,22 +1598,64 @@ export default function ProoferBoard({
           type="button"
           onClick={() => router.push("/app/proofer/publish")}
           style={{
-            padding: "10px 16px",
+            padding: isNarrow ? "8px 12px" : "10px 16px",
             borderRadius: 10,
             border: "1px solid #18181b",
             background: "#18181b",
             color: "#fff",
-            fontSize: 13,
+            fontSize: isNarrow ? 12 : 13,
             fontWeight: 700,
             cursor: "pointer",
+            flexShrink: 0,
           }}
         >
-          Publish Queue →
+          {isNarrow ? "Queue →" : "Publish Queue →"}
         </button>
       </div>
 
+      {/* Mobile toolbar: the board settings and the idea generator collapse
+          behind these so the composer is reachable without a long scroll. */}
+      {isNarrow && clients.length > 0 && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setMobileSettingsOpen(true)}
+            style={mobileToolbarButtonStyle(false)}
+          >
+            <span style={{ fontWeight: 700 }}>
+              {clients.find((c) => c.id === clientId)?.name ?? "Client"}
+            </span>
+            <span style={{ color: "#a1a1aa", fontWeight: 600 }}>
+              {months.find((m) => m.value === month)?.label ?? month}
+            </span>
+            <span style={{ color: "#a1a1aa" }}>⚙</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileIdeasOpen(true)}
+            style={mobileToolbarButtonStyle(true)}
+          >
+            ✦ Ideas
+          </button>
+        </div>
+      )}
+
+      <BottomSheet
+        open={isNarrow ? mobileSettingsOpen : true}
+        asSheet={isNarrow}
+        title="Board settings"
+        onClose={() => setMobileSettingsOpen(false)}
+      >
       {/* Post frequency toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: isNarrow ? "wrap" : "nowrap",
+          marginBottom: isNarrow ? 14 : 0,
+        }}
+      >
         <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
           {(["every-other-day", "every-day"] as const).map((freq) => {
             const active = postFrequency === freq;
@@ -1536,9 +1681,11 @@ export default function ProoferBoard({
           })}
         </div>
         <span style={{ fontSize: 11, color: "#a1a1aa" }}>
-          {postFrequency === "every-other-day"
-            ? `${visibleDays.length} slots ${isCurrentMonth && !showPast ? "from today" : "this month"}`
-            : `${visibleDays.length} days ${isCurrentMonth && !showPast ? "from today" : "this month"}`}
+          {`${visibleDays.length} ${
+            postFrequency === "every-other-day"
+              ? visibleDays.length === 1 ? "slot" : "slots"
+              : visibleDays.length === 1 ? "day" : "days"
+          } ${isCurrentMonth && !showPast ? "from today" : "this month"}`}
         </span>
         {isCurrentMonth && (
           <button
@@ -1864,10 +2011,16 @@ export default function ProoferBoard({
           )}
         </div>
       </SectionCard>
+      </BottomSheet>
 
       {/* ── Generate Month Ideas panel ──────────────────────────────────── */}
       {clients.length > 0 && (
-        <>
+        <BottomSheet
+          open={isNarrow ? mobileIdeasOpen : true}
+          asSheet={isNarrow}
+          title="Generate ideas"
+          onClose={() => setMobileIdeasOpen(false)}
+        >
         <div
           style={{
             background: "linear-gradient(135deg, #f0f9ff 0%, #e8f0fe 100%)",
@@ -1969,7 +2122,7 @@ export default function ProoferBoard({
             ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
             : " · no direction prompt"}
         </div>
-        </>
+        </BottomSheet>
       )}
 
       {clients.length === 0 ? (
@@ -1979,7 +2132,23 @@ export default function ProoferBoard({
           </div>
         </SectionCard>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: 4 }}
+          onTouchStart={isNarrow ? onTouchStart : undefined}
+          onTouchEnd={isNarrow ? onTouchEnd : undefined}
+        >
+          {isNarrow && visibleDays.length > 0 && focusedKey && (
+            <MobileDateStrip
+              days={visibleDays}
+              postsByKey={postsByKey}
+              focusedKey={focusedKey}
+              onFocus={(k) => {
+                setFocusedKey(k);
+                haptic(8);
+              }}
+            />
+          )}
+
           {visibleDays.length === 0 && (
             <SectionCard title="Nothing to show">
               <div style={{ fontSize: 13, color: "#71717a" }}>
@@ -1989,7 +2158,7 @@ export default function ProoferBoard({
             </SectionCard>
           )}
 
-          {visibleDays.map((d) => {
+          {renderedDays.map((d) => {
             const dateKey = toDateKey(d);
             const activePlatform = getActivePlatform(dateKey);
             const key = postKey(dateKey, activePlatform);
@@ -2091,46 +2260,126 @@ export default function ProoferBoard({
                   borderRadius: slotIdeas.length > 0 ? "12px 12px 0 0" : 12,
                   padding: isNarrow ? 12 : 16,
                   display: "grid",
-                  gridTemplateColumns: isNarrow ? "1fr" : "200px 1fr",
+                  gridTemplateColumns: isNarrow
+                    ? "minmax(0, 1fr)"
+                    : "200px minmax(0, 1fr)",
                   gap: isNarrow ? 12 : 16,
                   alignItems: "flex-start",
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  {(() => {
-                    if (!mounted) return null;
-                    const rel = relativeDayLabel(d);
-                    if (!rel) return null;
-                    const isToday = rel === "Today";
-                    return (
+                <div
+                  style={
+                    isNarrow
+                      ? // Dissolve the column so the date header, the composer
+                        // and the settings can be ordered independently.
+                        { display: "contents" }
+                      : { minWidth: 0 }
+                  }
+                >
+                  {isNarrow ? (
+                    // One header line with paging arrows: the day is the whole
+                    // screen here, so it needs to read as a title bar.
+                    <div
+                      style={{
+                        order: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => stepDay(-1)}
+                        disabled={focusedIndex <= 0}
+                        aria-label="Previous day"
+                        style={dayArrowStyle(focusedIndex <= 0)}
+                      >
+                        ‹
+                      </button>
+                      <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: "#18181b",
+                            lineHeight: 1.2,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {d.toLocaleDateString(undefined, {
+                            weekday: "long",
+                            day: "numeric",
+                            month: "long",
+                          })}
+                        </div>
+                        {mounted && relativeDayLabel(d) && (
+                          <div
+                            style={{
+                              marginTop: 3,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              letterSpacing: 0.4,
+                              textTransform: "uppercase",
+                              color:
+                                relativeDayLabel(d) === "Today" ? "#166534" : "#a1a1aa",
+                            }}
+                          >
+                            {relativeDayLabel(d)}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => stepDay(1)}
+                        disabled={focusedIndex < 0 || focusedIndex >= visibleKeys.length - 1}
+                        aria-label="Next day"
+                        style={dayArrowStyle(
+                          focusedIndex < 0 || focusedIndex >= visibleKeys.length - 1
+                        )}
+                      >
+                        ›
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {(() => {
+                        if (!mounted) return null;
+                        const rel = relativeDayLabel(d);
+                        if (!rel) return null;
+                        const isToday = rel === "Today";
+                        return (
+                          <div
+                            style={{
+                              display: "inline-block",
+                              marginBottom: 5,
+                              padding: "1px 8px",
+                              borderRadius: 99,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              letterSpacing: 0.3,
+                              textTransform: "uppercase",
+                              background: isToday ? "#dcfce7" : "#f4f4f5",
+                              color: isToday ? "#166534" : "#a1a1aa",
+                            }}
+                          >
+                            {rel}
+                          </div>
+                        );
+                      })()}
                       <div
                         style={{
-                          display: "inline-block",
-                          marginBottom: 5,
-                          padding: "1px 8px",
-                          borderRadius: 99,
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: 0.3,
-                          textTransform: "uppercase",
-                          background: isToday ? "#dcfce7" : "#f4f4f5",
-                          color: isToday ? "#166534" : "#a1a1aa",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#18181b",
+                          lineHeight: 1.2,
                         }}
                       >
-                        {rel}
+                        {formatDayLong(d)}
                       </div>
-                    );
-                  })()}
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: "#18181b",
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {formatDayLong(d)}
-                  </div>
+                    </>
+                  )}
 
                   {post?.createdBy && (
                     <div style={{ marginTop: 6, fontSize: 11, color: "#71717a" }}>
@@ -2180,9 +2429,12 @@ export default function ProoferBoard({
                       // Platform and Pillar sit side by side on a phone so the
                       // caption is not pushed a screenful down the page.
                       display: isNarrow ? "grid" : "flex",
-                      gridTemplateColumns: isNarrow ? "1fr 1fr" : undefined,
+                      gridTemplateColumns: isNarrow
+                        ? "minmax(0, 1fr) minmax(0, 1fr)"
+                        : undefined,
                       flexDirection: "column",
                       gap: 8,
+                      order: isNarrow ? 3 : undefined,
                     }}
                   >
                     <div
@@ -2204,10 +2456,12 @@ export default function ProoferBoard({
                         }
                         style={{
                           ...inputStyle,
-                          padding: "6px 8px",
-                          fontSize: 12,
+                          padding: isNarrow ? "10px 8px" : "6px 8px",
+                          fontSize: isNarrow ? 14 : 12,
                           fontWeight: 600,
                           cursor: "pointer",
+                          width: "100%",
+                          minWidth: 0,
                         }}
                       >
                         {PROOFER_PLATFORMS.map((p) => {
@@ -2247,9 +2501,11 @@ export default function ProoferBoard({
                             }
                             style={{
                               ...inputStyle,
-                              padding: "6px 8px",
-                              fontSize: 12,
+                              padding: isNarrow ? "10px 8px" : "6px 8px",
+                              fontSize: isNarrow ? 14 : 12,
                               fontWeight: 600,
+                              width: "100%",
+                              minWidth: 0,
                               display: "flex",
                               alignItems: "center",
                               gap: 6,
@@ -2289,33 +2545,45 @@ export default function ProoferBoard({
                               ▾
                             </span>
                           </button>
-                          {isOpen && (
+                          {/* A dropdown pinned to a half-width control is
+                              unusable on a phone — promote it to a sheet. */}
+                          <BottomSheet
+                            open={isOpen}
+                            asSheet={isNarrow}
+                            title="Content pillar"
+                            onClose={() => setOpenPillarPickerKey(null)}
+                          >
                             <>
+                              {!isNarrow && (
+                                <div
+                                  onClick={() => setOpenPillarPickerKey(null)}
+                                  style={{
+                                    position: "fixed",
+                                    inset: 0,
+                                    zIndex: 20,
+                                  }}
+                                />
+                              )}
                               <div
-                                onClick={() => setOpenPillarPickerKey(null)}
-                                style={{
-                                  position: "fixed",
-                                  inset: 0,
-                                  zIndex: 20,
-                                }}
-                              />
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: "100%",
-                                  left: 0,
-                                  right: 0,
-                                  marginTop: 4,
-                                  background: "#fff",
-                                  border: "1px solid #e4e4e7",
-                                  borderRadius: 8,
-                                  boxShadow:
-                                    "0 6px 16px rgba(0,0,0,0.08)",
-                                  zIndex: 21,
-                                  maxHeight: 220,
-                                  overflowY: "auto",
-                                  padding: 4,
-                                }}
+                                style={
+                                  isNarrow
+                                    ? { display: "flex", flexDirection: "column", gap: 2 }
+                                    : {
+                                        position: "absolute",
+                                        top: "100%",
+                                        left: 0,
+                                        right: 0,
+                                        marginTop: 4,
+                                        background: "#fff",
+                                        border: "1px solid #e4e4e7",
+                                        borderRadius: 8,
+                                        boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
+                                        zIndex: 21,
+                                        maxHeight: 220,
+                                        overflowY: "auto",
+                                        padding: 4,
+                                      }
+                                }
                               >
                                 <button
                                   type="button"
@@ -2335,15 +2603,15 @@ export default function ProoferBoard({
                                     display: "flex",
                                     alignItems: "center",
                                     gap: 8,
-                                    padding: "6px 8px",
+                                    padding: isNarrow ? "13px 12px" : "6px 8px",
                                     border: "none",
                                     background:
                                       draft.pillarId === null
                                         ? "#f4f4f5"
                                         : "transparent",
-                                    borderRadius: 6,
+                                    borderRadius: isNarrow ? 10 : 6,
                                     cursor: "pointer",
-                                    fontSize: 12,
+                                    fontSize: isNarrow ? 15 : 12,
                                     fontWeight: 600,
                                     color: "#71717a",
                                     textAlign: "left",
@@ -2396,14 +2664,14 @@ export default function ProoferBoard({
                                         display: "flex",
                                         alignItems: "center",
                                         gap: 8,
-                                        padding: "6px 8px",
+                                        padding: isNarrow ? "13px 12px" : "6px 8px",
                                         border: "none",
                                         background: isSelected
                                           ? "#f4f4f5"
                                           : "transparent",
-                                        borderRadius: 6,
+                                        borderRadius: isNarrow ? 10 : 6,
                                         cursor: "pointer",
-                                        fontSize: 12,
+                                        fontSize: isNarrow ? 15 : 12,
                                         fontWeight: 600,
                                         color: "#18181b",
                                         textAlign: "left",
@@ -2425,7 +2693,7 @@ export default function ProoferBoard({
                                 })}
                               </div>
                             </>
-                          )}
+                          </BottomSheet>
                         </div>
                       );
                     })()}
@@ -2442,10 +2710,27 @@ export default function ProoferBoard({
                     const captionLines = draft.caption.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ");
                     const autoQuery = [pillarName || clientName, captionLines || (slotIdeas[0]?.title ?? "")].filter(Boolean).join(" ").slice(0, 80);
                     return (
-                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        order: isNarrow ? 4 : undefined,
+                      }}
+                    >
 
                       {/* Single row of media buttons */}
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <div
+                        className={isNarrow ? "mobile-strip" : undefined}
+                        style={{
+                          display: "flex",
+                          gap: isNarrow ? 8 : 6,
+                          flexWrap: isNarrow ? "nowrap" : "wrap",
+                          alignItems: "center",
+                          paddingBottom: isNarrow ? 2 : 0,
+                        }}
+                      >
                         <ImageUpload
                           bucket="postimages"
                           folder={`proofer/${clientId}/${month}`}
@@ -2476,11 +2761,12 @@ export default function ProoferBoard({
                               }
                             }}
                             style={{
-                              padding: "5px 12px", borderRadius: 7,
+                              flexShrink: 0,
+                              padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
                               border: `1px solid ${libOpen ? "#0369a1" : "#bae6fd"}`,
                               background: libOpen ? "#0369a1" : "#e0f2fe",
                               color: libOpen ? "#fff" : "#0369a1",
-                              fontSize: 12, fontWeight: 600, cursor: "pointer",
+                              fontSize: isNarrow ? 13 : 12, fontWeight: 600, cursor: "pointer",
                             }}
                           >
                             {libOpen ? "Close library" : "📁 Library"}
@@ -2500,19 +2786,27 @@ export default function ProoferBoard({
                             }
                           }}
                           style={{
-                            padding: "5px 12px", borderRadius: 7,
+                            flexShrink: 0,
+                            padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
                             border: "1px solid #e9d5ff",
                             background: stockOpen ? "#ede9fe" : "#faf5ff",
-                            color: "#6d28d9", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                            color: "#6d28d9", fontSize: isNarrow ? 13 : 11, fontWeight: 600, cursor: "pointer",
                           }}
                         >
                           {stockOpen ? "Close stock" : "📷 Stock"}
                         </button>
                       </div>
 
-                      {/* Library panel */}
-                      {clientId && libOpen && (
-                        <div style={{ border: "1px solid #bae6fd", borderRadius: 10, background: "#f8faff", padding: "10px 12px 12px" }}>
+                      {/* Library panel — a bottom sheet on a phone, where an
+                          inline panel would shove the composer off screen */}
+                      {clientId && (
+                        <BottomSheet
+                          open={libOpen}
+                          asSheet={isNarrow}
+                          title="Client photos"
+                          onClose={() => setImgLibraryPostKey(null)}
+                        >
+                        <div style={isNarrow ? undefined : { border: "1px solid #bae6fd", borderRadius: 10, background: "#f8faff", padding: "10px 12px 12px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 11, fontWeight: 700, color: "#0369a1", flexShrink: 0 }}>Client photos</span>
                             <label style={{
@@ -2616,11 +2910,17 @@ export default function ProoferBoard({
                             </div>
                           )}
                         </div>
+                        </BottomSheet>
                       )}
 
                       {/* Pexels stock panel */}
-                      {stockOpen && (
-                        <div style={{ border: "1px solid #e9d5ff", borderRadius: 10, background: "#faf5ff", padding: "10px 12px 12px" }}>
+                      <BottomSheet
+                        open={stockOpen}
+                        asSheet={isNarrow}
+                        title="Stock photos"
+                        onClose={() => setPexelsPostKey(null)}
+                      >
+                        <div style={isNarrow ? undefined : { border: "1px solid #e9d5ff", borderRadius: 10, background: "#faf5ff", padding: "10px 12px 12px" }}>
                           <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
                             <input
                               type="text"
@@ -2705,7 +3005,7 @@ export default function ProoferBoard({
                             Photos from Pexels · free to use
                           </div>
                         </div>
-                      )}
+                      </BottomSheet>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
@@ -2714,17 +3014,19 @@ export default function ProoferBoard({
                           onChange={(e) => updateDraft(dateKey, activePlatform, { publishTime: e.target.value })}
                           disabled={isLocked}
                           style={{
-                            padding: "4px 6px",
-                            borderRadius: 6,
+                            padding: isNarrow ? "9px 10px" : "4px 6px",
+                            borderRadius: isNarrow ? 10 : 6,
                             border: "1px solid #e4e4e7",
-                            fontSize: 11,
+                            fontSize: isNarrow ? 15 : 11,
                             color: "#18181b",
                             background: "#fff",
                             fontFamily: "inherit",
-                            width: 90,
+                            width: isNarrow ? 130 : 90,
                           }}
                         />
-                        <span style={{ fontSize: 9, color: "#a1a1aa" }}>Publish (GMT)</span>
+                        <span style={{ fontSize: isNarrow ? 11 : 9, color: "#a1a1aa" }}>
+                          Publish (GMT)
+                        </span>
                       </div>
                     </div>
                   );
@@ -2732,12 +3034,16 @@ export default function ProoferBoard({
                 </div>
 
                 <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                    minWidth: 0,
-                  }}
+                  style={
+                    isNarrow
+                      ? { display: "contents" }
+                      : {
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                          minWidth: 0,
+                        }
+                  }
                 >
 
 
@@ -2752,6 +3058,7 @@ export default function ProoferBoard({
                       style={{
                         display: "flex",
                         gap: 10,
+                        order: isNarrow ? 2 : undefined,
                         // Status dots drop below the card on a phone rather than
                         // stealing width from it.
                         flexDirection: isNarrow ? "column" : "row",
@@ -2894,31 +3201,41 @@ export default function ProoferBoard({
 
                       {/* Editable caption */}
                       <div style={{ borderTop: "1px solid #f4f4f5" }}>
-                        <textarea
-                          value={draft.caption}
-                          onChange={(e) => updateDraft(dateKey, activePlatform, { caption: e.target.value })}
-                          onPaste={(e) => { if (!isLocked) handlePasteMedia(e, dateKey, activePlatform, postKey(dateKey, activePlatform)); }}
-                          placeholder="Write a caption... (or paste an image to attach it)"
-                          disabled={isLocked}
-                          rows={isNarrow ? 8 : 12}
-                          style={{
-                            display: "block",
-                            width: "100%",
-                            padding: isNarrow ? "10px 12px 6px" : "8px 12px 4px",
-                            border: "none",
-                            outline: "none",
-                            resize: isNarrow ? "vertical" : "none",
-                            // 16px keeps iOS from zooming the page in on focus.
-                            fontSize: isNarrow ? 16 : 13,
-                            color: "#18181b",
-                            lineHeight: 1.4,
-                            fontFamily: "inherit",
-                            background: "transparent",
-                            opacity: isLocked ? 0.7 : 1,
-                            cursor: isLocked ? "not-allowed" : "text",
-                            boxSizing: "border-box",
-                          }}
-                        />
+                        {(() => {
+                          const captionProps = {
+                            value: draft.caption,
+                            onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                              updateDraft(dateKey, activePlatform, { caption: e.target.value }),
+                            onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+                              if (!isLocked) handlePasteMedia(e, dateKey, activePlatform, postKey(dateKey, activePlatform));
+                            },
+                            placeholder: "Write a caption... (or paste an image to attach it)",
+                            disabled: isLocked,
+                            style: {
+                              display: "block",
+                              width: "100%",
+                              padding: isNarrow ? "12px 14px 8px" : "8px 12px 4px",
+                              border: "none",
+                              outline: "none",
+                              // 16px keeps iOS from zooming the page in on focus.
+                              fontSize: isNarrow ? 16 : 13,
+                              color: "#18181b",
+                              lineHeight: 1.45,
+                              fontFamily: "inherit",
+                              background: "transparent",
+                              opacity: isLocked ? 0.7 : 1,
+                              cursor: isLocked ? "not-allowed" : "text",
+                              boxSizing: "border-box" as const,
+                            },
+                          };
+                          // The composer grows with the caption on a phone, the
+                          // way a chat input does; desktop keeps its fixed box.
+                          return isNarrow ? (
+                            <AutoGrowTextarea {...captionProps} minHeight={150} maxHeight={480} />
+                          ) : (
+                            <textarea {...captionProps} rows={12} style={{ ...captionProps.style, resize: "none" }} />
+                          );
+                        })()}
                         {pasteUploadKey === postKey(dateKey, activePlatform) && (
                           <div style={{ padding: "0 12px 8px", fontSize: 11, fontWeight: 600, color: "#5b21b6" }}>
                             Uploading pasted image…
@@ -2928,7 +3245,18 @@ export default function ProoferBoard({
 
                       {/* Modifier buttons + Clear */}
                       {(draft.caption.trim() || post || hasDraft) && (
-                        <div style={{ padding: "0 12px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <div
+                          // On a phone the AI actions become a single swipeable
+                          // row of chips instead of a wrap that buries them.
+                          className={isNarrow ? "mobile-strip" : undefined}
+                          style={{
+                            padding: isNarrow ? "2px 12px 12px" : "0 12px 12px",
+                            display: "flex",
+                            gap: isNarrow ? 8 : 6,
+                            flexWrap: isNarrow ? "nowrap" : "wrap",
+                            alignItems: "center",
+                          }}
+                        >
                           {draft.caption.trim() && (["regenerate", "new_hook", "shorter", "more_playful", "more_premium", "stronger_cta"] as const).map((mod) => {
                             const labels: Record<string, string> = {
                               regenerate: "↺",
@@ -2946,20 +3274,25 @@ export default function ProoferBoard({
                                 key={mod}
                                 type="button"
                                 disabled={anyRunning || isLocked}
-                                onClick={() => handleModifyCaption(dateKey, activePlatform, mod)}
+                                onClick={() => {
+                                  haptic(8);
+                                  handleModifyCaption(dateKey, activePlatform, mod);
+                                }}
                                 style={{
-                                  padding: "3px 9px",
+                                  flexShrink: 0,
+                                  padding: isNarrow ? "8px 14px" : "3px 9px",
                                   borderRadius: 99,
                                   border: "1px solid #e4e4e7",
                                   background: isThisOne ? "#e0f2fe" : "#fff",
                                   color: isThisOne ? "#0369a1" : "#52525b",
-                                  fontSize: 11,
+                                  fontSize: isNarrow ? 13 : 11,
                                   fontWeight: 600,
                                   cursor: anyRunning || isLocked ? "wait" : "pointer",
                                   opacity: anyRunning && !isThisOne ? 0.45 : 1,
+                                  transition: "background 140ms ease",
                                 }}
                               >
-                                {isThisOne ? "…" : labels[mod]}
+                                {isThisOne ? "Rewriting…" : labels[mod]}
                               </button>
                             );
                           })}
@@ -2969,12 +3302,13 @@ export default function ProoferBoard({
                               onClick={() => handleDelete(dateKey, activePlatform)}
                               disabled={isPending}
                               style={{
-                                padding: "3px 9px",
+                                flexShrink: 0,
+                                padding: isNarrow ? "8px 14px" : "3px 9px",
                                 borderRadius: 99,
                                 border: "1px solid #fca5a5",
                                 background: "#fff",
                                 color: "#991b1b",
-                                fontSize: 11,
+                                fontSize: isNarrow ? 13 : 11,
                                 fontWeight: 600,
                                 cursor: isPending ? "wait" : "pointer",
                                 marginLeft: "auto",
@@ -2987,15 +3321,25 @@ export default function ProoferBoard({
                       )}
                     </div>
 
-                    {/* Status dots — outside the card, vertically centred (a row underneath on a phone) */}
+                    {/* Status dots — the save action. Vertically beside the card
+                        on desktop; a labelled row underneath on a phone, where
+                        an unlabelled dot is too easy to miss. */}
                     <div
                       style={{
                         display: "flex",
-                        flexDirection: isNarrow ? "row" : "column",
-                        gap: isNarrow ? 14 : 8,
+                        flexDirection: "row",
+                        gap: isNarrow ? 8 : 8,
                         alignItems: "center",
-                        justifyContent: isNarrow ? "center" : undefined,
+                        justifyContent: isNarrow ? "space-between" : undefined,
                         flexShrink: 0,
+                        ...(isNarrow
+                          ? {
+                              padding: 8,
+                              borderRadius: 14,
+                              border: "1px solid #e4e4e7",
+                              background: "#fff",
+                            }
+                          : { flexDirection: "column" }),
                       }}
                     >
                       {["proofed", "check", "improve"].map((statusValue) => {
@@ -3004,29 +3348,75 @@ export default function ProoferBoard({
                         const disableThisButton = isPending || (isLocked && statusValue !== "proofed" && statusValue !== "improve" && statusValue !== "check");
                         const isCheckBtn = statusValue === "check";
                         const isDisabled = disableThisButton || (isCheckBtn && !post && !hasDraft);
+                        // Short labels for the phone row — the desktop tooltip
+                        // text is too long to sit under a dot.
+                        const shortLabel =
+                          statusValue === "proofed"
+                            ? "Scheduled"
+                            : statusValue === "check"
+                            ? "Check"
+                            : "Improve";
+                        const dot = (
+                          <span
+                            style={{
+                              display: "block",
+                              width: isNarrow ? 22 : 16,
+                              height: isNarrow ? 22 : 16,
+                              borderRadius: "50%",
+                              border: "1px solid #e4e4e7",
+                              background: btn.dot,
+                              boxShadow: active && isNarrow ? `0 0 0 3px ${btn.bg}` : "none",
+                            }}
+                          />
+                        );
                         return (
                           <button
                             key={btn.value}
                             type="button"
                             title={btn.label}
                             aria-label={btn.label}
-                            onClick={() => handleStatus(dateKey, activePlatform, statusValue as ProoferStatus)}
+                            aria-pressed={active}
+                            onClick={() => {
+                              haptic(active ? 8 : [10, 40, 14]);
+                              handleStatus(dateKey, activePlatform, statusValue as ProoferStatus);
+                            }}
                             disabled={isDisabled}
                             style={{
-                              width: isNarrow ? 24 : 16,
-                              height: isNarrow ? 24 : 16,
-                              padding: 0,
-                              borderRadius: "50%",
-                              border: "1px solid #e4e4e7",
-                              background: btn.dot,
+                              padding: isNarrow ? "7px 6px" : 0,
+                              width: isNarrow ? undefined : 16,
+                              height: isNarrow ? undefined : 16,
+                              flex: isNarrow ? 1 : undefined,
+                              borderRadius: isNarrow ? 10 : "50%",
+                              border: isNarrow ? "none" : "1px solid #e4e4e7",
+                              background: isNarrow ? (active ? btn.bg : "transparent") : btn.dot,
                               cursor: isDisabled ? "not-allowed" : "pointer",
                               boxShadow: "none",
-                              opacity: isDisabled ? 0.25 : active ? 1 : 0.35,
-                              transition: "opacity 120ms ease",
+                              opacity: isDisabled ? 0.3 : active || isNarrow ? 1 : 0.35,
+                              transition: "opacity 120ms ease, background 140ms ease",
+                              display: isNarrow ? "flex" : undefined,
+                              flexDirection: isNarrow ? "column" : undefined,
+                              alignItems: isNarrow ? "center" : undefined,
+                              gap: isNarrow ? 5 : undefined,
                             }}
-                            onMouseEnter={(e) => { if (!isDisabled && !active) e.currentTarget.style.opacity = "0.75"; }}
-                            onMouseLeave={(e) => { if (!isDisabled && !active) e.currentTarget.style.opacity = "0.35"; }}
-                          />
+                            onMouseEnter={(e) => { if (!isNarrow && !isDisabled && !active) e.currentTarget.style.opacity = "0.75"; }}
+                            onMouseLeave={(e) => { if (!isNarrow && !isDisabled && !active) e.currentTarget.style.opacity = "0.35"; }}
+                          >
+                            {isNarrow ? (
+                              <>
+                                <span style={{ opacity: isDisabled || active ? 1 : 0.4 }}>{dot}</span>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    letterSpacing: 0.2,
+                                    color: active ? btn.color : "#71717a",
+                                  }}
+                                >
+                                  {shortLabel}
+                                </span>
+                              </>
+                            ) : null}
+                          </button>
                         );
                       })}
                     </div>
@@ -3041,6 +3431,7 @@ export default function ProoferBoard({
                       display: "flex",
                       flexDirection: "column",
                       gap: 10,
+                      order: isNarrow ? 5 : undefined,
                     }}
                   >
                     <button
@@ -3333,6 +3724,9 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
           fontSize: 12,
           fontWeight: 700,
           cursor: "pointer",
+          // Keeps the label on one line inside the mobile media strip.
+          whiteSpace: "nowrap",
+          flexShrink: 0,
         }}
       >
         + Paste link
@@ -3433,6 +3827,144 @@ function smoothScrollDayInto(dateKey: string) {
   smoothScrollTo(el.getBoundingClientRect().top + window.scrollY - 72);
 }
 
+/**
+ * The worst status across every platform on a day — "improve" wins over
+ * scheduled, scheduled over needs-check. Drives both the desktop scrubber and
+ * the mobile date strip.
+ */
+type DayColor = "red" | "green" | "yellow" | "grey";
+
+function dayColorFor(
+  dateKey: string,
+  postsByKey: Map<string, ProoferPost>
+): DayColor {
+  let color: DayColor = "grey";
+  for (const p of PROOFER_PLATFORMS) {
+    const post = postsByKey.get(postKey(dateKey, p));
+    if (!post) continue;
+    if (post.status === "improve") return "red";
+    if (post.status === "proofed" || post.status === "approved") {
+      color = "green";
+    } else if (post.status === "check" && color !== "green") {
+      color = "yellow";
+    }
+  }
+  return color;
+}
+
+const DAY_COLOR_HEX: Record<DayColor, string> = {
+  red: "#fca5a5",
+  green: "#86efac",
+  yellow: "#fef08a",
+  grey: "#e4e4e7",
+};
+
+/**
+ * Mobile replacement for the desktop scrubber rail: a sticky horizontal strip
+ * of dates. Tapping one focuses that day; the status colour rides underneath as
+ * a dot so you can see at a glance which days are scheduled.
+ */
+function MobileDateStrip({
+  days,
+  postsByKey,
+  focusedKey,
+  onFocus,
+}: {
+  days: Date[];
+  postsByKey: Map<string, ProoferPost>;
+  focusedKey: string;
+  onFocus: (dateKey: string) => void;
+}) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep the focused chip in view when the day changes from a swipe or arrow.
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const chip = strip.querySelector<HTMLElement>(`[data-date="${focusedKey}"]`);
+    if (!chip) return;
+    const target = chip.offsetLeft - strip.clientWidth / 2 + chip.clientWidth / 2;
+    strip.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+  }, [focusedKey]);
+
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 25,
+        margin: "0 -12px",
+        padding: "6px 0 8px",
+        background: "rgba(244,244,245,0.92)",
+        backdropFilter: "blur(8px)",
+        borderBottom: "1px solid #e4e4e7",
+      }}
+    >
+      <div ref={stripRef} className="mobile-strip" style={{ gap: 6, padding: "0 12px" }}>
+        {days.map((d) => {
+          const dateKey = toDateKey(d);
+          const isFocused = dateKey === focusedKey;
+          const color = dayColorFor(dateKey, postsByKey);
+          const rel = relativeDayLabel(d);
+          return (
+            <button
+              key={dateKey}
+              type="button"
+              data-date={dateKey}
+              onClick={() => onFocus(dateKey)}
+              aria-current={isFocused ? "date" : undefined}
+              style={{
+                flexShrink: 0,
+                width: 54,
+                padding: "7px 0 6px",
+                borderRadius: 12,
+                border: isFocused ? "1px solid #18181b" : "1px solid #e4e4e7",
+                background: isFocused ? "#18181b" : "#fff",
+                color: isFocused ? "#fff" : "#3f3f46",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 3,
+                transition: "background 140ms ease, border-color 140ms ease",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  opacity: isFocused ? 0.72 : 0.55,
+                }}
+              >
+                {rel === "Today"
+                  ? "TDY"
+                  : d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3)}
+              </span>
+              <span style={{ fontSize: 16, fontWeight: 700, lineHeight: 1 }}>
+                {d.getDate()}
+              </span>
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: color === "grey" ? "transparent" : DAY_COLOR_HEX[color],
+                  border:
+                    color === "grey"
+                      ? `1px solid ${isFocused ? "rgba(255,255,255,0.3)" : "#e4e4e7"}`
+                      : "none",
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DayScrubber({
   days,
   postsByKey,
@@ -3464,29 +3996,12 @@ function DayScrubber({
     >
       {days.map((d, i) => {
         const dateKey = toDateKey(d);
-        let color: "red" | "green" | "yellow" | "grey" = "grey";
-        for (const p of PROOFER_PLATFORMS) {
-          const post = postsByKey.get(postKey(dateKey, p));
-          if (!post) continue;
-          if (post.status === "improve") {
-            color = "red";
-            break;
-          }
-          if (post.status === "proofed" || post.status === "approved") {
-            color = "green";
-          } else if (post.status === "check" && color !== "green") {
-            color = "yellow";
-          }
-        }
+        const color = dayColorFor(dateKey, postsByKey);
 
         const isElapsed = d.getTime() < todayStart.getTime();
         const bg =
-          color === "red"
-            ? "#fca5a5"
-            : color === "green"
-            ? "#86efac"
-            : color === "yellow"
-            ? "#fef08a"
+          color !== "grey"
+            ? DAY_COLOR_HEX[color]
             : isElapsed
             ? "#d4d4d8"
             : "#e4e4e7";

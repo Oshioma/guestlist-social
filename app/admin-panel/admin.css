@@ -1,5 +1,11 @@
 .admin-root {
-  font-family: Arial, Helvetica, sans-serif;
+  /* Match the host OS rather than shipping Arial everywhere — this is most of
+     the difference between "web app from 2012" and "native" on a phone. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   background: #f4f4f5;
   color: #18181b;
   margin: 0;
@@ -299,5 +305,124 @@
 @media (max-width: 820px) {
   .app-content {
     padding: 12px;
+  }
+}
+
+/* ── Mobile chrome ───────────────────────────────────────────────────────── */
+
+/* Grey flash on every tap is the most obviously "web" tell on iOS. */
+.admin-root {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Horizontal strips (dates, AI chips) scroll like native carousels. */
+.mobile-strip {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.mobile-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Bottom sheet ────────────────────────────────────────────────────────── */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(9, 9, 11, 0.45);
+  backdrop-filter: blur(2px);
+  animation: sheet-fade 180ms ease;
+}
+
+.sheet-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 101;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.28);
+  /* Clear the home indicator on modern iPhones. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: sheet-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Toasts ──────────────────────────────────────────────────────────────── */
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  width: min(440px, calc(100vw - 24px));
+}
+
+.toast {
+  width: 100%;
+  padding: 11px 15px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #fff;
+  background: #18181b;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.toast-error {
+  background: #b91c1c;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .sheet-backdrop,
+  .toast {
+    animation: none;
   }
 }
