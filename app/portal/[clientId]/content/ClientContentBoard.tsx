@@ -259,33 +259,144 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function MediaTile({ url }: { url: string }) {
-  const frame: React.CSSProperties = {
-    width: "100%",
-    borderRadius: 10,
-    border: "1px solid #e2e8f0",
-    background: "#f8fafc",
-    maxHeight: 420,
-    objectFit: "cover",
+// A single media item filling a 1:1 square, matching the operator's proofer
+// card sizing (width: 100%, objectFit: cover inside a fixed square).
+function SquareMedia({ url }: { url: string }) {
+  const fill: React.CSSProperties = {
     display: "block",
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    border: "none",
   };
   if (isDriveUrl(url) && isVideoUrl(url)) {
-    return (
-      <iframe
-        src={driveEmbedUrl(url)}
-        style={{ ...frame, height: 320, objectFit: undefined }}
-        allow="autoplay"
-      />
-    );
+    return <iframe src={driveEmbedUrl(url)} style={{ ...fill, objectFit: undefined }} allow="autoplay" title="Video preview" />;
   }
   if (isVideoUrl(url)) {
-    return <video src={url} controls style={frame} />;
+    return <video src={url} controls style={fill} />;
   }
   if (isDriveUrl(url)) {
-    return <iframe src={driveEmbedUrl(url)} style={{ ...frame, height: 320 }} />;
+    return <iframe src={driveEmbedUrl(url)} style={{ ...fill, objectFit: undefined }} title="Preview" />;
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={frame} />;
+  return <img src={url} alt="" style={fill} />;
+}
+
+// Square carousel: one item at a time with prev/next nav + index badge,
+// exactly like the operator's board. Also carries the remove control.
+function MediaCarousel({
+  urls,
+  onRemove,
+  disabled,
+}: {
+  urls: string[];
+  onRemove: (idx: number) => void;
+  disabled: boolean;
+}) {
+  const [idx, setIdx] = useState(0);
+  const safeIdx = Math.min(idx, urls.length - 1);
+  const activeUrl = urls[safeIdx];
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        aspectRatio: "1 / 1",
+        background: "#f4f4f5",
+        borderRadius: 10,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      {activeUrl && <SquareMedia url={activeUrl} />}
+
+      {urls.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setIdx(Math.max(0, safeIdx - 1))}
+            disabled={safeIdx === 0}
+            aria-label="Previous"
+            style={navArrow("left", safeIdx === 0)}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => setIdx(Math.min(urls.length - 1, safeIdx + 1))}
+            disabled={safeIdx === urls.length - 1}
+            aria-label="Next"
+            style={navArrow("right", safeIdx === urls.length - 1)}
+          >
+            ›
+          </button>
+          <div
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 10,
+              background: "rgba(0,0,0,0.6)",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "3px 7px",
+              borderRadius: 99,
+            }}
+          >
+            {safeIdx + 1}/{urls.length}
+          </div>
+        </>
+      )}
+
+      {activeUrl && (
+        <button
+          type="button"
+          onClick={() => {
+            onRemove(safeIdx);
+            setIdx((prev) => Math.max(0, prev - (safeIdx === urls.length - 1 ? 1 : 0)));
+          }}
+          disabled={disabled}
+          style={{
+            position: "absolute",
+            bottom: 8,
+            right: 8,
+            padding: "3px 8px",
+            borderRadius: 6,
+            border: "none",
+            background: "rgba(180,0,0,0.75)",
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: disabled ? "not-allowed" : "pointer",
+          }}
+        >
+          Remove
+        </button>
+      )}
+    </div>
+  );
+}
+
+function navArrow(side: "left" | "right", disabled: boolean): React.CSSProperties {
+  return {
+    position: "absolute",
+    [side]: 10,
+    top: "50%",
+    transform: "translateY(-50%)",
+    background: "rgba(0,0,0,0.45)",
+    border: "none",
+    color: "#fff",
+    borderRadius: "50%",
+    width: 44,
+    height: 44,
+    cursor: disabled ? "default" : "pointer",
+    fontSize: 28,
+    lineHeight: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: disabled ? 0.25 : 1,
+  } as React.CSSProperties;
 }
 
 function PostCard({
@@ -356,6 +467,10 @@ function PostCard({
   return (
     <div
       style={{
+        // Match the operator's proofer card footprint so posts read at the
+        // same size clients see on our side.
+        width: "100%",
+        maxWidth: 500,
         background: "#fff",
         border: "1px solid #e2e8f0",
         borderRadius: 12,
@@ -375,41 +490,7 @@ function PostCard({
       </div>
 
       {mediaUrls.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: mediaUrls.length > 1 ? "repeat(auto-fill, minmax(160px, 1fr))" : "1fr",
-            gap: 10,
-          }}
-        >
-          {mediaUrls.map((url, idx) => (
-            <div key={`${url}-${idx}`} style={{ position: "relative" }}>
-              <MediaTile url={url} />
-              <button
-                type="button"
-                onClick={() => removeMedia(idx)}
-                disabled={pending}
-                aria-label="Remove media"
-                style={{
-                  position: "absolute",
-                  top: 6,
-                  right: 6,
-                  width: 24,
-                  height: 24,
-                  borderRadius: "50%",
-                  border: "none",
-                  background: "rgba(15,23,42,0.7)",
-                  color: "#fff",
-                  fontSize: 14,
-                  lineHeight: 1,
-                  cursor: "pointer",
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
+        <MediaCarousel urls={mediaUrls} onRemove={removeMedia} disabled={pending} />
       )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
