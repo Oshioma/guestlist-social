@@ -942,6 +942,7 @@ export default function PublishQueueBoard({
                       full width and the preview is small. */}
                   <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <CarouselPreview
+                      size={170}
                       urls={
                       item.mediaUrls.length > 0
                         ? item.mediaUrls
@@ -1078,8 +1079,28 @@ export default function PublishQueueBoard({
                       {item.clientName}
                         <PlatformChips platforms={item.platforms} />
                     </div>
-                    <div style={{ fontSize: 12, color: "#71717a" }}>
-                      {formatDate(item.postDate)} · Scheduled for{" "}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#71717a",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginTop: 2,
+                      }}
+                    >
+                      {formatDate(item.postDate)} · Scheduled for
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 800,
+                        color: "#18181b",
+                        letterSpacing: "-0.01em",
+                        lineHeight: 1.25,
+                        marginTop: 1,
+                      }}
+                    >
                       {formatDateTime(item.scheduledFor, timeZone)}
                     </div>
                   </div>
@@ -1087,10 +1108,11 @@ export default function PublishQueueBoard({
                   <div style={statusPill(item.status)}>{item.status}</div>
                 </div>
 
-                {/* Thumbnail beside the caption rather than under it — the card is
-                    full width and the preview is small. */}
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                {/* Thumbnail beside the caption — larger so the preview is
+                    actually legible on a full-width card. */}
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
                   <CarouselPreview
+                    size={170}
                     urls={
                     item.mediaUrls.length > 0
                       ? item.mediaUrls
@@ -1111,6 +1133,55 @@ export default function PublishQueueBoard({
                   >
                     {item.caption || "No caption"}
                   </div>
+                </div>
+
+                {/* Reschedule an already-scheduled post: pre-filled with its
+                    current time, applied to every platform the post goes to. */}
+                <div
+                  className="publish-action-row"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(220px, 1fr) auto",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <input
+                      type="datetime-local"
+                      value={
+                        scheduleDrafts[item.id] ??
+                        toDateTimeLocalInputValue(item.scheduledFor, default6pm)
+                      }
+                      onChange={(e) =>
+                        setScheduleDrafts((prev) => ({
+                          ...prev,
+                          [item.id]: e.target.value,
+                        }))
+                      }
+                      aria-label="Change scheduled time"
+                      style={inputStyle}
+                    />
+                    <span style={{ fontSize: 10, color: "#71717a" }}>
+                      {(() => {
+                        const iso = fromDateTimeLocalInputValue(
+                          scheduleDrafts[item.id] ??
+                            toDateTimeLocalInputValue(item.scheduledFor, default6pm)
+                        );
+                        const shown = iso ? formatDateTime(iso, timeZone) : "";
+                        return shown ? `New time: ${shown}` : "Pick a time";
+                      })()}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSchedule(item.ids)}
+                    disabled={isPending}
+                    style={darkButton}
+                  >
+                    Reschedule
+                  </button>
                 </div>
 
                 {showManualControls ? (
@@ -1288,6 +1359,7 @@ export default function PublishQueueBoard({
                 </div>
 
                 <CarouselPreview
+                  size={170}
                   urls={
                     item.mediaUrls.length > 0
                       ? item.mediaUrls
@@ -1397,6 +1469,7 @@ export default function PublishQueueBoard({
                   )}
 
                   <CarouselPreview
+                    size={170}
                     urls={
                       item.mediaUrls.length > 0
                         ? item.mediaUrls
