@@ -12,7 +12,9 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const apiKey = process.env.PEXELS_API_KEY;
+  // Trim: a trailing space/newline pasted into the env var makes Pexels reject
+  // the key with 403, which is otherwise very hard to diagnose.
+  const apiKey = process.env.PEXELS_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json({ ok: false, error: "PEXELS_API_KEY not configured." }, { status: 500 });
   }
