@@ -351,14 +351,26 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
-const monthArrowStyle: React.CSSProperties = {
-  flexShrink: 0,
-  width: 34,
+const monthNavStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  padding: "3px 6px",
   borderRadius: 8,
   border: "1px solid #e4e4e7",
   background: "#fff",
+};
+
+const monthNavBtnStyle: React.CSSProperties = {
+  flexShrink: 0,
+  width: 30,
+  height: 30,
+  borderRadius: 7,
+  border: "none",
+  background: "transparent",
   color: "#18181b",
-  fontSize: 18,
+  fontSize: 20,
   lineHeight: 1,
   cursor: "pointer",
   display: "flex",
@@ -1561,6 +1573,71 @@ export default function ProoferBoard({
     [days, postsByKey]
   );
 
+  // The post-frequency toggle + slot count + "view history" — extracted so it
+  // can sit in the desktop header's left column and in the mobile settings
+  // sheet without duplication.
+  const frequencyBlock = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: isNarrow ? "wrap" : "nowrap",
+        marginBottom: isNarrow ? 14 : 0,
+      }}
+    >
+      <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
+        {(["every-other-day", "every-day"] as const).map((freq) => {
+          const active = postFrequency === freq;
+          return (
+            <button
+              key={freq}
+              type="button"
+              onClick={() => setPostFrequency(freq)}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                border: "none",
+                background: active ? "#71717a" : "transparent",
+                color: active ? "#fff" : "#71717a",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {freq === "every-other-day" ? "Every other day" : "Every day"}
+            </button>
+          );
+        })}
+      </div>
+      <span style={{ fontSize: 11, color: "#a1a1aa" }}>
+        {`${visibleDays.length} ${
+          postFrequency === "every-other-day"
+            ? visibleDays.length === 1 ? "slot" : "slots"
+            : visibleDays.length === 1 ? "day" : "days"
+        } ${isCurrentMonth && !showPast ? "from today" : "this month"}`}
+      </span>
+      {isCurrentMonth && (
+        <button
+          type="button"
+          onClick={() => setShowPast((v) => !v)}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid #e4e4e7",
+            background: showPast ? "#eef2ff" : "#fff",
+            color: showPast ? "#4338ca" : "#52525b",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {showPast ? "Hide past days" : "🕓 View history"}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -1642,93 +1719,79 @@ export default function ProoferBoard({
           {isNarrow ? "Today" : "↓ Jump to today"}
         </button>
       )}
+      {/* Desktop lays the header + legend + frequency on the left and the
+          Settings card on the right; on mobile this wrapper is display:contents
+          so the existing header/topbar/sheet layout is untouched. */}
       <div
         style={{
-          // The topbar already shows "Proofer" on mobile — this whole row is a
-          // duplicate title plus a button that moves into the toolbar below.
-          display: isNarrow ? "none" : "flex",
-          justifyContent: "space-between",
+          display: isNarrow ? "contents" : "flex",
+          gap: 24,
           alignItems: "flex-start",
-          gap: 12,
           flexWrap: "wrap",
+          position: "relative",
         }}
       >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: isNarrow ? 22 : 30,
-              lineHeight: 1.05,
-              fontWeight: 700,
-              color: "#18181b",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Proofer
-          </h1>
-          <div
-            style={{
-              // The legend is redundant on mobile — the status buttons under
-              // the composer carry their own labels there.
-              display: isNarrow ? "none" : "flex",
-              marginTop: 10,
-              flexWrap: "wrap",
-              gap: 16,
-            }}
-          >
-            {PROOFER_LIGHT_LEGEND.map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    border: "1px solid #e4e4e7",
-                    background: item.dot,
-                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 14,
-                    color: "#52525b",
-                    fontWeight: 600,
-                  }}
-                >
-                  {item.label}
-                </span>
-              </div>
-            ))}
+        {!isNarrow && (
+          <div style={{ flexShrink: 0, width: 360 }}>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 30,
+                lineHeight: 1.05,
+                fontWeight: 700,
+                color: "#18181b",
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Proofer
+            </h1>
+            <div style={{ display: "flex", marginTop: 10, flexWrap: "wrap", gap: 16 }}>
+              {PROOFER_LIGHT_LEGEND.map((item) => (
+                <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      border: "1px solid #e4e4e7",
+                      background: item.dot,
+                      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ fontSize: 14, color: "#52525b", fontWeight: 600 }}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 18 }}>{frequencyBlock}</div>
           </div>
-        </div>
+        )}
 
-        <button
-          type="button"
-          onClick={() => router.push("/app/proofer/publish")}
-          style={{
-            padding: isNarrow ? "8px 12px" : "10px 16px",
-            borderRadius: 10,
-            border: "1px solid #18181b",
-            background: "#18181b",
-            color: "#fff",
-            fontSize: isNarrow ? 12 : 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-        >
-          {isNarrow ? "Queue →" : "Publish Queue →"}
-        </button>
-      </div>
+        {!isNarrow && (
+          <button
+            type="button"
+            onClick={() => router.push("/app/proofer/publish")}
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              padding: "10px 16px",
+              borderRadius: 10,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            Publish Queue →
+          </button>
+        )}
 
       {/* Mobile toolbar: the board settings and the idea generator collapse
           behind these so the composer is reachable without a long scroll. */}
@@ -1789,72 +1852,18 @@ export default function ProoferBoard({
         </div>
       )}
 
+      {/* Right column on desktop — fills the space beside the header. On
+          mobile it's a plain wrapper around the board-settings sheet. */}
+      <div style={isNarrow ? undefined : { flex: "1 1 460px", minWidth: 0, paddingRight: 168 }}>
       <BottomSheet
         open={isNarrow ? mobileSettingsOpen : true}
         asSheet={isNarrow}
         title="Board settings"
         onClose={() => setMobileSettingsOpen(false)}
       >
-      {/* Post frequency toggle */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          flexWrap: isNarrow ? "wrap" : "nowrap",
-          marginBottom: isNarrow ? 14 : 0,
-        }}
-      >
-        <div style={{ display: "flex", borderRadius: 8, border: "1px solid #e4e4e7", overflow: "hidden", background: "#f4f4f5" }}>
-          {(["every-other-day", "every-day"] as const).map((freq) => {
-            const active = postFrequency === freq;
-            return (
-              <button
-                key={freq}
-                type="button"
-                onClick={() => setPostFrequency(freq)}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: active ? 700 : 500,
-                  border: "none",
-                  background: active ? "#71717a" : "transparent",
-                  color: active ? "#fff" : "#71717a",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                }}
-              >
-                {freq === "every-other-day" ? "Every other day" : "Every day"}
-              </button>
-            );
-          })}
-        </div>
-        <span style={{ fontSize: 11, color: "#a1a1aa" }}>
-          {`${visibleDays.length} ${
-            postFrequency === "every-other-day"
-              ? visibleDays.length === 1 ? "slot" : "slots"
-              : visibleDays.length === 1 ? "day" : "days"
-          } ${isCurrentMonth && !showPast ? "from today" : "this month"}`}
-        </span>
-        {isCurrentMonth && (
-          <button
-            type="button"
-            onClick={() => setShowPast((v) => !v)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 8,
-              border: "1px solid #e4e4e7",
-              background: showPast ? "#eef2ff" : "#fff",
-              color: showPast ? "#4338ca" : "#52525b",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {showPast ? "Hide past days" : "🕓 View history"}
-          </button>
-        )}
-      </div>
+      {/* On desktop the frequency toggle sits in the header's left column;
+          on mobile it stays at the top of this sheet. */}
+      {isNarrow && frequencyBlock}
 
       <SectionCard title="Settings">
         <div
@@ -1891,41 +1900,27 @@ export default function ProoferBoard({
 
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={labelStyle}>Month</span>
-              {/* One-click prev/next arrows flank the dropdown so changing month
-                  is a single tap, not open-dropdown-then-pick. Arrows step to
-                  any month (including outside the planning window); the select
-                  keeps the current month as an option so it stays in sync. */}
-              <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+              {/* One-click prev/next month nav — a single tap either way, no
+                  dropdown to open. Steps to any month (history or planning). */}
+              <div style={monthNavStyle}>
                 <button
                   type="button"
                   onClick={() => handleSelectMonth(shiftMonthValue(month, -1))}
                   disabled={isPending}
                   aria-label="Previous month"
-                  style={monthArrowStyle}
+                  style={monthNavBtnStyle}
                 >
                   ‹
                 </button>
-                <select
-                  value={month}
-                  onChange={(e) => handleSelectMonth(e.target.value)}
-                  disabled={isPending}
-                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-                >
-                  {(months.some((m) => m.value === month)
-                    ? months
-                    : [{ value: month, label: formatMonthValueLabel(month) }, ...months]
-                  ).map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
+                  {formatMonthValueLabel(month)}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleSelectMonth(shiftMonthValue(month, 1))}
                   disabled={isPending}
                   aria-label="Next month"
-                  style={monthArrowStyle}
+                  style={monthNavBtnStyle}
                 >
                   ›
                 </button>
@@ -2188,6 +2183,8 @@ export default function ProoferBoard({
         </div>
       </SectionCard>
       </BottomSheet>
+      </div>{/* right column */}
+      </div>{/* desktop header/settings row wrapper */}
 
       {/* ── Generate Month Ideas panel ──────────────────────────────────── */}
       {clients.length > 0 && (
