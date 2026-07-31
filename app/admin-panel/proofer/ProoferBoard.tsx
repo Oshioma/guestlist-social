@@ -821,6 +821,16 @@ export default function ProoferBoard({
           delete next[key];
           return next;
         });
+        // Drop this slot's AI ideas locally too — the server just rejected
+        // them, so they must not linger in the panel or re-seed a draft.
+        setPostIdeas((prev) =>
+          prev.filter(
+            (i) =>
+              !(
+                i.postSlotDate.slice(0, 10) === dateKey && i.platform === platform
+              )
+          )
+        );
         router.refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not delete");
