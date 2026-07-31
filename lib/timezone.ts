@@ -235,3 +235,39 @@ export function formatUtcClockInZone(
   });
   return `${base} ${zoneAbbrev(tz, instant)}`;
 }
+
+// Clock (HH:MM + zone label, 24h) for an absolute instant — e.g. a queue's
+// `scheduled_for` timestamp — rendered in `timeZone`. Unlike
+// formatUtcClockInZone this takes a full timestamp rather than a
+// date + HH:MM pair. Returns "" for null/invalid input.
+export function formatInstantClockInZone(
+  value: string | Date | null,
+  timeZone: string
+): string {
+  if (!value) return "";
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return "";
+  const tz = normalizeTimeZone(timeZone);
+  const base = instant.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: tz,
+  });
+  return `${base} ${zoneAbbrev(tz, instant)}`;
+}
+
+// Calendar date (YYYY-MM-DD) that an instant falls on within `timeZone`.
+// Used to tell whether a queue's scheduled date differs from the proofer
+// day the card sits under. en-CA gives ISO-ordered output.
+export function zonedDateKey(value: string | Date | null, timeZone: string): string {
+  if (!value) return "";
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return "";
+  return instant.toLocaleDateString("en-CA", {
+    timeZone: normalizeTimeZone(timeZone),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}

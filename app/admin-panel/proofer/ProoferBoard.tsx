@@ -23,6 +23,7 @@ import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
 import { createClient } from "../../../lib/supabase/client";
 import type {
   ProoferPost,
+  ProoferPublishQueueItem,
   ProoferStatus,
   ProoferPlatform,
   ContentPillar,
@@ -33,7 +34,9 @@ import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
 import {
   DEFAULT_TIMEZONE,
   formatUtcClockInZone,
+  formatInstantClockInZone,
   formatDateTimeInZone,
+  zonedDateKey,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import {
@@ -211,6 +214,36 @@ function formatCommentTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return formatDateTimeInZone(date, DEFAULT_TIMEZONE);
+}
+
+// The "Scheduled for …" label for a locked post, in the display zone.
+// Prefers the publish queue's scheduled_for so that re-timing a slot on the
+// Publish Queue page is reflected here; falls back to the post's own
+// publish_time for posts proofed but not yet queued. If the queue moved the
+// post to a different calendar day, the full date is shown so the time isn't
+// read against the wrong day. Returns "" when there's nothing to show.
+function scheduledLabel(
+  publishQueue: ProoferPublishQueueItem[] | undefined,
+  publishTime: string,
+  dateKey: string,
+  timeZone: string
+): string {
+  const queued = (publishQueue ?? []).filter((q) => q.scheduledFor);
+  // Most recent scheduled/queued slot wins; queue items arrive
+  // oldest-first, so scan from the end.
+  const active =
+    [...queued]
+      .reverse()
+      .find((q) => q.status === "scheduled" || q.status === "queued") ??
+    queued[queued.length - 1];
+
+  if (active?.scheduledFor) {
+    const sameDay = zonedDateKey(active.scheduledFor, timeZone) === dateKey;
+    return sameDay
+      ? formatInstantClockInZone(active.scheduledFor, timeZone)
+      : formatDateTimeInZone(active.scheduledFor, timeZone);
+  }
+  return formatUtcClockInZone(dateKey, publishTime, timeZone);
 }
 
 function renderCommentText(text: string): React.ReactNode {
@@ -2459,9 +2492,15 @@ export default function ProoferBoard({
                         );
                       }
                       if (isLocked) {
+                        const when = scheduledLabel(
+                          post?.publishQueue,
+                          draft.publishTime,
+                          dateKey,
+                          timeZone
+                        );
                         meta.push(
                           <span key="locked" style={{ color: "#075985", fontWeight: 700 }}>
-                            🔒 Approved &amp; locked
+                            🔒 Approved &amp; locked{when ? ` · ${when}` : ""}
                           </span>
                         );
                       }
@@ -2532,11 +2571,14 @@ export default function ProoferBoard({
                           {/* Once a post is locked the editable time input is
                               hidden, so surface the scheduled publish time here
                               (in the agency display zone) — otherwise a scheduled
-                              post shows no time at all. */}
+                              post shows no time at all. Prefers the publish
+                              queue's scheduled_for so re-timing on the Publish
+                              Queue page is reflected here. */}
                           {(() => {
-                            const when = formatUtcClockInZone(
-                              dateKey,
+                            const when = scheduledLabel(
+                              post?.publishQueue,
                               draft.publishTime,
+                              dateKey,
                               timeZone
                             );
                             return when ? (
