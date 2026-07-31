@@ -310,6 +310,26 @@ export default function PublishQueueBoard({
     () => new Set()
   );
 
+  // Manual "mark published / mark failed" controls on scheduled cards are for
+  // recording posts published or resolved by hand. They're off by default to
+  // keep cards clean; an admin toggle reveals them (persisted per browser).
+  const [showManualControls, setShowManualControls] = useState(false);
+  useEffect(() => {
+    try {
+      setShowManualControls(localStorage.getItem("pq_manual_controls") === "1");
+    } catch {
+      /* localStorage unavailable — stay off */
+    }
+  }, []);
+  function toggleManualControls(next: boolean) {
+    setShowManualControls(next);
+    try {
+      localStorage.setItem("pq_manual_controls", next ? "1" : "0");
+    } catch {
+      /* ignore persistence failure */
+    }
+  }
+
   const clientNameById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const c of clients) map[c.id] = c.name;
@@ -687,6 +707,31 @@ export default function PublishQueueBoard({
             </Link>
           </span>
         </p>
+
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 12,
+            fontSize: 12,
+            fontWeight: 600,
+            color: INK_2,
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showManualControls}
+            onChange={(e) => toggleManualControls(e.target.checked)}
+            style={{ width: 15, height: 15, cursor: "pointer" }}
+          />
+          Manual publish / fail controls
+          <span style={{ fontSize: 11, fontWeight: 700, color: INK_3 }}>
+            {showManualControls ? "ON" : "OFF"}
+          </span>
+        </label>
       </div>
 
       {/* Summary tiles double as status filters — click one to show only that
@@ -1068,81 +1113,96 @@ export default function PublishQueueBoard({
                   </div>
                 </div>
 
-                <div
-                  className="publish-action-row"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(220px, 1fr) auto auto",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={publishUrlDrafts[item.id] ?? ""}
-                    onChange={(e) =>
-                      setPublishUrlDrafts((prev) => ({
-                        ...prev,
-                        [item.id]: e.target.value,
-                      }))
-                    }
-                    placeholder="Paste published URL (optional)"
-                    style={inputStyle}
-                  />
+                {showManualControls ? (
+                  <>
+                    <div
+                      className="publish-action-row"
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(220px, 1fr) auto auto",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={publishUrlDrafts[item.id] ?? ""}
+                        onChange={(e) =>
+                          setPublishUrlDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Paste published URL (optional)"
+                        style={inputStyle}
+                      />
 
-                  <button
-                    type="button"
-                    onClick={() => handleMarkPublished(item.id)}
-                    disabled={isPending}
-                    style={darkButton}
-                  >
-                    Mark published
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkPublished(item.id)}
+                        disabled={isPending}
+                        style={darkButton}
+                      >
+                        Mark published
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(item.id)}
-                    disabled={isPending}
-                    style={buttonBase}
-                  >
-                    Remove
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(item.id)}
+                        disabled={isPending}
+                        style={buttonBase}
+                      >
+                        Remove
+                      </button>
+                    </div>
 
-                <div
-                  className="publish-action-row"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(220px, 1fr) auto",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={failureNoteDrafts[item.id] ?? ""}
-                    onChange={(e) =>
-                      setFailureNoteDrafts((prev) => ({
-                        ...prev,
-                        [item.id]: e.target.value,
-                      }))
-                    }
-                    placeholder="Failure note (optional)"
-                    style={inputStyle}
-                  />
+                    <div
+                      className="publish-action-row"
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(220px, 1fr) auto",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={failureNoteDrafts[item.id] ?? ""}
+                        onChange={(e) =>
+                          setFailureNoteDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Failure note (optional)"
+                        style={inputStyle}
+                      />
 
-                  <button
-                    type="button"
-                    onClick={() => handleMarkFailed(item.id)}
-                    disabled={isPending}
-                    style={{
-                      ...buttonBase,
-                      color: "#991b1b",
-                    }}
-                  >
-                    Mark failed
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkFailed(item.id)}
+                        disabled={isPending}
+                        style={{
+                          ...buttonBase,
+                          color: "#991b1b",
+                        }}
+                      >
+                        Mark failed
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(item.id)}
+                      disabled={isPending}
+                      style={buttonBase}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
