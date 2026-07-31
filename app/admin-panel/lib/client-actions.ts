@@ -536,6 +536,47 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   redirect(`/app/clients/${clientId}`);
 }
 
+// Per-client portal visibility toggles. Controls which sections a client
+// sees in their portal (Content / Ads / Reviews / Consultation).
+export async function updatePortalVisibilityAction(
+  clientIdValue: string,
+  visibility: {
+    content: boolean;
+    ads: boolean;
+    reviews: boolean;
+    consultation: boolean;
+  }
+): Promise<{ error: string | null }> {
+  const clientId = Number(clientIdValue);
+  if (!Number.isFinite(clientId)) {
+    return { error: "Invalid client." };
+  }
+
+  if (!(await isAdmin())) {
+    return { error: "Not authorized." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      portal_show_content: visibility.content,
+      portal_show_ads: visibility.ads,
+      portal_show_reviews: visibility.reviews,
+      portal_show_consultation: visibility.consultation,
+    })
+    .eq("id", clientId);
+
+  if (error) {
+    console.error("updatePortalVisibilityAction error:", error);
+    return { error: "Could not update portal visibility." };
+  }
+
+  revalidatePath(`/admin-panel/clients/${clientId}/edit`);
+  revalidatePath(`/portal/${clientId}`);
+  return { error: null };
+}
+
 export async function archiveClientAction(clientId: string) {
   const supabase = await createClient();
 

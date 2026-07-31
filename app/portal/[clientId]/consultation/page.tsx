@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "@/app/admin-panel/lib/viewer";
 import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "@/lib/timezone";
 import ConsultationForm from "./ConsultationForm";
+import { isPortalSectionVisible } from "../visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,9 @@ export default async function PortalConsultationPage({
 
   const viewer = await getViewer();
   if (!canViewClient(viewer, clientId)) {
+    notFound();
+  }
+  if (!(await isPortalSectionVisible(clientId, viewer, "portal_show_consultation"))) {
     notFound();
   }
 

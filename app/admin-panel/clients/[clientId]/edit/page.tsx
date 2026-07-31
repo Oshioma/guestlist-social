@@ -7,6 +7,7 @@ import ClientAiInstructions from "../../../components/ClientAiInstructions";
 import ClientConsultationAnswersManager from "../../../components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
 import ClientEditSwitcher from "../../../components/ClientEditSwitcher";
+import PortalVisibilityForm from "../../../components/PortalVisibilityForm";
 import { ensureDefaultConsultationFormForClient } from "../../../lib/consultation-actions";
 import { updateClientAction } from "../../../lib/client-actions";
 import { mapClientStatus } from "../../../lib/mappers";
@@ -261,6 +262,16 @@ export default async function EditClientPage({ params }: Props) {
           notes: client.notes ?? "",
           industry: client.industry ?? "",
           metaAdAccountId: client.meta_ad_account_id ?? "",
+        }}
+      />
+
+      <PortalVisibilityForm
+        clientId={clientId}
+        initial={{
+          content: client.portal_show_content !== false,
+          ads: client.portal_show_ads !== false,
+          reviews: client.portal_show_reviews !== false,
+          consultation: client.portal_show_consultation !== false,
         }}
       />
 
