@@ -9,11 +9,9 @@ import TokenExpiryBanner from "../../components/TokenExpiryBanner";
 export const dynamic = "force-dynamic";
 
 export default async function ProoferPublishPage() {
-  let readyPosts: Awaited<ReturnType<typeof getProoferPublishQueueData>>["readyPosts"] = [];
   let queueItems: Awaited<ReturnType<typeof getProoferPublishQueueData>>["queueItems"] = [];
   try {
     const data = await getProoferPublishQueueData();
-    readyPosts = data.readyPosts;
     queueItems = data.queueItems;
   } catch (err) {
     console.error("Publish queue data error:", err);
@@ -76,7 +74,6 @@ export default async function ProoferPublishPage() {
     <>
     <TokenExpiryBanner />
     <PublishQueueBoard
-      readyPosts={readyPosts}
       queueItems={queueItems}
       defaultScheduleValue=""
       clients={clients}
