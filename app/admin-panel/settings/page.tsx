@@ -8,6 +8,7 @@ import MetaSyncButton from "../components/MetaSyncButton";
 import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import AutoApproveForm from "../components/AutoApproveForm";
+import TimezoneForm from "../components/TimezoneForm";
 import EngineNav from "../components/EngineNav";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
@@ -22,6 +23,8 @@ import {
   getAutoApproveSettings,
   setAutoApproveSettings,
   type AutoApproveSettings,
+  getDisplayTimezone,
+  setDisplayTimezone,
 } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
@@ -41,16 +44,22 @@ export default async function SettingsPage() {
 
   const adminClient = createAdminClient();
 
-  const [reaperSettings, engineSettings, autoApproveSettings, { data: metaAccounts }] =
-    await Promise.all([
-      getReaperSettings(adminClient),
-      getEngineThresholds(adminClient),
-      getAutoApproveSettings(adminClient),
-      adminClient
-        .from("connected_meta_accounts")
-        .select("id, client_id, platform, account_name, token_expires_at, updated_at")
-        .order("updated_at", { ascending: false }),
-    ]);
+  const [
+    reaperSettings,
+    engineSettings,
+    autoApproveSettings,
+    displayTimezone,
+    { data: metaAccounts },
+  ] = await Promise.all([
+    getReaperSettings(adminClient),
+    getEngineThresholds(adminClient),
+    getAutoApproveSettings(adminClient),
+    getDisplayTimezone(adminClient),
+    adminClient
+      .from("connected_meta_accounts")
+      .select("id, client_id, platform, account_name, token_expires_at, updated_at")
+      .order("updated_at", { ascending: false }),
+  ]);
   const reaperPercent = Math.round(reaperSettings.negRatio * 100);
   const reaperIsDefault =
     reaperSettings.minDecisiveVerdicts ===
@@ -187,6 +196,17 @@ export default async function SettingsPage() {
             Manage consultation template →
           </Link>
         </div>
+      </SectionCard>
+
+      <SectionCard title="Region & timezone">
+        <TimezoneForm
+          initial={displayTimezone}
+          onSave={async (timeZone) => {
+            "use server";
+            const admin = createAdminClient();
+            await setDisplayTimezone(admin, timeZone);
+          }}
+        />
       </SectionCard>
 
       <SectionCard title="Agency profile">

@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { getProoferData } from "../lib/queries";
+import { createAdminClient } from "../../../lib/supabase/admin";
+import { getDisplayTimezone } from "../../../lib/app-settings";
 import ProoferBoard from "./ProoferBoard";
 import EmptyState from "../components/EmptyState";
 
@@ -50,6 +52,13 @@ export default async function ProoferPage({
       selectedClientId ? selectedMonth : undefined
     );
 
+    let displayTimezone = "Etc/GMT";
+    try {
+      displayTimezone = await getDisplayTimezone(createAdminClient());
+    } catch (err) {
+      console.error("Display timezone load error:", err);
+    }
+
     return (
       <ProoferBoard
         clients={data.clients}
@@ -60,6 +69,7 @@ export default async function ProoferPage({
         initialPillars={data.pillars}
         initialIdeas={data.ideas}
         initialPostIdeas={data.postIdeas}
+        timeZone={displayTimezone}
       />
     );
   } catch (err) {
