@@ -137,6 +137,25 @@ function daysInMonth(month: string): Date[] {
   return out;
 }
 
+// Step a "YYYY-MM" value by whole months (used by the one-click month arrows).
+function shiftMonthValue(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return month;
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const MONTH_VALUE_LABEL = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
+});
+
+function formatMonthValueLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return month;
+  return MONTH_VALUE_LABEL.format(new Date(y, m - 1, 1));
+}
+
 function toDateKey(d: Date): string {
   const y = d.getFullYear();
   const mo = String(d.getMonth() + 1).padStart(2, "0");
@@ -330,6 +349,21 @@ const inputStyle: React.CSSProperties = {
   background: "#fff",
   color: "#18181b",
   fontFamily: "inherit",
+};
+
+const monthArrowStyle: React.CSSProperties = {
+  flexShrink: 0,
+  width: 34,
+  borderRadius: 8,
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  color: "#18181b",
+  fontSize: 18,
+  lineHeight: 1,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
@@ -1857,18 +1891,45 @@ export default function ProoferBoard({
 
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={labelStyle}>Month</span>
-              <select
-                value={month}
-                onChange={(e) => handleSelectMonth(e.target.value)}
-                disabled={isPending}
-                style={inputStyle}
-              >
-                {months.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
+              {/* One-click prev/next arrows flank the dropdown so changing month
+                  is a single tap, not open-dropdown-then-pick. Arrows step to
+                  any month (including outside the planning window); the select
+                  keeps the current month as an option so it stays in sync. */}
+              <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonth(shiftMonthValue(month, -1))}
+                  disabled={isPending}
+                  aria-label="Previous month"
+                  style={monthArrowStyle}
+                >
+                  ‹
+                </button>
+                <select
+                  value={month}
+                  onChange={(e) => handleSelectMonth(e.target.value)}
+                  disabled={isPending}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                >
+                  {(months.some((m) => m.value === month)
+                    ? months
+                    : [{ value: month, label: formatMonthValueLabel(month) }, ...months]
+                  ).map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonth(shiftMonthValue(month, 1))}
+                  disabled={isPending}
+                  aria-label="Next month"
+                  style={monthArrowStyle}
+                >
+                  ›
+                </button>
+              </div>
             </label>
 
             <label
