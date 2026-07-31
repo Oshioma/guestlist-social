@@ -26,6 +26,7 @@ import {
   fillRight,
   renameCashflowLine,
   setOpeningBalance,
+  setRetainerOverride,
   updateCashflowCell,
 } from "../lib/cashflow-actions";
 
@@ -33,10 +34,25 @@ type Props = {
   year: number;
   initialLines: CashflowLine[];
   initialOpeningBalance: number;
-  // Live monthly run-rate from active clients' retainers. Rendered as a
-  // read-only auto row inside Revenue and folded into every revenue total.
+  // Live monthly run-rate from active clients' retainers — the default value
+  // for any month the operator hasn't pinned. Rendered as an editable row
+  // inside Revenue and folded into every revenue total.
   clientRetainersMonthly: number;
+  // Per-month overrides [Jan … Dec]; null = use the live client total.
+  initialRetainerOverrides: (number | null)[];
+  // Column to highlight (current month), or null when not viewing this year.
+  highlightMonth: number | null;
 };
+
+// Pastel highlight for the current month's column.
+const HIGHLIGHT_BG = "#fef3c7"; // amber-100
+function withHighlight(
+  m: number,
+  highlightMonth: number | null,
+  base?: string
+): string | undefined {
+  return m === highlightMonth ? HIGHLIGHT_BG : base;
+}
 
 // ── Formatting ──────────────────────────────────────────────────────────────
 function money(n: number): string {
@@ -79,9 +95,13 @@ export default function CashflowGrid({
   initialLines,
   initialOpeningBalance,
   clientRetainersMonthly,
+  initialRetainerOverrides,
+  highlightMonth,
 }: Props) {
   const [lines, setLines] = useState<CashflowLine[]>(initialLines);
   const [openingBalance, setOpening] = useState<number>(initialOpeningBalance);
+  const [overrides, setOverrides] =
+    useState<(number | null)[]>(initialRetainerOverrides);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -121,16 +141,23 @@ export default function CashflowGrid({
     yearEndBalance,
     avgNet,
     runwayMonths,
+    retainersByMonth,
   } = useMemo(() => {
     const sections = orderedSections(lines);
     const costLines = lines.filter((l) => l.kind === "cost");
     const revenueLines = lines.filter((l) => l.kind === "revenue");
 
+    // Effective retainer per month: a pinned override, else the live client
+    // total. Unedited months keep following the live figure; edited months
+    // hold whatever was billed.
+    const retainersByMonth = MONTHS.map((_, m) =>
+      overrides[m] != null ? (overrides[m] as number) : clientRetainersMonthly
+    );
+
     const costsByMonth = MONTHS.map((_, m) => sumMonths(costLines, m));
-    // Revenue = editable revenue lines + the read-only client-retainers
-    // run-rate (same each month).
+    // Revenue = editable revenue lines + the client-retainers row.
     const revenueByMonth = MONTHS.map(
-      (_, m) => sumMonths(revenueLines, m) + clientRetainersMonthly
+      (_, m) => sumMonths(revenueLines, m) + retainersByMonth[m]
     );
     const netByMonth = MONTHS.map((_, m) => revenueByMonth[m] - costsByMonth[m]);
 
@@ -163,8 +190,9 @@ export default function CashflowGrid({
       yearEndBalance,
       avgNet,
       runwayMonths,
+      retainersByMonth,
     };
-  }, [lines, openingBalance, clientRetainersMonthly]);
+  }, [lines, openingBalance, clientRetainersMonthly, overrides]);
 
   // Visible (non-collapsed) line ids, in render order — used for Enter-to-move.
   const visibleLineIds = useMemo(() => {
@@ -260,6 +288,21 @@ export default function CashflowGrid({
     if (!Number.isFinite(value) || value === openingBalance) return;
     setOpening(value);
     persist(() => setOpeningBalance(year, value));
+  }
+
+  // Pin (a number) or clear (empty → revert to the live client total) the
+  // retainer amount for a single month.
+  function commitRetainer(m: number, raw: string) {
+    const trimmed = raw.trim();
+    const next = trimmed === "" ? null : Number(trimmed);
+    if (next != null && !Number.isFinite(next)) return;
+    if (next === overrides[m]) return;
+    setOverrides((prev) => {
+      const a = prev.slice();
+      a[m] = next;
+      return a;
+    });
+    persist(() => setRetainerOverride(year, m, next));
   }
 
   function toggleSection(section: string) {
@@ -441,8 +484,8 @@ export default function CashflowGrid({
           <thead>
             <tr>
               <Th sticky>Item</Th>
-              {MONTHS.map((mo) => (
-                <Th key={mo} align="right">
+              {MONTHS.map((mo, m) => (
+                <Th key={mo} align="right" highlight={m === highlightMonth}>
                   {mo}
                 </Th>
               ))}
@@ -460,6 +503,7 @@ export default function CashflowGrid({
                 kind="cost"
                 lines={lines.filter((l) => l.section === section)}
                 collapsed={collapsed.has(section)}
+                highlightMonth={highlightMonth}
                 onToggle={() => toggleSection(section)}
                 onAdd={() => addRow(section, "cost")}
                 onCommitCell={persistCell}
@@ -477,10 +521,11 @@ export default function CashflowGrid({
               monthly={costsByMonth}
               total={costsYear}
               tone="cost"
+              highlightMonth={highlightMonth}
             />
 
-            {/* Revenue sections. The client-retainers auto row attaches to
-                the first revenue section so it appears exactly once. */}
+            {/* Revenue sections. The client-retainers row attaches to the
+                first revenue section so it appears exactly once. */}
             {revenueSections.map((section, i) => (
               <SectionBlock
                 key={section}
@@ -488,6 +533,7 @@ export default function CashflowGrid({
                 kind="revenue"
                 lines={lines.filter((l) => l.section === section)}
                 collapsed={collapsed.has(section)}
+                highlightMonth={highlightMonth}
                 onToggle={() => toggleSection(section)}
                 onAdd={() => addRow(section, "revenue")}
                 onCommitCell={persistCell}
@@ -497,11 +543,18 @@ export default function CashflowGrid({
                 onFillRight={doFillRight}
                 onCellKeyDown={onCellKeyDown}
                 autoRow={
-                  i === 0 && clientRetainersMonthly > 0
+                  i === 0 &&
+                  (clientRetainersMonthly > 0 ||
+                    overrides.some((v) => v != null))
                     ? {
                         label: "Client retainers",
-                        monthly: MONTHS.map(() => clientRetainersMonthly),
-                        hint: "auto — sum of active clients",
+                        monthly: retainersByMonth,
+                        hint: "defaults to live client total; type to pin a month, clear to revert",
+                        editable: {
+                          overrides,
+                          liveDefault: clientRetainersMonthly,
+                          onCommit: commitRetainer,
+                        },
                       }
                     : undefined
                 }
@@ -513,6 +566,7 @@ export default function CashflowGrid({
                 monthly={revenueByMonth}
                 total={revenueYear}
                 tone="revenue"
+                highlightMonth={highlightMonth}
               />
             )}
 
@@ -523,6 +577,7 @@ export default function CashflowGrid({
               total={netYear}
               tone="net"
               colorSigned
+              highlightMonth={highlightMonth}
             />
             <TotalRow
               label="Running balance"
@@ -530,6 +585,7 @@ export default function CashflowGrid({
               total={yearEndBalance}
               tone="balance"
               colorSigned
+              highlightMonth={highlightMonth}
             />
           </tbody>
         </table>
@@ -540,7 +596,9 @@ export default function CashflowGrid({
       <p style={{ fontSize: 12, color: "#a1a1aa", margin: 0 }}>
         Tip: click any cell and type. Press Tab or Enter to move on. Hover a cell
         and click <strong>→</strong> to copy that value across the rest of the
-        year. Totals, net and running balance update as you go.
+        year. The <strong>Client retainers</strong> row follows your live client
+        total by default — type into a month to pin what was actually billed,
+        or clear it to revert. This month&apos;s column is shaded.
       </p>
     </div>
   );
@@ -707,25 +765,28 @@ function Th({
   align = "left",
   sticky = false,
   strong = false,
+  highlight = false,
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
   sticky?: boolean;
   strong?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <th
+      title={highlight ? "This month" : undefined}
       style={{
         position: sticky ? "sticky" : undefined,
         left: sticky ? 0 : undefined,
         zIndex: sticky ? 3 : 1,
         top: 0,
-        background: "#f4f4f5",
+        background: highlight ? HIGHLIGHT_BG : "#f4f4f5",
         textAlign: align,
         padding: "8px 10px",
         fontSize: 11,
-        fontWeight: strong ? 700 : 600,
-        color: "#52525b",
+        fontWeight: highlight || strong ? 700 : 600,
+        color: highlight ? "#92400e" : "#52525b",
         textTransform: "uppercase",
         letterSpacing: "0.03em",
         borderBottom: "1px solid #e4e4e7",
@@ -766,11 +827,26 @@ function StickyLabelCell({
   );
 }
 
+type AutoRowConfig = {
+  label: string;
+  monthly: number[]; // effective values (for subtotal + display)
+  hint?: string;
+  // When present, the row is editable per month: `overrides[m]` is the pinned
+  // value (or null = live), `liveDefault` is what an unpinned month shows, and
+  // `onCommit` persists a typed value (empty string clears the override).
+  editable?: {
+    overrides: (number | null)[];
+    liveDefault: number;
+    onCommit: (m: number, raw: string) => void;
+  };
+};
+
 function SectionBlock({
   section,
   kind,
   lines,
   collapsed,
+  highlightMonth,
   onToggle,
   onAdd,
   onCommitCell,
@@ -785,6 +861,7 @@ function SectionBlock({
   kind: CashflowKind;
   lines: CashflowLine[];
   collapsed: boolean;
+  highlightMonth: number | null;
   onToggle: () => void;
   onAdd: () => void;
   onCommitCell: (id: number, m: number, value: number) => void;
@@ -797,9 +874,9 @@ function SectionBlock({
     id: number,
     m: number
   ) => void;
-  // Optional read-only, computed row (e.g. client retainers) that lives in
-  // this section: counted in the subtotal but not editable/deletable.
-  autoRow?: { label: string; monthly: number[]; hint?: string };
+  // Optional computed row (e.g. client retainers) that lives in this section:
+  // counted in the subtotal. Read-only unless `editable` is provided.
+  autoRow?: AutoRowConfig;
 }) {
   const subtotal = MONTHS.map(
     (_, m) => sumMonths(lines, m) + (autoRow?.monthly[m] ?? 0)
@@ -851,7 +928,7 @@ function SectionBlock({
             style={{
               textAlign: "right",
               padding: "4px 10px",
-              background: "#fafafa",
+              background: withHighlight(m, highlightMonth, "#fafafa"),
               borderBottom: "1px solid #f1f1f3",
               fontWeight: 600,
               color: "#3f3f46",
@@ -875,8 +952,10 @@ function SectionBlock({
         </td>
       </tr>
 
-      {/* Read-only computed row (client retainers) */}
-      {!collapsed && autoRow && <AutoRow autoRow={autoRow} />}
+      {/* Computed row (client retainers) — editable per month when configured */}
+      {!collapsed && autoRow && (
+        <AutoRow autoRow={autoRow} highlightMonth={highlightMonth} />
+      )}
 
       {/* Line rows */}
       {!collapsed &&
@@ -884,6 +963,7 @@ function SectionBlock({
           <LineRow
             key={l.id}
             line={l}
+            highlightMonth={highlightMonth}
             onCommitCell={onCommitCell}
             onCellChange={onCellChange}
             onCommitLabel={onCommitLabel}
@@ -926,10 +1006,38 @@ function SectionBlock({
 // no fill-right, no delete.
 function AutoRow({
   autoRow,
+  highlightMonth,
 }: {
-  autoRow: { label: string; monthly: number[]; hint?: string };
+  autoRow: AutoRowConfig;
+  highlightMonth: number | null;
 }) {
   const total = autoRow.monthly.reduce((a, b) => a + (b || 0), 0);
+  const editable = autoRow.editable;
+  const [editingM, setEditingM] = useState<number | null>(null);
+  const [draft, setDraft] = useState("");
+  const origRef = useRef("");
+  const cancelRef = useRef(false);
+
+  function startEdit(m: number) {
+    const ov = editable?.overrides[m];
+    origRef.current =
+      ov != null
+        ? String(ov)
+        : editable && editable.liveDefault !== 0
+        ? String(editable.liveDefault)
+        : "";
+    cancelRef.current = false;
+    setEditingM(m);
+    setDraft(origRef.current);
+  }
+
+  function finishEdit(m: number) {
+    if (!cancelRef.current && draft !== origRef.current) {
+      editable?.onCommit(m, draft);
+    }
+    setEditingM(null);
+  }
+
   return (
     <tr>
       <StickyLabelCell>
@@ -954,21 +1062,77 @@ function AutoRow({
           </span>
         </span>
       </StickyLabelCell>
-      {autoRow.monthly.map((v, m) => (
-        <td
-          key={m}
-          style={{
-            textAlign: "right",
-            padding: "6px 8px",
-            borderBottom: "1px solid #f1f1f3",
-            color: "#0369a1",
-            fontStyle: "italic",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {v === 0 ? "" : money(v)}
-        </td>
-      ))}
+      {autoRow.monthly.map((v, m) => {
+        const pinned = editable?.overrides[m] != null;
+        const hl = withHighlight(m, highlightMonth);
+        if (!editable) {
+          return (
+            <td
+              key={m}
+              style={{
+                textAlign: "right",
+                padding: "6px 8px",
+                borderBottom: "1px solid #f1f1f3",
+                background: hl,
+                color: "#0369a1",
+                fontStyle: "italic",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {v === 0 ? "" : money(v)}
+            </td>
+          );
+        }
+        return (
+          <td
+            key={m}
+            title={pinned ? "Pinned — clear to revert to live total" : "Auto (live client total) — type to pin"}
+            style={{
+              padding: 0,
+              borderBottom: "1px solid #f1f1f3",
+              background: hl,
+            }}
+          >
+            <input
+              type="text"
+              inputMode="decimal"
+              value={editingM === m ? draft : v === 0 ? "" : String(v)}
+              onFocus={(e) => {
+                startEdit(m);
+                e.target.style.border = "1px solid #0ea5e9";
+                e.target.style.background = "#fff";
+                e.target.style.borderRadius = "6px";
+              }}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={(e) => {
+                finishEdit(m);
+                e.target.style.border = "1px solid transparent";
+                e.target.style.background = "transparent";
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  cancelRef.current = true;
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Enter") {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              style={{
+                width: COL_W,
+                boxSizing: "border-box",
+                border: "1px solid transparent",
+                background: "transparent",
+                font: "inherit",
+                textAlign: "right",
+                padding: "6px 8px",
+                color: "#0369a1",
+                fontStyle: pinned ? "normal" : "italic",
+                fontWeight: pinned ? 600 : 400,
+              }}
+            />
+          </td>
+        );
+      })}
       <td
         style={{
           textAlign: "right",
@@ -988,6 +1152,7 @@ function AutoRow({
 
 function LineRow({
   line,
+  highlightMonth,
   onCommitCell,
   onCellChange,
   onCommitLabel,
@@ -996,6 +1161,7 @@ function LineRow({
   onCellKeyDown,
 }: {
   line: CashflowLine;
+  highlightMonth: number | null;
   onCommitCell: (id: number, m: number, value: number) => void;
   onCellChange: (id: number, m: number, value: number) => void;
   onCommitLabel: (id: number, raw: string) => void;
@@ -1102,7 +1268,7 @@ function LineRow({
             position: "relative",
             padding: 0,
             borderBottom: "1px solid #f1f1f3",
-            background: v < 0 ? "#fef2f2" : undefined,
+            background: v < 0 ? "#fef2f2" : withHighlight(m, highlightMonth),
           }}
         >
           <input
@@ -1192,12 +1358,14 @@ function TotalRow({
   total,
   tone,
   colorSigned = false,
+  highlightMonth,
 }: {
   label: string;
   monthly: number[];
   total: number;
   tone: "cost" | "revenue" | "net" | "balance";
   colorSigned?: boolean;
+  highlightMonth: number | null;
 }) {
   const bg =
     tone === "cost"
@@ -1222,7 +1390,7 @@ function TotalRow({
           style={{
             textAlign: "right",
             padding: "7px 10px",
-            background: bg,
+            background: withHighlight(m, highlightMonth, bg),
             borderTop: "1px solid #e4e4e7",
             borderBottom: "1px solid #e4e4e7",
             fontWeight: 700,

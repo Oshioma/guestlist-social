@@ -25,7 +25,21 @@ export type CashflowData = {
   year: number;
   openingBalance: number;
   lines: CashflowLine[];
+  // Per-month retainer overrides, length 12 [Jan … Dec]. null = "use the live
+  // client total for that month"; a number pins that month.
+  retainerOverrides: (number | null)[];
 };
+
+// Coerce jsonb into a clean length-12 array of number|null (null = no override).
+export function normalizeOverrides(raw: unknown): (number | null)[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: 12 }, (_, i) => {
+    const v = arr[i];
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  });
+}
 
 // Section render order + display. Anything not listed falls to the end.
 export const SECTION_ORDER: string[] = [

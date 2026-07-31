@@ -21,6 +21,7 @@ import {
   type CashflowKind,
   type CashflowLine,
   normalizeAmounts,
+  normalizeOverrides,
 } from "./cashflow-shared";
 
 const CASHFLOW_PATH = "/app/cashflow";
@@ -36,9 +37,9 @@ export async function getCashflow(year: number): Promise<CashflowData> {
       .order("sort_order", { ascending: true }),
     supabase
       .from("cashflow_settings")
-      .select("opening_balance")
+      .select("opening_balance, retainer_overrides")
       .eq("year", year)
-      .maybeSingle<{ opening_balance: number }>(),
+      .maybeSingle<{ opening_balance: number; retainer_overrides: unknown }>(),
   ]);
 
   const lines: CashflowLine[] = (lineRows ?? []).map((r) => ({
@@ -55,7 +56,38 @@ export async function getCashflow(year: number): Promise<CashflowData> {
     year,
     openingBalance: Number(settingRow?.opening_balance ?? 0),
     lines,
+    retainerOverrides: normalizeOverrides(settingRow?.retainer_overrides),
   };
+}
+
+// Pin (or clear) the retainer amount for a single month. `value` null clears
+// the override so that month falls back to the live client total.
+export async function setRetainerOverride(
+  year: number,
+  monthIndex: number,
+  value: number | null
+): Promise<void> {
+  await requireAdmin();
+  if (monthIndex < 0 || monthIndex > 11) throw new Error("Bad month");
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("cashflow_settings")
+    .select("retainer_overrides")
+    .eq("year", year)
+    .maybeSingle<{ retainer_overrides: unknown }>();
+
+  const overrides = normalizeOverrides(row?.retainer_overrides);
+  overrides[monthIndex] =
+    value != null && Number.isFinite(value) ? value : null;
+
+  const { error } = await supabase.from("cashflow_settings").upsert(
+    { year, retainer_overrides: overrides, updated_at: new Date().toISOString() },
+    { onConflict: "year" }
+  );
+  if (error) throw new Error(error.message);
+
+  revalidatePath(CASHFLOW_PATH);
 }
 
 // Sum of the monthly retainer across clients that are actually paying —

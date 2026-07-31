@@ -26,14 +26,19 @@ export default async function CashflowPage({ searchParams }: Props) {
       ? parsed
       : DEFAULT_YEAR;
 
-  const [{ lines, openingBalance }, clientRetainers, years] = await Promise.all([
-    getCashflow(year),
-    getActiveClientRetainers(),
-    getCashflowYears(),
-  ]);
+  const [{ lines, openingBalance, retainerOverrides }, clientRetainers, years] =
+    await Promise.all([
+      getCashflow(year),
+      getActiveClientRetainers(),
+      getCashflowYears(),
+    ]);
 
   // Always offer the current year as a chip, even if it has no rows yet.
   const yearChips = Array.from(new Set([...years, year])).sort((a, b) => a - b);
+
+  // Highlight the current month's column, but only when viewing this year.
+  const now = new Date();
+  const highlightMonth = year === now.getFullYear() ? now.getMonth() : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -55,6 +60,8 @@ export default async function CashflowPage({ searchParams }: Props) {
         initialLines={lines}
         initialOpeningBalance={openingBalance}
         clientRetainersMonthly={clientRetainers}
+        initialRetainerOverrides={retainerOverrides}
+        highlightMonth={highlightMonth}
       />
     </div>
   );
