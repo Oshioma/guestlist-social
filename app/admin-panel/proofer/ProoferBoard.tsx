@@ -1233,13 +1233,12 @@ export default function ProoferBoard({
       }
 
       if (grandTotal === 0 && !errorMsg) {
-        // Nothing generated. If it's because leftover AI ideas fill the month,
-        // offer a one-click clear+regenerate rather than a dead-end message.
-        // Real posts (or promoted ideas tied to posts) are never cleared, so
-        // only non-promoted ideas count as "clearable".
-        const hasClearableIdeas = postIdeas.some(
-          (i) => i.postSlotDate.startsWith(month) && i.status !== "promoted"
-        );
+        // Nothing generated. If it's because leftover AI ideas fill the month —
+        // including orphaned promoted ideas whose post is gone — offer a
+        // one-click clear+regenerate rather than a dead-end message. Ideas still
+        // backed by a real post aren't clearable, so those fall through to the
+        // "nothing to generate" message.
+        const hasClearableIdeas = postIdeas.some(isClearableMonthIdea);
         if (hasClearableIdeas) {
           setGenNeedsClear(true);
         } else {
@@ -1383,15 +1382,24 @@ export default function ProoferBoard({
   // Delete every idea for the month (server + local mirror). Ideas are
   // one-per-day and platform-agnostic, so clear them whatever platform key
   // they're stored under — but never touch a slot that has a saved post.
+  // Which of this month's ideas "Clear AI" will actually delete — mirrors the
+  // server: any non-promoted idea, plus promoted ideas whose backing post is
+  // gone (orphaned). A promoted idea that still has its post is left alone.
+  function isClearableMonthIdea(i: PostIdea): boolean {
+    if (!i.postSlotDate.startsWith(month)) return false;
+    if (i.status !== "promoted") return true;
+    return !postsByKey.has(postKey(i.postSlotDate.slice(0, 10), i.platform));
+  }
+
   async function clearMonthIdeasNow() {
     if (!clientId || !month) return;
     await clearPostIdeasAction(clientId, month, genPlatform);
     const ideaSlots = new Set(
       postIdeas
-        .filter((i) => i.postSlotDate.startsWith(month))
+        .filter(isClearableMonthIdea)
         .map((i) => postKey(i.postSlotDate.slice(0, 10), i.platform))
     );
-    setPostIdeas((prev) => prev.filter((i) => !i.postSlotDate.startsWith(month)));
+    setPostIdeas((prev) => prev.filter((i) => !isClearableMonthIdea(i)));
     setDrafts((prev) => {
       const next = { ...prev };
       for (const key of Object.keys(next)) {

@@ -1363,8 +1363,43 @@ export async function clearPostIdeasAction(clientId: string, month: string, _pla
     .eq("client_id", clientId)
     .gte("post_slot_date", start)
     .lt("post_slot_date", end)
-    .neq("status", "promoted"); // never delete ideas already linked to a real post
+    .neq("status", "promoted"); // handled separately below — keep the ones still backed by a post
   if (error) throw new Error("Could not clear ideas.");
+
+  // Also remove ORPHANED promoted ideas — ones whose backing post was since
+  // deleted. Promotion links an idea to a post by slot (client, date, platform),
+  // so a promoted idea with no post at its slot is dead weight that still counts
+  // as "filled" and silently blocks regeneration. A promoted idea that still has
+  // its post is left alone.
+  const { data: promoted } = await supabase
+    .from("post_ideas")
+    .select("id, post_slot_date, platform")
+    .eq("client_id", clientId)
+    .eq("status", "promoted")
+    .gte("post_slot_date", start)
+    .lt("post_slot_date", end);
+  if (promoted && promoted.length > 0) {
+    const { data: posts } = await supabase
+      .from("proofer_posts")
+      .select("post_date, platform")
+      .eq("client_id", clientId)
+      .gte("post_date", start)
+      .lt("post_date", end);
+    const postSlots = new Set(
+      (posts ?? []).map((p) => `${String(p.post_date).slice(0, 10)}|${p.platform}`)
+    );
+    const orphanIds = promoted
+      .filter((i) => !postSlots.has(`${String(i.post_slot_date).slice(0, 10)}|${i.platform}`))
+      .map((i) => i.id);
+    if (orphanIds.length > 0) {
+      const { error: orphanErr } = await supabase
+        .from("post_ideas")
+        .delete()
+        .in("id", orphanIds);
+      if (orphanErr) throw new Error("Could not clear orphaned ideas.");
+    }
+  }
+
   revalidateProoferPaths();
 }
 
