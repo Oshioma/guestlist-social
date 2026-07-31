@@ -27,6 +27,24 @@ function normalizePlatform(value: string | undefined | null): Platform {
     : "instagram_feed";
 }
 
+const VALID_PUBLISH_TARGETS = ["instagram", "facebook"] as const;
+type PublishTargetValue = (typeof VALID_PUBLISH_TARGETS)[number];
+
+/**
+ * Destinations a post publishes to. Order and duplicates are normalised so the
+ * stored array is stable. An explicitly empty selection is preserved — that's
+ * "don't publish this anywhere yet", not a missing value.
+ */
+function normalizePublishTargets(value: unknown): PublishTargetValue[] {
+  if (!Array.isArray(value)) return [];
+  const set = new Set(
+    value.filter((v): v is PublishTargetValue =>
+      (VALID_PUBLISH_TARGETS as readonly unknown[]).includes(v)
+    )
+  );
+  return VALID_PUBLISH_TARGETS.filter((t) => set.has(t));
+}
+
 function normalizeMediaUrls(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -452,13 +470,15 @@ export async function saveProoferPostAction(
   pillarId: string | null,
   linkedIdeaId: string | null = null,
   linkedIdeaKindRaw: string | null = null,
-  publishTime: string = "18:00"
+  publishTime: string = "18:00",
+  publishTargets: string[] = ["instagram"]
 ) {
   if (!clientId || !postDate) {
     throw new Error("Client and date are required.");
   }
 
   const normalizedPlatform = normalizePlatform(platform);
+  const normalizedTargets = normalizePublishTargets(publishTargets);
   const normalizedMedia = normalizeMediaUrls(mediaUrls);
   const primaryImageUrl = normalizedMedia[0] ?? "";
   const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
@@ -498,6 +518,7 @@ export async function saveProoferPostAction(
         media_urls: normalizedMedia,
         pillar_id: normalizedPillarId,
         publish_time: normalizedPublishTime,
+        publish_targets: normalizedTargets,
         linked_idea_id: normalizedLinkedIdeaId,
         linked_idea_kind: normalizedLinkedIdeaId
           ? normalizedLinkedIdeaKind
@@ -546,6 +567,7 @@ export async function saveProoferPostAction(
         media_urls: normalizedMedia,
         pillar_id: normalizedPillarId,
         publish_time: normalizedPublishTime,
+        publish_targets: normalizedTargets,
         linked_idea_id: normalizedLinkedIdeaId,
         linked_idea_kind: normalizedLinkedIdeaId
           ? normalizedLinkedIdeaKind
@@ -1018,6 +1040,68 @@ export async function queueProoferPostAction(
   }
 
   revalidateProoferPaths();
+}
+
+/**
+ * Queue a post to every destination chosen on the proofer board. Replaces the
+ * publish page's per-platform buttons: the choice is made while writing, and
+ * the queue page just carries it out.
+ */
+export async function queueProoferPostToTargetsAction(postId: string) {
+  if (!postId) {
+    throw new Error("Post is required.");
+  }
+
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { data: post, error: postError } = await supabase
+    .from("proofer_posts")
+    .select("id, status, platform, publish_targets")
+    .eq("id", postId)
+    .maybeSingle();
+
+  if (postError) {
+    console.error("queueProoferPostToTargetsAction lookup error:", postError);
+    throw new Error("Could not verify post.");
+  }
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (post.status !== "proofed" && post.status !== "approved") {
+    throw new Error("Only proofed posts can be added to the publish queue.");
+  }
+
+  let targets = normalizePublishTargets(post.publish_targets);
+
+  // Rows written before publish_targets existed fall back to what their
+  // platform implied, so an un-migrated post still queues correctly.
+  if (targets.length === 0) {
+    targets = post.platform === "facebook" ? ["facebook"] : ["instagram"];
+  }
+
+  const rows = targets.map((platform) => ({
+    post_id: postId,
+    platform,
+    status: "queued",
+    created_by: authorEmail,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from("proofer_publish_queue")
+    .upsert(rows, { onConflict: "post_id,platform", ignoreDuplicates: false });
+
+  if (error) {
+    console.error("queueProoferPostToTargetsAction upsert error:", error);
+    throw new Error("Could not add post to publish queue.");
+  }
+
+  revalidateProoferPaths();
+
+  return { queued: targets };
 }
 
 export async function scheduleProoferQueueItemAction(

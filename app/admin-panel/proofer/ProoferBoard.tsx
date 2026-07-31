@@ -29,7 +29,13 @@ import type {
   IdeaKind,
   PostIdea,
 } from "../lib/types";
-import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
+import {
+  PROOFER_PLATFORMS,
+  PROOFER_PLATFORM_LABELS,
+  INSTAGRAM_FORMATS,
+  PUBLISH_TARGET_LABELS,
+} from "../lib/types";
+import type { PublishTarget } from "../lib/types";
 import {
   DEFAULT_TIMEZONE,
   formatUtcClockInZone,
@@ -176,6 +182,20 @@ function relativeDayLabel(d: Date): string | null {
 // Map a raw proofer_posts row (snake_case, as delivered by Supabase Realtime)
 // into a ProoferPost. Mirrors the server mapping in queries.ts; comments and
 // the publish queue live in other tables, so callers preserve those.
+/** Mirrors queries.ts's parsePublishTargets for realtime rows. */
+function parsePublishTargetsRow(row: Record<string, unknown>): PublishTarget[] {
+  const raw = row.publish_targets;
+  if (Array.isArray(raw)) {
+    const cleaned = raw.filter(
+      (t): t is PublishTarget => t === "instagram" || t === "facebook"
+    );
+    if (cleaned.length > 0) return cleaned;
+  }
+  return String(row.platform ?? "") === "facebook"
+    ? ["facebook"]
+    : ["instagram"];
+}
+
 function rowToProoferPost(row: Record<string, unknown>): ProoferPost {
   const mediaUrls = Array.isArray(row.media_urls)
     ? (row.media_urls as unknown[]).filter(
@@ -198,6 +218,7 @@ function rowToProoferPost(row: Record<string, unknown>): ProoferPost {
     imageUrl: str(row.image_url),
     mediaUrls,
     publishTime: str(row.publish_time, "18:00"),
+    publishTargets: parsePublishTargetsRow(row),
     status: (row.status ?? "none") as ProoferStatus,
     createdBy: str(row.created_by),
     updatedBy: row.updated_by ? String(row.updated_by) : null,
@@ -298,6 +319,19 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
   };
 }
 
+function selectStyle(isNarrow: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    ...inputStyle,
+    padding: isNarrow ? "10px 8px" : "6px 8px",
+    fontSize: isNarrow ? 14 : 12,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.7 : 1,
+    width: "100%",
+    minWidth: 0,
+  };
+}
+
 function dayArrowStyle(disabled: boolean): React.CSSProperties {
   return {
     width: 40,
@@ -389,6 +423,7 @@ export default function ProoferBoard({
     linkedIdeaId: string | null;
     linkedIdeaKind: IdeaKind | null;
     publishTime: string;
+    publishTargets: PublishTarget[];
   };
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => {
     const initial: Record<string, Draft> = {};
@@ -406,7 +441,7 @@ export default function ProoferBoard({
       if (!initial[slotKey]) {
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
-        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00" };
+        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] };
       }
     }
     return initial;
@@ -688,6 +723,9 @@ export default function ProoferBoard({
       linkedIdeaId: existing?.linkedIdeaId ?? null,
       linkedIdeaKind: existing?.linkedIdeaKind ?? null,
       publishTime: existing?.publishTime ?? "18:00",
+      // A brand new slot defaults to Instagram — the overwhelmingly common
+      // case, and it matches what an unmigrated row implies.
+      publishTargets: existing?.publishTargets ?? ["instagram"],
     };
   }
 
@@ -827,7 +865,8 @@ export default function ProoferBoard({
             draft.linkedIdeaKind,
             // Without this the action falls back to its "18:00" default and
             // silently discards whatever time was set on the draft.
-            draft.publishTime
+            draft.publishTime,
+            draft.publishTargets
           );
           setDrafts((prev) => {
             const next = { ...prev };
@@ -1067,7 +1106,7 @@ export default function ProoferBoard({
                       .filter(Boolean).join("\n\n");
                     return {
                       ...prev,
-                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00" },
+                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] },
                     };
                   });
                   passCount++;
@@ -2556,34 +2595,87 @@ export default function ProoferBoard({
                         minWidth: 0,
                       }}
                     >
-                      <span style={labelStyle}>Platform</span>
+                      <span style={labelStyle}>Instagram</span>
                       <select
-                        value={activePlatform}
-                        onChange={(e) =>
-                          handlePlatformChange(
-                            dateKey,
-                            e.target.value as ProoferPlatform
-                          )
+                        value={
+                          draft.publishTargets.includes("instagram")
+                            ? activePlatform
+                            : "off"
                         }
-                        style={{
-                          ...inputStyle,
-                          padding: isNarrow ? "10px 8px" : "6px 8px",
-                          fontSize: isNarrow ? 14 : 12,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          width: "100%",
-                          minWidth: 0,
+                        disabled={isLocked}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === "off") {
+                            // Stay on this draft, just stop sending it to IG.
+                            updateDraft(dateKey, activePlatform, {
+                              publishTargets: draft.publishTargets.filter(
+                                (t) => t !== "instagram"
+                              ),
+                            });
+                            return;
+                          }
+                          const nextFormat = value as ProoferPlatform;
+                          if (nextFormat !== activePlatform) {
+                            handlePlatformChange(dateKey, nextFormat);
+                          }
+                          // Picking a format implies publishing to Instagram.
+                          if (!getDraftFor(dateKey, nextFormat).publishTargets.includes("instagram")) {
+                            updateDraft(dateKey, nextFormat, {
+                              publishTargets: [
+                                ...getDraftFor(dateKey, nextFormat).publishTargets,
+                                "instagram",
+                              ],
+                            });
+                          }
                         }}
+                        style={selectStyle(isNarrow, isLocked)}
                       >
-                        {PROOFER_PLATFORMS.map((p) => {
-                          const hasVariant = variants.has(p);
-                          return (
-                            <option key={p} value={p}>
-                              {PROOFER_PLATFORM_LABELS[p]}
-                              {hasVariant ? " •" : ""}
-                            </option>
+                        <option value="off">Off</option>
+                        {INSTAGRAM_FORMATS.map((p) => (
+                          <option key={p} value={p}>
+                            {/* The field label already says Instagram. */}
+                            {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                            {variants.has(p) ? " •" : ""}
+                          </option>
+                        ))}
+                        {/* Pre-split drafts that live on the old
+                            platform='facebook' row stay reachable rather than
+                            being orphaned by the new model. */}
+                        {variants.has("facebook") && (
+                          <option value="facebook">Legacy FB draft •</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span style={labelStyle}>Facebook</span>
+                      <select
+                        value={
+                          draft.publishTargets.includes("facebook") ? "on" : "off"
+                        }
+                        disabled={isLocked}
+                        onChange={(e) => {
+                          const on = e.target.value === "on";
+                          const without = draft.publishTargets.filter(
+                            (t) => t !== "facebook"
                           );
-                        })}
+                          updateDraft(dateKey, activePlatform, {
+                            publishTargets: on
+                              ? [...without, "facebook"]
+                              : without,
+                          });
+                        }}
+                        style={selectStyle(isNarrow, isLocked)}
+                      >
+                        <option value="off">Off</option>
+                        <option value="on">On</option>
                       </select>
                     </div>
 
@@ -2601,6 +2693,9 @@ export default function ProoferBoard({
                             gap: 4,
                             position: "relative",
                             minWidth: 0,
+                            // Instagram + Facebook fill the first row, so the
+                            // pillar takes the full width beneath them.
+                            gridColumn: isNarrow ? "1 / -1" : undefined,
                           }}
                         >
                           <span style={labelStyle}>Pillar</span>

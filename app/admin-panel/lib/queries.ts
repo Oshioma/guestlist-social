@@ -22,6 +22,7 @@ import type {
   ProoferPublishQueueItem,
   PublishQueueStatus,
   PublishQueuePlatform,
+  PublishTarget,
   ContentPillar,
   PostIdea,
   PostIdeaStatus,
@@ -422,6 +423,24 @@ export async function getStoryIdeasData(): Promise<{
   return { clients, themes, ideas, pillars };
 }
 
+/**
+ * Destinations for a post row. Falls back to the pre-publish_targets behaviour
+ * (platform implied the destination) so rows written before the migration, or
+ * by an older client, still resolve to something sensible.
+ */
+function parsePublishTargets(row: Record<string, unknown>): PublishTarget[] {
+  const raw = row.publish_targets;
+  if (Array.isArray(raw)) {
+    const cleaned = raw.filter(
+      (t): t is PublishTarget => t === "instagram" || t === "facebook"
+    );
+    if (cleaned.length > 0) return cleaned;
+  }
+  return String(row.platform ?? "") === "facebook"
+    ? ["facebook"]
+    : ["instagram"];
+}
+
 export type ProoferIdeaLite = {
   id: string;
   kind: "video" | "carousel" | "story";
@@ -607,6 +626,7 @@ export async function getProoferData(
       imageUrl: row.image_url ?? "",
       mediaUrls,
       publishTime: row.publish_time ?? "18:00",
+      publishTargets: parsePublishTargets(row),
       status: (row.status ?? "none") as ProoferStatus,
       createdBy: row.created_by ?? "",
       updatedBy: row.updated_by ?? null,
@@ -844,6 +864,7 @@ export async function getProoferPublishQueueData(): Promise<{
       imageUrl: row.image_url ?? "",
       mediaUrls,
       publishTime: row.publish_time ?? "18:00",
+      publishTargets: parsePublishTargets(row),
       status: (row.status ?? "none") as ProoferStatus,
       createdBy: row.created_by ?? "",
       updatedBy: row.updated_by ?? null,

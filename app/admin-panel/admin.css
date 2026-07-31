@@ -499,3 +499,11 @@
     animation: none;
   }
 }
+
+/* Publish queue action rows: the 220px input plus its buttons cannot fit a
+   phone, so they stack rather than pushing the button off-screen. */
+@media (max-width: 620px) {
+  .publish-action-row {
+    grid-template-columns: 1fr !important;
+  }
+}
