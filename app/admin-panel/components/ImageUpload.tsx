@@ -57,7 +57,7 @@ export default function ImageUpload({
   }
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
       <input
         ref={inputRef}
         type="file"
