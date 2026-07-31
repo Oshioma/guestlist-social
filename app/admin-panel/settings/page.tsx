@@ -375,6 +375,31 @@ export default async function SettingsPage() {
         />
       </SectionCard>
 
+      <SectionCard title="Publish diagnostics">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            See exactly what Meta returned for every published post — the real
+            post id, or the rejection reason. Use this to check whether a post
+            marked &ldquo;Published&rdquo; actually went live on Meta.
+          </p>
+          <Link
+            href="/app/meta-log"
+            style={{
+              alignSelf: "flex-start",
+              padding: "8px 14px",
+              borderRadius: 8,
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            View Meta publish log &rarr;
+          </Link>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Meta sync">
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
