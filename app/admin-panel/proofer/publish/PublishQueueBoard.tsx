@@ -13,6 +13,7 @@ import type {
   PublishQueuePlatform,
   PublishQueueStatus,
 } from "../../lib/types";
+import { PUBLISH_TARGET_LABELS } from "../../lib/types";
 import {
   queueProoferPostAction,
   scheduleProoferQueueItemAction,
@@ -20,6 +21,7 @@ import {
   markProoferQueueItemFailedAction,
   removeProoferQueueItemAction,
   deleteProoferPostByIdAction,
+  queueProoferPostToTargetsAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
 import { describeZone, formatDateTimeInZone } from "../../../../lib/timezone";
@@ -111,6 +113,67 @@ function getStatusPillStyle(status: PublishQueueStatus): React.CSSProperties {
 
 function platformLabel(platform: PublishQueuePlatform) {
   return platform === "facebook" ? "Facebook" : "Instagram";
+}
+
+/**
+ * A post's queue entries collapsed into one row. The queue stores a row per
+ * (post, platform), but a post going to Instagram and Facebook is one piece of
+ * work — showing it twice just reads as a duplicate. `platforms` carries every
+ * destination in the group and `ids` every underlying queue row, so actions
+ * still reach each one.
+ */
+type QueueGroup = QueueItem & {
+  platforms: PublishQueuePlatform[];
+  ids: string[];
+};
+
+function groupByPost(items: QueueItem[]): QueueGroup[] {
+  const byPost = new Map<string, QueueGroup>();
+  for (const item of items) {
+    const existing = byPost.get(item.postId);
+    if (existing) {
+      if (!existing.platforms.includes(item.platform)) {
+        existing.platforms.push(item.platform);
+      }
+      existing.ids.push(item.id);
+    } else {
+      byPost.set(item.postId, {
+        ...item,
+        platforms: [item.platform],
+        ids: [item.id],
+      });
+    }
+  }
+  // Instagram first so the chips read consistently.
+  for (const g of byPost.values()) {
+    g.platforms.sort((a, b) => (a === "instagram" ? -1 : b === "instagram" ? 1 : 0));
+  }
+  return [...byPost.values()];
+}
+
+function PlatformChips({ platforms }: { platforms: PublishQueuePlatform[] }) {
+  return (
+    <>
+      {platforms.map((pl) => (
+        <span
+          key={pl}
+          style={{
+            display: "inline-block",
+            padding: "1px 8px",
+            marginLeft: 6,
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 700,
+            background: pl === "facebook" ? "#e0f2fe" : "#fdf2f8",
+            border: `1px solid ${pl === "facebook" ? "#bae6fd" : "#fbcfe8"}`,
+            color: pl === "facebook" ? "#075985" : "#9d174d",
+          }}
+        >
+          {platformLabel(pl)}
+        </span>
+      ))}
+    </>
+  );
 }
 
 const buttonBase: React.CSSProperties = {
@@ -219,44 +282,67 @@ export default function PublishQueueBoard({
 
   const scheduledItems = useMemo(
     () =>
-      queueItems
+      groupByPost(
+        queueItems
         .filter((item) => item.status === "scheduled")
         .sort((a, b) =>
           String(a.scheduledFor ?? "").localeCompare(String(b.scheduledFor ?? ""))
-        ),
+        )
+      ),
     [queueItems]
   );
 
   const queuedItems = useMemo(
     () =>
-      queueItems
+      groupByPost(
+        queueItems
         .filter((item) => item.status === "queued")
-        .sort((a, b) => a.postDate.localeCompare(b.postDate)),
+        .sort((a, b) => a.postDate.localeCompare(b.postDate))
+      ),
     [queueItems]
   );
 
   const publishedItems = useMemo(
     () =>
-      queueItems
+      groupByPost(
+        queueItems
         .filter((item) => item.status === "published")
         .sort((a, b) =>
           String(b.publishedAt ?? "").localeCompare(String(a.publishedAt ?? ""))
-        ),
+        )
+      ),
     [queueItems]
   );
 
   const failedItems = useMemo(
     () =>
-      queueItems
+      groupByPost(
+        queueItems
         .filter((item) => item.status === "failed")
         .sort((a, b) =>
           String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? ""))
-        ),
+        )
+      ),
     [queueItems]
   );
 
   function refresh() {
     router.refresh();
+  }
+
+  // Queue rows are grouped per post in the UI, so an action may target several.
+  const idList = (queueId: string | string[]) =>
+    Array.isArray(queueId) ? queueId : [queueId];
+
+  function handleQueueTargets(postId: string) {
+    startTransition(async () => {
+      try {
+        await queueProoferPostToTargetsAction(postId);
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not add to queue");
+      }
+    });
   }
 
   function handleQueue(postId: string, platform: PublishQueuePlatform) {
@@ -270,8 +356,9 @@ export default function PublishQueueBoard({
     });
   }
 
-  function handleSchedule(queueId: string) {
-    const draft = scheduleDrafts[queueId] ?? defaultScheduleValue;
+  function handleSchedule(queueId: string | string[]) {
+    const ids = idList(queueId);
+    const draft = scheduleDrafts[ids[0]] ?? defaultScheduleValue;
     if (!draft) {
       alert("Pick a scheduled time first.");
       return;
@@ -279,9 +366,9 @@ export default function PublishQueueBoard({
 
     startTransition(async () => {
       try {
-        await scheduleProoferQueueItemAction(
-          queueId,
-          fromDateTimeLocalInputValue(draft)
+        const at = fromDateTimeLocalInputValue(draft);
+        await Promise.all(
+          ids.map((id) => scheduleProoferQueueItemAction(id, at))
         );
         refresh();
       } catch (err) {
@@ -290,18 +377,20 @@ export default function PublishQueueBoard({
     });
   }
 
-  function handleMarkPublished(queueId: string) {
-    const publishUrl = (publishUrlDrafts[queueId] ?? "").trim();
+  function handleMarkPublished(queueId: string | string[]) {
+    const ids = idList(queueId);
+    const publishUrl = (publishUrlDrafts[ids[0]] ?? "").trim();
 
     startTransition(async () => {
       try {
-        await markProoferQueueItemPublishedAction(
-          queueId,
-          publishUrl || undefined
+        await Promise.all(
+          ids.map((id) =>
+            markProoferQueueItemPublishedAction(id, publishUrl || undefined)
+          )
         );
         setPublishUrlDrafts((prev) => {
           const next = { ...prev };
-          delete next[queueId];
+          for (const id of ids) delete next[id];
           return next;
         });
         refresh();
@@ -313,7 +402,7 @@ export default function PublishQueueBoard({
     });
   }
 
-  async function handlePublishNow(queueId: string) {
+  async function handlePublishNow(queueId: string | string[]) {
     if (
       !confirm(
         "Publish this post to Meta right now? It will go live on the connected Facebook Page or Instagram account."
@@ -322,15 +411,30 @@ export default function PublishQueueBoard({
       return;
     }
     try {
-      const result = await publishMetaQueueItem(queueId);
-      if (result.ok) {
-        alert(
-          result.publishUrl
-            ? `Published! ${result.publishUrl}`
-            : "Published to Meta."
-        );
+      // Publish each destination separately so one failing (e.g. a missing
+      // Instagram connection) doesn't hide that the other succeeded.
+      const ids = idList(queueId);
+      const results = await Promise.all(
+        ids.map(async (id) => ({ id, result: await publishMetaQueueItem(id) }))
+      );
+      const okUrls: string[] = [];
+      const errors: string[] = [];
+      for (const { result } of results) {
+        if (result.ok) {
+          if (result.publishUrl) okUrls.push(result.publishUrl);
+        } else {
+          errors.push(result.error);
+        }
+      }
+      const okCount = results.length - errors.length;
+      if (errors.length === 0) {
+        alert(okUrls[0] ? `Published! ${okUrls[0]}` : "Published to Meta.");
+      } else if (okCount === 0) {
+        alert(`Publish failed: ${errors.join(" · ")}`);
       } else {
-        alert(`Publish failed: ${result.error}`);
+        alert(
+          `Published ${okCount} of ${results.length}. Failed: ${errors.join(" · ")}`
+        );
       }
       refresh();
     } catch (err) {
@@ -350,12 +454,15 @@ export default function PublishQueueBoard({
     )}`;
   }
 
-  function handleMarkFailed(queueId: string) {
-    const note = (failureNoteDrafts[queueId] ?? "").trim();
+  function handleMarkFailed(queueId: string | string[]) {
+    const ids = idList(queueId);
+    const note = (failureNoteDrafts[ids[0]] ?? "").trim();
 
     startTransition(async () => {
       try {
-        await markProoferQueueItemFailedAction(queueId, note || undefined);
+        await Promise.all(
+          ids.map((id) => markProoferQueueItemFailedAction(id, note || undefined))
+        );
         refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not mark as failed");
@@ -363,12 +470,20 @@ export default function PublishQueueBoard({
     });
   }
 
-  function handleRemove(queueId: string) {
-    if (!confirm("Remove this item from the publish queue?")) return;
+  function handleRemove(queueId: string | string[]) {
+    const ids = idList(queueId);
+    if (
+      !confirm(
+        ids.length > 1
+          ? `Remove this post from the publish queue? It is queued for ${ids.length} platforms.`
+          : "Remove this item from the publish queue?"
+      )
+    )
+      return;
 
     startTransition(async () => {
       try {
-        await removeProoferQueueItemAction(queueId);
+        await Promise.all(ids.map((id) => removeProoferQueueItemAction(id)));
         refresh();
       } catch (err) {
         alert(
@@ -537,7 +652,7 @@ export default function PublishQueueBoard({
           }}
         >
           Queue proofed posts, schedule them, then mark them published or
-          failed.{" "}
+          failed. Platforms are chosen in the Proofer.{" "}
           <Link href="/app/settings" style={{ color: "#6366f1", textDecoration: "none", fontWeight: 600 }}>
             Change region &rarr;
           </Link>
@@ -921,49 +1036,76 @@ export default function PublishQueueBoard({
                       borderTop: "1px solid #efefef",
                     }}
                   >
-                    {images.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleQueue(post.id, "instagram")}
-                        disabled={isPending}
-                        style={darkButton}
-                      >
-                        Queue for Instagram
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleQueue(post.id, "facebook")}
-                      disabled={isPending}
-                      style={images.length > 0 ? buttonBase : darkButton}
-                    >
-                      Queue for Facebook
-                    </button>
-                    {images.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (isPending) return;
-                          startTransition(async () => {
-                            try {
-                              await queueProoferPostAction(post.id, "instagram");
-                              await queueProoferPostAction(post.id, "facebook");
-                              refresh();
-                            } catch (err) {
-                              alert(
-                                err instanceof Error
-                                  ? err.message
-                                  : "Could not queue both platforms"
-                              );
+                    {/* Destinations are chosen in the Proofer while writing —
+                        this page shows what was chosen and acts on it. */}
+                    {(() => {
+                      const targets = post.publishTargets ?? [];
+                      const needsImage =
+                        targets.includes("instagram") && images.length === 0;
+                      const blocked = targets.length === 0 || needsImage;
+                      return (
+                        <>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flexWrap: "wrap",
+                              marginRight: "auto",
+                              fontSize: 12,
+                              color: "#52525b",
+                            }}
+                          >
+                            <span style={{ color: "#a1a1aa" }}>Publishing to</span>
+                            {targets.length === 0 ? (
+                              <strong style={{ color: "#b45309" }}>
+                                nothing selected — set it in the Proofer
+                              </strong>
+                            ) : (
+                              targets.map((t) => (
+                                <span
+                                  key={t}
+                                  style={{
+                                    padding: "2px 9px",
+                                    borderRadius: 999,
+                                    background: t === "facebook" ? "#e0f2fe" : "#fdf2f8",
+                                    border: `1px solid ${t === "facebook" ? "#bae6fd" : "#fbcfe8"}`,
+                                    color: t === "facebook" ? "#075985" : "#9d174d",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {PUBLISH_TARGET_LABELS[t]}
+                                </span>
+                              ))
+                            )}
+                            {needsImage && (
+                              <span style={{ color: "#b45309", fontWeight: 600 }}>
+                                · Instagram needs an image
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleQueueTargets(post.id)}
+                            disabled={isPending || blocked}
+                            title={
+                              targets.length === 0
+                                ? "No platforms selected for this post"
+                                : needsImage
+                                ? "Instagram posts need at least one image"
+                                : undefined
                             }
-                          });
-                        }}
-                        disabled={isPending}
-                        style={buttonBase}
-                      >
-                        Queue both
-                      </button>
-                    )}
+                            style={{
+                              ...darkButton,
+                              opacity: blocked ? 0.45 : 1,
+                              cursor: blocked ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            Add to queue
+                          </button>
+                        </>
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={() => handleDeletePost(post.id)}
@@ -1109,7 +1251,8 @@ export default function PublishQueueBoard({
                             color: "#18181b",
                           }}
                         >
-                          {item.clientName} · {platformLabel(item.platform)}
+                          {item.clientName}
+                        <PlatformChips platforms={item.platforms} />
                         </div>
                         <div style={{ fontSize: 12, color: "#71717a" }}>
                           {formatDate(item.postDate)}
@@ -1131,26 +1274,31 @@ export default function PublishQueueBoard({
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "#27272a",
-                      lineHeight: 1.45,
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {item.caption || "No caption"}
-                  </div>
-
-                  <CarouselPreview
-                    urls={
+                  {/* Thumbnail beside the caption rather than under it — the card is
+                      full width and the preview is small. */}
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <CarouselPreview
+                      urls={
                       item.mediaUrls.length > 0
                         ? item.mediaUrls
                         : item.imageUrl
                         ? [item.imageUrl]
                         : []
-                    }
-                  />
+                      }
+                    />
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 200,
+                        fontSize: 13,
+                        color: "#27272a",
+                        lineHeight: 1.45,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {item.caption || "No caption"}
+                    </div>
+                  </div>
 
                   <div
                     style={{
@@ -1269,7 +1417,8 @@ export default function PublishQueueBoard({
                         color: "#18181b",
                       }}
                     >
-                      {item.clientName} · {platformLabel(item.platform)}
+                      {item.clientName}
+                        <PlatformChips platforms={item.platforms} />
                     </div>
                     <div style={{ fontSize: 12, color: "#71717a" }}>
                       {formatDate(item.postDate)} · Scheduled for{" "}
@@ -1291,28 +1440,34 @@ export default function PublishQueueBoard({
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "#27272a",
-                    lineHeight: 1.45,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {item.caption || "No caption"}
-                </div>
-
-                <CarouselPreview
-                  urls={
+                {/* Thumbnail beside the caption rather than under it — the card is
+                    full width and the preview is small. */}
+                <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <CarouselPreview
+                    urls={
                     item.mediaUrls.length > 0
                       ? item.mediaUrls
                       : item.imageUrl
                       ? [item.imageUrl]
                       : []
-                  }
-                />
+                    }
+                  />
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 200,
+                      fontSize: 13,
+                      color: "#27272a",
+                      lineHeight: 1.45,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {item.caption || "No caption"}
+                  </div>
+                </div>
 
                 <div
+                  className="publish-action-row"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "minmax(220px, 1fr) auto auto",
@@ -1353,6 +1508,7 @@ export default function PublishQueueBoard({
                 </div>
 
                 <div
+                  className="publish-action-row"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "minmax(220px, 1fr) auto",
@@ -1420,7 +1576,8 @@ export default function PublishQueueBoard({
                       color: "#18181b",
                     }}
                   >
-                    {item.clientName} · {platformLabel(item.platform)}
+                    {item.clientName}
+                        <PlatformChips platforms={item.platforms} />
                   </div>
                   <div style={{ fontSize: 12, color: "#71717a" }}>
                     {formatDate(item.postDate)} · Published{" "}
@@ -1565,7 +1722,8 @@ export default function PublishQueueBoard({
                           color: "#18181b",
                         }}
                       >
-                        {item.clientName} · {platformLabel(item.platform)}
+                        {item.clientName}
+                        <PlatformChips platforms={item.platforms} />
                       </div>
                       <div style={{ fontSize: 12, color: "#71717a" }}>
                         {formatDate(item.postDate)}

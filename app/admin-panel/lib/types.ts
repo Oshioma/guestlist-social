@@ -237,6 +237,34 @@ export const PROOFER_PLATFORM_LABELS: Record<ProoferPlatform, string> = {
   facebook: "Facebook",
 };
 
+/**
+ * The Instagram formats a post can take. `platform` on a post now means the
+ * format only — where it publishes is `publishTargets`. "facebook" remains a
+ * valid ProoferPlatform so pre-existing Facebook-only drafts stay readable,
+ * but the board no longer creates new ones.
+ */
+export const INSTAGRAM_FORMATS = [
+  "instagram_feed",
+  "instagram_story",
+  "instagram_reel",
+] as const;
+
+export type InstagramFormat = (typeof INSTAGRAM_FORMATS)[number];
+
+export function isInstagramFormat(p: ProoferPlatform): p is InstagramFormat {
+  return (INSTAGRAM_FORMATS as readonly string[]).includes(p);
+}
+
+/** Where a post actually publishes. Mirrors the publish queue's platforms. */
+export type PublishTarget = "instagram" | "facebook";
+
+export const PUBLISH_TARGETS: PublishTarget[] = ["instagram", "facebook"];
+
+export const PUBLISH_TARGET_LABELS: Record<PublishTarget, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+};
+
 export type ProoferComment = {
   id: string;
   postId: string;
@@ -299,6 +327,8 @@ export type ProoferPost = {
   imageUrl: string;
   mediaUrls: string[];
   publishTime: string; // "HH:MM" in UTC, default "18:00"
+  /** Destinations this post publishes to. Empty means nothing is selected. */
+  publishTargets: PublishTarget[];
   status: ProoferStatus;
   createdBy: string;
   updatedBy: string | null;
