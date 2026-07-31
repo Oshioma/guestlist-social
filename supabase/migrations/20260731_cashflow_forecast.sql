@@ -46,9 +46,13 @@ create table if not exists public.cashflow_settings (
 alter table public.cashflow_lines    enable row level security;
 alter table public.cashflow_settings enable row level security;
 
+-- Drop-then-create so the migration is safe to re-run (Postgres has no
+-- CREATE POLICY IF NOT EXISTS).
+drop policy if exists cashflow_lines_admin_all on public.cashflow_lines;
 create policy cashflow_lines_admin_all on public.cashflow_lines
   for all using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists cashflow_settings_admin_all on public.cashflow_settings;
 create policy cashflow_settings_admin_all on public.cashflow_settings
   for all using (public.is_admin()) with check (public.is_admin());
 
@@ -61,6 +65,11 @@ insert into public.cashflow_settings (year, opening_balance)
 values (2026, 0)
 on conflict (year) do nothing;
 
+-- Seeded once. The guard keeps the migration re-runnable: cashflow_lines has
+-- no natural unique key, so a bare re-insert would duplicate every row.
+do $$
+begin
+if not exists (select 1 from public.cashflow_lines where year = 2026) then
 insert into public.cashflow_lines (year, section, label, kind, sort_order, amounts) values
   -- Overheads
   (2026, 'Overheads', 'Rent',            'cost', 10, '[400,400,400,400,400,400,400,400,400,400,400,400]'),
@@ -100,5 +109,6 @@ insert into public.cashflow_lines (year, section, label, kind, sort_order, amoun
   (2026, 'Rooms', 'Edson',  'cost', 420, '[150,0,130,0,0,130,0,0,130,0,0,130]'),
   (2026, 'Rooms', 'Joshua', 'cost', 430, '[120,0,120,0,0,0,160,0,0,0,160,120]'),
   -- Revenue
-  (2026, 'Revenue', 'Social revenue', 'revenue', 510, '[4300,4300,4300,6000,5400,5500,0,0,0,0,0,0]')
-on conflict do nothing;
+  (2026, 'Revenue', 'Social revenue', 'revenue', 510, '[4300,4300,4300,6000,5400,5500,0,0,0,0,0,0]');
+end if;
+end $$;
