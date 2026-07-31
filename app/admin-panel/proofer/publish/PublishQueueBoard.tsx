@@ -272,6 +272,9 @@ export default function PublishQueueBoard({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  // Which queue item currently has an action in flight. The global isPending
+  // disables every button; this lets just the pressed one show a spinner.
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [connectClientId, setConnectClientId] = useState<string>(
     clients[0]?.id ?? ""
   );
@@ -444,6 +447,33 @@ export default function PublishQueueBoard({
         refresh();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not schedule item");
+      }
+    });
+  }
+
+  // Reschedule an already-scheduled post to a new time across all its platform
+  // rows, tracking pendingId so the button shows a "Rescheduling…" state
+  // instead of just sitting there disabled while the server works.
+  function handleReschedule(item: QueueGroup) {
+    const draft =
+      scheduleDrafts[item.id] ??
+      toDateTimeLocalInputValue(item.scheduledFor, default6pm);
+    if (!draft) {
+      alert("Pick a time first.");
+      return;
+    }
+    setPendingId(item.id);
+    startTransition(async () => {
+      try {
+        const at = fromDateTimeLocalInputValue(draft);
+        await Promise.all(
+          item.ids.map((id) => scheduleProoferQueueItemAction(id, at))
+        );
+        refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Could not reschedule");
+      } finally {
+        setPendingId(null);
       }
     });
   }
@@ -1169,18 +1199,25 @@ export default function PublishQueueBoard({
                             toDateTimeLocalInputValue(item.scheduledFor, default6pm)
                         );
                         const shown = iso ? formatDateTime(iso, timeZone) : "";
-                        return shown ? `New time: ${shown}` : "Pick a time";
+                        return shown
+                          ? `Set in your local time · goes out ${shown}`
+                          : "Pick a time";
                       })()}
                     </span>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => handleSchedule(item.ids)}
+                    onClick={() => handleReschedule(item)}
                     disabled={isPending}
-                    style={darkButton}
+                    style={{
+                      ...darkButton,
+                      opacity:
+                        pendingId === item.id ? 0.7 : isPending ? 0.5 : 1,
+                      cursor: isPending ? "wait" : "pointer",
+                    }}
                   >
-                    Reschedule
+                    {pendingId === item.id ? "Rescheduling…" : "Reschedule"}
                   </button>
                 </div>
 
