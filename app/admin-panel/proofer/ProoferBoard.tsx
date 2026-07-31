@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -1636,7 +1636,8 @@ export default function ProoferBoard({
             >
               {clients.find((c) => c.id === clientId)?.name ?? "Client"}
             </span>
-            {/* Month is the first thing to give way when the row is tight. */}
+            {/* Abbreviated ("Aug 2026") so it degrades to something readable
+                rather than clipping to "Au…" when the row is tight. */}
             <span
               style={{
                 color: "#a1a1aa",
@@ -1646,7 +1647,10 @@ export default function ProoferBoard({
                 textOverflow: "ellipsis",
               }}
             >
-              {months.find((m) => m.value === month)?.label ?? month}
+              {(months.find((m) => m.value === month)?.label ?? month).replace(
+                /^([A-Za-z]{3})[a-z]+/,
+                "$1"
+              )}
             </span>
             <span style={{ color: "#a1a1aa", marginLeft: "auto", flexShrink: 0 }}>⚙</span>
           </button>
@@ -2413,46 +2417,121 @@ export default function ProoferBoard({
                     </>
                   )}
 
-                  {post?.createdBy && (
-                    <div style={{ marginTop: 6, fontSize: 11, color: "#71717a" }}>
-                      Created by <strong style={{ color: "#52525b" }}>{post.createdBy.split("@")[0]}</strong>
-                    </div>
-                  )}
-                  {post?.updatedBy && post.updatedBy !== post.createdBy && (
-                    <div style={{ marginTop: 2, fontSize: 11, color: "#71717a" }}>
-                      Edited by <strong style={{ color: "#52525b" }}>{post.updatedBy.split("@")[0]}</strong>
-                    </div>
-                  )}
-                  {post?.status === "approved" && post.updatedBy && (
-                    <div style={{ marginTop: 2, fontSize: 11, color: "#15803d", fontWeight: 600 }}>
-                      Approved by {post.updatedBy.split("@")[0]}
-                    </div>
-                  )}
+                  {isNarrow ? (
+                    // On a phone these five facts each used to claim their own
+                    // line — and because the column is dissolved into the card
+                    // grid, each one also cost a 12px grid gap. One wrapped row
+                    // says the same thing in a single line.
+                    (() => {
+                      const meta: React.ReactNode[] = [];
+                      if (post?.createdBy) {
+                        meta.push(
+                          <span key="by" style={{ color: "#71717a" }}>
+                            by{" "}
+                            <strong style={{ color: "#52525b" }}>
+                              {post.createdBy.split("@")[0]}
+                            </strong>
+                          </span>
+                        );
+                      }
+                      if (post?.updatedBy && post.updatedBy !== post.createdBy) {
+                        meta.push(
+                          <span key="edit" style={{ color: "#71717a" }}>
+                            edited by{" "}
+                            <strong style={{ color: "#52525b" }}>
+                              {post.updatedBy.split("@")[0]}
+                            </strong>
+                          </span>
+                        );
+                      }
+                      if (post?.status === "approved" && post.updatedBy) {
+                        meta.push(
+                          <span key="appr" style={{ color: "#15803d", fontWeight: 600 }}>
+                            approved by {post.updatedBy.split("@")[0]}
+                          </span>
+                        );
+                      }
+                      if (hasDraft && !isLocked) {
+                        meta.push(
+                          <span key="unsaved" style={{ color: "#b45309", fontWeight: 700 }}>
+                            Unsaved changes
+                          </span>
+                        );
+                      }
+                      if (isLocked) {
+                        meta.push(
+                          <span key="locked" style={{ color: "#075985", fontWeight: 700 }}>
+                            🔒 Approved &amp; locked
+                          </span>
+                        );
+                      }
+                      if (meta.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            order: 1,
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            gap: "2px 10px",
+                            marginTop: -4,
+                            fontSize: 12,
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {meta.map((node, i) => (
+                            <React.Fragment key={i}>
+                              {i > 0 && <span style={{ color: "#d4d4d8" }}>·</span>}
+                              {node}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <>
+                      {post?.createdBy && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#71717a" }}>
+                          Created by <strong style={{ color: "#52525b" }}>{post.createdBy.split("@")[0]}</strong>
+                        </div>
+                      )}
+                      {post?.updatedBy && post.updatedBy !== post.createdBy && (
+                        <div style={{ marginTop: 2, fontSize: 11, color: "#71717a" }}>
+                          Edited by <strong style={{ color: "#52525b" }}>{post.updatedBy.split("@")[0]}</strong>
+                        </div>
+                      )}
+                      {post?.status === "approved" && post.updatedBy && (
+                        <div style={{ marginTop: 2, fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                          Approved by {post.updatedBy.split("@")[0]}
+                        </div>
+                      )}
 
-                  {hasDraft && !isLocked && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 11,
-                        color: "#b45309",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Unsaved changes
-                    </div>
-                  )}
+                      {hasDraft && !isLocked && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 11,
+                            color: "#b45309",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Unsaved changes
+                        </div>
+                      )}
 
-                  {isLocked && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 11,
-                        color: "#075985",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Approved and locked
-                    </div>
+                      {isLocked && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 11,
+                            color: "#075985",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Approved and locked
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div
@@ -3130,7 +3209,7 @@ export default function ProoferBoard({
                           display: "flex",
                           alignItems: "center",
                           gap: 10,
-                          padding: "10px 12px",
+                          padding: isNarrow ? "8px 12px" : "10px 12px",
                         }}
                       >
                         <div
@@ -3150,13 +3229,18 @@ export default function ProoferBoard({
                           {(clients.find((c) => c.id === clientId)?.name ?? "?").charAt(0).toUpperCase()}
                         </div>
 
-                        <div style={{ display: "flex", flexDirection: "column" }}>
+                        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: "#18181b", lineHeight: 1.2 }}>
                             {clients.find((c) => c.id === clientId)?.name ?? "Client"}
                           </span>
-                          <span style={{ fontSize: 11, color: "#71717a", lineHeight: 1.2 }}>
-                            {formatDayLong(d)}
-                          </span>
+                          {/* The day header directly above already states the
+                              date on mobile — repeating it here is a wasted
+                              line inside a screen-width card. */}
+                          {!isNarrow && (
+                            <span style={{ fontSize: 11, color: "#71717a", lineHeight: 1.2 }}>
+                              {formatDayLong(d)}
+                            </span>
+                          )}
                         </div>
 
                         {draft.pillarId && pillarsById.get(draft.pillarId) && (
