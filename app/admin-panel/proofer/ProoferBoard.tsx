@@ -3306,20 +3306,30 @@ export default function ProoferBoard({
                             </div>
                           ) : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              {clientImages.map((img) => (
+                              {clientImages.map((img) => {
+                                const useImage = () => {
+                                  addMediaUrl(dateKey, activePlatform, img.publicUrl);
+                                  setImgLibraryPostKey(null);
+                                  setHoverPreview(null);
+                                  setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                                };
+                                const cellW = isNarrow ? 150 : 100;
+                                const cellH = isNarrow ? 106 : 70;
+                                return (
                                 <div key={img.id} style={{ position: "relative", flexShrink: 0 }}
-                                  onMouseEnter={(e) => {
+                                  // Skip the cut-off hover preview on touch; tapping selects instead.
+                                  onMouseEnter={isNarrow ? undefined : (e) => {
                                     const r = e.currentTarget.getBoundingClientRect();
                                     setHoverPreview({ url: img.publicUrl, x: r.right + 12, y: Math.max(8, Math.min(r.top, window.innerHeight - 400)) });
                                   }}
-                                  onMouseLeave={() => setHoverPreview(null)}
+                                  onMouseLeave={isNarrow ? undefined : () => setHoverPreview(null)}
                                 >
                                   {isDriveVideo(img.publicUrl) ? (
-                                    <div style={{ position: "relative", width: 100, height: 70, flexShrink: 0 }}>
+                                    <div onClick={isNarrow ? useImage : undefined} style={{ position: "relative", width: cellW, height: cellH, flexShrink: 0 }}>
                                       <img
                                         src={driveThumbUrl(img.publicUrl) ?? ""}
                                         alt=""
-                                        style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
+                                        style={{ width: cellW, height: cellH, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe" }}
                                       />
                                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, background: "rgba(0,0,0,0.28)" }}>
                                         <span style={{ fontSize: 18, color: "#fff", lineHeight: 1 }}>▶</span>
@@ -3329,22 +3339,18 @@ export default function ProoferBoard({
                                     <img
                                       src={img.publicUrl}
                                       alt=""
-                                      style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
+                                      onClick={isNarrow ? useImage : undefined}
+                                      style={{ width: cellW, height: cellH, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
                                     />
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      addMediaUrl(dateKey, activePlatform, img.publicUrl);
-                                      setImgLibraryPostKey(null);
-                                      setHoverPreview(null);
-                                      setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                                    }}
+                                    onClick={useImage}
                                     style={{
-                                      position: "absolute", bottom: 4, right: 4,
-                                      padding: "2px 6px", borderRadius: 4, border: "none",
-                                      background: "rgba(0,0,0,0.65)", color: "#fff",
-                                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                      position: "absolute", bottom: isNarrow ? 6 : 4, right: isNarrow ? 6 : 4,
+                                      padding: isNarrow ? "6px 14px" : "2px 6px", borderRadius: isNarrow ? 8 : 4, border: "none",
+                                      background: "rgba(0,0,0,0.72)", color: "#fff",
+                                      fontSize: isNarrow ? 13 : 10, fontWeight: 700, cursor: "pointer",
                                     }}
                                   >
                                     Use
@@ -3364,7 +3370,8 @@ export default function ProoferBoard({
                                     ×
                                   </button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -3411,47 +3418,54 @@ export default function ProoferBoard({
                           )}
 
                           {pexelsPhotos.length > 0 && (
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              {pexelsPhotos.map((photo) => (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: isNarrow ? 8 : 6 }}>
+                              {pexelsPhotos.map((photo) => {
+                                const selectPhoto = () => {
+                                  addMediaUrl(dateKey, activePlatform, photo.full);
+                                  setPexelsPostKey(null);
+                                  setHoverPreview(null);
+                                  setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                                };
+                                return (
                                 <div key={photo.id} style={{ position: "relative", flexShrink: 0 }}
-                                  onMouseEnter={(e) => {
+                                  // Hover-preview is a desktop affordance; on touch it just pops a
+                                  // cut-off overlay you can't act on, so skip it and let the tap select.
+                                  onMouseEnter={isNarrow ? undefined : (e) => {
                                     const r = e.currentTarget.getBoundingClientRect();
                                     setHoverPreview({ url: photo.full, credit: photo.photographer, x: r.right + 12, y: Math.max(8, Math.min(r.top, window.innerHeight - 400)) });
                                   }}
-                                  onMouseLeave={() => setHoverPreview(null)}
+                                  onMouseLeave={isNarrow ? undefined : () => setHoverPreview(null)}
                                 >
                                   <img
                                     src={photo.thumb}
                                     alt={photo.photographer}
-                                    style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff" }}
+                                    // On mobile the whole photo is the tap target — select on tap.
+                                    onClick={isNarrow ? selectPhoto : undefined}
+                                    style={{ width: isNarrow ? 150 : 100, height: isNarrow ? 106 : 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff", cursor: "pointer" }}
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      addMediaUrl(dateKey, activePlatform, photo.full);
-                                      setPexelsPostKey(null);
-                                      setHoverPreview(null);
-                                      setTimeout(() => document.getElementById(`day-${dateKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-                                    }}
+                                    onClick={selectPhoto}
                                     style={{
-                                      position: "absolute", bottom: 4, right: 4,
-                                      padding: "2px 6px", borderRadius: 4, border: "none",
-                                      background: "rgba(0,0,0,0.65)", color: "#fff",
-                                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                      position: "absolute", bottom: isNarrow ? 6 : 4, right: isNarrow ? 6 : 4,
+                                      padding: isNarrow ? "6px 14px" : "2px 6px", borderRadius: isNarrow ? 8 : 4, border: "none",
+                                      background: "rgba(0,0,0,0.72)", color: "#fff",
+                                      fontSize: isNarrow ? 13 : 10, fontWeight: 700, cursor: "pointer",
                                     }}
                                   >
                                     Use
                                   </button>
                                   <div style={{
-                                    position: "absolute", bottom: 4, left: 4,
-                                    fontSize: 9, color: "rgba(255,255,255,0.8)",
-                                    background: "rgba(0,0,0,0.4)", borderRadius: 3, padding: "1px 3px",
-                                    maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                    position: "absolute", bottom: isNarrow ? 6 : 4, left: isNarrow ? 6 : 4,
+                                    fontSize: 9, color: "rgba(255,255,255,0.85)",
+                                    background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "1px 3px",
+                                    maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                                   }}>
                                     {photo.photographer}
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
 
