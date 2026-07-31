@@ -63,6 +63,17 @@ export default async function EditClientPage({ params }: Props) {
   const access = await getMemberAccess();
   const isAdmin = access?.role === "admin";
 
+  // Billing lives in its own admin-only table now (never exposed to portals).
+  const billing = isAdmin
+    ? (
+        await supabase
+          .from("client_billing")
+          .select("monthly_price, direct_debit")
+          .eq("client_id", clientId)
+          .maybeSingle<{ monthly_price: number | null; direct_debit: boolean }>()
+      ).data
+    : null;
+
   const activeClients = (activeClientsRes.data ?? [])
     .filter((row) =>
       isActiveClientStatus((row as { status?: string | null }).status)
@@ -274,9 +285,9 @@ export default async function EditClientPage({ params }: Props) {
         <ClientBillingForm
           clientId={clientId}
           initialMonthlyPrice={
-            client.monthly_price != null ? Number(client.monthly_price) : null
+            billing?.monthly_price != null ? Number(billing.monthly_price) : null
           }
-          initialDirectDebit={client.direct_debit === true}
+          initialDirectDebit={billing?.direct_debit === true}
         />
       ) : null}
 

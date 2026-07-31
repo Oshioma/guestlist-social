@@ -4,6 +4,8 @@ import {
   getActiveClientRetainers,
   getCashflowYears,
 } from "@/app/admin-panel/lib/cashflow-actions";
+import { createClient } from "@/lib/supabase/server";
+import { getDisplayTimezone } from "@/lib/app-settings";
 import CashflowGrid from "@/app/admin-panel/components/CashflowGrid";
 import CashflowYearBar from "@/app/admin-panel/components/CashflowYearBar";
 
@@ -37,8 +39,17 @@ export default async function CashflowPage({ searchParams }: Props) {
   const yearChips = Array.from(new Set([...years, year])).sort((a, b) => a - b);
 
   // Highlight the current month's column, but only when viewing this year.
-  const now = new Date();
-  const highlightMonth = year === now.getFullYear() ? now.getMonth() : null;
+  // Compute "now" in the agency's display timezone so the highlight doesn't
+  // slip a month around midnight for a server running in UTC.
+  const tz = await getDisplayTimezone(await createClient());
+  const nowParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(new Date());
+  const curYear = Number(nowParts.find((p) => p.type === "year")?.value);
+  const curMonth = Number(nowParts.find((p) => p.type === "month")?.value) - 1;
+  const highlightMonth = year === curYear ? curMonth : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

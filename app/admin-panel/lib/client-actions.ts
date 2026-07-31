@@ -598,13 +598,15 @@ export async function updateClientBillingAction(
       : null;
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("clients")
-    .update({
+  const { error } = await supabase.from("client_billing").upsert(
+    {
+      client_id: clientId,
       monthly_price: price,
       direct_debit: billing.directDebit,
-    })
-    .eq("id", clientId);
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "client_id" }
+  );
 
   if (error) {
     console.error("updateClientBillingAction error:", error);
@@ -612,6 +614,8 @@ export async function updateClientBillingAction(
   }
 
   revalidatePath(`/admin-panel/clients/${clientId}/edit`);
+  revalidatePath("/admin-panel/clients");
+  revalidatePath("/admin-panel/clients/payments");
   return { error: null };
 }
 
