@@ -274,22 +274,43 @@ export default async function ClientsPage({ searchParams }: Props) {
           </div>
         </div>
 
-        <Link
-          href="/app/clients/new"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "#18181b",
-            color: "#fff",
-            textDecoration: "none",
-            fontSize: 14,
-            fontWeight: 600,
-          }}
-        >
-          New client
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {admin ? (
+            <Link
+              href="/app/clients/payments"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+                color: "#18181b",
+                textDecoration: "none",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              Payments
+            </Link>
+          ) : null}
+          <Link
+            href="/app/clients/new"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "#18181b",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            New client
+          </Link>
+        </div>
       </div>
 
       <div
