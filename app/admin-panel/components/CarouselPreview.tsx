@@ -11,13 +11,37 @@ function isVideoUrl(url: string): boolean {
   return /\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url);
 }
 
+// Pull the file id out of the Google Drive URL shapes we store
+// (`uc?id=…`, `?id=…`, `/file/d/<id>/…`, `thumbnail?id=…`).
+function driveFileId(url: string): string | null {
+  const query = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (query) return query[1];
+  const path = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (path) return path[1];
+  return null;
+}
+
+// Google Drive's `uc?id=` links don't render in an <img>; the `thumbnail`
+// endpoint does. Convert Drive links to that form so previews actually load
+// (the proofer already does this — the queue used the raw link, hence blank
+// thumbnails). Non-Drive URLs pass through untouched.
+function displayImageSrc(url: string): string {
+  if (/drive\.google\.com|googleusercontent\.com/.test(url)) {
+    const id = driveFileId(url);
+    if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w600`;
+  }
+  return url;
+}
+
 export default function CarouselPreview({ urls, size = 120 }: Props) {
   const [idx, setIdx] = useState(0);
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
   const total = urls.length;
 
   if (total === 0) return null;
 
   const url = urls[idx] ?? urls[0];
+  const errored = Boolean(failed[url]);
   const hasPrev = idx > 0;
   const hasNext = idx < total - 1;
 
@@ -41,10 +65,31 @@ export default function CarouselPreview({ urls, size = 120 }: Props) {
           position: "relative",
         }}
       >
-        {isVideoUrl(url) ? (
+        {errored ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              width: "100%",
+              height: "100%",
+              color: "#a1a1aa",
+              fontSize: 11,
+              fontWeight: 600,
+              textAlign: "center",
+              padding: 6,
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 20 }}>&#128247;</span>
+            No preview
+          </div>
+        ) : isVideoUrl(url) ? (
           <video
             key={url}
             src={url}
+            onError={() => setFailed((prev) => ({ ...prev, [url]: true }))}
             style={{
               display: "block",
               width: "100%",
@@ -55,8 +100,9 @@ export default function CarouselPreview({ urls, size = 120 }: Props) {
         ) : (
           <img
             key={url}
-            src={url}
+            src={displayImageSrc(url)}
             alt={`Slide ${idx + 1}`}
+            onError={() => setFailed((prev) => ({ ...prev, [url]: true }))}
             style={{
               display: "block",
               width: "100%",

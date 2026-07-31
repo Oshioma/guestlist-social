@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SectionCard from "../../components/SectionCard";
@@ -278,6 +278,23 @@ export default function PublishQueueBoard({
 
   const default6pm = useMemo(() => getDefault6pmGmt(), []);
   const zone = useMemo(() => describeZone(timeZone), [timeZone]);
+
+  // The expired-token banner links here with #meta-connection to send the
+  // operator straight to reconnecting. Open the (collapsed) panel and scroll
+  // it into view — on first load (arriving from another page) and on
+  // hashchange (clicking the banner while already on this page).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const openIfTargeted = () => {
+      if (window.location.hash !== "#meta-connection") return;
+      const el = document.getElementById("meta-connection");
+      if (el instanceof HTMLDetailsElement) el.open = true;
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    openIfTargeted();
+    window.addEventListener("hashchange", openIfTargeted);
+    return () => window.removeEventListener("hashchange", openIfTargeted);
+  }, []);
 
   const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, string>>(
     {}
@@ -1473,6 +1490,7 @@ export default function PublishQueueBoard({
             )}
           </div>
       <details
+        id="meta-connection"
         style={{
           border: "1px solid #e4e4e7",
           borderRadius: 14,

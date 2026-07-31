@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import TokenExpiryActions from "./TokenExpiryActions";
 
 type AccountRow = {
   client_id: number;
@@ -83,9 +84,7 @@ export default async function TokenExpiryBanner() {
           Re-connect before they expire to avoid publish failures.
         </div>
       )}
-      <div style={{ fontSize: 11, color: "#71717a", marginTop: 2 }}>
-        Go to Settings &rarr; Meta Ads Sync or use the Connect Meta button on the publish page.
-      </div>
+      <TokenExpiryActions />
     </div>
   );
 }
