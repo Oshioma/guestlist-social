@@ -19,16 +19,20 @@ export default async function ClientPaymentsPage() {
     .eq("archived", false)
     .order("name", { ascending: true });
 
-  const rows: PaymentRow[] = (data ?? []).map((c) => ({
-    id: String(c.id),
-    name: (c.name as string) ?? "Untitled client",
-    price:
-      c.monthly_price != null && Number.isFinite(Number(c.monthly_price))
-        ? Number(c.monthly_price)
-        : null,
-    directDebit: c.direct_debit === true,
-    status: mapClientStatus((c.status as string) ?? ""),
-  }));
+  const rows: PaymentRow[] = (data ?? []).map((c) => {
+    const rawStatus = (c.status as string) ?? "";
+    return {
+      id: String(c.id),
+      name: (c.name as string) ?? "Untitled client",
+      price:
+        c.monthly_price != null && Number.isFinite(Number(c.monthly_price))
+          ? Number(c.monthly_price)
+          : null,
+      directDebit: c.direct_debit === true,
+      status: mapClientStatus(rawStatus),
+      active: rawStatus === "active" || rawStatus === "growing",
+    };
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

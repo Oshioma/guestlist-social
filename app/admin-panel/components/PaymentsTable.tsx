@@ -15,6 +15,7 @@ export type PaymentRow = {
   price: number | null;
   directDebit: boolean;
   status: string;
+  active: boolean;
 };
 
 type SortKey = "name" | "status" | "price" | "method";
@@ -31,9 +32,12 @@ export default function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [pricedOnly, setPricedOnly] = useState(true);
+  const [activeOnly, setActiveOnly] = useState(true);
 
   const visible = useMemo(() => {
-    const filtered = pricedOnly ? rows.filter((r) => r.price != null) : rows;
+    const filtered = rows.filter(
+      (r) => (!pricedOnly || r.price != null) && (!activeOnly || r.active)
+    );
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
       switch (sortKey) {
@@ -48,7 +52,7 @@ export default function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
           return ((a.price ?? -1) - (b.price ?? -1)) * dir;
       }
     });
-  }, [rows, sortKey, sortDir, pricedOnly]);
+  }, [rows, sortKey, sortDir, pricedOnly, activeOnly]);
 
   const totalMrr = visible.reduce((t, r) => t + (r.price ?? 0), 0);
   const ddMrr = visible.reduce(
@@ -93,22 +97,40 @@ export default function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
             value={money(totalMrr - ddMrr)}
           />
         </div>
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 13,
-            color: "#52525b",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={pricedOnly}
-            onChange={(e) => setPricedOnly(e.target.checked)}
-          />
-          Only clients with a price
-        </label>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: "#52525b",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={activeOnly}
+              onChange={(e) => setActiveOnly(e.target.checked)}
+            />
+            Active clients only
+          </label>
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: "#52525b",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={pricedOnly}
+              onChange={(e) => setPricedOnly(e.target.checked)}
+            />
+            Only clients with a price
+          </label>
+        </div>
       </div>
 
       <div
