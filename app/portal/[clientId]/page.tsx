@@ -14,7 +14,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../admin-panel/lib/viewer";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +86,24 @@ export default async function PortalClientDashboard({
   if (!canViewClient(viewer, clientId)) notFound();
 
   const supabase = await createClient();
+
+  // Clients land on Content first (when it's enabled for them). Admins
+  // previewing keep the dashboard so they can inspect the trust surfaces.
+  if (viewer?.role === "client") {
+    const { data: toggle, error: toggleError } = await supabase
+      .from("clients")
+      .select("portal_show_content")
+      .eq("id", clientId)
+      .maybeSingle();
+    // Only redirect when we could actually read the flag (post-migration).
+    if (!toggleError) {
+      const showContent =
+        (toggle as { portal_show_content?: boolean } | null)?.portal_show_content !== false;
+      if (showContent) {
+        redirect(`/portal/${clientId}/content`);
+      }
+    }
+  }
 
   // Fetch ads first — we need their ids to scope ad_actions (ad_actions has
   // no client_id column, so the only way to scope is via ad_id IN (...)).

@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../../admin-panel/lib/viewer";
 import { getAppPerformanceStatus } from "../../../admin-panel/lib/performance-truth";
+import { isPortalSectionVisible } from "../visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function PortalAdsPage({
 
   const viewer = await getViewer();
   if (!canViewClient(viewer, clientId)) notFound();
+  if (!(await isPortalSectionVisible(clientId, viewer, "portal_show_ads"))) notFound();
 
   const supabase = await createClient();
   const { data: ads } = await supabase

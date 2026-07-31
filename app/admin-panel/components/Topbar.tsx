@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import NotificationsBell from "./NotificationsBell";
 
 const subtitles: Record<string, string> = {
   "/app/dashboard": "Activity across all apps · last 30 days",
@@ -93,6 +94,7 @@ export default function Topbar({ onMenu }: { onMenu?: () => void }) {
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <NotificationsBell />
         <form action="/sign-out" method="post" style={{ margin: 0 }}>
           <button
             type="submit"

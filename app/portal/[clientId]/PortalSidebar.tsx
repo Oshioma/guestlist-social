@@ -12,27 +12,46 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+type Visibility = {
+  content: boolean;
+  ads: boolean;
+  reviews: boolean;
+  consultation: boolean;
+};
+
 type Props = {
   clientId: number;
   clientName: string;
   isAdminPreview: boolean;
+  visibility?: Visibility;
 };
 
 export default function PortalSidebar({
   clientId,
   clientName,
   isAdminPreview,
+  visibility,
 }: Props) {
   const pathname = usePathname();
   const base = `/portal/${clientId}`;
 
+  // Missing visibility (older callers) means "show everything" — the toggles
+  // default on, so this preserves prior behavior.
+  const show = {
+    content: visibility?.content !== false,
+    ads: visibility?.ads !== false,
+    reviews: visibility?.reviews !== false,
+    consultation: visibility?.consultation !== false,
+  };
+
   const navItems = [
-    { label: "Dashboard", href: `${base}` },
-    { label: "Ads", href: `${base}/ads` },
-    { label: "Reviews", href: `${base}/reviews` },
-    { label: "Consultation", href: `${base}/consultation` },
-    { label: "Connect Meta", href: `${base}/connect` },
-  ];
+    { label: "Dashboard", href: `${base}`, show: true },
+    { label: "Content", href: `${base}/content`, show: show.content },
+    { label: "Ads", href: `${base}/ads`, show: show.ads },
+    { label: "Reviews", href: `${base}/reviews`, show: show.reviews },
+    { label: "Consultation", href: `${base}/consultation`, show: show.consultation },
+    { label: "Connect Meta", href: `${base}/connect`, show: true },
+  ].filter((item) => item.show);
 
   return (
     <aside className="portal-sidebar">
