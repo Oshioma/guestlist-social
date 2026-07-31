@@ -110,7 +110,9 @@ export async function POST(req: Request) {
           supabase.from("clients").select("id, name, industry, notes, ai_instructions").eq("id", clientId).single(),
           supabase.from("content_pillars").select("id, name, description, color").eq("client_id", clientId).eq("archived", false).order("sort_order", { ascending: true }),
           supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", monthStart).lt("post_date", nextMonthStr).order("post_date", { ascending: true }),
-          supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).eq("platform", platform).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr),
+          // Exclude rejected ideas — they're hidden in the UI, so they must not
+          // count as filling a slot (otherwise regeneration silently no-ops).
+          supabase.from("post_ideas").select("post_slot_date").eq("client_id", clientId).eq("platform", platform).gte("post_slot_date", monthStart).lt("post_slot_date", nextMonthStr).neq("status", "rejected"),
           // Most recent consultation submission answers for this client
           supabase.from("consultation_submissions")
             .select("id, consultation_answers(question_prompt, answer_text)")
