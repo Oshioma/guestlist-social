@@ -17,6 +17,31 @@ type PublishResult =
   | { ok: true; publishUrl: string | null }
   | { ok: false; error: string };
 
+// Record why a scheduled publish couldn't run, WITHOUT changing its status.
+// Pre-flight failures (no connected account, post not approved) intentionally
+// leave the row 'scheduled' so the 5-minute cron keeps retrying and the post
+// goes out once the issue is fixed — but we stash the reason in `notes` so the
+// UI can show *why* it hasn't published, instead of the card sitting silently
+// on "Scheduled" forever.
+async function noteScheduledIssue(
+  admin: ReturnType<typeof metaServiceClient>,
+  queueId: string,
+  message: string
+): Promise<void> {
+  try {
+    await admin
+      .from("proofer_publish_queue")
+      .update({
+        notes: message.slice(0, 2000),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", queueId);
+    revalidatePath("/admin-panel/proofer/publish");
+  } catch {
+    // Best-effort — never let note-writing mask the original failure.
+  }
+}
+
 export async function publishMetaQueueItem(
   queueId: string
 ): Promise<PublishResult> {
@@ -59,16 +84,17 @@ export async function publishMetaQueueItem(
     .maybeSingle();
 
   if (postErr) {
+    await noteScheduledIssue(admin, queueId, `post lookup: ${postErr.message}`);
     return { ok: false, error: `post lookup: ${postErr.message}` };
   }
   if (!post) {
+    await noteScheduledIssue(admin, queueId, "Post not found.");
     return { ok: false, error: "Post not found." };
   }
   if (post.status !== "proofed" && post.status !== "approved") {
-    return {
-      ok: false,
-      error: "Only proofed posts can be published.",
-    };
+    const msg = `Can't publish yet — the post is "${post.status}", not approved. Approve it in the Proofer.`;
+    await noteScheduledIssue(admin, queueId, msg);
+    return { ok: false, error: msg };
   }
 
   // 3. Connected account
@@ -83,13 +109,13 @@ export async function publishMetaQueueItem(
     .maybeSingle();
 
   if (accountErr) {
+    await noteScheduledIssue(admin, queueId, `account lookup: ${accountErr.message}`);
     return { ok: false, error: `account lookup: ${accountErr.message}` };
   }
   if (!account) {
-    return {
-      ok: false,
-      error: `No connected ${platform} account for this client. Click Connect Meta first.`,
-    };
+    const msg = `No connected ${platform} account for this client. Click "Connect Meta" to reconnect.`;
+    await noteScheduledIssue(admin, queueId, msg);
+    return { ok: false, error: msg };
   }
 
   const caption: string = (post.caption as string | null) ?? "";
@@ -136,6 +162,7 @@ export async function publishMetaQueueItem(
         status: "published",
         published_at: now,
         publish_url: publishUrl,
+        notes: null,
         updated_at: now,
       })
       .eq("id", queueId);
