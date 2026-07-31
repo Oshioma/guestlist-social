@@ -30,7 +30,11 @@ import type {
   PostIdea,
 } from "../lib/types";
 import { PROOFER_PLATFORMS, PROOFER_PLATFORM_LABELS } from "../lib/types";
-import { DEFAULT_TIMEZONE, formatUtcClockInZone } from "../../../lib/timezone";
+import {
+  DEFAULT_TIMEZONE,
+  formatUtcClockInZone,
+  formatDateTimeInZone,
+} from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import {
   saveProoferPostAction,
@@ -206,12 +210,7 @@ function formatCommentTime(value: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeInZone(date, DEFAULT_TIMEZONE);
 }
 
 function renderCommentText(text: string): React.ReactNode {

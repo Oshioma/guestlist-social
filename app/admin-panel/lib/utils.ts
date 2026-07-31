@@ -1,4 +1,5 @@
 import type { ClientStatus, AdStatus, CreativeStatus, Priority } from "./types";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
 
 export function formatCurrency(amount: number): string {
   return `£${amount.toLocaleString("en-GB", {
@@ -7,12 +8,24 @@ export function formatCurrency(amount: number): string {
   })}`;
 }
 
+// Dates are shown site-wide in a single fixed zone (GMT by default) rather
+// than each viewer's browser zone, so everyone on the team reads the same
+// clock. Pinning the zone here also avoids the day-shift bug where a
+// date-only value (UTC midnight) rolls back a day for viewers west of GMT.
 export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: DEFAULT_TIMEZONE,
   });
+}
+
+// Shared date+time formatter for surfaces that show a moment (submitted,
+// created, published…). Renders in the site default zone with a short zone
+// label so "3:00 PM GMT" is never mistaken for the reader's local clock.
+export function formatDateTime(value: string | Date | null): string {
+  return formatDateTimeInZone(value, DEFAULT_TIMEZONE);
 }
 
 export function statusColor(

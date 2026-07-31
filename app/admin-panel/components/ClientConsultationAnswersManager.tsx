@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import {
   saveSingleConsultationSubmissionAnswersAction,
 } from "../lib/consultation-actions";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
 
 type ConsultationQuestion = {
   id: number;
@@ -52,13 +53,7 @@ function formatSubmittedAt(dateString: string) {
   if (Number.isNaN(date.getTime())) {
     return "Unknown date";
   }
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeInZone(date, DEFAULT_TIMEZONE);
 }
 
 function buildSubmissionPreview(submission: ConsultationSubmission) {
@@ -125,15 +120,7 @@ export default function ClientConsultationAnswersManager({
 
   useEffect(() => {
     if (!saveState.success) return;
-    setLocalSavedAt(
-      new Date().toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    );
+    setLocalSavedAt(formatDateTimeInZone(new Date(), DEFAULT_TIMEZONE));
   }, [saveState.success]);
   const latestSubmission = submissions[0] ?? null;
   const answersByQuestionId = new Map<number, ConsultationAnswer>();

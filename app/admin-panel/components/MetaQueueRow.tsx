@@ -14,6 +14,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdCreativeThumb from "./AdCreativeThumb";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
 
 export type MetaQueueRowData = {
   id: number;
@@ -85,15 +86,7 @@ const riskColors: Record<string, { bg: string; text: string; border: string }> =
 };
 
 function formatTimestamp(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeInZone(iso, DEFAULT_TIMEZONE);
 }
 
 function formatPayloadSummary(

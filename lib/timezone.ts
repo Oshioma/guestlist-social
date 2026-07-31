@@ -30,7 +30,7 @@ export const DEFAULT_TIMEZONE = "Etc/GMT";
 // "EAT"). DST zones leave it empty and fall back to a date-aware Intl
 // lookup so "BST" vs "GMT" resolves correctly for the actual instant.
 export const REGION_OPTIONS: { value: string; label: string; abbrev: string }[] = [
-  { value: "Etc/GMT", label: "GMT — Greenwich Mean Time (default)", abbrev: "GMT" },
+  { value: "Etc/GMT", label: "GMT — UK / Greenwich Mean Time (default)", abbrev: "GMT" },
   { value: "Africa/Dar_es_Salaam", label: "Tanzania — East Africa Time", abbrev: "EAT" },
   { value: "Africa/Nairobi", label: "Kenya — East Africa Time", abbrev: "EAT" },
   { value: "Africa/Lagos", label: "Nigeria — West Africa Time", abbrev: "WAT" },

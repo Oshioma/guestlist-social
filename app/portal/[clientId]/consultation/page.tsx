@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "@/app/admin-panel/lib/viewer";
+import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "@/lib/timezone";
 import ConsultationForm from "./ConsultationForm";
 
 export const dynamic = "force-dynamic";
@@ -147,13 +148,7 @@ export default async function PortalConsultationPage({
       }, {});
 
   const latestSubmissionLabel = latestSubmission?.submitted_at
-    ? new Date(latestSubmission.submitted_at).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
+    ? formatDateTimeInZone(latestSubmission.submitted_at, DEFAULT_TIMEZONE)
     : null;
 
   return (
