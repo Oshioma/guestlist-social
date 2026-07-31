@@ -256,48 +256,121 @@
   color: #fff;
 }
 
-/* Responsive: sidebar on top when narrow */
+/* Hamburger + drawer close: desktop shows the sidebar permanently, so both
+   controls stay hidden until the narrow breakpoint. */
+.app-nav-trigger,
+.app-sidebar-close {
+  display: none;
+}
+
+/* Responsive: below 1100px the sidebar becomes an off-canvas drawer. It used
+   to stack on top with every nav group expanded, which pushed the actual page
+   content roughly a full screen down on a phone. */
 @media (max-width: 1100px) {
-  .app-shell {
-    flex-direction: column;
-  }
-
   .app-sidebar {
-    width: 100%;
-    padding: 12px 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 120;
+    width: min(280px, 82vw);
+    padding: 14px 0 16px;
     flex-direction: column;
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-100%);
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.32);
   }
 
-  .app-sidebar-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .app-sidebar-open {
+    transform: translateX(0);
+  }
+
+  .app-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: rgba(9, 9, 11, 0.5);
+    backdrop-filter: blur(2px);
+    animation: sheet-fade 180ms ease;
+  }
+
+  .app-nav-trigger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     gap: 4px;
-    padding: 0 12px;
-    overflow-x: auto;
+    width: 38px;
+    height: 38px;
+    margin-left: -6px;
+    padding: 0 8px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    cursor: pointer;
   }
 
-  .app-sidebar-section + .app-sidebar-section {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
+  .app-nav-trigger span {
+    display: block;
+    height: 2px;
+    border-radius: 2px;
+    background: #3f3f46;
+  }
+
+  .app-nav-trigger:active {
+    background: #f4f4f5;
+  }
+
+  .app-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    margin-left: auto;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4d4d8;
+    font-size: 14px;
+    cursor: pointer;
   }
 
   .app-sidebar-brand {
-    padding: 0 16px 10px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     margin-bottom: 8px;
   }
 
-  .app-sidebar-footer {
-    display: none;
+  /* Bigger touch targets inside the drawer. */
+  .app-sidebar-link,
+  .app-sidebar-heading-link {
+    padding: 11px 14px;
   }
 
-  .app-sidebar-link-indented {
-    margin-left: 0;
-    padding-left: 12px;
-    border-left: none;
+  .app-topbar {
+    /* The proofer's scrubber rail is hidden here, so its reserved gutter goes. */
+    padding-right: 14px !important;
+    padding-left: 14px !important;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+  }
+
+  .app-topbar-subtitle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
   }
 }
 

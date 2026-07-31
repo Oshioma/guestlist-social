@@ -15,6 +15,9 @@ type NavGroup = {
 type Props = {
   isAdmin: boolean;
   canRunAds: boolean;
+  /** Drawer state. Only meaningful below the 1100px breakpoint. */
+  open?: boolean;
+  onClose?: () => void;
 };
 
 const PUBLISHER_ITEMS: NavItem[] = [
@@ -51,7 +54,7 @@ function buildUtilityItems(_isAdmin: boolean): NavItem[] {
   ];
 }
 
-export default function Sidebar({ isAdmin, canRunAds }: Props) {
+export default function Sidebar({ isAdmin, canRunAds, open, onClose }: Props) {
   const pathname = usePathname();
   const navGroups = buildNavGroups(canRunAds);
   const utilityItems = buildUtilityItems(isAdmin);
@@ -69,7 +72,7 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
   }
 
   return (
-    <aside className="app-sidebar">
+    <aside className={`app-sidebar${open ? " app-sidebar-open" : ""}`}>
       <div className="app-sidebar-brand">
         <img
           src="/gslogo.jpg"
@@ -82,9 +85,22 @@ export default function Sidebar({ isAdmin, canRunAds }: Props) {
           <div className="app-sidebar-brand-title">Guestlist Social</div>
           <div className="app-sidebar-brand-subtitle">Vibing!</div>
         </div>
+        <button
+          type="button"
+          className="app-sidebar-close"
+          onClick={onClose}
+          aria-label="Close menu"
+        >
+          ✕
+        </button>
       </div>
 
-      <nav className="app-sidebar-nav">
+      <nav
+        className="app-sidebar-nav"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) onClose?.();
+        }}
+      >
         {navGroups.map((group, gi) => (
           <NavSection
             key={gi}

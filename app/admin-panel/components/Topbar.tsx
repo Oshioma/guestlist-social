@@ -41,16 +41,18 @@ function resolveTitle(pathname: string): string {
   return "Admin";
 }
 
-export default function Topbar() {
+export default function Topbar({ onMenu }: { onMenu?: () => void }) {
   const pathname = usePathname();
   const title = resolveTitle(pathname);
   const subtitle = subtitles[pathname] ?? null;
   // Proofer page pins a day scrubber to the right edge — pull the
-  // topbar's right-side controls inward so they sit clear of it.
+  // topbar's right-side controls inward so they sit clear of it. The scrubber
+  // is hidden on narrow screens, so admin.css resets this below 1100px.
   const paddingRight = pathname === "/app/proofer" ? 80 : 24;
 
   return (
     <header
+      className="app-topbar"
       style={{
         height: 56,
         borderBottom: "1px solid #e4e4e7",
@@ -62,7 +64,18 @@ export default function Topbar() {
         flexShrink: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <button
+          type="button"
+          className="app-nav-trigger"
+          onClick={onMenu}
+          aria-label="Open menu"
+          aria-haspopup="menu"
+        >
+          <span />
+          <span />
+          <span />
+        </button>
         <h1
           style={{
             fontSize: 16,
@@ -74,7 +87,9 @@ export default function Topbar() {
           {title}
         </h1>
         {subtitle && (
-          <span style={{ fontSize: 12, color: "#a1a1aa" }}>{subtitle}</span>
+          <span className="app-topbar-subtitle" style={{ fontSize: 12, color: "#a1a1aa" }}>
+            {subtitle}
+          </span>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
