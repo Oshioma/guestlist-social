@@ -17,8 +17,6 @@ type ClientRow = {
   name: string;
   platform?: string | null;
   monthly_budget?: number | string | null;
-  monthly_price?: number | string | null;
-  direct_debit?: boolean | null;
   status?: string | null;
   website_url?: string | null;
   industry?: string | null;
@@ -61,15 +59,29 @@ export default async function ClientsPage({ searchParams }: Props) {
   const admin = await isAdmin();
   const supabase = await createClient();
 
-  const [clientsRes, campaignsRes, adsRes] = await Promise.all([
+  const [clientsRes, campaignsRes, adsRes, billingRes] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name, platform, monthly_budget, monthly_price, direct_debit, status, website_url, industry, notes, archived, created_at")
+      .select("id, name, platform, monthly_budget, status, website_url, industry, notes, archived, created_at")
       .eq("archived", false)
       .order("created_at", { ascending: false }),
     supabase.from("campaigns").select("client_id"),
     supabase.from("ads").select("client_id, spend"),
+    // Billing is admin-only (RLS); non-admins get an empty set.
+    supabase.from("client_billing").select("client_id, monthly_price, direct_debit"),
   ]);
+
+  const billingByClient = new Map<
+    string,
+    { price: number | null; directDebit: boolean }
+  >();
+  for (const b of billingRes.data ?? []) {
+    const priceNum = Number((b as { monthly_price: unknown }).monthly_price);
+    billingByClient.set(String((b as { client_id: number }).client_id), {
+      price: Number.isFinite(priceNum) ? priceNum : null,
+      directDebit: (b as { direct_debit: unknown }).direct_debit === true,
+    });
+  }
 
   if (clientsRes.error) {
     return (
@@ -143,17 +155,21 @@ export default async function ClientsPage({ searchParams }: Props) {
     0
   );
 
-  // Admin-only: total monthly retainer (what clients pay us) across the
-  // currently-visible clients, and how much of it is on direct debit.
-  const totalRetainers = clients.reduce(
-    (sum, client) => sum + Number(client.monthly_price ?? 0),
-    0
+  // Admin-only: total monthly retainer (what clients pay us). Pinned to ACTIVE
+  // clients (not the current view) so this number reconciles with the Cashflow
+  // "Client retainers" row and the Payments table.
+  const activeClientsAll = allClients.filter((c) =>
+    isActiveClientStatus(c.status)
   );
-  const ddRetainers = clients.reduce(
+  const totalRetainers = activeClientsAll.reduce(
     (sum, client) =>
-      sum + (client.direct_debit ? Number(client.monthly_price ?? 0) : 0),
+      sum + (billingByClient.get(String(client.id))?.price ?? 0),
     0
   );
+  const ddRetainers = activeClientsAll.reduce((sum, client) => {
+    const bill = billingByClient.get(String(client.id));
+    return sum + (bill?.directDebit ? bill.price ?? 0 : 0);
+  }, 0);
 
   const unassignedCampaigns = unassignedCampaignCount;
   const viewLabel =
@@ -192,7 +208,7 @@ export default async function ClientsPage({ searchParams }: Props) {
           {
             label: "Retainers (MRR)",
             value: formatCurrency(totalRetainers),
-            subtext: `${formatCurrency(ddRetainers)} on direct debit`,
+            subtext: `active clients · ${formatCurrency(ddRetainers)} on DD`,
           },
         ]
       : []),
@@ -379,6 +395,7 @@ export default async function ClientsPage({ searchParams }: Props) {
               const adStats = adsByClient.get(key) ?? { count: 0, spend: 0 };
               const clientAdCount = adStats.count;
               const clientSpend = adStats.spend;
+              const clientBilling = billingByClient.get(key);
 
               return (
                 <div
@@ -420,10 +437,10 @@ export default async function ClientsPage({ searchParams }: Props) {
                           {client.name}
                         </h2>
                         <StatusPill status={mapClientStatus(client.status ?? "")} />
-                        {admin && client.monthly_price != null ? (
+                        {admin && clientBilling?.price != null ? (
                           <span
                             title={
-                              client.direct_debit
+                              clientBilling.directDebit
                                 ? "Pays by direct debit"
                                 : "Invoiced / other"
                             }
@@ -440,16 +457,18 @@ export default async function ClientsPage({ searchParams }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                            {formatCurrency(Number(client.monthly_price))}/mo
+                            {formatCurrency(Number(clientBilling.price))}/mo
                             <span
                               style={{
                                 fontSize: 10,
                                 fontWeight: 700,
                                 letterSpacing: "0.03em",
-                                color: client.direct_debit ? "#15803d" : "#a16207",
+                                color: clientBilling.directDebit
+                                  ? "#15803d"
+                                  : "#a16207",
                               }}
                             >
-                              {client.direct_debit ? "DD" : "INV"}
+                              {clientBilling.directDebit ? "DD" : "INV"}
                             </span>
                           </span>
                         ) : null}

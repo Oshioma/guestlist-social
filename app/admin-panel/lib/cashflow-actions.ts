@@ -69,22 +69,15 @@ export async function setRetainerOverride(
 ): Promise<void> {
   await requireAdmin();
   if (monthIndex < 0 || monthIndex > 11) throw new Error("Bad month");
+  const pinned = value != null && Number.isFinite(value) ? value : null;
 
+  // Atomic single-index override (null clears it back to the live total).
   const supabase = await createClient();
-  const { data: row } = await supabase
-    .from("cashflow_settings")
-    .select("retainer_overrides")
-    .eq("year", year)
-    .maybeSingle<{ retainer_overrides: unknown }>();
-
-  const overrides = normalizeOverrides(row?.retainer_overrides);
-  overrides[monthIndex] =
-    value != null && Number.isFinite(value) ? value : null;
-
-  const { error } = await supabase.from("cashflow_settings").upsert(
-    { year, retainer_overrides: overrides, updated_at: new Date().toISOString() },
-    { onConflict: "year" }
-  );
+  const { error } = await supabase.rpc("cashflow_set_retainer", {
+    p_year: year,
+    p_month: monthIndex,
+    p_value: pinned,
+  });
   if (error) throw new Error(error.message);
 
   revalidatePath(CASHFLOW_PATH);
@@ -95,13 +88,21 @@ export async function setRetainerOverride(
 // revenue row in the forecast. Returns a single monthly run-rate figure.
 export async function getActiveClientRetainers(): Promise<number> {
   const supabase = await createClient();
-  const { data } = await supabase
+
+  const { data: active } = await supabase
     .from("clients")
-    .select("monthly_price, status, archived")
+    .select("id")
     .in("status", ["active", "growing"])
     .eq("archived", false);
+  const ids = (active ?? []).map((r) => (r as { id: number }).id);
+  if (ids.length === 0) return 0;
 
-  return (data ?? []).reduce((total, row) => {
+  const { data: billing } = await supabase
+    .from("client_billing")
+    .select("monthly_price")
+    .in("client_id", ids);
+
+  return (billing ?? []).reduce((total, row) => {
     const price = Number((row as { monthly_price: unknown }).monthly_price);
     return total + (Number.isFinite(price) ? price : 0);
   }, 0);
@@ -191,21 +192,14 @@ export async function updateCashflowCell(
   if (monthIndex < 0 || monthIndex > 11) throw new Error("Bad month");
   const amount = Number.isFinite(value) ? value : 0;
 
+  // Atomic single-index update (see migration) so concurrent edits to
+  // different months of the same row can't clobber each other.
   const supabase = await createClient();
-  const { data: row, error: readErr } = await supabase
-    .from("cashflow_lines")
-    .select("amounts")
-    .eq("id", id)
-    .single<{ amounts: unknown }>();
-  if (readErr) throw new Error(readErr.message);
-
-  const amounts = normalizeAmounts(row?.amounts);
-  amounts[monthIndex] = amount;
-
-  const { error } = await supabase
-    .from("cashflow_lines")
-    .update({ amounts, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("cashflow_set_amount", {
+    p_id: id,
+    p_month: monthIndex,
+    p_value: amount,
+  });
   if (error) throw new Error(error.message);
 
   revalidatePath(CASHFLOW_PATH);
@@ -218,20 +212,10 @@ export async function fillRight(id: number, fromMonth: number): Promise<void> {
   if (fromMonth < 0 || fromMonth > 11) throw new Error("Bad month");
 
   const supabase = await createClient();
-  const { data: row, error: readErr } = await supabase
-    .from("cashflow_lines")
-    .select("amounts")
-    .eq("id", id)
-    .single<{ amounts: unknown }>();
-  if (readErr) throw new Error(readErr.message);
-
-  const amounts = normalizeAmounts(row?.amounts);
-  for (let i = fromMonth + 1; i < 12; i++) amounts[i] = amounts[fromMonth];
-
-  const { error } = await supabase
-    .from("cashflow_lines")
-    .update({ amounts, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("cashflow_fill_right", {
+    p_id: id,
+    p_from: fromMonth,
+  });
   if (error) throw new Error(error.message);
 
   revalidatePath(CASHFLOW_PATH);

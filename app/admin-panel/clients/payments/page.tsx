@@ -13,22 +13,37 @@ export default async function ClientPaymentsPage() {
   await requireAdmin();
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("clients")
-    .select("id, name, monthly_price, direct_debit, status")
-    .eq("archived", false)
-    .order("name", { ascending: true });
+  const [{ data }, { data: billingRows }] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name, status")
+      .eq("archived", false)
+      .order("name", { ascending: true }),
+    supabase
+      .from("client_billing")
+      .select("client_id, monthly_price, direct_debit"),
+  ]);
+
+  const billingByClient = new Map<
+    string,
+    { price: number | null; directDebit: boolean }
+  >();
+  for (const b of billingRows ?? []) {
+    const priceNum = Number((b as { monthly_price: unknown }).monthly_price);
+    billingByClient.set(String((b as { client_id: number }).client_id), {
+      price: Number.isFinite(priceNum) ? priceNum : null,
+      directDebit: (b as { direct_debit: unknown }).direct_debit === true,
+    });
+  }
 
   const rows: PaymentRow[] = (data ?? []).map((c) => {
     const rawStatus = (c.status as string) ?? "";
+    const bill = billingByClient.get(String(c.id));
     return {
       id: String(c.id),
       name: (c.name as string) ?? "Untitled client",
-      price:
-        c.monthly_price != null && Number.isFinite(Number(c.monthly_price))
-          ? Number(c.monthly_price)
-          : null,
-      directDebit: c.direct_debit === true,
+      price: bill?.price ?? null,
+      directDebit: bill?.directDebit ?? false,
       status: mapClientStatus(rawStatus),
       active: rawStatus === "active" || rawStatus === "growing",
     };
