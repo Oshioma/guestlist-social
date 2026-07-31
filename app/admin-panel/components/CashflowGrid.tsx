@@ -21,6 +21,7 @@ import {
 } from "../lib/cashflow-shared";
 import {
   addCashflowLine,
+  createStandardYear,
   deleteCashflowLine,
   fillRight,
   renameCashflowLine,
@@ -231,6 +232,28 @@ export default function CashflowGrid({
     persist(() => deleteCashflowLine(id));
   }
 
+  // Add a brand-new section by creating its first row. Sections are derived
+  // from the lines, so a row with a fresh section name creates the section.
+  function addSection(name: string, kind: CashflowKind) {
+    const section = name.trim();
+    if (!section) return;
+    persist(async () => {
+      const row = await addCashflowLine(year, section, kind);
+      setLines((prev) => [...prev, row]);
+      requestAnimationFrame(() => {
+        document.getElementById(`cf-label-${row.id}`)?.focus();
+      });
+    });
+  }
+
+  // Empty-year quick start: seed the standard section skeleton.
+  function seedStandard() {
+    persist(async () => {
+      const rows = await createStandardYear(year);
+      if (rows.length > 0) setLines((prev) => [...prev, ...rows]);
+    });
+  }
+
   function commitOpening(raw: string) {
     const trimmed = raw.trim();
     const value = trimmed === "" ? 0 : Number(trimmed);
@@ -358,6 +381,46 @@ export default function CashflowGrid({
         )}
       </div>
 
+      {/* Empty-year quick start */}
+      {lines.length === 0 && (
+        <div
+          style={{
+            border: "1px dashed #d4d4d8",
+            borderRadius: 12,
+            padding: 20,
+            background: "#fafafa",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontSize: 14, color: "#52525b" }}>
+            <strong>{year}</strong> is empty. Start with the standard sections
+            (Overheads, Software, Crew, Rooms, Revenue), or add your own below —
+            or use <strong>+ Duplicate year</strong> to copy another year in.
+          </div>
+          <button
+            type="button"
+            onClick={seedStandard}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              padding: "10px 16px",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Create standard sections
+          </button>
+        </div>
+      )}
+
       {/* Grid */}
       <div
         style={{
@@ -472,11 +535,134 @@ export default function CashflowGrid({
         </table>
       </div>
 
+      <AddSectionControl onAdd={addSection} />
+
       <p style={{ fontSize: 12, color: "#a1a1aa", margin: 0 }}>
         Tip: click any cell and type. Press Tab or Enter to move on. Hover a cell
         and click <strong>→</strong> to copy that value across the rest of the
         year. Totals, net and running balance update as you go.
       </p>
+    </div>
+  );
+}
+
+// Add a new section (cost or revenue) by naming it — creates the section with
+// a first blank row.
+function AddSectionControl({
+  onAdd,
+}: {
+  onAdd: (name: string, kind: CashflowKind) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<CashflowKind>("cost");
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: "flex-start",
+          border: "1px dashed #c4c4cc",
+          borderRadius: 10,
+          padding: "8px 14px",
+          background: "#fff",
+          color: "#52525b",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        + Add section
+      </button>
+    );
+  }
+
+  function submit() {
+    if (!name.trim()) return;
+    onAdd(name, kind);
+    setName("");
+    setKind("cost");
+    setOpen(false);
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+        border: "1px solid #e4e4e7",
+        borderRadius: 10,
+        padding: 10,
+        background: "#fff",
+      }}
+    >
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") setOpen(false);
+        }}
+        placeholder="Section name (e.g. Marketing)"
+        style={{
+          width: 240,
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: "1px solid #d4d4d8",
+          fontSize: 14,
+        }}
+      />
+      <select
+        value={kind}
+        onChange={(e) => setKind(e.target.value as CashflowKind)}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: "1px solid #d4d4d8",
+          fontSize: 14,
+          background: "#fff",
+        }}
+      >
+        <option value="cost">Cost</option>
+        <option value="revenue">Revenue</option>
+      </select>
+      <button
+        type="button"
+        onClick={submit}
+        style={{
+          border: "none",
+          borderRadius: 8,
+          padding: "8px 14px",
+          background: "#18181b",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        style={{
+          border: "1px solid #e4e4e7",
+          borderRadius: 8,
+          padding: "8px 12px",
+          background: "#fff",
+          color: "#52525b",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        Cancel
+      </button>
     </div>
   );
 }

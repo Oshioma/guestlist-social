@@ -270,6 +270,61 @@ export async function addCashflowLine(
   };
 }
 
+// Seed a blank year with the standard section skeleton — one starter row per
+// section — so a fresh year can be built up from scratch. No-op if the year
+// already has rows. Returns the created rows for optimistic insertion.
+export async function createStandardYear(
+  year: number
+): Promise<CashflowLine[]> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("cashflow_lines")
+    .select("id")
+    .eq("year", year)
+    .limit(1);
+  if (existing && existing.length > 0) return [];
+
+  const skeleton: Array<{
+    section: string;
+    kind: CashflowKind;
+    sort_order: number;
+  }> = [
+    { section: "Overheads", kind: "cost", sort_order: 10 },
+    { section: "Software & Subscriptions", kind: "cost", sort_order: 110 },
+    { section: "Crew", kind: "cost", sort_order: 310 },
+    { section: "Rooms", kind: "cost", sort_order: 410 },
+    { section: "Revenue", kind: "revenue", sort_order: 510 },
+  ];
+
+  const { data, error } = await supabase
+    .from("cashflow_lines")
+    .insert(
+      skeleton.map((s) => ({
+        year,
+        section: s.section,
+        label: "New item",
+        kind: s.kind,
+        sort_order: s.sort_order,
+        amounts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      }))
+    )
+    .select("id, year, section, label, kind, sort_order, amounts");
+  if (error) throw new Error(error.message);
+
+  revalidatePath(CASHFLOW_PATH);
+  return (data ?? []).map((r) => ({
+    id: r.id as number,
+    year: r.year as number,
+    section: r.section as string,
+    label: r.label as string,
+    kind: (r.kind as CashflowKind) ?? "cost",
+    sortOrder: r.sort_order as number,
+    amounts: normalizeAmounts(r.amounts),
+  }));
+}
+
 export async function deleteCashflowLine(id: number): Promise<void> {
   await requireAdmin();
   const supabase = await createClient();

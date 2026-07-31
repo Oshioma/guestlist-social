@@ -49,30 +49,13 @@ export default async function CashflowPage({ searchParams }: Props) {
 
       <CashflowYearBar years={yearChips} currentYear={year} />
 
-      {lines.length === 0 ? (
-        <div
-          style={{
-            border: "1px dashed #d4d4d8",
-            borderRadius: 12,
-            padding: 24,
-            background: "#fafafa",
-            color: "#71717a",
-            fontSize: 14,
-          }}
-        >
-          {year} has no forecast yet. Use{" "}
-          <strong>+ Duplicate year</strong> above to copy another year in, or
-          add rows once a year exists.
-        </div>
-      ) : (
-        <CashflowGrid
-          key={year}
-          year={year}
-          initialLines={lines}
-          initialOpeningBalance={openingBalance}
-          clientRetainersMonthly={clientRetainers}
-        />
-      )}
+      <CashflowGrid
+        key={year}
+        year={year}
+        initialLines={lines}
+        initialOpeningBalance={openingBalance}
+        clientRetainersMonthly={clientRetainers}
+      />
     </div>
   );
 }
