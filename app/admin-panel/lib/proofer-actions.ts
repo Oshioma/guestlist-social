@@ -1168,6 +1168,8 @@ export async function scheduleProoferQueueItemAction(
     .update({
       status: "scheduled",
       scheduled_for: scheduledFor,
+      // Clear any stale "couldn't publish" note — this is a fresh attempt.
+      notes: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", queueId);

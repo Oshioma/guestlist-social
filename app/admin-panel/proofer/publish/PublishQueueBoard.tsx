@@ -1138,6 +1138,26 @@ export default function PublishQueueBoard({
                   <div style={statusPill(item.status)}>{item.status}</div>
                 </div>
 
+                {/* Why a scheduled post hasn't gone out yet. The auto-publish
+                    cron leaves the row scheduled (and keeps retrying) when a
+                    pre-flight check fails; this surfaces the reason instead of
+                    it sitting here silently. */}
+                {item.notes && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                      color: STATUS_TONES.failed.ink,
+                      background: STATUS_TONES.failed.fill,
+                      border: `1px solid ${STATUS_TONES.failed.edge}`,
+                      borderRadius: 8,
+                      padding: "7px 11px",
+                    }}
+                  >
+                    <strong>&#9888; Not published yet:</strong> {item.notes}
+                  </div>
+                )}
+
                 {/* Thumbnail beside the caption — larger so the preview is
                     actually legible on a full-width card. */}
                 <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
