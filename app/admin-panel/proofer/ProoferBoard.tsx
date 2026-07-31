@@ -33,6 +33,26 @@ import {
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
 
+// Phones and small tablets: the board drops to a single column so the caption
+// editor gets the full width instead of being squeezed off-screen.
+const NARROW_BREAKPOINT = 820;
+
+/**
+ * True once mounted on a viewport narrower than the breakpoint. Starts false so
+ * the first client render matches the server's and hydration stays clean.
+ */
+function useIsNarrow(breakpoint = NARROW_BREAKPOINT): boolean {
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [breakpoint]);
+  return isNarrow;
+}
+
 function postKey(dateKey: string, platform: ProoferPlatform): string {
   return `${dateKey}|${platform}`;
 }
@@ -318,6 +338,7 @@ export default function ProoferBoard({
   // the first render identical to the server's and avoid hydration mismatches.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const isNarrow = useIsNarrow();
 
   // Is the board currently looking at the month that contains today?
   const isCurrentMonth = mounted && month === monthKey(startOfToday());
@@ -1344,7 +1365,9 @@ export default function ProoferBoard({
         display: "flex",
         flexDirection: "column",
         gap: 24,
-        paddingRight: 52,
+        // Room for the fixed day scrubber, which is hidden when narrow.
+        paddingRight: isNarrow ? 0 : 52,
+        minWidth: 0,
       }}
     >
       {/* Fixed hover preview — escapes all overflow containers */}
@@ -1379,7 +1402,8 @@ export default function ProoferBoard({
           )}
         </div>
       )}
-      <DayScrubber days={visibleDays} postsByKey={postsByKey} />
+      {/* The scrubber overlays the board on a phone — "Jump to today" covers it */}
+      {!isNarrow && <DayScrubber days={visibleDays} postsByKey={postsByKey} />}
       {showJumpToday && (
         <button
           type="button"
@@ -2067,14 +2091,14 @@ export default function ProoferBoard({
                   background: "#fff",
                   border: "1px solid #e4e4e7",
                   borderRadius: slotIdeas.length > 0 ? "12px 12px 0 0" : 12,
-                  padding: 16,
+                  padding: isNarrow ? 12 : 16,
                   display: "grid",
-                  gridTemplateColumns: "200px 1fr",
-                  gap: 16,
+                  gridTemplateColumns: isNarrow ? "1fr" : "200px 1fr",
+                  gap: isNarrow ? 12 : 16,
                   alignItems: "flex-start",
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0 }}>
                   {(() => {
                     if (!mounted) return null;
                     const rel = relativeDayLabel(d);
@@ -2155,7 +2179,10 @@ export default function ProoferBoard({
                   <div
                     style={{
                       marginTop: 12,
-                      display: "flex",
+                      // Platform and Pillar sit side by side on a phone so the
+                      // caption is not pushed a screenful down the page.
+                      display: isNarrow ? "grid" : "flex",
+                      gridTemplateColumns: isNarrow ? "1fr 1fr" : undefined,
                       flexDirection: "column",
                       gap: 8,
                     }}
@@ -2165,6 +2192,7 @@ export default function ProoferBoard({
                         display: "flex",
                         flexDirection: "column",
                         gap: 4,
+                        minWidth: 0,
                       }}
                     >
                       <span style={labelStyle}>Platform</span>
@@ -2209,6 +2237,7 @@ export default function ProoferBoard({
                             flexDirection: "column",
                             gap: 4,
                             position: "relative",
+                            minWidth: 0,
                           }}
                         >
                           <span style={labelStyle}>Pillar</span>
@@ -2709,6 +2738,7 @@ export default function ProoferBoard({
                     display: "flex",
                     flexDirection: "column",
                     gap: 10,
+                    minWidth: 0,
                   }}
                 >
 
@@ -2720,11 +2750,22 @@ export default function ProoferBoard({
                     const activeUrl = draft.mediaUrls[safeIdx] ?? "";
                     const setPreviewIdx = (n: number) => setPreviewIdxMap((prev) => ({ ...prev, [key]: n }));
                     return (
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        // Status dots drop below the card on a phone rather than
+                        // stealing width from it.
+                        flexDirection: isNarrow ? "column" : "row",
+                        alignItems: isNarrow ? "stretch" : "center",
+                        minWidth: 0,
+                      }}
+                    >
                     <div
                       style={{
                         flex: 1,
-                        maxWidth: 500,
+                        maxWidth: isNarrow ? "100%" : 500,
+                        minWidth: 0,
                         background: "#fff",
                         border: "1px solid #e4e4e7",
                         borderRadius: 12,
@@ -2801,7 +2842,10 @@ export default function ProoferBoard({
                       <div
                         style={{
                           width: "100%",
-                          aspectRatio: "1 / 1",
+                          // An empty square preview eats most of a phone screen,
+                          // so shrink the placeholder until there's media to show.
+                          aspectRatio: isNarrow && !activeUrl ? undefined : "1 / 1",
+                          height: isNarrow && !activeUrl ? 90 : undefined,
                           background: "#f4f4f5",
                           overflow: "hidden",
                           position: "relative",
@@ -2858,15 +2902,16 @@ export default function ProoferBoard({
                           onPaste={(e) => { if (!isLocked) handlePasteMedia(e, dateKey, activePlatform, postKey(dateKey, activePlatform)); }}
                           placeholder="Write a caption... (or paste an image to attach it)"
                           disabled={isLocked}
-                          rows={12}
+                          rows={isNarrow ? 8 : 12}
                           style={{
                             display: "block",
                             width: "100%",
-                            padding: "8px 12px 4px",
+                            padding: isNarrow ? "10px 12px 6px" : "8px 12px 4px",
                             border: "none",
                             outline: "none",
-                            resize: "none",
-                            fontSize: 13,
+                            resize: isNarrow ? "vertical" : "none",
+                            // 16px keeps iOS from zooming the page in on focus.
+                            fontSize: isNarrow ? 16 : 13,
                             color: "#18181b",
                             lineHeight: 1.4,
                             fontFamily: "inherit",
@@ -2944,8 +2989,17 @@ export default function ProoferBoard({
                       )}
                     </div>
 
-                    {/* Status dots — outside the card, vertically centred */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                    {/* Status dots — outside the card, vertically centred (a row underneath on a phone) */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: isNarrow ? "row" : "column",
+                        gap: isNarrow ? 14 : 8,
+                        alignItems: "center",
+                        justifyContent: isNarrow ? "center" : undefined,
+                        flexShrink: 0,
+                      }}
+                    >
                       {["proofed", "check", "improve"].map((statusValue) => {
                         const btn = STATUS_BUTTONS.find((b) => b.value === statusValue)!;
                         const active = effectiveStatus === statusValue;
@@ -2961,8 +3015,8 @@ export default function ProoferBoard({
                             onClick={() => handleStatus(dateKey, activePlatform, statusValue as ProoferStatus)}
                             disabled={isDisabled}
                             style={{
-                              width: 16,
-                              height: 16,
+                              width: isNarrow ? 24 : 16,
+                              height: isNarrow ? 24 : 16,
                               padding: 0,
                               borderRadius: "50%",
                               border: "1px solid #e4e4e7",
