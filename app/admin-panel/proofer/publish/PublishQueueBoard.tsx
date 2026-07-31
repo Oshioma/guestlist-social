@@ -356,50 +356,77 @@ export default function PublishQueueBoard({
     [accountsByClient, clientNameById]
   );
 
+  // Optimistic reschedule: reflect a new time immediately rather than waiting
+  // on the server round-trip + full page refetch (which is what made the
+  // button feel slow). Keyed by queue-row id → new UTC time. Cleared when
+  // fresh server data arrives (router.refresh() hands us a new queueItems).
+  const [optimisticTimes, setOptimisticTimes] = useState<Record<string, string>>(
+    {}
+  );
+  useEffect(() => {
+    setOptimisticTimes((prev) => (Object.keys(prev).length ? {} : prev));
+  }, [queueItems]);
+
+  const effectiveQueueItems = useMemo(
+    () =>
+      Object.keys(optimisticTimes).length === 0
+        ? queueItems
+        : queueItems.map((it) =>
+            optimisticTimes[it.id]
+              ? {
+                  ...it,
+                  status: "scheduled" as PublishQueueStatus,
+                  scheduledFor: optimisticTimes[it.id],
+                }
+              : it
+          ),
+    [queueItems, optimisticTimes]
+  );
+
   const scheduledItems = useMemo(
     () =>
       groupByPost(
-        queueItems
+        effectiveQueueItems
         .filter((item) => item.status === "scheduled")
         .sort((a, b) =>
           String(a.scheduledFor ?? "").localeCompare(String(b.scheduledFor ?? ""))
         )
       ),
-    [queueItems]
+    [effectiveQueueItems]
   );
 
   const queuedItems = useMemo(
     () =>
       groupByPost(
-        queueItems
+        effectiveQueueItems
         .filter((item) => item.status === "queued")
         .sort((a, b) => a.postDate.localeCompare(b.postDate))
       ),
-    [queueItems]
+    [effectiveQueueItems]
   );
 
   const publishedItems = useMemo(
     () =>
       groupByPost(
-        queueItems
+        effectiveQueueItems
         .filter((item) => item.status === "published")
         .sort((a, b) =>
           String(b.publishedAt ?? "").localeCompare(String(a.publishedAt ?? ""))
         )
       ),
-    [queueItems]
+    [effectiveQueueItems]
   );
 
   const failedItems = useMemo(
     () =>
       groupByPost(
-        queueItems
+        effectiveQueueItems
         .filter((item) => item.status === "failed")
         .sort((a, b) =>
           String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? ""))
         )
       ),
-    [queueItems]
+    [effectiveQueueItems]
   );
 
   // Status filter driven by the summary tiles. "all" shows every section.
@@ -462,15 +489,28 @@ export default function PublishQueueBoard({
       alert("Pick a time first.");
       return;
     }
+    const at = fromDateTimeLocalInputValue(draft);
+    // Show the new time right away across the post's platforms; the server
+    // write + refetch happen in the background.
+    setOptimisticTimes((prev) => {
+      const next = { ...prev };
+      for (const id of item.ids) next[id] = at;
+      return next;
+    });
     setPendingId(item.id);
     startTransition(async () => {
       try {
-        const at = fromDateTimeLocalInputValue(draft);
         await Promise.all(
           item.ids.map((id) => scheduleProoferQueueItemAction(id, at))
         );
         refresh();
       } catch (err) {
+        // Roll back the optimistic time so the card reverts to its real value.
+        setOptimisticTimes((prev) => {
+          const next = { ...prev };
+          for (const id of item.ids) delete next[id];
+          return next;
+        });
         alert(err instanceof Error ? err.message : "Could not reschedule");
       } finally {
         setPendingId(null);
@@ -1549,11 +1589,16 @@ export default function PublishQueueBoard({
 
                     <button
                       type="button"
-                      onClick={() => handleSchedule(item.id)}
+                      onClick={() => handleReschedule(item)}
                       disabled={isPending}
-                      style={darkButton}
+                      style={{
+                        ...darkButton,
+                        opacity:
+                          pendingId === item.id ? 0.7 : isPending ? 0.5 : 1,
+                        cursor: isPending ? "wait" : "pointer",
+                      }}
                     >
-                      Reschedule
+                      {pendingId === item.id ? "Rescheduling…" : "Reschedule"}
                     </button>
 
                     <button
