@@ -255,6 +255,23 @@ function getDefault6pmGmt(): string {
   return local.toISOString().slice(0, 16);
 }
 
+// Default time to seed the schedule picker with for a not-yet-scheduled post:
+// 6pm on the post's OWN calendar date, not today/tomorrow. This keeps a post
+// filed on (say) 1 Aug from defaulting to today's date and quietly going out
+// on the wrong day. Falls back to the today/tomorrow default if the post has
+// no valid date.
+function defaultScheduleForPost(postDate: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(postDate ?? "");
+  if (!m) return getDefault6pmGmt();
+  const utc = new Date(
+    Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 18, 0, 0)
+  );
+  if (Number.isNaN(utc.getTime())) return getDefault6pmGmt();
+  const offsetMs = utc.getTimezoneOffset() * 60 * 1000;
+  const local = new Date(utc.getTime() - offsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function PublishQueueBoard({
   queueItems,
   defaultScheduleValue,
@@ -279,7 +296,6 @@ export default function PublishQueueBoard({
     clients[0]?.id ?? ""
   );
 
-  const default6pm = useMemo(() => getDefault6pmGmt(), []);
   const zone = useMemo(() => describeZone(timeZone), [timeZone]);
 
   // The expired-token banner links here with #meta-connection to send the
@@ -457,7 +473,7 @@ export default function PublishQueueBoard({
   function handleReschedule(item: QueueGroup) {
     const draft =
       scheduleDrafts[item.id] ??
-      toDateTimeLocalInputValue(item.scheduledFor, default6pm);
+      toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate));
     if (!draft) {
       alert("Pick a time first.");
       return;
@@ -924,7 +940,7 @@ export default function PublishQueueBoard({
             {queuedItems.map((item) => {
               const scheduleValue =
                 scheduleDrafts[item.id] ??
-                toDateTimeLocalInputValue(item.scheduledFor, default6pm);
+                toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate));
               const selected = selectedQueueIds.has(item.id);
 
               return (
@@ -1201,7 +1217,7 @@ export default function PublishQueueBoard({
                       type="datetime-local"
                       value={
                         scheduleDrafts[item.id] ??
-                        toDateTimeLocalInputValue(item.scheduledFor, default6pm)
+                        toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
                       }
                       onChange={(e) =>
                         setScheduleDrafts((prev) => ({
@@ -1216,7 +1232,7 @@ export default function PublishQueueBoard({
                       {(() => {
                         const iso = fromDateTimeLocalInputValue(
                           scheduleDrafts[item.id] ??
-                            toDateTimeLocalInputValue(item.scheduledFor, default6pm)
+                            toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
                         );
                         const shown = iso ? formatDateTime(iso, timeZone) : "";
                         return shown
@@ -1478,7 +1494,7 @@ export default function PublishQueueBoard({
             {failedItems.map((item) => {
               const scheduleValue =
                 scheduleDrafts[item.id] ??
-                toDateTimeLocalInputValue(item.scheduledFor, default6pm);
+                toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate));
 
               return (
                 <div
