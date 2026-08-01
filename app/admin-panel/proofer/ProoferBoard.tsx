@@ -58,6 +58,7 @@ import {
   archiveContentPillarAction,
   rejectPostIdeaAction,
   clearPostIdeasAction,
+  scheduleProoferQueueItemAction,
 } from "../lib/proofer-actions";
 
 const DEFAULT_PLATFORM: ProoferPlatform = "instagram_feed";
@@ -286,6 +287,20 @@ function scheduledLabel(
   return formatUtcClockInZone(dateKey, publishTime, timeZone);
 }
 
+// The time-of-day (UTC "HH:MM") to seed the reschedule input with: the post's
+// current scheduled_for if it has one, otherwise its publish_time.
+function scheduledSeedHHMM(
+  publishQueue: ProoferPublishQueueItem[] | undefined,
+  publishTime: string
+): string {
+  const active = (publishQueue ?? []).filter((q) => q.scheduledFor).pop();
+  if (active?.scheduledFor) {
+    const d = new Date(active.scheduledFor);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(11, 16);
+  }
+  return /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+}
+
 function renderCommentText(text: string): React.ReactNode {
   const parts = text.split(/(@\w[\w.-]*)/g);
   return parts.map((part, i) =>
@@ -472,6 +487,11 @@ export default function ProoferBoard({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  // Reschedule-from-proofer: a per-post edited time (UTC "HH:MM") and which
+  // post currently has a reschedule in flight (for the button's pending state).
+  const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState(initialClientId);
   const [month, setMonth] = useState(initialMonth);
@@ -996,6 +1016,44 @@ export default function ProoferBoard({
         router.refresh();
       } catch (err) {
         notify(err instanceof Error ? err.message : "Could not update status", "error");
+      }
+    });
+  }
+
+  // Reschedule a locked post from the proofer. Sets the publish queue's
+  // scheduled_for to the post's OWN date (dateKey) at the chosen UTC time,
+  // across every platform the post is queued to. Using the post's date keeps
+  // the send day aligned with the calendar slot it lives on.
+  function handleProoferReschedule(
+    dateKey: string,
+    post: ProoferPost,
+    hhmm: string
+  ) {
+    const ids = (post.publishQueue ?? []).map((q) => q.id);
+    if (ids.length === 0) {
+      notify("This post isn't in the publish queue yet.", "error");
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(hhmm)) {
+      notify("Pick a valid time.", "error");
+      return;
+    }
+    const at = `${dateKey}T${hhmm}:00.000Z`;
+    setReschedulingId(post.id);
+    startTransition(async () => {
+      try {
+        await Promise.all(
+          ids.map((id) => scheduleProoferQueueItemAction(id, at))
+        );
+        notify("Rescheduled.", "info");
+        router.refresh();
+      } catch (err) {
+        notify(
+          err instanceof Error ? err.message : "Could not reschedule",
+          "error"
+        );
+      } finally {
+        setReschedulingId(null);
       }
     });
   }
@@ -2820,6 +2878,92 @@ export default function ProoferBoard({
                               </div>
                             ) : null;
                           })()}
+                          {/* Reschedule from the proofer: sets the queue's
+                              scheduled_for to THIS post's date (dateKey) at the
+                              chosen GMT time, across every platform it's queued
+                              to — so the send day always matches the slot. */}
+                          {post && (post.publishQueue?.length ?? 0) > 0 &&
+                            ((p: ProoferPost) => {
+                              const seed = scheduledSeedHHMM(
+                                p.publishQueue,
+                                draft.publishTime
+                              );
+                              const val = rescheduleTimes[p.id] ?? seed;
+                              const localHint = formatUtcClockInZone(
+                                dateKey,
+                                val,
+                                timeZone
+                              );
+                              return (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    marginTop: 6,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <input
+                                    type="time"
+                                    value={val}
+                                    disabled={isPending}
+                                    onChange={(e) =>
+                                      setRescheduleTimes((prev) => ({
+                                        ...prev,
+                                        [p.id]: e.target.value,
+                                      }))
+                                    }
+                                    aria-label="New publish time (GMT)"
+                                    style={{
+                                      padding: "5px 8px",
+                                      borderRadius: 8,
+                                      border: "1px solid #e4e4e7",
+                                      fontSize: 12,
+                                      color: "#18181b",
+                                      background: "#fff",
+                                      fontFamily: "inherit",
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 500,
+                                      color: "#71717a",
+                                    }}
+                                  >
+                                    GMT{localHint ? ` · ${localHint}` : ""}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleProoferReschedule(dateKey, p, val)
+                                    }
+                                    disabled={isPending}
+                                    style={{
+                                      padding: "5px 11px",
+                                      borderRadius: 8,
+                                      border: "1px solid #18181b",
+                                      background: "#18181b",
+                                      color: "#fff",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      cursor: isPending ? "wait" : "pointer",
+                                      opacity:
+                                        reschedulingId === p.id
+                                          ? 0.7
+                                          : isPending
+                                          ? 0.5
+                                          : 1,
+                                    }}
+                                  >
+                                    {reschedulingId === p.id
+                                      ? "Rescheduling…"
+                                      : "Reschedule"}
+                                  </button>
+                                </div>
+                              );
+                            })(post)}
                         </div>
                       )}
                     </>
