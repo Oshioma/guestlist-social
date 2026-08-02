@@ -43,6 +43,9 @@ import {
   formatInstantClockInZone,
   formatDateTimeInZone,
   zonedDateKey,
+  hhmmInZone,
+  zonedTimeToUtcIso,
+  zoneAbbrev,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import {
@@ -287,18 +290,20 @@ function scheduledLabel(
   return formatUtcClockInZone(dateKey, publishTime, timeZone);
 }
 
-// The time-of-day (UTC "HH:MM") to seed the reschedule input with: the post's
-// current scheduled_for if it has one, otherwise its publish_time.
+// The time-of-day ("HH:MM") to seed the reschedule input with, expressed in
+// the agency display zone (e.g. BST) so the input reads the same timezone as
+// everything else on the card. Uses the post's current scheduled_for if it has
+// one, otherwise its publish_time (stored as UTC) on the post's date.
 function scheduledSeedHHMM(
   publishQueue: ProoferPublishQueueItem[] | undefined,
-  publishTime: string
+  publishTime: string,
+  dateKey: string,
+  timeZone: string
 ): string {
   const active = (publishQueue ?? []).filter((q) => q.scheduledFor).pop();
-  if (active?.scheduledFor) {
-    const d = new Date(active.scheduledFor);
-    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(11, 16);
-  }
-  return /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+  if (active?.scheduledFor) return hhmmInZone(active.scheduledFor, timeZone);
+  const pt = /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+  return hhmmInZone(`${dateKey}T${pt}:00.000Z`, timeZone) || pt;
 }
 
 function renderCommentText(text: string): React.ReactNode {
@@ -1034,11 +1039,12 @@ export default function ProoferBoard({
       notify("This post isn't in the publish queue yet.", "error");
       return;
     }
-    if (!/^\d{2}:\d{2}$/.test(hhmm)) {
+    // hhmm is in the agency display zone; convert to the UTC instant we store.
+    const at = zonedTimeToUtcIso(dateKey, hhmm, timeZone);
+    if (!at) {
       notify("Pick a valid time.", "error");
       return;
     }
-    const at = `${dateKey}T${hhmm}:00.000Z`;
     setReschedulingId(post.id);
     startTransition(async () => {
       try {
@@ -2880,19 +2886,21 @@ export default function ProoferBoard({
                           })()}
                           {/* Reschedule from the proofer: sets the queue's
                               scheduled_for to THIS post's date (dateKey) at the
-                              chosen GMT time, across every platform it's queued
-                              to — so the send day always matches the slot. */}
+                              chosen time — entered in the agency display zone,
+                              across every platform it's queued to — so the send
+                              day always matches the slot. */}
                           {post && (post.publishQueue?.length ?? 0) > 0 &&
                             ((p: ProoferPost) => {
                               const seed = scheduledSeedHHMM(
                                 p.publishQueue,
-                                draft.publishTime
+                                draft.publishTime,
+                                dateKey,
+                                timeZone
                               );
                               const val = rescheduleTimes[p.id] ?? seed;
-                              const localHint = formatUtcClockInZone(
-                                dateKey,
-                                val,
-                                timeZone
+                              const zoneAbbr = zoneAbbrev(
+                                timeZone,
+                                new Date(`${dateKey}T12:00:00Z`)
                               );
                               return (
                                 <div
@@ -2914,7 +2922,7 @@ export default function ProoferBoard({
                                         [p.id]: e.target.value,
                                       }))
                                     }
-                                    aria-label="New publish time (GMT)"
+                                    aria-label={`New publish time (${zoneAbbr})`}
                                     style={{
                                       padding: "5px 8px",
                                       borderRadius: 8,
@@ -2927,12 +2935,12 @@ export default function ProoferBoard({
                                   />
                                   <span
                                     style={{
-                                      fontSize: 10,
-                                      fontWeight: 500,
+                                      fontSize: 11,
+                                      fontWeight: 700,
                                       color: "#71717a",
                                     }}
                                   >
-                                    GMT{localHint ? ` · ${localHint}` : ""}
+                                    {zoneAbbr}
                                   </span>
                                   <button
                                     type="button"

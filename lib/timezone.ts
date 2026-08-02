@@ -271,3 +271,45 @@ export function zonedDateKey(value: string | Date | null, timeZone: string): str
     day: "2-digit",
   });
 }
+
+// The wall-clock time ("HH:MM", 24h) an instant reads as within `timeZone` —
+// e.g. a UTC scheduled_for → "15:17" in BST. For seeding a time input that
+// works directly in the agency zone (no GMT↔BST mental maths).
+export function hhmmInZone(value: string | Date | null, timeZone: string): string {
+  if (!value) return "";
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return "";
+  return instant.toLocaleTimeString("en-GB", {
+    timeZone: normalizeTimeZone(timeZone),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+// Inverse of hhmmInZone: interpret a date + wall-clock time ("HH:MM") as being
+// in `timeZone` and return the matching UTC ISO string. So "2026-08-01" +
+// "15:17" in BST → the 14:17Z instant. Used when the operator edits a time in
+// the agency zone and we need to store it as UTC. A single offset pass is
+// enough away from a DST boundary (which is all our scheduling ever hits).
+export function zonedTimeToUtcIso(
+  dateKey: string,
+  hhmm: string,
+  timeZone: string
+): string {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateKey ?? "");
+  const tm = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!dm || !tm) return "";
+  const tz = normalizeTimeZone(timeZone);
+  // Treat the wall-clock as if it were UTC, then correct by the zone's offset
+  // at that instant. offset is minutes AHEAD of UTC, so UTC = guess − offset.
+  const guessMs = Date.UTC(
+    Number(dm[1]),
+    Number(dm[2]) - 1,
+    Number(dm[3]),
+    Number(tm[1]),
+    Number(tm[2])
+  );
+  const offsetMin = zoneOffsetMinutes(new Date(guessMs), tz);
+  return new Date(guessMs - offsetMin * 60000).toISOString();
+}
