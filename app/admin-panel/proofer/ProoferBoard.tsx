@@ -3477,7 +3477,7 @@ export default function ProoferBoard({
                                   onMouseLeave={isNarrow ? undefined : () => setHoverPreview(null)}
                                 >
                                   {isDriveVideo(img.publicUrl) ? (
-                                    <div onClick={isNarrow ? useImage : undefined} style={{ position: "relative", width: cellW, height: cellH, flexShrink: 0 }}>
+                                    <div onClick={useImage} title="Click to use this video" style={{ position: "relative", width: cellW, height: cellH, flexShrink: 0, cursor: "pointer" }}>
                                       <img
                                         src={driveThumbUrl(img.publicUrl) ?? ""}
                                         alt=""
@@ -3491,7 +3491,8 @@ export default function ProoferBoard({
                                     <img
                                       src={img.publicUrl}
                                       alt=""
-                                      onClick={isNarrow ? useImage : undefined}
+                                      title="Click to use this photo"
+                                      onClick={useImage}
                                       style={{ width: cellW, height: cellH, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e0f2fe", cursor: "pointer" }}
                                     />
                                   )}
@@ -3591,8 +3592,11 @@ export default function ProoferBoard({
                                   <img
                                     src={photo.thumb}
                                     alt={photo.photographer}
-                                    // On mobile the whole photo is the tap target — select on tap.
-                                    onClick={isNarrow ? selectPhoto : undefined}
+                                    title="Click to use this photo"
+                                    // The whole photo is the click/tap target on every device — the
+                                    // "Use" button is just an extra affordance. (Previously desktop
+                                    // clicks did nothing, so the photo felt unselectable.)
+                                    onClick={selectPhoto}
                                     style={{ width: isNarrow ? 150 : 100, height: isNarrow ? 106 : 70, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid #e9d5ff", cursor: "pointer" }}
                                   />
                                   <button
