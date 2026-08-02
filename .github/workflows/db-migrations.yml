@@ -1,0 +1,30 @@
+name: Apply DB migrations
+
+# Runs the pending Supabase migrations against production whenever a merge to
+# main changes anything under supabase/migrations/. Also runnable on demand
+# (Actions tab -> "Run workflow") — use that once after setup to baseline.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+  workflow_dispatch: {}
+
+# Never let two migration runs overlap.
+concurrency:
+  group: db-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Apply pending migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash scripts/apply-migrations.sh
