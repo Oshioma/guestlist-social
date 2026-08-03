@@ -17,6 +17,120 @@ type PublishResult =
   | { ok: true; publishUrl: string | null }
   | { ok: false; error: string };
 
+type ConnectedAccount = {
+  account_id: string;
+  access_token: string;
+  account_name: string | null;
+};
+
+type ResolveResult =
+  | { ok: true; account: ConnectedAccount }
+  | { ok: false; error: string };
+
+// Normalize a handle/username for comparison: lower-case, trimmed, no
+// leading "@". "@Organzibar " and "organzibar" compare equal.
+function normalizeHandle(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+// Pick the ONE account a post is allowed to publish to, and refuse rather
+// than guess. The binding key is the client's declared handle ("the handle
+// the post was written for"):
+//
+//   Instagram — publish only to the connected account whose username
+//     (account_name, captured from Graph at connect time) matches the
+//     client's ig_handle. If a handle is set and nothing matches, block.
+//     If no handle is set, allow only when there's exactly one connected
+//     account (unambiguous); otherwise block.
+//   Facebook — publish only to the connected Page whose name (account_name)
+//     or id (account_id) matches the client's declared `fb_page`. If a Page
+//     is declared and nothing matches, block. If none is declared, allow
+//     only when there's exactly one connected Page; otherwise block.
+//
+// Blocking returns a human-readable reason that the caller stashes in the
+// queue row's notes so the operator can see *why* it didn't go out.
+function resolveTargetAccount(args: {
+  accounts: ConnectedAccount[];
+  platform: "facebook" | "instagram";
+  handle: string | null;
+  fbPage: string | null;
+  clientName: string;
+}): ResolveResult {
+  const { accounts, platform, handle, fbPage, clientName } = args;
+  const connectedList = accounts
+    .map((a) => a.account_name || a.account_id)
+    .join(", ");
+
+  if (platform === "instagram") {
+    const wanted = normalizeHandle(handle);
+    if (wanted) {
+      const matches = accounts.filter(
+        (a) => normalizeHandle(a.account_name) === wanted
+      );
+      if (matches.length === 1) return { ok: true, account: matches[0] };
+      if (matches.length === 0) {
+        return {
+          ok: false,
+          error:
+            `Blocked: no connected Instagram account matches @${wanted} for "${clientName}". ` +
+            `Connected: ${connectedList || "none"}. Not publishing to avoid posting to the wrong account. ` +
+            `Fix the client's Instagram handle or connect the right account.`,
+        };
+      }
+      return {
+        ok: false,
+        error:
+          `Blocked: ${matches.length} connected Instagram accounts match @${wanted} for "${clientName}". ` +
+          `Remove the duplicate connection before publishing.`,
+      };
+    }
+    // No handle declared — only safe when there's a single account.
+    if (accounts.length === 1) return { ok: true, account: accounts[0] };
+    return {
+      ok: false,
+      error:
+        `Blocked: "${clientName}" has ${accounts.length} connected Instagram accounts (${connectedList}) ` +
+        `and no Instagram handle set to identify the right one. Set the client's Instagram handle so posts ` +
+        `only go to the intended account.`,
+    };
+  }
+
+  // Facebook: match the declared Page against the connected Page's name or id.
+  const wantedPage = normalizeHandle(fbPage);
+  if (wantedPage) {
+    const matches = accounts.filter(
+      (a) =>
+        normalizeHandle(a.account_name) === wantedPage ||
+        (a.account_id ?? "").trim().toLowerCase() === wantedPage
+    );
+    if (matches.length === 1) return { ok: true, account: matches[0] };
+    if (matches.length === 0) {
+      return {
+        ok: false,
+        error:
+          `Blocked: no connected Facebook Page matches "${fbPage}" for "${clientName}". ` +
+          `Connected: ${connectedList || "none"}. Not publishing to avoid posting to the wrong account. ` +
+          `Fix the client's Facebook Page or connect the right Page.`,
+      };
+    }
+    return {
+      ok: false,
+      error:
+        `Blocked: ${matches.length} connected Facebook Pages match "${fbPage}" for "${clientName}". ` +
+        `Remove the duplicate connection before publishing.`,
+    };
+  }
+  // No Page declared — only safe when there's a single connected Page.
+  if (accounts.length === 1) return { ok: true, account: accounts[0] };
+  return {
+    ok: false,
+    error:
+      `Blocked: "${clientName}" has ${accounts.length} connected Facebook Pages (${connectedList}) ` +
+      `and no Facebook Page set to identify the right one. Set the client's Facebook Page so posts ` +
+      `only go to the intended account.`,
+  };
+}
+
 // Record why a scheduled publish couldn't run, WITHOUT changing its status.
 // Pre-flight failures (no connected account, post not approved) intentionally
 // leave the row 'scheduled' so the 5-minute cron keeps retrying and the post
@@ -97,26 +211,77 @@ export async function publishMetaQueueItem(
     return { ok: false, error: msg };
   }
 
-  // 3. Connected account
+  // 3. Connected account — resolve AND verify.
+  //
+  // A single Meta login can administer many brands' Pages, so the OAuth
+  // connect flow can attach several accounts under one client_id. We must
+  // NEVER guess which one a post belongs to (that is exactly the bug that
+  // sent Organzibar's posts to another client's Instagram). Instead we pin
+  // the target to the handle the post was written for — the client's
+  // declared `ig_handle` — and refuse to publish if nothing matches.
   const platform = queueItem.platform as "facebook" | "instagram";
-  const { data: account, error: accountErr } = await admin
+
+  // Defensive select: `fb_page` is a newer column, so fall back if a
+  // database hasn't run the migration yet — publishing must never break on
+  // a missing optional column.
+  type ClientRow = {
+    name?: string | null;
+    ig_handle?: string | null;
+    fb_page?: string | null;
+  };
+  let client: ClientRow | null = null;
+  const clientFull = await admin
+    .from("clients")
+    .select("id, name, ig_handle, fb_page")
+    .eq("id", post.client_id)
+    .maybeSingle();
+  if (clientFull.error) {
+    const fallback = await admin
+      .from("clients")
+      .select("id, name, ig_handle")
+      .eq("id", post.client_id)
+      .maybeSingle();
+    if (fallback.error) {
+      await noteScheduledIssue(admin, queueId, `client lookup: ${fallback.error.message}`);
+      return { ok: false, error: `client lookup: ${fallback.error.message}` };
+    }
+    client = (fallback.data ?? null) as ClientRow | null;
+  } else {
+    client = (clientFull.data ?? null) as ClientRow | null;
+  }
+  const clientName: string = client?.name || "this client";
+  const clientHandle: string | null = client?.ig_handle ?? null;
+  const clientFbPage: string | null = client?.fb_page ?? null;
+
+  const { data: accounts, error: accountErr } = await admin
     .from("connected_meta_accounts")
     .select("account_id, access_token, account_name")
     .eq("client_id", post.client_id)
     .eq("platform", platform)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
 
   if (accountErr) {
     await noteScheduledIssue(admin, queueId, `account lookup: ${accountErr.message}`);
     return { ok: false, error: `account lookup: ${accountErr.message}` };
   }
-  if (!account) {
+  if (!accounts || accounts.length === 0) {
     const msg = `No connected ${platform} account for this client. Click "Connect Meta" to reconnect.`;
     await noteScheduledIssue(admin, queueId, msg);
     return { ok: false, error: msg };
   }
+
+  const resolved = resolveTargetAccount({
+    accounts,
+    platform,
+    handle: clientHandle,
+    fbPage: clientFbPage,
+    clientName,
+  });
+  if (!resolved.ok) {
+    await noteScheduledIssue(admin, queueId, resolved.error);
+    return { ok: false, error: resolved.error };
+  }
+  const account = resolved.account;
 
   const caption: string = (post.caption as string | null) ?? "";
   const mediaUrls: string[] = Array.isArray(post.media_urls)

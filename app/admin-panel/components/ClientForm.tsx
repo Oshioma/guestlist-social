@@ -9,6 +9,7 @@ type ClientFormValues = {
   status: "active" | "paused" | "onboarding";
   websiteUrl?: string;
   igHandle?: string;
+  fbPage?: string;
   notes?: string;
   industry?: string;
   metaAdAccountId?: string;
@@ -120,8 +121,23 @@ export default function ClientForm({
               placeholder="@handle"
             />
             <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
-              Used for the Interactions comment feed.
+              Used for the Interactions comment feed. <strong>Also gates publishing</strong> —
+              posts only go out to the connected Instagram account matching this handle.
             </div>
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Facebook Page</label>
+          <input
+            name="fbPage"
+            defaultValue={initialValues?.fbPage ?? ""}
+            style={inputStyle}
+            placeholder="Page name or ID"
+          />
+          <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 4 }}>
+            Gates Facebook publishing — posts only go out to the connected Page whose name or
+            ID matches this. Leave blank only if this client has a single connected Page.
           </div>
         </div>
 
