@@ -53,6 +53,20 @@ function normalizeMediaUrls(value: unknown): string[] {
     .filter((v) => v.length > 0);
 }
 
+// The moment a post goes out is derived entirely from the proofer: its date
+// plus its publish time (stored as a UTC "HH:MM"). This is the single source
+// of truth for scheduling — the publish queue never sets a time of its own, so
+// changing the time on the proofer is the only way to reschedule.
+function scheduledForFromPost(
+  postDate: string,
+  publishTime: string | null | undefined
+): string {
+  const date = String(postDate).slice(0, 10);
+  const time =
+    publishTime && /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+  return `${date}T${time}:00.000Z`;
+}
+
 function parseDateKey(value: string): { year: number; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (!match) return null;
@@ -534,6 +548,25 @@ export async function saveProoferPostAction(
       throw new Error("Could not save post.");
     }
 
+    // Keep the publish queue's send time in lockstep with the proofer. The
+    // queue never owns the time — editing the post's publish time here is the
+    // only way to reschedule. Rows already published or failed are left alone.
+    const { error: queueSyncError } = await supabase
+      .from("proofer_publish_queue")
+      .update({
+        scheduled_for: scheduledForFromPost(postDate, normalizedPublishTime),
+        status: "scheduled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("post_id", existing.id)
+      // Also revive a failed row: fixing the post on the proofer and re-saving
+      // is how you retry. Published rows are never touched.
+      .in("status", ["queued", "scheduled", "failed"]);
+    if (queueSyncError) {
+      // Non-fatal: the post itself saved. Log and continue.
+      console.error("saveProoferPostAction queue-sync error:", queueSyncError);
+    }
+
     const previousIdeaId = existing.linked_idea_id
       ? String(existing.linked_idea_id)
       : null;
@@ -613,7 +646,7 @@ export async function updateProoferStatusAction(
 
   const { data: existing } = await supabase
     .from("proofer_posts")
-    .select("id, platform, publish_targets")
+    .select("id, platform, publish_targets, post_date, publish_time")
     .eq("client_id", clientId)
     .eq("post_date", postDate)
     .eq("platform", normalizedPlatform)
@@ -639,12 +672,12 @@ export async function updateProoferStatusAction(
       await supabase.from("proofer_publish_queue").delete().eq("post_id", existing.id);
     }
 
-    // Approving a post now drops it straight into the publish queue (status
-    // "queued", awaiting a send time) — no separate "add to queue" step. A
-    // post can publish to more than one destination, so we queue a row per
-    // publish target (mirroring queueProoferPostToTargetsAction). We only
-    // insert targets that aren't already in the queue, so re-approving a post
-    // whose Instagram slot is already scheduled or published never resets it.
+    // Approving a post drops it straight into the publish queue — no separate
+    // "add to queue" step, and no queue-stage scheduling: the send time is the
+    // post's own date + publish time, set on the proofer. A post can publish to
+    // more than one destination, so we queue a row per target. We only insert
+    // targets that aren't already in the queue, so re-approving a post whose
+    // Instagram slot is already scheduled or published never resets it.
     if (normalized === "proofed" || normalized === "approved") {
       let targets = normalizePublishTargets(existing.publish_targets);
       // Posts predating publish_targets fall back to what their platform
@@ -661,12 +694,18 @@ export async function updateProoferStatusAction(
         (existingRows ?? []).map((row) => row.platform)
       );
 
+      const scheduledFor = scheduledForFromPost(
+        String(existing.post_date ?? postDate),
+        existing.publish_time as string | null
+      );
+
       const rowsToInsert = targets
         .filter((target) => !alreadyQueued.has(target))
         .map((platform) => ({
           post_id: existing.id,
           platform,
-          status: "queued",
+          status: "scheduled",
+          scheduled_for: scheduledFor,
           created_by: authorEmail,
           updated_at: new Date().toISOString(),
         }));
@@ -1048,7 +1087,7 @@ export async function queueProoferPostAction(
 
   const { data: post, error: postError } = await supabase
     .from("proofer_posts")
-    .select("id, status")
+    .select("id, status, post_date, publish_time")
     .eq("id", postId)
     .maybeSingle();
 
@@ -1069,7 +1108,11 @@ export async function queueProoferPostAction(
     {
       post_id: postId,
       platform: normalizedPlatform,
-      status: "queued",
+      status: "scheduled",
+      scheduled_for: scheduledForFromPost(
+        String(post.post_date),
+        post.publish_time as string | null
+      ),
       created_by: authorEmail,
       updated_at: new Date().toISOString(),
     },
@@ -1102,7 +1145,7 @@ export async function queueProoferPostToTargetsAction(postId: string) {
 
   const { data: post, error: postError } = await supabase
     .from("proofer_posts")
-    .select("id, status, platform, publish_targets")
+    .select("id, status, platform, publish_targets, post_date, publish_time")
     .eq("id", postId)
     .maybeSingle();
 
@@ -1127,10 +1170,16 @@ export async function queueProoferPostToTargetsAction(postId: string) {
     targets = post.platform === "facebook" ? ["facebook"] : ["instagram"];
   }
 
+  const scheduledFor = scheduledForFromPost(
+    String(post.post_date),
+    post.publish_time as string | null
+  );
+
   const rows = targets.map((platform) => ({
     post_id: postId,
     platform,
-    status: "queued",
+    status: "scheduled",
+    scheduled_for: scheduledFor,
     created_by: authorEmail,
     updated_at: new Date().toISOString(),
   }));

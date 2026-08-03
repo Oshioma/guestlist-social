@@ -1019,59 +1019,15 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <input
-                        type="datetime-local"
-                        value={scheduleValue}
-                        onChange={(e) =>
-                          setScheduleDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        style={inputStyle}
-                      />
-                      <span style={{ fontSize: 10, color: "#71717a" }}>
-                        {(() => {
-                          const iso = fromDateTimeLocalInputValue(scheduleValue);
-                          const shown = iso ? formatDateTime(iso, timeZone) : "";
-                          return shown
-                            ? `Goes out: ${shown}`
-                            : "Default 6 PM GMT";
-                        })()}
-                      </span>
+                    <div style={{ flex: 1, fontSize: 13, color: INK_2 }}>
+                      Goes out:{" "}
+                      <strong style={{ color: INK }}>
+                        {item.scheduledFor
+                          ? formatDateTime(item.scheduledFor, timeZone)
+                          : "—"}
+                      </strong>
+                      <span style={{ color: INK_3 }}> · set on the proofer</span>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSchedule(item.id)}
-                      disabled={isPending}
-                      style={darkButton}
-                    >
-                      Schedule
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handlePublishNow(item.id)}
-                      disabled={isPending}
-                      style={{
-                        ...darkButton,
-                        background: "#1877f2",
-                        borderColor: "#1877f2",
-                      }}
-                    >
-                      Publish now
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleMarkPublished(item.id)}
-                      disabled={isPending}
-                      style={buttonBase}
-                    >
-                      Mark published
-                    </button>
 
                     <button
                       type="button"
@@ -1201,60 +1157,17 @@ export default function PublishQueueBoard({
                   </div>
                 </div>
 
-                {/* Reschedule an already-scheduled post: pre-filled with its
-                    current time, applied to every platform the post goes to. */}
-                <div
-                  className="publish-action-row"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(220px, 1fr) auto",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <input
-                      type="datetime-local"
-                      value={
-                        scheduleDrafts[item.id] ??
-                        toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
-                      }
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      aria-label="Change scheduled time"
-                      style={inputStyle}
-                    />
-                    <span style={{ fontSize: 10, color: "#71717a" }}>
-                      {(() => {
-                        const iso = fromDateTimeLocalInputValue(
-                          scheduleDrafts[item.id] ??
-                            toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
-                        );
-                        const shown = iso ? formatDateTime(iso, timeZone) : "";
-                        return shown
-                          ? `Set in your local time · goes out ${shown}`
-                          : "Pick a time";
-                      })()}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleReschedule(item)}
-                    disabled={isPending}
-                    style={{
-                      ...darkButton,
-                      opacity:
-                        pendingId === item.id ? 0.7 : isPending ? 0.5 : 1,
-                      cursor: isPending ? "wait" : "pointer",
-                    }}
-                  >
-                    {pendingId === item.id ? "Rescheduling…" : "Reschedule"}
-                  </button>
+                {/* Read-only send time. The schedule lives on the proofer —
+                    a post goes out at its own date + publish time. To change
+                    it, edit the post's time on the proofer page. */}
+                <div style={{ fontSize: 13, color: INK_2 }}>
+                  Goes out:{" "}
+                  <strong style={{ color: INK }}>
+                    {item.scheduledFor
+                      ? formatDateTime(item.scheduledFor, timeZone)
+                      : "—"}
+                  </strong>
+                  <span style={{ color: INK_3 }}> · set on the proofer</span>
                 </div>
 
                 {showManualControls ? (
@@ -1560,37 +1473,10 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <input
-                        type="datetime-local"
-                        value={scheduleValue}
-                        onChange={(e) =>
-                          setScheduleDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        style={inputStyle}
-                      />
-                      <span style={{ fontSize: 10, color: "#71717a" }}>
-                        {(() => {
-                          const iso = fromDateTimeLocalInputValue(scheduleValue);
-                          const shown = iso ? formatDateTime(iso, timeZone) : "";
-                          return shown
-                            ? `Goes out: ${shown}`
-                            : "Default 6 PM GMT";
-                        })()}
-                      </span>
+                    <div style={{ flex: 1, fontSize: 13, color: INK_2 }}>
+                      To retry, fix the post on the proofer and re-save — it
+                      re-queues for its date + publish time. Or remove it here.
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSchedule(item.id)}
-                      disabled={isPending}
-                      style={darkButton}
-                    >
-                      Reschedule
-                    </button>
 
                     <button
                       type="button"
