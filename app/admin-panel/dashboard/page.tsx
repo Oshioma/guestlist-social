@@ -2,16 +2,22 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
+import { getMemberAccess } from "@/lib/auth/permissions";
 import { zonedDateKey, zonedTimeToUtcIso, zoneAbbrev } from "@/lib/timezone";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import ClientCard from "../components/ClientCard";
 import { mapDbClientToUiClient } from "../lib/mappers";
+import { getActiveClientRetainers } from "../lib/cashflow-actions";
+import { normalizeAmounts, normalizeOverrides, MONTHS } from "../lib/cashflow-shared";
 import TokenExpiryBanner from "../components/TokenExpiryBanner";
 import TodayPublishingCard, {
   type TodayPublishingStats,
   type TodayAccountRow,
 } from "./TodayPublishingCard";
+import FinanceThisMonthCard, {
+  type FinanceThisMonthStats,
+} from "./FinanceThisMonthCard";
 
 export const dynamic = "force-dynamic";
 
@@ -135,11 +141,15 @@ async function getTodayPublishingStats(): Promise<TodayPublishingStats> {
   };
 }
 
-async function getActivityStats() {
+async function getActivityStats(timeZone: string) {
   const supabase = await createClient();
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Today's calendar day in the agency's display timezone. A task is overdue
+  // when its due day is strictly before this — same rule the tasks board uses.
+  const todayKey = zonedDateKey(new Date(), timeZone);
 
   const [
     clientsRes,
@@ -155,6 +165,9 @@ async function getActivityStats() {
     decisionsRes,
     tasksRes,
     liveCampaignsRes,
+    activeAdsRes,
+    overdueTasksRes,
+    clientCommentsRes,
   ] = await Promise.all([
     supabase.from("clients").select("*").eq("archived", false).order("created_at", { ascending: false }),
     supabase.from("ads").select("id, client_id, spend, clicks, impressions, ctr, status").order("created_at", { ascending: false }).limit(500),
@@ -169,6 +182,12 @@ async function getActivityStats() {
     supabase.from("ad_decisions").select("id, status, created_at").gte("created_at", thirtyDaysAgo),
     supabase.from("tasks").select("id, status").in("status", ["todo", "in_progress"]),
     supabase.from("campaigns").select("id").in("status", ["live", "testing"]),
+    // Ads currently running across all clients.
+    supabase.from("ads").select("id", { count: "exact", head: true }).eq("status", "active"),
+    // Open tasks that carry a due date, so we can flag the ones now overdue.
+    supabase.from("tasks").select("id, due_date").neq("status", "completed").not("due_date", "is", null),
+    // Comments authored by clients (not the agency) on their posts.
+    supabase.from("proofer_comments").select("id, resolved").eq("author_role", "client"),
   ]);
 
   const clients = (clientsRes.data ?? []).map((row) => {
@@ -187,6 +206,17 @@ async function getActivityStats() {
   const decisionsGenerated = decisionsRes.data?.length ?? 0;
   const tasksOutstanding = tasksRes.error ? 0 : (tasksRes.data?.length ?? 0);
   const liveCampaigns = liveCampaignsRes.error ? 0 : (liveCampaignsRes.data?.length ?? 0);
+  const activeAds = activeAdsRes.error ? 0 : (activeAdsRes.count ?? 0);
+  const overdueTasks = overdueTasksRes.error
+    ? 0
+    : (overdueTasksRes.data ?? []).filter((t) => {
+        const due = t.due_date ? String(t.due_date).slice(0, 10) : "";
+        return due !== "" && due < todayKey;
+      }).length;
+  // Default to "needs attention": client comments not yet marked resolved.
+  const clientComments = clientCommentsRes.error
+    ? 0
+    : (clientCommentsRes.data ?? []).filter((c) => c.resolved !== true).length;
 
   return {
     clients,
@@ -199,13 +229,99 @@ async function getActivityStats() {
     decisionsGenerated,
     tasksOutstanding,
     liveCampaigns,
+    activeAds,
+    overdueTasks,
+    clientComments,
+  };
+}
+
+// Finance snapshot for the current calendar month, read live from the
+// cashflow forecast (admins only — the cashflow tables are admin-RLS). Revenue
+// mirrors the forecast's own definition: the month's revenue lines plus the
+// client-retainers row (a per-month override if pinned, else the live active-
+// client total). Costs is the month's cost lines; "salaries coming up" is the
+// Crew section, itemised per person for the breakdown.
+async function getFinanceThisMonth(
+  timeZone: string
+): Promise<FinanceThisMonthStats | null> {
+  const supabase = await createClient();
+
+  const now = new Date();
+  const todayKey = zonedDateKey(now, timeZone); // "YYYY-MM-DD"
+  const year = Number(todayKey.slice(0, 4));
+  const monthIndex = Number(todayKey.slice(5, 7)) - 1; // 0 = Jan
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) return null;
+
+  const [{ data: lineRows, error: linesErr }, { data: settingRow }, retainer] =
+    await Promise.all([
+      supabase
+        .from("cashflow_lines")
+        .select("section, label, kind, sort_order, amounts")
+        .eq("year", year)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("cashflow_settings")
+        .select("retainer_overrides")
+        .eq("year", year)
+        .maybeSingle<{ retainer_overrides: unknown }>(),
+      getActiveClientRetainers(),
+    ]);
+
+  // No rows (or blocked by RLS for a non-admin) → nothing to show.
+  if (linesErr || !lineRows || lineRows.length === 0) return null;
+
+  const overrides = normalizeOverrides(settingRow?.retainer_overrides);
+  const retainerThisMonth =
+    overrides[monthIndex] != null ? (overrides[monthIndex] as number) : retainer;
+
+  let costs = 0;
+  let revenue = 0;
+  const salaryRows: { label: string; amount: number }[] = [];
+
+  for (const row of lineRows) {
+    const amounts = normalizeAmounts(row.amounts);
+    const amount = amounts[monthIndex] || 0;
+    const kind = (row.kind as string) === "revenue" ? "revenue" : "cost";
+    if (kind === "revenue") {
+      revenue += amount;
+    } else {
+      costs += amount;
+      if ((row.section as string) === "Crew") {
+        salaryRows.push({ label: (row.label as string) || "Crew", amount });
+      }
+    }
+  }
+
+  // Revenue includes the auto client-retainers row, matching the forecast.
+  revenue += retainerThisMonth;
+
+  const salaries = salaryRows.reduce((t, r) => t + r.amount, 0);
+
+  return {
+    monthLabel: `${MONTHS[monthIndex]} ${year}`,
+    revenue,
+    costs,
+    salaries,
+    salaryRows: salaryRows.sort((a, b) => b.amount - a.amount),
   };
 }
 
 export default async function DashboardPage() {
   try {
-    const [stats, todayPublishing] = await Promise.all([
-      getActivityStats(),
+    const access = await getMemberAccess();
+    const isAdmin = access?.role === "admin";
+
+    // Display timezone drives "today" for the overdue-tasks and finance-month
+    // calculations. Fall back to GMT if the setting can't be read.
+    let timeZone = "Etc/GMT";
+    try {
+      timeZone = await getDisplayTimezone(await createClient());
+    } catch {
+      // keep GMT
+    }
+
+    const [stats, todayPublishing, finance] = await Promise.all([
+      getActivityStats(timeZone),
       getTodayPublishingStats().catch((err) => {
         console.error("Today publishing stats error:", err);
         return {
@@ -215,6 +331,14 @@ export default async function DashboardPage() {
           byAccount: [],
         } as TodayPublishingStats;
       }),
+      // Finance is owner-level data (admin-only RLS). Only fetch it for admins;
+      // other members simply don't see the card.
+      isAdmin
+        ? getFinanceThisMonth(timeZone).catch((err) => {
+            console.error("Finance stats error:", err);
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
     const activeClients = stats.clients.filter((c) => c.status === "active");
 
@@ -222,9 +346,18 @@ export default async function DashboardPage() {
       { label: "Clients", value: String(activeClients.length), sub: `${stats.clients.length} total`, href: "/app/clients" },
       { label: "Posts Proofed", value: String(stats.postsProofed), sub: `${stats.postsPublished} published`, color: stats.postsPublished > 0 ? "#166534" : undefined, href: "/app/proofer/publish" },
       { label: "Ideas Created", value: String(stats.ideasCreated), sub: "video + carousel + story", href: "/app/ideas" },
+      { label: "Active ad campaigns", value: String(stats.activeAds), sub: "ads running now", color: stats.activeAds > 0 ? "#166534" : undefined },
       { label: "Campaigns Live", value: String(stats.liveCampaigns), sub: "active right now", color: stats.liveCampaigns > 0 ? "#166534" : undefined },
       { label: "Decisions", value: String(stats.decisionsGenerated), sub: "generated this month" },
       { label: "Tasks Outstanding", value: String(stats.tasksOutstanding), sub: "to do + in progress", color: stats.tasksOutstanding > 0 ? "#b45309" : undefined, href: "/app/tasks" },
+      { label: "Overdue tasks", value: String(stats.overdueTasks), sub: "past their due date", color: stats.overdueTasks > 0 ? "#b91c1c" : undefined, href: "/app/tasks" },
+      { label: "Client comments", value: String(stats.clientComments), sub: "unresolved on posts", color: stats.clientComments > 0 ? "#b45309" : undefined, href: "/app/proofer" },
+    ];
+
+    // Placeholders for metrics we plan to track but don't collect yet.
+    const comingSoon = [
+      { label: "Hooks tested", sub: "coming soon" },
+      { label: "Reel concepts tested", sub: "coming soon" },
     ];
 
     return (
@@ -232,6 +365,8 @@ export default async function DashboardPage() {
         <TokenExpiryBanner />
 
         <TodayPublishingCard stats={todayPublishing} />
+
+        {finance && <FinanceThisMonthCard stats={finance} />}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {cards.map((c) => {
@@ -259,6 +394,24 @@ export default async function DashboardPage() {
               <div key={c.label} style={style}>{inner}</div>
             );
           })}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          {comingSoon.map((c) => (
+            <div
+              key={c.label}
+              style={{
+                padding: "16px 18px",
+                borderRadius: 14,
+                background: "#fafafa",
+                border: "1px dashed #e4e4e7",
+              }}
+            >
+              <div style={{ fontSize: 12, color: "#a1a1aa", fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#d4d4d8", letterSpacing: "-0.02em" }}>—</div>
+              <div style={{ fontSize: 12, color: "#c4c4cc", marginTop: 2 }}>{c.sub}</div>
+            </div>
+          ))}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
