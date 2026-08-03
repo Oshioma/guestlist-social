@@ -295,6 +295,11 @@ export default function PublishQueueBoard({
   const [connectClientId, setConnectClientId] = useState<string>(
     clients[0]?.id ?? ""
   );
+  // Feedback state for the "Connect Meta" button. Opening Facebook's OAuth
+  // dialog in a new window is near-instant, but the button used to just sit
+  // there (it navigated the whole page) with no sign it had been pressed.
+  // This drives an "Opening Facebook…" label + note while the popup is open.
+  const [connectOpening, setConnectOpening] = useState(false);
 
   const zone = useMemo(() => describeZone(timeZone), [timeZone]);
 
@@ -566,9 +571,29 @@ export default function PublishQueueBoard({
       alert("Pick a client first.");
       return;
     }
-    window.location.href = `/api/meta/connect?clientId=${encodeURIComponent(
+    const url = `/api/meta/connect?clientId=${encodeURIComponent(
       connectClientId
     )}`;
+    // Open Facebook's login/OAuth flow in a separate window so the publish
+    // board stays put. Show immediate feedback, and when the popup closes
+    // (after the callback finishes and lands back on this page inside the
+    // popup), refresh so any newly connected accounts show up here.
+    const popup = window.open(url, "metaConnect", "width=600,height=760");
+    if (!popup) {
+      // Pop-up blocked — fall back to same-tab navigation so the flow still
+      // works rather than silently doing nothing.
+      window.location.href = url;
+      return;
+    }
+    setConnectOpening(true);
+    popup.focus();
+    const timer = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(timer);
+        setConnectOpening(false);
+        router.refresh();
+      }
+    }, 700);
   }
 
   function handleMarkFailed(queueId: string | string[]) {
@@ -1759,7 +1784,7 @@ export default function PublishQueueBoard({
             <button
               type="button"
               onClick={handleConnectMeta}
-              disabled={!connectClientId}
+              disabled={!connectClientId || connectOpening}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -1768,11 +1793,24 @@ export default function PublishQueueBoard({
                 border: "none",
                 fontSize: 12,
                 fontWeight: 700,
-                cursor: connectClientId ? "pointer" : "not-allowed",
+                cursor: !connectClientId
+                  ? "not-allowed"
+                  : connectOpening
+                  ? "wait"
+                  : "pointer",
+                opacity: connectOpening ? 0.85 : 1,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              Connect Meta
+              {connectOpening ? "Opening Facebook…" : "Connect Meta"}
             </button>
+            {connectOpening && (
+              <span style={{ fontSize: 12, color: "#71717a" }}>
+                Continue in the Facebook window we just opened.
+              </span>
+            )}
           </div>
 
           {metaConnectionError && (
