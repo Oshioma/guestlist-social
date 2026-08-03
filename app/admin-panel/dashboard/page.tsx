@@ -239,8 +239,9 @@ async function getActivityStats(timeZone: string) {
 // cashflow forecast (admins only — the cashflow tables are admin-RLS). Revenue
 // mirrors the forecast's own definition: the month's revenue lines plus the
 // client-retainers row (a per-month override if pinned, else the live active-
-// client total). Costs is the month's cost lines; "salaries coming up" is the
-// Crew section, itemised per person for the breakdown.
+// client total). Costs is the month's cost lines; "salaries coming up" is each
+// person's Crew pay plus any Rooms cost billed under the same name, itemised
+// per person (salary + room) for the breakdown.
 async function getFinanceThisMonth(
   timeZone: string
 ): Promise<FinanceThisMonthStats | null> {
@@ -276,24 +277,48 @@ async function getFinanceThisMonth(
 
   let costs = 0;
   let revenue = 0;
-  const salaryRows: { label: string; amount: number }[] = [];
+  // Per-person totals, keyed by name. Crew lines set the salary; Rooms lines
+  // add a room cost to whoever shares that name (so a person's row shows both).
+  const people = new Map<string, { label: string; salary: number; room: number }>();
+  const personFor = (label: string) => {
+    let p = people.get(label);
+    if (!p) {
+      p = { label, salary: 0, room: 0 };
+      people.set(label, p);
+    }
+    return p;
+  };
 
   for (const row of lineRows) {
     const amounts = normalizeAmounts(row.amounts);
     const amount = amounts[monthIndex] || 0;
     const kind = (row.kind as string) === "revenue" ? "revenue" : "cost";
+    const section = row.section as string;
     if (kind === "revenue") {
       revenue += amount;
     } else {
       costs += amount;
-      if ((row.section as string) === "Crew") {
-        salaryRows.push({ label: (row.label as string) || "Crew", amount });
+      if (section === "Crew") {
+        personFor((row.label as string) || "Crew").salary += amount;
+      } else if (section === "Rooms") {
+        personFor((row.label as string) || "Rooms").room += amount;
       }
     }
   }
 
   // Revenue includes the auto client-retainers row, matching the forecast.
   revenue += retainerThisMonth;
+
+  const salaryRows = Array.from(people.values())
+    .map((p) => ({
+      label: p.label,
+      salary: p.salary,
+      room: p.room,
+      amount: p.salary + p.room,
+    }))
+    // Drop people who cost nothing this month (e.g. a room-only name with a 0).
+    .filter((r) => r.amount !== 0)
+    .sort((a, b) => b.amount - a.amount);
 
   const salaries = salaryRows.reduce((t, r) => t + r.amount, 0);
 
@@ -302,7 +327,7 @@ async function getFinanceThisMonth(
     revenue,
     costs,
     salaries,
-    salaryRows: salaryRows.sort((a, b) => b.amount - a.amount),
+    salaryRows,
   };
 }
 

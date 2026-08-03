@@ -4,6 +4,11 @@ import { useState } from "react";
 
 export type SalaryRow = {
   label: string;
+  // Crew pay for the month.
+  salary: number;
+  // Rooms cost billed under the same name (0 if none).
+  room: number;
+  // salary + room — this person's total cost for the month.
   amount: number;
 };
 
@@ -38,7 +43,13 @@ export default function FinanceThisMonthCard({
   const net = stats.revenue - stats.costs;
   const hasBreakdown = stats.salaryRows.length > 0;
 
-  const figures: Array<{ label: string; value: number; color?: string }> = [
+  const hasRooms = stats.salaryRows.some((r) => r.room > 0);
+  const figures: Array<{
+    label: string;
+    value: number;
+    color?: string;
+    note?: string;
+  }> = [
     { label: "Monthly revenue", value: stats.revenue, color: "#166534" },
     { label: "Total monthly costs", value: stats.costs },
     {
@@ -50,6 +61,7 @@ export default function FinanceThisMonthCard({
       label: "Staff salaries coming up",
       value: stats.salaries,
       color: "#b45309",
+      note: hasRooms ? "incl. room costs" : undefined,
     },
   ];
 
@@ -102,6 +114,11 @@ export default function FinanceThisMonthCard({
               >
                 {money(f.value)}
               </div>
+              {f.note && (
+                <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 2 }}>
+                  {f.note}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -164,7 +181,12 @@ export default function FinanceThisMonthCard({
                   style={{ borderTop: "1px solid #f4f4f5" }}
                 >
                   <td style={{ padding: "8px 18px", color: "#18181b" }}>
-                    {row.label}
+                    <span>{row.label}</span>
+                    {row.room > 0 && (
+                      <span style={{ color: "#a1a1aa", marginLeft: 8, fontSize: 12 }}>
+                        {money(row.salary)} salary + {money(row.room)} room
+                      </span>
+                    )}
                   </td>
                   <td
                     style={{
