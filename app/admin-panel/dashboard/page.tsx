@@ -1,12 +1,139 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getDisplayTimezone } from "@/lib/app-settings";
+import { zonedDateKey, zonedTimeToUtcIso, zoneAbbrev } from "@/lib/timezone";
 import SectionCard from "../components/SectionCard";
 import EmptyState from "../components/EmptyState";
 import ClientCard from "../components/ClientCard";
 import { mapDbClientToUiClient } from "../lib/mappers";
 import TokenExpiryBanner from "../components/TokenExpiryBanner";
+import TodayPublishingCard, {
+  type TodayPublishingStats,
+  type TodayAccountRow,
+} from "./TodayPublishingCard";
 
 export const dynamic = "force-dynamic";
+
+// Counts of posts scheduled to go out today and posts already published
+// today, broken down per account (client + Instagram handle). "Today" is
+// the current calendar day in the agency's display timezone, so it lines up
+// with the times operators see everywhere else in the app.
+async function getTodayPublishingStats(): Promise<TodayPublishingStats> {
+  const admin = createAdminClient();
+
+  let timeZone = "Etc/GMT";
+  try {
+    timeZone = await getDisplayTimezone(admin);
+  } catch {
+    // fall back to GMT
+  }
+
+  const now = new Date();
+  const todayKey = zonedDateKey(now, timeZone);
+  const startUtc = zonedTimeToUtcIso(todayKey, "00:00", timeZone);
+  // Re-zone an instant ~26h later to land on tomorrow's calendar day (DST-safe),
+  // then take that day's midnight as the exclusive upper bound.
+  const tomorrowKey = zonedDateKey(
+    new Date(new Date(startUtc).getTime() + 26 * 60 * 60 * 1000),
+    timeZone
+  );
+  const endUtc = zonedTimeToUtcIso(tomorrowKey, "00:00", timeZone);
+
+  const empty: TodayPublishingStats = {
+    scheduledToday: 0,
+    postedToday: 0,
+    zoneAbbrev: zoneAbbrev(timeZone, now),
+    byAccount: [],
+  };
+  if (!startUtc || !endUtc) return empty;
+
+  const [scheduledRes, postedRes] = await Promise.all([
+    admin
+      .from("proofer_publish_queue")
+      .select("id, post_id")
+      .in("status", ["scheduled", "queued"])
+      .gte("scheduled_for", startUtc)
+      .lt("scheduled_for", endUtc),
+    admin
+      .from("proofer_publish_queue")
+      .select("id, post_id")
+      .eq("status", "published")
+      .gte("published_at", startUtc)
+      .lt("published_at", endUtc),
+  ]);
+
+  const scheduledRows = scheduledRes.data ?? [];
+  const postedRows = postedRes.data ?? [];
+
+  const postIds = Array.from(
+    new Set(
+      [...scheduledRows, ...postedRows]
+        .map((r) => (r.post_id != null ? String(r.post_id) : null))
+        .filter((v): v is string => !!v)
+    )
+  );
+
+  // post_id -> client_id, then client_id -> { name, handle }
+  const postClient = new Map<string, string>();
+  const clientInfo = new Map<string, { name: string; handle: string | null }>();
+  if (postIds.length > 0) {
+    const { data: posts } = await admin
+      .from("proofer_posts")
+      .select("id, client_id")
+      .in("id", postIds);
+    for (const p of posts ?? []) {
+      if (p.client_id != null) postClient.set(String(p.id), String(p.client_id));
+    }
+    const clientIds = Array.from(new Set([...postClient.values()]));
+    if (clientIds.length > 0) {
+      const { data: clients } = await admin
+        .from("clients")
+        .select("id, name, ig_handle")
+        .in("id", clientIds);
+      for (const c of clients ?? []) {
+        clientInfo.set(String(c.id), {
+          name: (c.name as string | null) || "Unknown client",
+          handle: (c.ig_handle as string | null) ?? null,
+        });
+      }
+    }
+  }
+
+  const byAccount = new Map<string, TodayAccountRow>();
+  const bucketFor = (postId: string | null): TodayAccountRow => {
+    const clientId = postId ? postClient.get(postId) ?? "unknown" : "unknown";
+    let row = byAccount.get(clientId);
+    if (!row) {
+      const info = clientId !== "unknown" ? clientInfo.get(clientId) : undefined;
+      row = {
+        clientId,
+        name: info?.name ?? "Unknown client",
+        handle: info?.handle ?? null,
+        scheduled: 0,
+        posted: 0,
+      };
+      byAccount.set(clientId, row);
+    }
+    return row;
+  };
+
+  for (const r of scheduledRows) {
+    bucketFor(r.post_id != null ? String(r.post_id) : null).scheduled += 1;
+  }
+  for (const r of postedRows) {
+    bucketFor(r.post_id != null ? String(r.post_id) : null).posted += 1;
+  }
+
+  return {
+    scheduledToday: scheduledRows.length,
+    postedToday: postedRows.length,
+    zoneAbbrev: zoneAbbrev(timeZone, now),
+    byAccount: Array.from(byAccount.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    ),
+  };
+}
 
 async function getActivityStats() {
   const supabase = await createClient();
@@ -77,7 +204,18 @@ async function getActivityStats() {
 
 export default async function DashboardPage() {
   try {
-    const stats = await getActivityStats();
+    const [stats, todayPublishing] = await Promise.all([
+      getActivityStats(),
+      getTodayPublishingStats().catch((err) => {
+        console.error("Today publishing stats error:", err);
+        return {
+          scheduledToday: 0,
+          postedToday: 0,
+          zoneAbbrev: "",
+          byAccount: [],
+        } as TodayPublishingStats;
+      }),
+    ]);
     const activeClients = stats.clients.filter((c) => c.status === "active");
 
     const cards = [
@@ -92,6 +230,8 @@ export default async function DashboardPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <TokenExpiryBanner />
+
+        <TodayPublishingCard stats={todayPublishing} />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {cards.map((c) => {
