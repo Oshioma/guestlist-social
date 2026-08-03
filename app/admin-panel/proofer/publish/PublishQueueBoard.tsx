@@ -155,6 +155,12 @@ const LINE_2 = "#e0e0e4";
 const SUNK = "#f5f5f6";
 const CARD_SHADOW = "0 1px 2px rgba(24,24,27,.04), 0 4px 14px -10px rgba(24,24,27,.10)";
 
+// Keep in sync with PUBLISH_GRACE_HOURS in the publish cron
+// (app/api/cron/publish-meta-queue). Once a scheduled post is overdue by more
+// than this, the cron won't auto-send it — it surfaces here as "missed its
+// window" so the operator isn't left wondering why it hasn't gone out.
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 // Per-status colours: a pastel fill + readable ink for pills, plus a mid
 // tone for the card's left edge-stripe and the stat tiles.
 type StatusTone = { edge: string; fill: string; ink: string; strong: string };
@@ -295,6 +301,12 @@ export default function PublishQueueBoard({
   const [connectClientId, setConnectClientId] = useState<string>(
     clients[0]?.id ?? ""
   );
+
+  // The "missed its window" hint compares against the current clock, so it's
+  // client-only — gate it behind mount so the first render matches the server
+  // and we don't trip a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const zone = useMemo(() => describeZone(timeZone), [timeZone]);
 
@@ -1129,6 +1141,31 @@ export default function PublishQueueBoard({
                     <strong>&#9888; Not published yet:</strong> {item.notes}
                   </div>
                 )}
+
+                {/* Proactively flag a post that has missed its send window,
+                    before the cron gets to mark it failed — same message the
+                    cron records, so the operator sees it right away. */}
+                {mounted &&
+                  !item.notes &&
+                  item.scheduledFor &&
+                  Date.now() - new Date(item.scheduledFor).getTime() >
+                    STALE_AFTER_MS && (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1.4,
+                        color: STATUS_TONES.failed.ink,
+                        background: STATUS_TONES.failed.fill,
+                        border: `1px solid ${STATUS_TONES.failed.edge}`,
+                        borderRadius: 8,
+                        padding: "7px 11px",
+                      }}
+                    >
+                      <strong>&#9888; Missed its send window:</strong> this
+                      won&rsquo;t be sent automatically. Set a new time on the
+                      Proofer to re-send.
+                    </div>
+                  )}
 
                 {/* Thumbnail beside the caption — larger so the preview is
                     actually legible on a full-width card. */}
