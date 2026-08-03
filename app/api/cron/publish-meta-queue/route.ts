@@ -77,7 +77,50 @@ async function handle(req: Request) {
     );
   }
 
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+
+  // Safety guard against a stale blast. Scheduling is derived from the post's
+  // proofer date + time, so a back-dated or long-overdue post would otherwise
+  // be "due" and go out on the next tick. We only auto-publish inside a grace
+  // window: due within the last PUBLISH_GRACE_HOURS. Anything older missed its
+  // slot and is marked 'failed' (visible in the queue) instead of sent late —
+  // to re-send, give it a new time on the Proofer. Tunable via env; defaults
+  // to 6h, generous enough to absorb cron downtime without sending day-old
+  // posts. Manual publishing (publishMetaQueueItem) is deliberately not gated
+  // by this — the window only governs the automated cron.
+  const graceHours = Number(process.env.PUBLISH_GRACE_HOURS) || 6;
+  const graceCutoff = new Date(
+    nowDate.getTime() - graceHours * 60 * 60 * 1000
+  ).toISOString();
+
+  // Retire anything that missed its window so it can't sit as a landmine that
+  // fires the moment the window logic ever changes.
+  const { data: missed, error: missedErr } = await admin
+    .from("proofer_publish_queue")
+    .select("id")
+    .eq("status", "scheduled")
+    .lt("scheduled_for", graceCutoff);
+  if (missedErr) {
+    return NextResponse.json(
+      { ok: false, error: `missed lookup: ${missedErr.message}` },
+      { status: 500 }
+    );
+  }
+  if (missed && missed.length > 0) {
+    await admin
+      .from("proofer_publish_queue")
+      .update({
+        status: "failed",
+        notes:
+          "Missed its scheduled time — not sent automatically. Set a new time on the Proofer to re-send.",
+        updated_at: now,
+      })
+      .in(
+        "id",
+        missed.map((r) => (r as { id: string }).id)
+      );
+  }
 
   // Cap the batch so a single invocation can't be monopolised by a backlog.
   // If there are more than LIMIT due items the next tick will pick them up.
@@ -87,6 +130,7 @@ async function handle(req: Request) {
     .select("id, post_id, platform, scheduled_for")
     .eq("status", "scheduled")
     .lte("scheduled_for", now)
+    .gte("scheduled_for", graceCutoff)
     .order("scheduled_for", { ascending: true })
     .limit(LIMIT);
 
