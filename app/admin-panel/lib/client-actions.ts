@@ -363,6 +363,7 @@ export async function createClientAction(formData: FormData) {
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const igHandle = String(formData.get("igHandle") ?? "").trim().replace(/^@/, "");
+  const fbPage = String(formData.get("fbPage") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const industry = String(formData.get("industry") ?? "").trim();
   let metaAdAccountId = String(formData.get("metaAdAccountId") ?? "").trim();
@@ -404,6 +405,10 @@ export async function createClientAction(formData: FormData) {
     insertPayload.meta_ad_account_id = metaAdAccountId;
   }
 
+  if (fbPage) {
+    insertPayload.fb_page = fbPage;
+  }
+
   let insertResult = await supabase
     .from("clients")
     .insert(insertPayload)
@@ -412,9 +417,11 @@ export async function createClientAction(formData: FormData) {
   let { error } = insertResult;
   let createdClient = insertResult.data as { id: number } | null;
 
-  // If industry column doesn't exist, retry without it
-  if (error && insertPayload.industry !== undefined) {
+  // If a newer optional column (industry / fb_page) doesn't exist yet, retry
+  // without it so client creation never breaks on a lagging migration.
+  if (error && (insertPayload.industry !== undefined || insertPayload.fb_page !== undefined)) {
     delete insertPayload.industry;
+    delete insertPayload.fb_page;
     const retry = await supabase
       .from("clients")
       .insert(insertPayload)
@@ -464,6 +471,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   const status = normalizeStatus(String(formData.get("status") ?? "onboarding"));
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const igHandle = String(formData.get("igHandle") ?? "").trim().replace(/^@/, "");
+  const fbPage = String(formData.get("fbPage") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const industry = String(formData.get("industry") ?? "").trim();
   let metaAdAccountId = String(formData.get("metaAdAccountId") ?? "").trim();
@@ -493,6 +501,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     status: dbStatus,
     website_url: websiteUrl || null,
     ig_handle: igHandle || null,
+    fb_page: fbPage || null,
     notes: notes || null,
     meta_ad_account_id: metaAdAccountId || null,
   };
@@ -506,17 +515,17 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     .update(updatePayload)
     .eq("id", clientId);
 
-  // If industry or meta_ad_account_id columns don't exist, retry without them
-  if (error && updatePayload.industry !== undefined) {
+  // If a newer optional column doesn't exist yet, retry without the ones that
+  // might be missing so a lagging migration never blocks a client edit.
+  if (
+    error &&
+    (updatePayload.industry !== undefined ||
+      updatePayload.meta_ad_account_id !== undefined ||
+      updatePayload.fb_page !== undefined)
+  ) {
     delete updatePayload.industry;
     delete updatePayload.meta_ad_account_id;
-    const retry = await supabase
-      .from("clients")
-      .update(updatePayload)
-      .eq("id", clientId);
-    error = retry.error;
-  } else if (error && updatePayload.meta_ad_account_id !== undefined) {
-    delete updatePayload.meta_ad_account_id;
+    delete updatePayload.fb_page;
     const retry = await supabase
       .from("clients")
       .update(updatePayload)

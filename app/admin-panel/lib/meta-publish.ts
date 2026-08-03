@@ -42,8 +42,10 @@ function normalizeHandle(value: string | null | undefined): string {
 //     client's ig_handle. If a handle is set and nothing matches, block.
 //     If no handle is set, allow only when there's exactly one connected
 //     account (unambiguous); otherwise block.
-//   Facebook  — no per-client page handle exists, so allow only when
-//     there's exactly one connected Page; block if it's ambiguous.
+//   Facebook — publish only to the connected Page whose name (account_name)
+//     or id (account_id) matches the client's declared `fb_page`. If a Page
+//     is declared and nothing matches, block. If none is declared, allow
+//     only when there's exactly one connected Page; otherwise block.
 //
 // Blocking returns a human-readable reason that the caller stashes in the
 // queue row's notes so the operator can see *why* it didn't go out.
@@ -51,9 +53,10 @@ function resolveTargetAccount(args: {
   accounts: ConnectedAccount[];
   platform: "facebook" | "instagram";
   handle: string | null;
+  fbPage: string | null;
   clientName: string;
 }): ResolveResult {
-  const { accounts, platform, handle, clientName } = args;
+  const { accounts, platform, handle, fbPage, clientName } = args;
   const connectedList = accounts
     .map((a) => a.account_name || a.account_id)
     .join(", ");
@@ -92,13 +95,39 @@ function resolveTargetAccount(args: {
     };
   }
 
-  // Facebook: no declared page handle to match on.
+  // Facebook: match the declared Page against the connected Page's name or id.
+  const wantedPage = normalizeHandle(fbPage);
+  if (wantedPage) {
+    const matches = accounts.filter(
+      (a) =>
+        normalizeHandle(a.account_name) === wantedPage ||
+        (a.account_id ?? "").trim().toLowerCase() === wantedPage
+    );
+    if (matches.length === 1) return { ok: true, account: matches[0] };
+    if (matches.length === 0) {
+      return {
+        ok: false,
+        error:
+          `Blocked: no connected Facebook Page matches "${fbPage}" for "${clientName}". ` +
+          `Connected: ${connectedList || "none"}. Not publishing to avoid posting to the wrong account. ` +
+          `Fix the client's Facebook Page or connect the right Page.`,
+      };
+    }
+    return {
+      ok: false,
+      error:
+        `Blocked: ${matches.length} connected Facebook Pages match "${fbPage}" for "${clientName}". ` +
+        `Remove the duplicate connection before publishing.`,
+    };
+  }
+  // No Page declared — only safe when there's a single connected Page.
   if (accounts.length === 1) return { ok: true, account: accounts[0] };
   return {
     ok: false,
     error:
       `Blocked: "${clientName}" has ${accounts.length} connected Facebook Pages (${connectedList}) ` +
-      `and no way to tell which one this post is for. Leave only the intended Page connected for this client.`,
+      `and no Facebook Page set to identify the right one. Set the client's Facebook Page so posts ` +
+      `only go to the intended account.`,
   };
 }
 
@@ -192,17 +221,37 @@ export async function publishMetaQueueItem(
   // declared `ig_handle` — and refuse to publish if nothing matches.
   const platform = queueItem.platform as "facebook" | "instagram";
 
-  const { data: client, error: clientErr } = await admin
+  // Defensive select: `fb_page` is a newer column, so fall back if a
+  // database hasn't run the migration yet — publishing must never break on
+  // a missing optional column.
+  type ClientRow = {
+    name?: string | null;
+    ig_handle?: string | null;
+    fb_page?: string | null;
+  };
+  let client: ClientRow | null = null;
+  const clientFull = await admin
     .from("clients")
-    .select("id, name, ig_handle")
+    .select("id, name, ig_handle, fb_page")
     .eq("id", post.client_id)
     .maybeSingle();
-  if (clientErr) {
-    await noteScheduledIssue(admin, queueId, `client lookup: ${clientErr.message}`);
-    return { ok: false, error: `client lookup: ${clientErr.message}` };
+  if (clientFull.error) {
+    const fallback = await admin
+      .from("clients")
+      .select("id, name, ig_handle")
+      .eq("id", post.client_id)
+      .maybeSingle();
+    if (fallback.error) {
+      await noteScheduledIssue(admin, queueId, `client lookup: ${fallback.error.message}`);
+      return { ok: false, error: `client lookup: ${fallback.error.message}` };
+    }
+    client = (fallback.data ?? null) as ClientRow | null;
+  } else {
+    client = (clientFull.data ?? null) as ClientRow | null;
   }
-  const clientName: string = (client?.name as string | null) || "this client";
-  const clientHandle: string | null = (client?.ig_handle as string | null) ?? null;
+  const clientName: string = client?.name || "this client";
+  const clientHandle: string | null = client?.ig_handle ?? null;
+  const clientFbPage: string | null = client?.fb_page ?? null;
 
   const { data: accounts, error: accountErr } = await admin
     .from("connected_meta_accounts")
@@ -225,6 +274,7 @@ export async function publishMetaQueueItem(
     accounts,
     platform,
     handle: clientHandle,
+    fbPage: clientFbPage,
     clientName,
   });
   if (!resolved.ok) {
