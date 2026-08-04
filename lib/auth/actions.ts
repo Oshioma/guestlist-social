@@ -6,10 +6,14 @@
 //
 // Flows:
 //   - signInWithPassword   → redirect /post-login?next=<safeNext>
-//   - signUpWithPassword   → email-verify link back to /auth/callback
 //   - sendPasswordReset    → reset link back to /auth/callback?type=recovery
 //   - updatePassword       → redirect /post-login (viewer is authed via recovery session)
 //   - signOut              → invalidate Supabase session, redirect /sign-in
+//
+// There is deliberately no public sign-up action. Admission is invite-only:
+// new accounts are created by an admin via inviteMember (lib/auth/
+// member-actions.ts), which is the only path that grants access. This removes
+// the open self-service door that let unknown users/bots register.
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -29,19 +33,6 @@ const signInSchema = z.object({
   password: z.string().min(1, "Password is required."),
   next: z.string().optional(),
 });
-
-const signUpSchema = z
-  .object({
-    fullName: z.string().min(1, "Full name is required."),
-    email: z.string().email("Enter a valid email address."),
-    password: z.string().min(8, "Password must be at least 8 characters."),
-    confirmPassword: z.string(),
-    next: z.string().optional(),
-  })
-  .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match.",
-    path: ["confirmPassword"],
-  });
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Enter a valid email address."),
@@ -94,53 +85,6 @@ export async function signInWithPassword(
 
   const next = getSafeNext(parsed.data.next);
   redirect(`/post-login?next=${encodeURIComponent(next)}`);
-}
-
-export async function signUpWithPassword(
-  _prevState: ActionState | null,
-  formData: FormData
-): Promise<ActionState> {
-  try {
-    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Verification failed." };
-  }
-
-  const raw = {
-    fullName: formData.get("fullName") as string,
-    email: formData.get("email") as string,
-    password: formData.get("password") as string,
-    confirmPassword: formData.get("confirmPassword") as string,
-    next: (formData.get("next") as string) || undefined,
-  };
-
-  const parsed = signUpSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { fieldErrors: parsed.error.flatten().fieldErrors };
-  }
-
-  const callbackUrl = new URL(`${siteUrl()}/auth/callback`);
-  const safeNext = getSafeNext(parsed.data.next);
-  if (safeNext !== "/post-login") callbackUrl.searchParams.set("next", safeNext);
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: {
-      data: { full_name: parsed.data.fullName },
-      emailRedirectTo: callbackUrl.toString(),
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return {
-    success: true,
-    message: "Check your email for a confirmation link.",
-  };
 }
 
 export async function sendPasswordReset(

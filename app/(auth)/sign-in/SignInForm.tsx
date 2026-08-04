@@ -77,10 +77,6 @@ export function SignInForm({ next }: Props) {
       <button type="submit" disabled={isPending} className="auth-submit">
         {isPending ? "Signing in…" : "Sign in"}
       </button>
-
-      <p className="auth-footer">
-        No account? <Link href={`/sign-up${qs}`}>Create one</Link>
-      </p>
     </form>
   );
 }

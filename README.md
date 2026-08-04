@@ -39,7 +39,7 @@ app/
   admin-panel/       operator admin — dashboard, clients, ads, proofer, campaigns
   portal/            read-only client view
   api/               API routes (meta-sync, decisions, publishing, cron jobs)
-  (auth)/            sign-in / sign-up / forgot-password / reset-password / accept-invite
+  (auth)/            sign-in / forgot-password / reset-password / accept-invite (invite-only)
   auth/callback/     Supabase PKCE + OTP return handler
   sign-out/          POST-only logout
 lib/                 shared: meta client, supabase client, cross-pollinate, patterns

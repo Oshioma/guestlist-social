@@ -3,9 +3,17 @@
 //
 // Every page that needs to know "who is looking at this and what are they
 // allowed to see" goes through getViewer(). It looks up the current Supabase
-// auth user, then checks client_user_links to find out whether they're an
-// admin (no link) or a client portal user (one or more links — we use the
-// first today, but the table is shaped for multi-tenant viewers later).
+// auth user, then decides admission:
+//   - a client_user_links row      → client portal user (scoped to a client)
+//   - else a user_roles row         → admin-panel user
+//   - neither                       → NOT admitted (null)
+//
+// Admission is deny-by-default: an authenticated account with no client link
+// and no user_roles row resolves to null. This is what keeps an account that
+// slipped past sign-up (there is no public sign-up — admission is invite-only)
+// from silently gaining admin-panel access. Legitimate accounts are admitted
+// only when an admin invites them (which writes a user_roles row) or they are
+// linked to a client.
 //
 // Why server-side: viewer state must be authoritative (a client must not be
 // able to flip themselves into admin from the browser), and every gate in
@@ -41,16 +49,26 @@ export async function getViewer(): Promise<Viewer | null> {
     .limit(1)
     .maybeSingle();
 
-  if (!link) {
-    return { role: "admin", userId: user.id, email: user.email ?? null };
+  if (link) {
+    return {
+      role: "client",
+      userId: user.id,
+      email: user.email ?? null,
+      clientId: (link as any).client_id as number,
+    };
   }
 
-  return {
-    role: "client",
-    userId: user.id,
-    email: user.email ?? null,
-    clientId: (link as any).client_id as number,
-  };
+  // No client link — admitted to the admin panel only with an explicit
+  // user_roles row. Missing row → not admitted (deny-by-default).
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!roleRow) return null;
+
+  return { role: "admin", userId: user.id, email: user.email ?? null };
 }
 
 // assertCanViewClient: defense-in-depth gate every portal page calls before

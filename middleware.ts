@@ -58,6 +58,27 @@ export async function middleware(request: NextRequest) {
   const linkedClientId = (link as { client_id: number } | null)?.client_id ?? null;
   const isClientUser = linkedClientId !== null;
 
+  // Admission is deny-by-default. A logged-in account that is neither a
+  // client (client_user_links) nor an invited admin-panel user (user_roles)
+  // is NOT admitted — bounce it to /sign-in instead of letting it roam the
+  // admin panel. This is the gate that stops an account created outside the
+  // invite flow from gaining access. Keep it in sync with getViewer().
+  if (!isClientUser) {
+    const { data: roleRow } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!roleRow) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/sign-in";
+      url.search = "";
+      url.searchParams.set("error", "not-authorized");
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Client users can only see /portal/{theirClientId}/*. Anywhere else gets
   // bounced. The bounce target is always their own portal — that's the
   // "calmer mirror" the feature promises.
