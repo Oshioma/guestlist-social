@@ -48,7 +48,7 @@ Key env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 ```
 /                       marketing homepage
-/sign-in, /sign-up, /forgot-password, /reset-password   Supabase auth
+/sign-in, /forgot-password, /reset-password, /accept-invite   Supabase auth (invite-only — no public sign-up)
 /auth/callback          PKCE code exchange (email verify + password recovery)
 /sign-out               POST — clears session, redirects to /sign-in
 /post-login             role-based redirect (admin → /app/dashboard, client → /portal/{id})

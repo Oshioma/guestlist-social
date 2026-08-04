@@ -14,7 +14,6 @@ and so a second (or third) app can adopt it in 30 minutes.
 | Path | Purpose |
 |---|---|
 | `/sign-in` | Email + password sign-in |
-| `/sign-up` | Public self-signup (disable by deleting the route if you don't want this) |
 | `/forgot-password` | Sends a reset-password email |
 | `/reset-password` | Sets a new password after clicking the reset link |
 | `/accept-invite` | First-time password + name setup after an admin invite |
@@ -28,6 +27,24 @@ so the Supabase anon key is never invoked from the browser and Zod runs
 server-side.
 
 ---
+
+## Admission model (invite-only)
+
+Access is **deny-by-default**. There is no public sign-up route — the only way
+an account is admitted is:
+
+- an **admin invite** (`inviteMember` → `admin.inviteUserByEmail`), which writes
+  a `user_roles` row, or
+- a **client link** (`client_user_links`), which scopes the account to a client
+  portal.
+
+An authenticated account with neither is **not admitted**: `getViewer()` returns
+`null`, `getMemberAccess()` returns `null`, and `middleware.ts` bounces it to
+`/sign-in?error=not-authorized`. A missing `user_roles` row is treated as "never
+invited", not as a default member. These three gates must stay in sync.
+
+This is what removes the possibility of an unknown user/bot self-registering:
+there is no unauthenticated path that produces an admitted account.
 
 ## Permissions model
 
@@ -57,7 +74,6 @@ app/
     layout.tsx                       base frame (no admin shell)
     auth.css
     sign-in/{page.tsx,SignInForm.tsx}
-    sign-up/{page.tsx,SignUpForm.tsx}
     forgot-password/{page.tsx,ForgotPasswordForm.tsx}
     reset-password/{page.tsx,ResetPasswordForm.tsx}
     accept-invite/{page.tsx,AcceptInviteForm.tsx,actions.ts}
@@ -80,7 +96,8 @@ lib/
     middleware.ts                    cookie refresh helper
 
   auth/
-    actions.ts                       sign-in/up, reset, send-reset, sign-out
+    actions.ts                       sign-in, reset, send-reset, sign-out
+                                     (no sign-up — admission is invite-only)
     next.ts                          safe-redirect helper for ?next=
     turnstile.ts                     optional Cloudflare bot check
     permissions.ts                   getMemberAccess, requireAdmin,
@@ -91,6 +108,10 @@ middleware.ts                        session refresh + protected-route gate
 
 supabase/migrations/
   20260417_user_roles.sql            role + can_run_ads table with RLS
+  20260805_invite_only_admission_backfill.sql
+                                     grants explicit user_roles rows to
+                                     pre-existing accounts so deny-by-default
+                                     doesn't lock them out
 ```
 
 ---

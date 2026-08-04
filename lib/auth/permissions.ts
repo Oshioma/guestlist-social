@@ -22,9 +22,11 @@ export type MemberAccess = {
   canRunAds: boolean;
 };
 
-// Returns null when the viewer is not signed in, or is a client-portal user.
-// For admin-panel users, resolves role + can_run_ads from user_roles.
-// Missing row → defaults to member / no-ads (least privilege).
+// Returns null when the viewer is not signed in, is a client-portal user, or
+// is not admitted. Admission is deny-by-default: an admin-panel user must have
+// an explicit user_roles row. A missing row means the account was never
+// invited, so it is NOT admitted (returns null) rather than defaulting to a
+// member. Keep this in sync with getViewer() and middleware.ts.
 export async function getMemberAccess(): Promise<MemberAccess | null> {
   const supabase = await createClient();
 
@@ -49,8 +51,11 @@ export async function getMemberAccess(): Promise<MemberAccess | null> {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const role: MemberRole = (row?.role as MemberRole) === "admin" ? "admin" : "member";
-  const canRunAds = Boolean(row?.can_run_ads);
+  // No row → not admitted. Deny rather than default to member.
+  if (!row) return null;
+
+  const role: MemberRole = (row.role as MemberRole) === "admin" ? "admin" : "member";
+  const canRunAds = Boolean(row.can_run_ads);
 
   return {
     userId: user.id,
