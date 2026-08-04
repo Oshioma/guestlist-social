@@ -69,8 +69,22 @@ export default function TeamPriorityCard({ stats }: { stats: TeamPriorityStats }
         <div style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
           High-priority per person
         </div>
-        <div style={{ fontSize: 11, color: "#a1a1aa" }}>
-          latest, assigned in last 3 weeks
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <div style={{ fontSize: 11, color: "#a1a1aa" }}>
+            latest, assigned in last 3 weeks
+          </div>
+          <Link
+            href="/app/tasks"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#7c3aed",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            View tasks →
+          </Link>
         </div>
       </div>
 
