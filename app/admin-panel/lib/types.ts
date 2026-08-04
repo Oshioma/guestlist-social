@@ -194,6 +194,8 @@ export type TaskCategory =
 
 export type TaskStatus = "open" | "in_progress" | "completed";
 
+export type TaskPriority = "normal" | "high";
+
 export type TaskRecurrence = "none" | "weekly" | "monthly";
 
 export type Task = {
@@ -205,6 +207,7 @@ export type Task = {
   createdBy: string;
   dueDate: string;
   status: TaskStatus;
+  priority: TaskPriority;
   recurrence: TaskRecurrence;
   createdAt: string;
   updatedAt: string;

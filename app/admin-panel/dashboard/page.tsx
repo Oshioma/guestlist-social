@@ -18,6 +18,10 @@ import TodayPublishingCard, {
 import FinanceThisMonthCard, {
   type FinanceThisMonthStats,
 } from "./FinanceThisMonthCard";
+import TeamPriorityCard, {
+  type TeamPriorityStats,
+  type TeamPriorityRow,
+} from "./TeamPriorityCard";
 
 export const dynamic = "force-dynamic";
 
@@ -331,6 +335,51 @@ async function getFinanceThisMonth(
   };
 }
 
+// One row per team member showing the most recent high-priority task assigned
+// to them — but only for people who were given a high-priority task in the last
+// three weeks. Someone whose latest high-priority task is older than that (or
+// who has none) is left off entirely. Completed tasks are ignored so the row
+// always reflects live, outstanding work.
+async function getTeamPriorityTasks(): Promise<TeamPriorityStats> {
+  const supabase = await createClient();
+
+  const threeWeeksAgo = new Date(
+    Date.now() - 21 * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, title, assignee, due_date, created_at")
+    .eq("priority", "high")
+    .neq("status", "completed")
+    .gte("created_at", threeWeeksAgo)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return { rows: [] };
+
+  // Rows come newest-first, so the first one seen for each assignee is their
+  // most recently assigned high-priority task.
+  const seen = new Set<string>();
+  const rows: TeamPriorityRow[] = [];
+  for (const t of data) {
+    const assignee = (t.assignee as string | null)?.trim();
+    if (!assignee || seen.has(assignee)) continue;
+    seen.add(assignee);
+    rows.push({
+      assignee,
+      title: (t.title as string | null) ?? "",
+      taskId: String(t.id),
+      dueDate: (t.due_date as string | null) ?? null,
+      createdAt: (t.created_at as string | null) ?? "",
+    });
+  }
+
+  // Alphabetical by display order keeps the list stable between renders.
+  rows.sort((a, b) => a.assignee.localeCompare(b.assignee));
+
+  return { rows };
+}
+
 export default async function DashboardPage() {
   try {
     const access = await getMemberAccess();
@@ -345,7 +394,7 @@ export default async function DashboardPage() {
       // keep GMT
     }
 
-    const [stats, todayPublishing, finance] = await Promise.all([
+    const [stats, todayPublishing, finance, teamPriority] = await Promise.all([
       getActivityStats(timeZone),
       getTodayPublishingStats().catch((err) => {
         console.error("Today publishing stats error:", err);
@@ -364,6 +413,10 @@ export default async function DashboardPage() {
             return null;
           })
         : Promise.resolve(null),
+      getTeamPriorityTasks().catch((err) => {
+        console.error("Team priority tasks error:", err);
+        return { rows: [] } as TeamPriorityStats;
+      }),
     ]);
     const activeClients = stats.clients.filter((c) => c.status === "active");
 
@@ -392,6 +445,8 @@ export default async function DashboardPage() {
         <TodayPublishingCard stats={todayPublishing} />
 
         {finance && <FinanceThisMonthCard stats={finance} />}
+
+        <TeamPriorityCard stats={teamPriority} />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {cards.map((c) => {

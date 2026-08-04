@@ -12,6 +12,7 @@ import type {
   Task,
   TaskCategory,
   TaskStatus,
+  TaskPriority,
   TaskRecurrence,
   SavedView,
   TaskFilters,
@@ -437,6 +438,7 @@ export default function TasksBoard({
   const [newAssignee,   setNewAssignee]   = useState(currentUserEmail||"");
   const [newDueDate,    setNewDueDate]    = useState("");
   const [newRecurrence, setNewRecurrence] = useState<TaskRecurrence>("none");
+  const [newPriority,   setNewPriority]   = useState<TaskPriority>("normal");
 
   useEffect(() => {
     if (selectedDate && showNewTaskForm) setNewDueDate(selectedDate);
@@ -446,12 +448,12 @@ export default function TasksBoard({
     if (!newTitle.trim()) return;
     startTransition(async () => {
       try {
-        await addTaskAction(newTitle.trim(), newDesc.trim(), newCat, newAssignee.trim(), newDueDate, newRecurrence);
+        await addTaskAction(newTitle.trim(), newDesc.trim(), newCat, newAssignee.trim(), newDueDate, newRecurrence, newPriority);
         setTasks((prev) => [
-          { id: uid(), title: newTitle.trim(), description: newDesc.trim(), category: newCat, assignee: newAssignee.trim(), createdBy: currentUserEmail, dueDate: newDueDate, status: "open", recurrence: newRecurrence, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          { id: uid(), title: newTitle.trim(), description: newDesc.trim(), category: newCat, assignee: newAssignee.trim(), createdBy: currentUserEmail, dueDate: newDueDate, status: "open", priority: newPriority, recurrence: newRecurrence, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
           ...prev,
         ]);
-        setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewRecurrence("none");
+        setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewRecurrence("none"); setNewPriority("normal");
         setShowNewTaskForm(false);
       } catch (err) {
         alert(err instanceof Error ? err.message : "Could not add task");
@@ -463,11 +465,12 @@ export default function TasksBoard({
   const [editDraft, setEditDraft] = useState<{
     title: string; description: string; category: TaskCategory;
     assignee: string; dueDate: string; recurrence: TaskRecurrence;
+    priority: TaskPriority;
   } | null>(null);
 
   function startEditSelected() {
     if (!selectedTask) return;
-    setEditDraft({ title: selectedTask.title, description: selectedTask.description, category: selectedTask.category, assignee: selectedTask.assignee, dueDate: selectedTask.dueDate?selectedTask.dueDate.slice(0,10):"", recurrence: selectedTask.recurrence??"none" });
+    setEditDraft({ title: selectedTask.title, description: selectedTask.description, category: selectedTask.category, assignee: selectedTask.assignee, dueDate: selectedTask.dueDate?selectedTask.dueDate.slice(0,10):"", recurrence: selectedTask.recurrence??"none", priority: selectedTask.priority??"normal" });
   }
   function cancelEdit() { setEditDraft(null); }
   function saveEdit() {
@@ -475,7 +478,7 @@ export default function TasksBoard({
     const d = editDraft;
     startTransition(async () => {
       try {
-        await updateTaskAction(selectedTask.id, d.title, d.description, d.category, d.assignee, d.dueDate, d.recurrence);
+        await updateTaskAction(selectedTask.id, d.title, d.description, d.category, d.assignee, d.dueDate, d.recurrence, d.priority);
         setTasks((prev) => prev.map((t) => t.id===selectedTask.id ? { ...t, ...d, updatedAt: new Date().toISOString() } : t));
         logActivity(selectedTask.id, "edit", "Task details updated");
         setEditDraft(null);
@@ -567,6 +570,7 @@ export default function TasksBoard({
           <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"1px 7px", borderRadius:999, background:`${meta.color}18`, color:meta.color, border:`1px solid ${meta.color}40`, fontSize:11, fontWeight:600 }}>
             <span style={{ width:6, height:6, borderRadius:999, background:meta.color, display:"inline-block" }} />{meta.label}
           </span>
+          {task.priority==="high" && <span style={{ padding:"1px 7px", borderRadius:999, background:"#fef2f2", color:"#b91c1c", border:"1px solid #fecaca", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.04em" }}>High</span>}
           {overdue && <span style={{ padding:"1px 7px", borderRadius:999, background:"#fee2e2", color:"#991b1b", border:"1px solid #fecaca", fontSize:11, fontWeight:600 }}>Overdue</span>}
           {task.recurrence && task.recurrence!=="none" && <span style={{ padding:"1px 7px", borderRadius:999, background:"#ede9fe", color:"#5b21b6", border:"1px solid #ddd6fe", fontSize:11, fontWeight:600 }} title={recurrenceSummary(task.recurrence, task.dueDate)}>{"\u21bb"}</span>}
         </div>
@@ -622,6 +626,10 @@ export default function TasksBoard({
                     <input type="date" value={editDraft.dueDate} onChange={(e) => setEditDraft({ ...editDraft, dueDate:e.target.value })} style={inputStyle} />
                     <select value={editDraft.recurrence} onChange={(e) => setEditDraft({ ...editDraft, recurrence:e.target.value as TaskRecurrence })} style={inputStyle}>{RECURRENCE_OPTIONS.map((r)=><option key={r.value} value={r.value}>{r.label}</option>)}</select>
                   </div>
+                  <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#18181b", cursor:"pointer" }}>
+                    <input type="checkbox" checked={editDraft.priority==="high"} onChange={(e) => setEditDraft({ ...editDraft, priority:e.target.checked?"high":"normal" })} style={{ cursor:"pointer" }} />
+                    High priority
+                  </label>
                   <div style={{ display:"flex", gap:8 }}>
                     <button type="button" onClick={saveEdit} disabled={isPending} style={{ ...primaryButton, fontSize:12, padding:"7px 12px" }}>Save</button>
                     <button type="button" onClick={cancelEdit} style={{ ...secondaryButton, fontSize:12, padding:"7px 12px" }}>Cancel</button>
@@ -1123,6 +1131,10 @@ export default function TasksBoard({
               </label>
             </div>
             {newRecurrence!=="none" && <div style={{ fontSize:12, color:"#71717a" }}>Tip: pick a due date on the first target day and the task will roll forward when completed.</div>}
+            <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#18181b", cursor:"pointer" }}>
+              <input type="checkbox" checked={newPriority==="high"} onChange={(e) => setNewPriority(e.target.checked?"high":"normal")} style={{ cursor:"pointer" }} />
+              High priority
+            </label>
             <div style={{ display:"flex", gap:8 }}>
               <button type="button" onClick={handleAdd} disabled={isPending||!newTitle.trim()} style={{ ...primaryButton, opacity:!newTitle.trim()||isPending?0.6:1 }}>{isPending?"Adding...":"Add task"}</button>
               <button type="button" onClick={() => setShowNewTaskForm(false)} style={secondaryButton}>Cancel</button>
