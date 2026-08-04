@@ -139,6 +139,14 @@ export function createTaskActions(
       await afterMutate();
     },
 
+    // Quick, targeted priority change — lets the UI flag an existing task
+    // high priority without re-sending every other field.
+    async updatePriority(id: string, priority: string) {
+      if (!id) throw new Error("ID is required.");
+      await adapter.updateTask(id, { priority: normalizePriority(priority) });
+      await afterMutate();
+    },
+
     async updateStatus(id: string, status: string) {
       if (!id) throw new Error("ID is required.");
       const normalizedStatus = normalizeStatus(status);
