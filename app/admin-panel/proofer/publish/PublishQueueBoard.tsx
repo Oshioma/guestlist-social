@@ -155,6 +155,12 @@ const LINE_2 = "#e0e0e4";
 const SUNK = "#f5f5f6";
 const CARD_SHADOW = "0 1px 2px rgba(24,24,27,.04), 0 4px 14px -10px rgba(24,24,27,.10)";
 
+// Keep in sync with PUBLISH_GRACE_HOURS in the publish cron
+// (app/api/cron/publish-meta-queue). Once a scheduled post is overdue by more
+// than this, the cron won't auto-send it — it surfaces here as "missed its
+// window" so the operator isn't left wondering why it hasn't gone out.
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
 // Per-status colours: a pastel fill + readable ink for pills, plus a mid
 // tone for the card's left edge-stripe and the stat tiles.
 type StatusTone = { edge: string; fill: string; ink: string; strong: string };
@@ -300,6 +306,12 @@ export default function PublishQueueBoard({
   // there (it navigated the whole page) with no sign it had been pressed.
   // This drives an "Opening Facebook…" label + note while the popup is open.
   const [connectOpening, setConnectOpening] = useState(false);
+
+  // The "missed its window" hint compares against the current clock, so it's
+  // client-only — gate it behind mount so the first render matches the server
+  // and we don't trip a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const zone = useMemo(() => describeZone(timeZone), [timeZone]);
 
@@ -1044,59 +1056,15 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <input
-                        type="datetime-local"
-                        value={scheduleValue}
-                        onChange={(e) =>
-                          setScheduleDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        style={inputStyle}
-                      />
-                      <span style={{ fontSize: 10, color: "#71717a" }}>
-                        {(() => {
-                          const iso = fromDateTimeLocalInputValue(scheduleValue);
-                          const shown = iso ? formatDateTime(iso, timeZone) : "";
-                          return shown
-                            ? `Goes out: ${shown}`
-                            : "Default 6 PM GMT";
-                        })()}
-                      </span>
+                    <div style={{ flex: 1, fontSize: 13, color: INK_2 }}>
+                      Goes out:{" "}
+                      <strong style={{ color: INK }}>
+                        {item.scheduledFor
+                          ? formatDateTime(item.scheduledFor, timeZone)
+                          : "—"}
+                      </strong>
+                      <span style={{ color: INK_3 }}> · set on the proofer</span>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSchedule(item.id)}
-                      disabled={isPending}
-                      style={darkButton}
-                    >
-                      Schedule
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handlePublishNow(item.id)}
-                      disabled={isPending}
-                      style={{
-                        ...darkButton,
-                        background: "#1877f2",
-                        borderColor: "#1877f2",
-                      }}
-                    >
-                      Publish now
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleMarkPublished(item.id)}
-                      disabled={isPending}
-                      style={buttonBase}
-                    >
-                      Mark published
-                    </button>
 
                     <button
                       type="button"
@@ -1199,6 +1167,31 @@ export default function PublishQueueBoard({
                   </div>
                 )}
 
+                {/* Proactively flag a post that has missed its send window,
+                    before the cron gets to mark it failed — same message the
+                    cron records, so the operator sees it right away. */}
+                {mounted &&
+                  !item.notes &&
+                  item.scheduledFor &&
+                  Date.now() - new Date(item.scheduledFor).getTime() >
+                    STALE_AFTER_MS && (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1.4,
+                        color: STATUS_TONES.failed.ink,
+                        background: STATUS_TONES.failed.fill,
+                        border: `1px solid ${STATUS_TONES.failed.edge}`,
+                        borderRadius: 8,
+                        padding: "7px 11px",
+                      }}
+                    >
+                      <strong>&#9888; Missed its send window:</strong> this
+                      won&rsquo;t be sent automatically. Set a new time on the
+                      Proofer to re-send.
+                    </div>
+                  )}
+
                 {/* Thumbnail beside the caption — larger so the preview is
                     actually legible on a full-width card. */}
                 <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -1226,60 +1219,17 @@ export default function PublishQueueBoard({
                   </div>
                 </div>
 
-                {/* Reschedule an already-scheduled post: pre-filled with its
-                    current time, applied to every platform the post goes to. */}
-                <div
-                  className="publish-action-row"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(220px, 1fr) auto",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <input
-                      type="datetime-local"
-                      value={
-                        scheduleDrafts[item.id] ??
-                        toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
-                      }
-                      onChange={(e) =>
-                        setScheduleDrafts((prev) => ({
-                          ...prev,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                      aria-label="Change scheduled time"
-                      style={inputStyle}
-                    />
-                    <span style={{ fontSize: 10, color: "#71717a" }}>
-                      {(() => {
-                        const iso = fromDateTimeLocalInputValue(
-                          scheduleDrafts[item.id] ??
-                            toDateTimeLocalInputValue(item.scheduledFor, defaultScheduleForPost(item.postDate))
-                        );
-                        const shown = iso ? formatDateTime(iso, timeZone) : "";
-                        return shown
-                          ? `Set in your local time · goes out ${shown}`
-                          : "Pick a time";
-                      })()}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleReschedule(item)}
-                    disabled={isPending}
-                    style={{
-                      ...darkButton,
-                      opacity:
-                        pendingId === item.id ? 0.7 : isPending ? 0.5 : 1,
-                      cursor: isPending ? "wait" : "pointer",
-                    }}
-                  >
-                    {pendingId === item.id ? "Rescheduling…" : "Reschedule"}
-                  </button>
+                {/* Read-only send time. The schedule lives on the proofer —
+                    a post goes out at its own date + publish time. To change
+                    it, edit the post's time on the proofer page. */}
+                <div style={{ fontSize: 13, color: INK_2 }}>
+                  Goes out:{" "}
+                  <strong style={{ color: INK }}>
+                    {item.scheduledFor
+                      ? formatDateTime(item.scheduledFor, timeZone)
+                      : "—"}
+                  </strong>
+                  <span style={{ color: INK_3 }}> · set on the proofer</span>
                 </div>
 
                 {showManualControls ? (
@@ -1585,37 +1535,10 @@ export default function PublishQueueBoard({
                       alignItems: "center",
                     }}
                   >
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <input
-                        type="datetime-local"
-                        value={scheduleValue}
-                        onChange={(e) =>
-                          setScheduleDrafts((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        style={inputStyle}
-                      />
-                      <span style={{ fontSize: 10, color: "#71717a" }}>
-                        {(() => {
-                          const iso = fromDateTimeLocalInputValue(scheduleValue);
-                          const shown = iso ? formatDateTime(iso, timeZone) : "";
-                          return shown
-                            ? `Goes out: ${shown}`
-                            : "Default 6 PM GMT";
-                        })()}
-                      </span>
+                    <div style={{ flex: 1, fontSize: 13, color: INK_2 }}>
+                      To retry, fix the post on the proofer and re-save — it
+                      re-queues for its date + publish time. Or remove it here.
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSchedule(item.id)}
-                      disabled={isPending}
-                      style={darkButton}
-                    >
-                      Reschedule
-                    </button>
 
                     <button
                       type="button"
