@@ -59,6 +59,10 @@ export async function updateTaskStatusAction(id: string, status: string) {
   return actions.updateStatus(id, status);
 }
 
+export async function updateTaskPriorityAction(id: string, priority: string) {
+  return actions.updatePriority(id, priority);
+}
+
 export async function deleteTaskAction(id: string) {
   return actions.deleteTask(id);
 }

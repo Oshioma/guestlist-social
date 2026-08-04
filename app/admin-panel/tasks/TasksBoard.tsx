@@ -32,6 +32,7 @@ import {
   addTaskAction,
   updateTaskAction,
   updateTaskStatusAction,
+  updateTaskPriorityAction,
   deleteTaskAction,
 } from "../lib/tasks/actions";
 import { DEFAULT_TIMEZONE, formatDateTimeInZone } from "../../../lib/timezone";
@@ -502,6 +503,21 @@ export default function TasksBoard({
     });
   }
 
+  function handlePriorityToggle(task: Task, high: boolean) {
+    const next: TaskPriority = high ? "high" : "normal";
+    const prev = task.priority;
+    setTasks((all) => all.map((t) => t.id===task.id ? { ...t, priority: next } : t));
+    logActivity(task.id, "edit", high ? "Marked high priority" : "Priority cleared");
+    startTransition(async () => {
+      try {
+        await updateTaskPriorityAction(task.id, next);
+      } catch (err) {
+        setTasks((all) => all.map((t) => t.id===task.id ? { ...t, priority: prev } : t));
+        alert(err instanceof Error ? err.message : "Could not update priority");
+      }
+    });
+  }
+
   function handleDelete(task: Task) {
     if (!confirm(`Delete "${task.title}"?`)) return;
     startTransition(async () => {
@@ -642,6 +658,24 @@ export default function TasksBoard({
                     <select value={selectedTask.status} onChange={(e) => handleStatusChange(selectedTask, e.target.value as TaskStatus)} disabled={isPending} style={{ ...inputStyle, width:"auto" }}>
                       {STATUS_OPTIONS.map((s)=><option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:600, color:"#71717a", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:6 }}>Priority</div>
+                    <button
+                      type="button"
+                      onClick={() => handlePriorityToggle(selectedTask, selectedTask.priority!=="high")}
+                      disabled={isPending}
+                      aria-pressed={selectedTask.priority==="high"}
+                      style={{
+                        display:"inline-flex", alignItems:"center", gap:6, cursor:isPending?"default":"pointer",
+                        padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:600,
+                        background: selectedTask.priority==="high" ? "#fef2f2" : "#fff",
+                        color: selectedTask.priority==="high" ? "#b91c1c" : "#71717a",
+                        border: selectedTask.priority==="high" ? "1px solid #fecaca" : "1px solid #e4e4e7",
+                      }}
+                    >
+                      {selectedTask.priority==="high" ? "★ High priority — click to clear" : "☆ Mark high priority"}
+                    </button>
                   </div>
                   {selectedTask.description && (
                     <div>
