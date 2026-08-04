@@ -8,6 +8,7 @@ export type {
   Task,
   TaskCategory,
   TaskStatus,
+  TaskPriority,
   TaskRecurrence,
   ViewMode,
   TaskFilters,

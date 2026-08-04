@@ -19,7 +19,8 @@ export async function addTaskAction(
   category: string,
   assignee: string,
   dueDate: string,
-  recurrence: string = "none"
+  recurrence: string = "none",
+  priority: string = "normal"
 ) {
   return actions.addTask(
     title,
@@ -27,7 +28,8 @@ export async function addTaskAction(
     category,
     assignee,
     dueDate,
-    recurrence
+    recurrence,
+    priority
   );
 }
 
@@ -38,7 +40,8 @@ export async function updateTaskAction(
   category: string,
   assignee: string,
   dueDate: string,
-  recurrence: string = "none"
+  recurrence: string = "none",
+  priority: string = "normal"
 ) {
   return actions.updateTask(
     id,
@@ -47,7 +50,8 @@ export async function updateTaskAction(
     category,
     assignee,
     dueDate,
-    recurrence
+    recurrence,
+    priority
   );
 }
 

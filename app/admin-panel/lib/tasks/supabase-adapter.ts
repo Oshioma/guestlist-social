@@ -9,6 +9,7 @@ import type {
   CreateTaskInput,
   Task,
   TaskCategory,
+  TaskPriority,
   TaskRecurrence,
   TaskStatus,
   TasksDataAdapter,
@@ -24,6 +25,7 @@ type TaskRow = {
   created_by: string | null;
   due_date: string | null;
   status: string | null;
+  priority: string | null;
   recurrence: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -39,6 +41,7 @@ function rowToTask(row: TaskRow): Task {
     createdBy: row.created_by ?? "",
     dueDate: row.due_date ?? "",
     status: (row.status ?? "open") as TaskStatus,
+    priority: (row.priority ?? "normal") as TaskPriority,
     recurrence: (row.recurrence ?? "none") as TaskRecurrence,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
@@ -52,6 +55,7 @@ function updateInputToRow(input: UpdateTaskInput): Record<string, unknown> {
   if (input.category !== undefined) row.category = input.category;
   if (input.assignee !== undefined) row.assignee = input.assignee;
   if (input.dueDate !== undefined) row.due_date = input.dueDate;
+  if (input.priority !== undefined) row.priority = input.priority;
   if (input.recurrence !== undefined) row.recurrence = input.recurrence;
   if (input.status !== undefined) row.status = input.status;
   row.updated_at = new Date().toISOString();
@@ -90,6 +94,7 @@ export const supabaseTasksAdapter: TasksDataAdapter = {
       created_by: input.createdBy,
       due_date: input.dueDate,
       status: "open",
+      priority: input.priority,
       recurrence: input.recurrence,
     });
     if (error) {

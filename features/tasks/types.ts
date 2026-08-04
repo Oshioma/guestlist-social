@@ -5,6 +5,8 @@
 
 export type TaskStatus = "open" | "in_progress" | "completed";
 
+export type TaskPriority = "normal" | "high";
+
 export type TaskRecurrence = "none" | "weekly" | "monthly";
 
 // Host apps typically narrow this to a union of their category keys.
@@ -26,6 +28,7 @@ export type Task = {
   createdBy: string;
   dueDate: string;
   status: TaskStatus;
+  priority: TaskPriority;
   recurrence: TaskRecurrence;
   createdAt: string;
   updatedAt: string;
@@ -76,6 +79,7 @@ export type CreateTaskInput = {
   assignee: string;
   createdBy: string;
   dueDate: string | null;
+  priority: TaskPriority;
   recurrence: TaskRecurrence;
 };
 
@@ -85,6 +89,7 @@ export type UpdateTaskInput = Partial<{
   category: TaskCategory;
   assignee: string;
   dueDate: string | null;
+  priority: TaskPriority;
   recurrence: TaskRecurrence;
   status: TaskStatus;
 }>;

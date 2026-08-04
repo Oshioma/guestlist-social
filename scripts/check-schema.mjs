@@ -213,6 +213,17 @@ const SCHEMA = {
     "error",
     "created_at",
   ],
+  // The dashboard's per-person priority widget reads these; `priority` is the
+  // column added by 20260804_task_priority.sql.
+  tasks: [
+    "id",
+    "title",
+    "assignee",
+    "status",
+    "priority",
+    "due_date",
+    "created_at",
+  ],
 };
 
 const RED = "\x1b[31m";

@@ -5,7 +5,12 @@
 // "use server" module (or a tRPC/REST route) and wire in revalidation.
 
 import type { TasksDataAdapter } from "./adapter";
-import type { TaskCategory, TaskRecurrence, TaskStatus } from "./types";
+import type {
+  TaskCategory,
+  TaskPriority,
+  TaskRecurrence,
+  TaskStatus,
+} from "./types";
 
 const VALID_CATEGORIES: TaskCategory[] = [
   "video",
@@ -17,6 +22,7 @@ const VALID_CATEGORIES: TaskCategory[] = [
   "one_day",
 ];
 const VALID_STATUSES: TaskStatus[] = ["open", "in_progress", "completed"];
+const VALID_PRIORITIES: TaskPriority[] = ["normal", "high"];
 const VALID_RECURRENCES: TaskRecurrence[] = ["none", "weekly", "monthly"];
 
 export type TaskActionsOptions = {
@@ -44,6 +50,12 @@ function normalizeStatus(value: string): TaskStatus {
   return (
     VALID_STATUSES.includes(value as TaskStatus) ? value : "open"
   ) as TaskStatus;
+}
+
+function normalizePriority(value: string): TaskPriority {
+  return (
+    VALID_PRIORITIES.includes(value as TaskPriority) ? value : "normal"
+  ) as TaskPriority;
 }
 
 function advanceDueDate(
@@ -79,7 +91,8 @@ export function createTaskActions(
       category: string,
       assignee: string,
       dueDate: string,
-      recurrence: string = "none"
+      recurrence: string = "none",
+      priority: string = "normal"
     ) {
       if (!title.trim()) throw new Error("Task title is required.");
 
@@ -92,6 +105,7 @@ export function createTaskActions(
         assignee: assignee.trim(),
         createdBy,
         dueDate: dueDate || null,
+        priority: normalizePriority(priority),
         recurrence: normalizeRecurrence(recurrence),
       });
 
@@ -105,7 +119,8 @@ export function createTaskActions(
       category: string,
       assignee: string,
       dueDate: string,
-      recurrence: string = "none"
+      recurrence: string = "none",
+      priority: string = "normal"
     ) {
       if (!id || !title.trim()) {
         throw new Error("ID and title are required.");
@@ -117,6 +132,7 @@ export function createTaskActions(
         category: normalizeCategory(category, allowed),
         assignee: assignee.trim(),
         dueDate: dueDate || null,
+        priority: normalizePriority(priority),
         recurrence: normalizeRecurrence(recurrence),
       });
 
