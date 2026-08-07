@@ -21,6 +21,7 @@ import {
   deleteProoferPostByIdAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
+import { pruneClientMetaStraysAction } from "../../lib/meta-accounts-actions";
 import {
   resolveAccountMatch,
   isClientSettingsReason,
@@ -748,6 +749,42 @@ export default function PublishQueueBoard({
         router.refresh();
       }
     }, 700);
+  }
+
+  const [pruningClientId, setPruningClientId] = useState<string | null>(null);
+
+  function handlePruneClient(cid: string, clientName: string) {
+    const accs = accountsByClient[cid] ?? [];
+    if (
+      !window.confirm(
+        `Remove every connected account for "${clientName}" except the ones marked ✓ ` +
+          `(the accounts posts actually publish to)?\n\n` +
+          `${accs.length} connected now. Anything removed can be re-added by clicking Connect Meta again.`
+      )
+    ) {
+      return;
+    }
+    setPruningClientId(cid);
+    startTransition(async () => {
+      try {
+        const res = await pruneClientMetaStraysAction(cid);
+        if (res.error) {
+          alert(`Couldn't clean up: ${res.error}`);
+        } else {
+          alert(
+            `Removed ${res.removed} stray account${res.removed === 1 ? "" : "s"} from "${clientName}".` +
+              (res.kept.length > 0
+                ? `\nKept: ${res.kept.join(", ")}.`
+                : `\nNothing matched this client's handle/Page, so all were removed — reconnect with the login that manages ${clientName}.`)
+          );
+        }
+        router.refresh();
+      } catch (err) {
+        alert(`Cleanup error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setPruningClientId(null);
+      }
+    });
   }
 
   function handleMarkFailed(queueId: string | string[]) {
@@ -1964,6 +2001,30 @@ export default function PublishQueueBoard({
                       <span style={{ fontSize: 10, color: "#a1a1aa" }}>&#9654;</span>
                       {clientNameById[cid] ?? `Client ${cid}`} · {fb.length} Page
                       {fb.length === 1 ? "" : "s"} · {ig.length} Instagram
+                      {accs.length > (matchedFbId ? 1 : 0) + (matchedIgId ? 1 : 0) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handlePruneClient(cid, clientNameById[cid] ?? `Client ${cid}`);
+                          }}
+                          disabled={isPending && pruningClientId === cid}
+                          style={{
+                            marginLeft: "auto",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            background: "#fff",
+                            border: "1px solid #fca5a5",
+                            color: "#b91c1c",
+                            cursor: "pointer",
+                          }}
+                          title="Remove every connected account except the ✓ matched one"
+                        >
+                          {pruningClientId === cid ? "Cleaning…" : "Remove unmatched"}
+                        </button>
+                      ) : null}
                     </summary>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 0 2px 16px" }}>
                       {fb.map((a) => {
