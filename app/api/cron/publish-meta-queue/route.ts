@@ -17,6 +17,19 @@ export const maxDuration = 300;
 // between a scheduled_for time and the post actually going live, which is
 // good enough for a social publishing queue.
 //
+// Two safety rails protect against sending the wrong thing to clients:
+//   1. Lateness window (PUBLISH_GRACE_HOURS, default 48h) — a post is only
+//      auto-sent within this window after its slot, so a genuinely stale
+//      post never goes live long after its date. Cron downtime shorter than
+//      the window is absorbed transparently; anything older is marked
+//      'failed' (visible in the queue) rather than sent late.
+//   2. Mass-send circuit breaker (MAX_AUTO_PUBLISH_BATCH, default 50) — if a
+//      single tick finds more due posts than this, it publishes NOTHING and
+//      leaves them 'scheduled' for a human to review. A batch that large
+//      signals something abnormal (cron recovering from a long outage, clock
+//      skew, a bulk reschedule) and auto-firing it could blast many posts at
+//      once. See the guard below.
+//
 // Source of truth is always proofer_publish_queue. This route does NOT
 // introduce a parallel publishing path — it just loads the due rows and
 // delegates each one to publishMetaQueueItem(), which is the same server
@@ -80,25 +93,33 @@ async function handle(req: Request) {
   const nowDate = new Date();
   const now = nowDate.toISOString();
 
-  // Safety guard against a stale blast. Scheduling is derived from the post's
-  // proofer date + time, so a back-dated or long-overdue post would otherwise
-  // be "due" and go out on the next tick. We only auto-publish inside a grace
-  // window: due within the last PUBLISH_GRACE_HOURS. Anything older missed its
-  // slot and is marked 'failed' (visible in the queue) instead of sent late —
-  // to re-send, give it a new time on the Proofer. Tunable via env; defaults
-  // to 6h, generous enough to absorb cron downtime without sending day-old
-  // posts. Manual publishing (publishMetaQueueItem) is deliberately not gated
-  // by this — the window only governs the automated cron.
-  const graceHours = Number(process.env.PUBLISH_GRACE_HOURS) || 6;
+  // Lateness window. Scheduling is derived from the post's proofer date +
+  // time, so a back-dated or long-overdue post would otherwise be "due" and
+  // go out on the next tick. We only auto-publish inside a grace window: due
+  // within the last PUBLISH_GRACE_HOURS. Anything older missed its slot and is
+  // marked 'failed' (visible in the queue) instead of sent late — to re-send,
+  // give it a new time on the Proofer. Tunable via env; defaults to 48h,
+  // generous enough to ride out a cron/deploy outage of up to two days without
+  // killing legitimately-scheduled posts, while still refusing to send content
+  // that's more than two days stale. Manual publishing (publishMetaQueueItem)
+  // is deliberately not gated by this — the window only governs the automated
+  // cron.
+  const graceHours = Number(process.env.PUBLISH_GRACE_HOURS) || 48;
   const graceCutoff = new Date(
     nowDate.getTime() - graceHours * 60 * 60 * 1000
   ).toISOString();
 
   // Retire anything that missed its window so it can't sit as a landmine that
-  // fires the moment the window logic ever changes.
+  // fires the moment the window logic ever changes. Crucially, PRESERVE any
+  // existing note: a scheduled row often already carries the real reason it
+  // never sent (a pre-flight block like "no connected account matches @handle"
+  // that the cron re-hit every tick). Clobbering that with a generic "missed
+  // its time" message hides the actual cause and sends operators chasing the
+  // cron instead of the misconfiguration. So we keep the reason and append the
+  // retirement note; only rows with no prior note get the bare generic text.
   const { data: missed, error: missedErr } = await admin
     .from("proofer_publish_queue")
-    .select("id")
+    .select("id, notes")
     .eq("status", "scheduled")
     .lt("scheduled_for", graceCutoff);
   if (missedErr) {
@@ -108,18 +129,84 @@ async function handle(req: Request) {
     );
   }
   if (missed && missed.length > 0) {
-    await admin
-      .from("proofer_publish_queue")
-      .update({
-        status: "failed",
-        notes:
-          "Missed its scheduled time — not sent automatically. Set a new time on the Proofer to re-send.",
-        updated_at: now,
-      })
-      .in(
-        "id",
-        missed.map((r) => (r as { id: string }).id)
-      );
+    const GENERIC_MISSED =
+      "Missed its scheduled time — not sent automatically. Set a new time on the Proofer to re-send.";
+
+    // Rows with no prior note all get the same generic text — one bulk update.
+    const withoutNote = missed
+      .filter((r) => !((r as { notes: string | null }).notes ?? "").trim())
+      .map((r) => (r as { id: string }).id);
+    if (withoutNote.length > 0) {
+      await admin
+        .from("proofer_publish_queue")
+        .update({ status: "failed", notes: GENERIC_MISSED, updated_at: now })
+        .in("id", withoutNote);
+    }
+
+    // Rows that already carry a reason keep it, with a line noting it was
+    // retired after the grace window. Per-row because the preserved text differs.
+    const withNote = missed.filter((r) =>
+      ((r as { notes: string | null }).notes ?? "").trim()
+    );
+    for (const r of withNote) {
+      const existing = (r as { notes: string | null }).notes as string;
+      const combined =
+        `${existing}\n\nMissed its scheduled time — not sent automatically ` +
+        `after the ${graceHours}h grace window. Fix the reason above, then set ` +
+        `a new time on the Proofer to re-send.`;
+      await admin
+        .from("proofer_publish_queue")
+        .update({
+          status: "failed",
+          notes: combined.slice(0, 2000),
+          updated_at: now,
+        })
+        .eq("id", (r as { id: string }).id);
+    }
+  }
+
+  // Mass-send circuit breaker. Under normal operation only a handful of posts
+  // come due in any 5-minute tick. A large due batch means something abnormal
+  // — the cron recovering after a long outage, a clock skew, or a bulk
+  // reschedule — and auto-firing all of it could blast many posts to clients
+  // in error. When the due count exceeds MAX_AUTO_PUBLISH_BATCH we publish
+  // NOTHING: the rows stay 'scheduled' (not failed, so nothing is lost) for a
+  // human to review and release via "Publish now", or re-time on the Proofer.
+  // Idempotent — every tick re-detects and re-halts until the backlog clears.
+  // Tunable via env; defaults to 50 — comfortably above a normal busy slot
+  // (10–20 posts, or ~40 if two adjacent slots land in one tick) so routine
+  // batches sail through, but well under the size of a full backlog that a
+  // recovering cron would try to fire at once.
+  const maxBatch = Number(process.env.MAX_AUTO_PUBLISH_BATCH) || 50;
+  const { count: dueCount, error: countErr } = await admin
+    .from("proofer_publish_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "scheduled")
+    .lte("scheduled_for", now)
+    .gte("scheduled_for", graceCutoff);
+  if (countErr) {
+    return NextResponse.json(
+      { ok: false, error: `due count: ${countErr.message}` },
+      { status: 500 }
+    );
+  }
+  if ((dueCount ?? 0) > maxBatch) {
+    console.warn(
+      `[cron/publish-meta-queue] HALTED: ${dueCount} posts due at once ` +
+        `(threshold ${maxBatch}). Published nothing; awaiting manual review.`
+    );
+    return NextResponse.json({
+      ok: true,
+      halted: true,
+      now,
+      dueCount,
+      threshold: maxBatch,
+      message:
+        `Auto-publish halted: ${dueCount} posts are due at once, above the ` +
+        `safety threshold of ${maxBatch}. No posts were sent. Review them in ` +
+        `the queue and use "Publish now" to release each, or re-time them on ` +
+        `the Proofer.`,
+    });
   }
 
   // Cap the batch so a single invocation can't be monopolised by a backlog.
