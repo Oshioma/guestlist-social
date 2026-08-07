@@ -494,7 +494,25 @@ export default async function DashboardPage() {
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <Link
+            href="/proofer"
+            target="_blank"
+            rel="noopener"
+            style={{
+              padding: "18px 20px",
+              borderRadius: 14,
+              background: "#effaf6",
+              border: "1px solid #99e2d0",
+              textDecoration: "none",
+              color: "#18181b",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#1f6b5c" }}>Proofer ↗</div>
+          </Link>
           <Link
             href="/app/proofer"
             style={{
