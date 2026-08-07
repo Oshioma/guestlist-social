@@ -23,6 +23,111 @@ type PublishResult =
 // operator at schedule time. This module never guesses — see account-match.ts
 // for the full rationale.
 
+// Detect a video URL so we can route to Meta's video endpoints instead of the
+// image ones. Mirrors the Proofer's isVideoUrl (ProoferBoard.tsx) — the same
+// signal that draws the play button in the UI — so publishing agrees with what
+// the operator saw. Sending a video to the image endpoints fails hard ("image
+// format video/mp4 … could not be converted to JPEG"), which is exactly the
+// bug this routing guards against.
+function isVideoUrl(url: string): boolean {
+  if (!url) return false;
+  if (/\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url)) return true;
+  // Google Drive video URLs use the uc endpoint (no file extension).
+  if (/drive\.google\.com\/uc\?/.test(url)) return true;
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Instagram video (Reels / Story video) can't be published until Meta finishes
+// processing the uploaded clip — media_publish before then returns "Media not
+// ready". So we create the container, then poll its status_code until FINISHED.
+// Budget: ~115s (23 waits × 5s), inside the cron's 300s maxDuration and enough
+// for typical short clips. A longer clip that isn't ready in time fails with a
+// retry hint rather than hanging.
+const IG_CONTAINER_POLL_INTERVAL_MS = 5000;
+const IG_CONTAINER_POLL_MAX_ATTEMPTS = 24;
+
+async function waitForContainerReady(
+  containerId: string,
+  pageToken: string,
+  operation: string
+): Promise<void> {
+  for (let attempt = 0; attempt < IG_CONTAINER_POLL_MAX_ATTEMPTS; attempt++) {
+    // Check immediately on the first pass, then space subsequent checks out.
+    if (attempt > 0) await sleep(IG_CONTAINER_POLL_INTERVAL_MS);
+
+    const statusUrl = new URL(
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${containerId}`
+    );
+    statusUrl.searchParams.set("fields", "status_code,status");
+    statusUrl.searchParams.set("access_token", pageToken);
+
+    const start = Date.now();
+    const res = await fetch(statusUrl.toString(), { cache: "no-store" });
+    const data = (await res.json()) as {
+      status_code?: string;
+      status?: string;
+      error?: { message?: string };
+    };
+    logMetaWrite({
+      operation,
+      metaEndpoint: `/${containerId}?fields=status_code`,
+      requestBody: { fields: "status_code" },
+      responseStatus: res.status,
+      responseBody: data,
+      success: res.ok,
+      errorMessage: data.error?.message ?? null,
+      durationMs: Date.now() - start,
+    });
+    if (!res.ok) {
+      throw new Error(
+        `IG container status check failed: ${res.status} ${JSON.stringify(data)}`
+      );
+    }
+
+    const code = data.status_code;
+    if (code === "FINISHED") return;
+    if (code === "ERROR" || code === "EXPIRED") {
+      throw new Error(
+        `IG video processing ${code}: ${data.status ?? JSON.stringify(data)}`
+      );
+    }
+    // IN_PROGRESS — keep waiting.
+  }
+  const budgetSeconds =
+    ((IG_CONTAINER_POLL_MAX_ATTEMPTS - 1) * IG_CONTAINER_POLL_INTERVAL_MS) /
+    1000;
+  throw new Error(
+    `IG video still processing after ${budgetSeconds}s. The clip may be large — ` +
+      `try "Publish now" again shortly.`
+  );
+}
+
+// Look up an Instagram media permalink, best-effort (null on any failure).
+async function lookupInstagramPermalink(
+  mediaId: string,
+  pageToken: string
+): Promise<string | null> {
+  try {
+    const permalinkUrl = new URL(
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${mediaId}`
+    );
+    permalinkUrl.searchParams.set("fields", "permalink");
+    permalinkUrl.searchParams.set("access_token", pageToken);
+    const res = await fetch(permalinkUrl.toString(), { cache: "no-store" });
+    if (res.ok) {
+      const data = (await res.json()) as { permalink?: string };
+      if (data.permalink) return data.permalink;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 // Record why a scheduled publish couldn't run, WITHOUT changing its status.
 // Pre-flight failures (no connected account, post not approved) intentionally
 // leave the row 'scheduled' so the 5-minute cron keeps retrying and the post
@@ -183,31 +288,55 @@ export async function publishMetaQueueItem(
   const postPlatform: string = (post as any).platform ?? "";
   const isStory =
     postPlatform === "instagram_story" || postPlatform === "instagram_stories";
+  // The media URL doubles as the video URL when it points at a video file —
+  // route those to the video endpoints (FB /videos, IG Reels/Story video)
+  // instead of the image ones, which reject video/mp4.
+  const isVideo = isVideoUrl(imageUrl);
 
   // 4. Publish
   try {
     let publishUrl: string | null = null;
 
     if (platform === "facebook") {
-      publishUrl = await publishFacebookPost({
-        pageId: account.account_id,
-        pageToken: account.access_token,
-        caption,
-        imageUrl,
-      });
+      publishUrl = isVideo
+        ? await publishFacebookVideo({
+            pageId: account.account_id,
+            pageToken: account.access_token,
+            caption,
+            videoUrl: imageUrl,
+          })
+        : await publishFacebookPost({
+            pageId: account.account_id,
+            pageToken: account.access_token,
+            caption,
+            imageUrl,
+          });
     } else if (isStory) {
-      publishUrl = await publishInstagramStory({
-        igAccountId: account.account_id,
-        pageToken: account.access_token,
-        imageUrl,
-      });
+      publishUrl = isVideo
+        ? await publishInstagramStoryVideo({
+            igAccountId: account.account_id,
+            pageToken: account.access_token,
+            videoUrl: imageUrl,
+          })
+        : await publishInstagramStory({
+            igAccountId: account.account_id,
+            pageToken: account.access_token,
+            imageUrl,
+          });
     } else {
-      publishUrl = await publishInstagramPost({
-        igAccountId: account.account_id,
-        pageToken: account.access_token,
-        caption,
-        imageUrl,
-      });
+      publishUrl = isVideo
+        ? await publishInstagramVideo({
+            igAccountId: account.account_id,
+            pageToken: account.access_token,
+            caption,
+            videoUrl: imageUrl,
+          })
+        : await publishInstagramPost({
+            igAccountId: account.account_id,
+            pageToken: account.access_token,
+            caption,
+            imageUrl,
+          });
     }
 
     const now = new Date().toISOString();
@@ -459,6 +588,224 @@ async function publishInstagramStory(args: {
   if (!storyPublishRes.ok) {
     throw new Error(
       `IG Story /media_publish failed: ${storyPublishRes.status} ${JSON.stringify(publishData)}`
+    );
+  }
+  return publishData.id
+    ? `https://www.instagram.com/stories/${igAccountId}/${publishData.id}/`
+    : null;
+}
+
+// ── Video publishing ──────────────────────────────────────────────────────
+// Video uses entirely different Graph flows than images. Facebook takes a
+// hosted file_url on the /videos edge. Instagram publishes video as a Reel
+// (feed) or a Story video via the two-step container flow — but the container
+// must finish server-side processing before it can be published, so these poll
+// waitForContainerReady() between create and publish.
+
+async function publishFacebookVideo(args: {
+  pageId: string;
+  pageToken: string;
+  caption: string;
+  videoUrl: string;
+}): Promise<string | null> {
+  const { pageId, pageToken, caption, videoUrl } = args;
+  if (!videoUrl) {
+    throw new Error("Facebook video requires a video_url.");
+  }
+
+  const params = new URLSearchParams();
+  params.set("file_url", videoUrl);
+  if (caption) params.set("description", caption);
+  params.set("access_token", pageToken);
+
+  const endpoint = `/${pageId}/videos`;
+  const start = Date.now();
+  const res = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
+    { method: "POST", body: params, cache: "no-store" }
+  );
+  const data = (await res.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  logMetaWrite({
+    operation: "publish:facebook_video",
+    metaEndpoint: endpoint,
+    requestBody: { file_url: videoUrl, description: caption },
+    responseStatus: res.status,
+    responseBody: data,
+    success: res.ok && !!data.id,
+    errorMessage: data.error?.message ?? null,
+    durationMs: Date.now() - start,
+  });
+  if (!res.ok) {
+    throw new Error(`FB /videos failed: ${res.status} ${JSON.stringify(data)}`);
+  }
+  return data.id ? `https://www.facebook.com/${pageId}/videos/${data.id}/` : null;
+}
+
+async function publishInstagramVideo(args: {
+  igAccountId: string;
+  pageToken: string;
+  caption: string;
+  videoUrl: string;
+}): Promise<string | null> {
+  const { igAccountId, pageToken, caption, videoUrl } = args;
+  if (!videoUrl) {
+    throw new Error("Instagram video posts require a video_url.");
+  }
+
+  // 1. Create the Reels container.
+  const containerParams = new URLSearchParams();
+  containerParams.set("media_type", "REELS");
+  containerParams.set("video_url", videoUrl);
+  if (caption) containerParams.set("caption", caption);
+  containerParams.set("access_token", pageToken);
+
+  const containerStart = Date.now();
+  const containerRes = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    { method: "POST", body: containerParams, cache: "no-store" }
+  );
+  const container = (await containerRes.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  logMetaWrite({
+    operation: "publish:instagram_video",
+    metaEndpoint: `/${igAccountId}/media`,
+    requestBody: { media_type: "REELS", video_url: videoUrl, caption },
+    responseStatus: containerRes.status,
+    responseBody: container,
+    success: containerRes.ok && !!container.id,
+    errorMessage: container.error?.message ?? null,
+    durationMs: Date.now() - containerStart,
+  });
+  if (!containerRes.ok) {
+    throw new Error(
+      `IG Reel /media failed: ${containerRes.status} ${JSON.stringify(container)}`
+    );
+  }
+  const creationId = container.id;
+  if (!creationId) {
+    throw new Error("IG Reel /media returned no creation id");
+  }
+
+  // 2. Wait for Meta to finish processing the uploaded video.
+  await waitForContainerReady(creationId, pageToken, "publish:instagram_video");
+
+  // 3. Publish the processed container.
+  const publishParams = new URLSearchParams();
+  publishParams.set("creation_id", creationId);
+  publishParams.set("access_token", pageToken);
+
+  const publishStart = Date.now();
+  const publishRes = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    { method: "POST", body: publishParams, cache: "no-store" }
+  );
+  const publishData = (await publishRes.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  logMetaWrite({
+    operation: "publish:instagram_video",
+    metaEndpoint: `/${igAccountId}/media_publish`,
+    requestBody: { creation_id: creationId },
+    responseStatus: publishRes.status,
+    responseBody: publishData,
+    success: publishRes.ok && !!publishData.id,
+    errorMessage: publishData.error?.message ?? null,
+    durationMs: Date.now() - publishStart,
+  });
+  if (!publishRes.ok) {
+    throw new Error(
+      `IG Reel /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`
+    );
+  }
+  if (!publishData.id) return null;
+  return lookupInstagramPermalink(publishData.id, pageToken);
+}
+
+async function publishInstagramStoryVideo(args: {
+  igAccountId: string;
+  pageToken: string;
+  videoUrl: string;
+}): Promise<string | null> {
+  const { igAccountId, pageToken, videoUrl } = args;
+  if (!videoUrl) {
+    throw new Error("Instagram Stories require a video_url.");
+  }
+
+  // 1. Create the Story container (video).
+  const containerParams = new URLSearchParams();
+  containerParams.set("media_type", "STORIES");
+  containerParams.set("video_url", videoUrl);
+  containerParams.set("access_token", pageToken);
+
+  const containerStart = Date.now();
+  const containerRes = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    { method: "POST", body: containerParams, cache: "no-store" }
+  );
+  const container = (await containerRes.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  logMetaWrite({
+    operation: "publish:instagram_story_video",
+    metaEndpoint: `/${igAccountId}/media`,
+    requestBody: { media_type: "STORIES", video_url: videoUrl },
+    responseStatus: containerRes.status,
+    responseBody: container,
+    success: containerRes.ok && !!container.id,
+    errorMessage: container.error?.message ?? null,
+    durationMs: Date.now() - containerStart,
+  });
+  if (!containerRes.ok) {
+    throw new Error(
+      `IG Story video /media failed: ${containerRes.status} ${JSON.stringify(container)}`
+    );
+  }
+  const creationId = container.id;
+  if (!creationId) {
+    throw new Error("IG Story video /media returned no creation id");
+  }
+
+  // 2. Wait for processing.
+  await waitForContainerReady(
+    creationId,
+    pageToken,
+    "publish:instagram_story_video"
+  );
+
+  // 3. Publish.
+  const publishParams = new URLSearchParams();
+  publishParams.set("creation_id", creationId);
+  publishParams.set("access_token", pageToken);
+
+  const publishStart = Date.now();
+  const publishRes = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    { method: "POST", body: publishParams, cache: "no-store" }
+  );
+  const publishData = (await publishRes.json()) as {
+    id?: string;
+    error?: { message?: string };
+  };
+  logMetaWrite({
+    operation: "publish:instagram_story_video",
+    metaEndpoint: `/${igAccountId}/media_publish`,
+    requestBody: { creation_id: creationId },
+    responseStatus: publishRes.status,
+    responseBody: publishData,
+    success: publishRes.ok && !!publishData.id,
+    errorMessage: publishData.error?.message ?? null,
+    durationMs: Date.now() - publishStart,
+  });
+  if (!publishRes.ok) {
+    throw new Error(
+      `IG Story video /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`
     );
   }
   return publishData.id
