@@ -110,10 +110,16 @@ async function handle(req: Request) {
   ).toISOString();
 
   // Retire anything that missed its window so it can't sit as a landmine that
-  // fires the moment the window logic ever changes.
+  // fires the moment the window logic ever changes. Crucially, PRESERVE any
+  // existing note: a scheduled row often already carries the real reason it
+  // never sent (a pre-flight block like "no connected account matches @handle"
+  // that the cron re-hit every tick). Clobbering that with a generic "missed
+  // its time" message hides the actual cause and sends operators chasing the
+  // cron instead of the misconfiguration. So we keep the reason and append the
+  // retirement note; only rows with no prior note get the bare generic text.
   const { data: missed, error: missedErr } = await admin
     .from("proofer_publish_queue")
-    .select("id")
+    .select("id, notes")
     .eq("status", "scheduled")
     .lt("scheduled_for", graceCutoff);
   if (missedErr) {
@@ -123,18 +129,40 @@ async function handle(req: Request) {
     );
   }
   if (missed && missed.length > 0) {
-    await admin
-      .from("proofer_publish_queue")
-      .update({
-        status: "failed",
-        notes:
-          "Missed its scheduled time — not sent automatically. Set a new time on the Proofer to re-send.",
-        updated_at: now,
-      })
-      .in(
-        "id",
-        missed.map((r) => (r as { id: string }).id)
-      );
+    const GENERIC_MISSED =
+      "Missed its scheduled time — not sent automatically. Set a new time on the Proofer to re-send.";
+
+    // Rows with no prior note all get the same generic text — one bulk update.
+    const withoutNote = missed
+      .filter((r) => !((r as { notes: string | null }).notes ?? "").trim())
+      .map((r) => (r as { id: string }).id);
+    if (withoutNote.length > 0) {
+      await admin
+        .from("proofer_publish_queue")
+        .update({ status: "failed", notes: GENERIC_MISSED, updated_at: now })
+        .in("id", withoutNote);
+    }
+
+    // Rows that already carry a reason keep it, with a line noting it was
+    // retired after the grace window. Per-row because the preserved text differs.
+    const withNote = missed.filter((r) =>
+      ((r as { notes: string | null }).notes ?? "").trim()
+    );
+    for (const r of withNote) {
+      const existing = (r as { notes: string | null }).notes as string;
+      const combined =
+        `${existing}\n\nMissed its scheduled time — not sent automatically ` +
+        `after the ${graceHours}h grace window. Fix the reason above, then set ` +
+        `a new time on the Proofer to re-send.`;
+      await admin
+        .from("proofer_publish_queue")
+        .update({
+          status: "failed",
+          notes: combined.slice(0, 2000),
+          updated_at: now,
+        })
+        .eq("id", (r as { id: string }).id);
+    }
   }
 
   // Mass-send circuit breaker. Under normal operation only a handful of posts
