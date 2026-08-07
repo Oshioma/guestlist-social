@@ -65,7 +65,14 @@ export function metaAuthorizeUrl(state: string): string {
   // are owned by a Business Portfolio / use the New Pages Experience — the
   // classic scope flow below can't see them, which surfaces to the user as
   // "No Pages to control" / "No Facebook Pages found".
-  const configId = process.env.META_SOCIAL_LOGIN_CONFIG_ID;
+  //
+  // The default is this workspace's own configuration; it's not a secret (it
+  // travels in the browser's OAuth URL). Override it with a different id via
+  // env, or set the env var to "off" to fall back to the classic scope flow.
+  const DEFAULT_LOGIN_CONFIG_ID = "2158869421359858";
+  const envConfigId = process.env.META_SOCIAL_LOGIN_CONFIG_ID;
+  const configId =
+    envConfigId === "off" ? "" : envConfigId || DEFAULT_LOGIN_CONFIG_ID;
   if (configId) {
     params.set("config_id", configId);
     return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
