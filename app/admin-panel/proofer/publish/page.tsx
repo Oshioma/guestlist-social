@@ -7,6 +7,12 @@ import PublishQueueBoard from "./PublishQueueBoard";
 import TokenExpiryBanner from "../../components/TokenExpiryBanner";
 
 export const dynamic = "force-dynamic";
+// "Publish now" runs the publishMetaQueueItem server action from this route.
+// Publishing an Instagram video (Reel / Story) polls Meta's container status
+// until processing finishes (~up to 2 min), so the action needs headroom well
+// past the default function timeout — otherwise it's killed mid-poll and the
+// video never publishes. Matches the auto-publish cron's maxDuration.
+export const maxDuration = 300;
 
 type ConnectResult = {
   status: "success" | "error";
