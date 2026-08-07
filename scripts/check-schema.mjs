@@ -149,6 +149,11 @@ const SCHEMA = {
     "id",
     "name",
     "industry",
+    // Publish-target identity the wrong-account guard relies on. `ig_handle`
+    // pins Instagram, `fb_page` pins Facebook — if either is missing the edit
+    // form silently can't save it and posts can't be routed.
+    "ig_handle",
+    "fb_page",
   ],
   meta_execution_queue: [
     "id",
