@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SectionCard from "../../components/SectionCard";
@@ -22,12 +22,21 @@ import {
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
 import {
+  resolveAccountMatch,
+  isClientSettingsReason,
+} from "../../lib/account-match";
+import {
   describeZone,
   formatDateTimeInZone,
   formatInstantClockInZone,
 } from "../../../../lib/timezone";
 
-type ClientLite = { id: string; name: string };
+type ClientLite = {
+  id: string;
+  name: string;
+  igHandle?: string | null;
+  fbPage?: string | null;
+};
 
 type ConnectedAccount = {
   clientId: string;
@@ -90,9 +99,16 @@ function platformLabel(platform: PublishQueuePlatform) {
  * destination in the group and `ids` every underlying queue row, so actions
  * still reach each one.
  */
+type QueueBlock = { platform: PublishQueuePlatform; notes: string };
+
 type QueueGroup = QueueItem & {
   platforms: PublishQueuePlatform[];
   ids: string[];
+  // Per-platform "why it hasn't gone out" notes. The queue stores a row per
+  // (post, platform) and each row carries its own note, so an Instagram block
+  // and a Facebook block can coexist on the same post — we keep both here
+  // instead of collapsing to a single arbitrary note.
+  blocks: QueueBlock[];
 };
 
 function groupByPost(items: QueueItem[]): QueueGroup[] {
@@ -104,11 +120,17 @@ function groupByPost(items: QueueItem[]): QueueGroup[] {
         existing.platforms.push(item.platform);
       }
       existing.ids.push(item.id);
+      if (item.notes) {
+        existing.blocks.push({ platform: item.platform, notes: item.notes });
+      }
     } else {
       byPost.set(item.postId, {
         ...item,
         platforms: [item.platform],
         ids: [item.id],
+        blocks: item.notes
+          ? [{ platform: item.platform, notes: item.notes }]
+          : [],
       });
     }
   }
@@ -141,6 +163,55 @@ function PlatformChips({ platforms }: { platforms: PublishQueuePlatform[] }) {
         </span>
       ))}
     </>
+  );
+}
+
+// The "Not published yet" banner on a queue card. Each destination that is
+// blocked gets its own line, so an Instagram handle problem and a Facebook
+// Page problem read as two distinct, individually-actionable issues rather
+// than one merged blob. Actionable lines carry an "Edit here" link straight
+// to the client's edit page.
+function NotPublishedNotice({
+  blocks,
+  clientId,
+}: {
+  blocks: QueueBlock[];
+  clientId: string;
+}) {
+  if (blocks.length === 0) return null;
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        lineHeight: 1.45,
+        color: "#991b1b",
+        background: "#fef2f2",
+        border: "1px solid #fecaca",
+        borderRadius: 8,
+        padding: "8px 11px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 5,
+      }}
+    >
+      <strong>&#9888; Not published yet</strong>
+      {blocks.map((b, i) => (
+        <div key={`${b.platform}-${i}`}>
+          <span style={{ fontWeight: 700 }}>{platformLabel(b.platform)}:</span> {b.notes}
+          {clientId && isClientSettingsReason(b.notes) ? (
+            <>
+              {" "}
+              <Link
+                href={`/app/clients/${clientId}/edit`}
+                style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline" }}
+              >
+                Edit here
+              </Link>
+            </>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -380,6 +451,46 @@ export default function PublishQueueBoard({
     }
     return map;
   }, [connectedAccounts]);
+
+  const clientById = useMemo(() => {
+    const map: Record<string, ClientLite> = {};
+    for (const c of clients) map[c.id] = c;
+    return map;
+  }, [clients]);
+
+  // What's stopping a card from publishing, per destination — computed live so
+  // it shows the moment a post is queued/scheduled, without waiting for the
+  // send time to pass. Runs the SAME resolveAccountMatch the publisher uses,
+  // against the client's current handle/Page + connected accounts, then layers
+  // on any cron-written note (post not approved, Meta API error) for reasons
+  // the live check can't see.
+  const computeCardBlocks = useCallback(
+    (item: QueueGroup): QueueBlock[] => {
+      const client = clientById[item.clientId];
+      const all = accountsByClient[item.clientId] ?? [];
+      const merged = new Map<PublishQueuePlatform, string>();
+
+      for (const platform of item.platforms) {
+        const accts = all
+          .filter((a) => a.platform === platform)
+          .map((a) => ({ account_id: a.accountId, account_name: a.accountName }));
+        const res = resolveAccountMatch({
+          accounts: accts,
+          platform,
+          handle: client?.igHandle ?? null,
+          fbPage: client?.fbPage ?? null,
+        });
+        if (!res.ok) merged.set(platform, res.reason);
+      }
+
+      for (const b of item.blocks) {
+        if (!merged.has(b.platform)) merged.set(b.platform, b.notes);
+      }
+
+      return [...merged.entries()].map(([platform, notes]) => ({ platform, notes }));
+    },
+    [clientById, accountsByClient]
+  );
 
   const connectedClientIds = useMemo(
     () =>
@@ -1021,6 +1132,10 @@ export default function PublishQueueBoard({
                     <div style={statusPill(item.status)}>{item.status}</div>
                   </div>
 
+                  {/* Warn at queue/schedule time — before the send window — if
+                      this post has no valid target account for a destination. */}
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+
                   {/* Thumbnail beside the caption rather than under it — the card is
                       full width and the preview is small. */}
                   <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -1149,23 +1264,9 @@ export default function PublishQueueBoard({
 
                 {/* Why a scheduled post hasn't gone out yet. The auto-publish
                     cron leaves the row scheduled (and keeps retrying) when a
-                    pre-flight check fails; this surfaces the reason instead of
-                    it sitting here silently. */}
-                {item.notes && (
-                  <div
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.4,
-                      color: STATUS_TONES.failed.ink,
-                      background: STATUS_TONES.failed.fill,
-                      border: `1px solid ${STATUS_TONES.failed.edge}`,
-                      borderRadius: 8,
-                      padding: "7px 11px",
-                    }}
-                  >
-                    <strong>&#9888; Not published yet:</strong> {item.notes}
-                  </div>
-                )}
+                    pre-flight check fails; this surfaces the reason — per
+                    destination — instead of it sitting here silently. */}
+                <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
 
                 {/* Proactively flag a post that has missed its send window,
                     before the cron gets to mark it failed — same message the
@@ -1503,18 +1604,7 @@ export default function PublishQueueBoard({
                     <div style={statusPill(item.status)}>{item.status}</div>
                   </div>
 
-                  {item.notes && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#991b1b",
-                        lineHeight: 1.45,
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {item.notes}
-                    </div>
-                  )}
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
 
                   <CarouselPreview
                     size={170}

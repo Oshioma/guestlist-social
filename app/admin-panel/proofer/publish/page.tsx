@@ -17,15 +17,30 @@ export default async function ProoferPublishPage() {
     console.error("Publish queue data error:", err);
   }
 
-  // Lightweight clients list used by the "Connect Meta" picker.
+  // Lightweight clients list used by the "Connect Meta" picker and by the
+  // board's schedule-time publishability check (needs each client's declared
+  // Instagram handle / Facebook Page). `fb_page` is a newer column, so fall
+  // back gracefully if the migration hasn't run yet.
   const supabase = await createClient();
-  const clientsRes = await supabase
+  let clientsRows: { id: string | number; name?: string | null; ig_handle?: string | null; fb_page?: string | null }[] = [];
+  const clientsFull = await supabase
     .from("clients")
-    .select("id, name")
+    .select("id, name, ig_handle, fb_page")
     .order("name", { ascending: true });
-  const clients = (clientsRes.data ?? []).map((c) => ({
+  if (clientsFull.error) {
+    const fallback = await supabase
+      .from("clients")
+      .select("id, name, ig_handle")
+      .order("name", { ascending: true });
+    clientsRows = (fallback.data ?? []) as typeof clientsRows;
+  } else {
+    clientsRows = (clientsFull.data ?? []) as typeof clientsRows;
+  }
+  const clients = clientsRows.map((c) => ({
     id: String(c.id),
     name: c.name ?? "Client",
+    igHandle: (c.ig_handle as string | null) ?? null,
+    fbPage: (c.fb_page as string | null) ?? null,
   }));
 
   // Agency-wide display region. Reads via the service role so it works
