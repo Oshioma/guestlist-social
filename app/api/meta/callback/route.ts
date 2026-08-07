@@ -7,6 +7,7 @@ import {
   fetchUserPages,
   metaServiceClient,
 } from "../../../admin-panel/lib/meta-auth";
+import { normalizeHandle } from "../../../admin-panel/lib/account-match";
 
 // GET /api/meta/callback
 //
@@ -100,35 +101,70 @@ export async function GET(req: Request) {
       ? new Date(Date.now() + longLived.expiresIn * 1000).toISOString()
       : null;
 
+    // Only attach the account(s) this client actually declares. When a login
+    // manages a whole portfolio, attaching every Page under one client is the
+    // pollution that put the wrong accounts everywhere — so if the client has
+    // declared its Instagram handle / Facebook Page, keep only the matching
+    // ones. With nothing declared yet, attach everything so the operator can
+    // still discover and pick, then set the handle/Page.
+    let handle: string | null = null;
+    let fbPage: string | null = null;
+    const clientRow = await admin
+      .from("clients")
+      .select("ig_handle, fb_page")
+      .eq("id", clientIdNum)
+      .maybeSingle();
+    if (clientRow.error) {
+      const fb = await admin
+        .from("clients")
+        .select("ig_handle")
+        .eq("id", clientIdNum)
+        .maybeSingle();
+      handle = (fb.data?.ig_handle as string | null) ?? null;
+    } else {
+      handle = (clientRow.data?.ig_handle as string | null) ?? null;
+      fbPage = (clientRow.data?.fb_page as string | null) ?? null;
+    }
+    const wantedHandle = normalizeHandle(handle);
+    const wantedPage = normalizeHandle(fbPage);
+    const matchesFbPage = (p: { id: string; name: string }) =>
+      !wantedPage ||
+      normalizeHandle(p.name) === wantedPage ||
+      p.id.trim().toLowerCase() === wantedPage;
+    const matchesHandle = (username: string) =>
+      !wantedHandle || normalizeHandle(username) === wantedHandle;
+
     let fbCount = 0;
     let igCount = 0;
-    // Diagnostic: exactly what Facebook handed back for this login, so the
-    // operator can see whether the intended Page/account was even offered.
-    const igByPage: string[] = [];
+    // Diagnostic: exactly what Facebook handed back for this login (the whole
+    // portfolio), so the connect banner can show what was available even when
+    // we only attach the matching one.
+    const returnedParts: string[] = [];
 
     for (const page of pages) {
-      const { error: fbErr } = await admin
-        .from("connected_meta_accounts")
-        .upsert(
-          {
-            client_id: clientIdNum,
-            platform: "facebook",
-            account_id: page.id,
-            account_name: page.name,
-            access_token: page.access_token,
-            token_expires_at: expiresAt,
-            updated_at: now,
-          },
-          { onConflict: "client_id,platform,account_id" }
-        );
-      if (fbErr) {
-        console.error("meta/callback fb upsert error:", fbErr);
-        continue;
-      }
-      fbCount += 1;
-
       const ig = await fetchInstagramAccountForPage(page.id, page.access_token);
-      if (ig) {
+      returnedParts.push(ig?.username ? `${page.name} → @${ig.username}` : page.name);
+
+      if (matchesFbPage(page)) {
+        const { error: fbErr } = await admin
+          .from("connected_meta_accounts")
+          .upsert(
+            {
+              client_id: clientIdNum,
+              platform: "facebook",
+              account_id: page.id,
+              account_name: page.name,
+              access_token: page.access_token,
+              token_expires_at: expiresAt,
+              updated_at: now,
+            },
+            { onConflict: "client_id,platform,account_id" }
+          );
+        if (fbErr) console.error("meta/callback fb upsert error:", fbErr);
+        else fbCount += 1;
+      }
+
+      if (ig && matchesHandle(ig.username)) {
         const { error: igErr } = await admin
           .from("connected_meta_accounts")
           .upsert(
@@ -144,20 +180,11 @@ export async function GET(req: Request) {
             },
             { onConflict: "client_id,platform,account_id" }
           );
-        if (!igErr) {
-          igCount += 1;
-          if (ig.username) igByPage.push(`${page.name} → @${ig.username}`);
-        }
+        if (!igErr) igCount += 1;
       }
     }
 
-    // "PageName → @iguser" for pages with a linked IG, plain page names for the
-    // rest — a compact record of what this login actually exposed.
-    const withIg = new Set(igByPage.map((s) => s.split(" → ")[0]));
-    const returned = [
-      ...igByPage,
-      ...pages.filter((p) => !withIg.has(p.name)).map((p) => p.name),
-    ].join("|");
+    const returned = returnedParts.join("|");
 
     return redirectSuccess({
       meta: "connected",

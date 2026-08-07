@@ -21,6 +21,7 @@ import {
   deleteProoferPostByIdAction,
 } from "../../lib/proofer-actions";
 import { publishMetaQueueItem } from "../../lib/meta-publish";
+import { pruneClientMetaStraysAction } from "../../lib/meta-accounts-actions";
 import {
   resolveAccountMatch,
   isClientSettingsReason,
@@ -218,9 +219,11 @@ function NotPublishedNotice({
           {isClientSettingsReason(b.notes) ? (
             <div style={{ color: "#9a6a6a", marginTop: 2 }}>
               {b.connected.length > 0
-                ? `Connected here: ${b.connected.join(", ")}. Connect ${platformLabel(
-                    b.platform
-                  )} for this client if the right account isn't listed.`
+                ? `Connected here: ${b.connected.join(", ")}. Set this client's ${
+                    b.platform === "instagram" ? "Instagram handle" : "Facebook Page"
+                  } to the exact ${
+                    b.platform === "instagram" ? "username" : "name or ID"
+                  } of the intended one above — or use "Connect Meta" if it isn't listed.`
                 : `No ${platformLabel(b.platform)} account is connected for this client yet — use "Connect Meta".`}
             </div>
           ) : null}
@@ -746,6 +749,42 @@ export default function PublishQueueBoard({
         router.refresh();
       }
     }, 700);
+  }
+
+  const [pruningClientId, setPruningClientId] = useState<string | null>(null);
+
+  function handlePruneClient(cid: string, clientName: string) {
+    const accs = accountsByClient[cid] ?? [];
+    if (
+      !window.confirm(
+        `Remove every connected account for "${clientName}" except the ones marked ✓ ` +
+          `(the accounts posts actually publish to)?\n\n` +
+          `${accs.length} connected now. Anything removed can be re-added by clicking Connect Meta again.`
+      )
+    ) {
+      return;
+    }
+    setPruningClientId(cid);
+    startTransition(async () => {
+      try {
+        const res = await pruneClientMetaStraysAction(cid);
+        if (res.error) {
+          alert(`Couldn't clean up: ${res.error}`);
+        } else {
+          alert(
+            `Removed ${res.removed} stray account${res.removed === 1 ? "" : "s"} from "${clientName}".` +
+              (res.kept.length > 0
+                ? `\nKept: ${res.kept.join(", ")}.`
+                : `\nNothing matched this client's handle/Page, so all were removed — reconnect with the login that manages ${clientName}.`)
+          );
+        }
+        router.refresh();
+      } catch (err) {
+        alert(`Cleanup error: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setPruningClientId(null);
+      }
+    });
   }
 
   function handleMarkFailed(queueId: string | string[]) {
@@ -1789,7 +1828,9 @@ export default function PublishQueueBoard({
           Meta connection
           <span style={{ fontSize: 12, fontWeight: 500, color: "#71717a", marginLeft: 4 }}>
             {connectedClientIds.length > 0
-              ? `${connectedAccounts.length} accounts connected`
+              ? `${connectedAccounts.filter((a) => a.platform === "facebook").length} Pages · ` +
+                `${connectedAccounts.filter((a) => a.platform === "instagram").length} Instagram ` +
+                `across ${connectedClientIds.length} client${connectedClientIds.length === 1 ? "" : "s"}`
               : "Not connected"}
           </span>
         </summary>
@@ -1912,7 +1953,37 @@ export default function PublishQueueBoard({
                 const accs = accountsByClient[cid] ?? [];
                 const fb = accs.filter((a) => a.platform === "facebook");
                 const ig = accs.filter((a) => a.platform === "instagram");
-                const count = accs.length;
+                const client = clientById[cid];
+
+                // The one Page / Instagram account posts will actually go to,
+                // per the same guard the publisher uses. Everything else in the
+                // list is a stray from the connecting login's portfolio and is
+                // never published to.
+                const fbMatch = resolveAccountMatch({
+                  accounts: fb.map((a) => ({ account_id: a.accountId, account_name: a.accountName })),
+                  platform: "facebook",
+                  handle: null,
+                  fbPage: client?.fbPage ?? null,
+                });
+                const igMatch = resolveAccountMatch({
+                  accounts: ig.map((a) => ({ account_id: a.accountId, account_name: a.accountName })),
+                  platform: "instagram",
+                  handle: client?.igHandle ?? null,
+                  fbPage: null,
+                });
+                const matchedFbId = fbMatch.ok ? fbMatch.account.account_id : null;
+                const matchedIgId = igMatch.ok ? igMatch.account.account_id : null;
+
+                const activeChip = {
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: "#dcfce7",
+                  border: "1px solid #4ade80",
+                  color: "#166534",
+                } as const;
+
                 return (
                   <details key={cid} style={{ fontSize: 12 }}>
                     <summary
@@ -1928,19 +1999,66 @@ export default function PublishQueueBoard({
                       }}
                     >
                       <span style={{ fontSize: 10, color: "#a1a1aa" }}>&#9654;</span>
-                      {clientNameById[cid] ?? `Client ${cid}`} · {count} account{count === 1 ? "" : "s"}
+                      {clientNameById[cid] ?? `Client ${cid}`} · {fb.length} Page
+                      {fb.length === 1 ? "" : "s"} · {ig.length} Instagram
+                      {accs.length > (matchedFbId ? 1 : 0) + (matchedIgId ? 1 : 0) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handlePruneClient(cid, clientNameById[cid] ?? `Client ${cid}`);
+                          }}
+                          disabled={isPending && pruningClientId === cid}
+                          style={{
+                            marginLeft: "auto",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            background: "#fff",
+                            border: "1px solid #fca5a5",
+                            color: "#b91c1c",
+                            cursor: "pointer",
+                          }}
+                          title="Remove every connected account except the ✓ matched one"
+                        >
+                          {pruningClientId === cid ? "Cleaning…" : "Remove unmatched"}
+                        </button>
+                      ) : null}
                     </summary>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 0 2px 16px" }}>
-                      {fb.map((a) => (
-                        <span key={`fb-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#e7f0fe", border: "1px solid #93c5fd", color: "#1d4ed8" }}>
-                          FB · {a.accountName || a.accountId}
-                        </span>
-                      ))}
-                      {ig.map((a) => (
-                        <span key={`ig-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#fdf2f8", border: "1px solid #f9a8d4", color: "#be185d" }}>
-                          IG · @{a.accountName || a.accountId}
-                        </span>
-                      ))}
+                      {fb.map((a) => {
+                        const active = a.accountId === matchedFbId;
+                        return (
+                          <span
+                            key={`fb-${a.accountId}`}
+                            title={active ? "Facebook posts publish to this Page" : undefined}
+                            style={
+                              active
+                                ? activeChip
+                                : { padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#e7f0fe", border: "1px solid #93c5fd", color: "#1d4ed8" }
+                            }
+                          >
+                            {active ? "✓ " : ""}FB · {a.accountName || a.accountId}
+                          </span>
+                        );
+                      })}
+                      {ig.map((a) => {
+                        const active = a.accountId === matchedIgId;
+                        return (
+                          <span
+                            key={`ig-${a.accountId}`}
+                            title={active ? "Instagram posts publish to this account" : undefined}
+                            style={
+                              active
+                                ? activeChip
+                                : { padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#fdf2f8", border: "1px solid #f9a8d4", color: "#be185d" }
+                            }
+                          >
+                            {active ? "✓ " : ""}IG · @{a.accountName || a.accountId}
+                          </span>
+                        );
+                      })}
                     </div>
                   </details>
                 );
