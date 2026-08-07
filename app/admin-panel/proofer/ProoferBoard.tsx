@@ -478,6 +478,12 @@ export default function ProoferBoard({
   initialIdeas,
   initialPostIdeas,
   timeZone = "Etc/GMT",
+  // Where the board's own client/month navigation and Publish Queue button
+  // point. Defaults to the admin-panel route so the existing /app/proofer page
+  // is unchanged; the standalone /proofer page overrides basePath so switching
+  // client or month keeps the user on the standalone page.
+  basePath = "/app/proofer",
+  publishPath = "/app/proofer/publish",
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -488,6 +494,8 @@ export default function ProoferBoard({
   initialIdeas: ProoferIdeaLite[];
   initialPostIdeas: PostIdea[];
   timeZone?: string;
+  basePath?: string;
+  publishPath?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -970,7 +978,7 @@ export default function ProoferBoard({
     setOpenComments({});
     setCommentDrafts({});
     setActivePlatformByDate({});
-    router.push(`/app/proofer?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   function handleSelectClient(id: string) {
@@ -1942,7 +1950,7 @@ export default function ProoferBoard({
         {!isNarrow && (
           <button
             type="button"
-            onClick={() => router.push("/app/proofer/publish")}
+            onClick={() => router.push(publishPath)}
             style={{
               position: "absolute",
               top: 0,
@@ -2008,7 +2016,7 @@ export default function ProoferBoard({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/app/proofer/publish")}
+            onClick={() => router.push(publishPath)}
             style={{
               ...mobileToolbarButtonStyle(true),
               border: "1px solid #18181b",
