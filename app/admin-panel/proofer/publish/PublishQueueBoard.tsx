@@ -218,9 +218,11 @@ function NotPublishedNotice({
           {isClientSettingsReason(b.notes) ? (
             <div style={{ color: "#9a6a6a", marginTop: 2 }}>
               {b.connected.length > 0
-                ? `Connected here: ${b.connected.join(", ")}. Connect ${platformLabel(
-                    b.platform
-                  )} for this client if the right account isn't listed.`
+                ? `Connected here: ${b.connected.join(", ")}. Set this client's ${
+                    b.platform === "instagram" ? "Instagram handle" : "Facebook Page"
+                  } to the exact ${
+                    b.platform === "instagram" ? "username" : "name or ID"
+                  } of the intended one above — or use "Connect Meta" if it isn't listed.`
                 : `No ${platformLabel(b.platform)} account is connected for this client yet — use "Connect Meta".`}
             </div>
           ) : null}
