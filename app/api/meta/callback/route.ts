@@ -85,7 +85,12 @@ export async function GET(req: Request) {
     const pages = await fetchUserPages(longLived.accessToken);
     if (pages.length === 0) {
       return redirectError(
-        "No Facebook Pages found for this Meta account. Create or join a Page first, then retry."
+        "Facebook returned no Pages for this login, so there's nothing to connect. " +
+          "This almost always means your Pages are owned by a Business Portfolio / use " +
+          "the New Pages Experience, which the classic login can't read (you'll see " +
+          '"No Pages to control" on Facebook). Grant this app access to the Page in Meta ' +
+          "Business Settings, or switch on Business Login (set META_SOCIAL_LOGIN_CONFIG_ID), " +
+          "then retry."
       );
     }
 
