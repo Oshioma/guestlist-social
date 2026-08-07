@@ -370,6 +370,7 @@ export default function PublishQueueBoard({
   clients = [],
   connectedAccounts = [],
   metaConnectionError = null,
+  connectResult = null,
   timeZone = "Etc/GMT",
 }: {
   queueItems: QueueItem[];
@@ -377,6 +378,13 @@ export default function PublishQueueBoard({
   clients?: ClientLite[];
   connectedAccounts?: ConnectedAccount[];
   metaConnectionError?: string | null;
+  connectResult?: {
+    status: "success" | "error";
+    message?: string;
+    pages: string[];
+    fbCount?: number;
+    igCount?: number;
+  } | null;
   timeZone?: string;
 }) {
   const router = useRouter();
@@ -1846,6 +1854,38 @@ export default function PublishQueueBoard({
               </span>
             )}
           </div>
+
+          {connectResult && (
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: connectResult.status === "success" ? "#166534" : "#991b1b",
+                background: connectResult.status === "success" ? "#f0fdf4" : "#fee2e2",
+                border: `1px solid ${connectResult.status === "success" ? "#bbf7d0" : "#fca5a5"}`,
+                borderRadius: 8,
+                padding: "8px 11px",
+              }}
+            >
+              {connectResult.status === "success" ? (
+                <div style={{ fontWeight: 700 }}>
+                  Connected {connectResult.fbCount ?? 0} Facebook Page
+                  {connectResult.fbCount === 1 ? "" : "s"} and {connectResult.igCount ?? 0} Instagram
+                  account{connectResult.igCount === 1 ? "" : "s"}.
+                </div>
+              ) : (
+                <div style={{ fontWeight: 700 }}>{connectResult.message}</div>
+              )}
+              {connectResult.pages.length > 0 ? (
+                <div style={{ marginTop: 4 }}>
+                  Facebook returned: {connectResult.pages.join(", ")}.
+                  {connectResult.status === "success"
+                    ? " If the account you wanted isn't here, it isn't shared with this login — pick it in the business asset picker, or grant this app access to that Page in Meta Business settings."
+                    : ""}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {metaConnectionError && (
             <div

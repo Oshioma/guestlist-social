@@ -102,6 +102,9 @@ export async function GET(req: Request) {
 
     let fbCount = 0;
     let igCount = 0;
+    // Diagnostic: exactly what Facebook handed back for this login, so the
+    // operator can see whether the intended Page/account was even offered.
+    const igByPage: string[] = [];
 
     for (const page of pages) {
       const { error: fbErr } = await admin
@@ -141,11 +144,27 @@ export async function GET(req: Request) {
             },
             { onConflict: "client_id,platform,account_id" }
           );
-        if (!igErr) igCount += 1;
+        if (!igErr) {
+          igCount += 1;
+          if (ig.username) igByPage.push(`${page.name} → @${ig.username}`);
+        }
       }
     }
 
-    return redirectSuccess({ meta: "connected", fb: String(fbCount), ig: String(igCount) });
+    // "PageName → @iguser" for pages with a linked IG, plain page names for the
+    // rest — a compact record of what this login actually exposed.
+    const withIg = new Set(igByPage.map((s) => s.split(" → ")[0]));
+    const returned = [
+      ...igByPage,
+      ...pages.filter((p) => !withIg.has(p.name)).map((p) => p.name),
+    ].join("|");
+
+    return redirectSuccess({
+      meta: "connected",
+      fb: String(fbCount),
+      ig: String(igCount),
+      pages: returned.slice(0, 1500),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("meta/callback error:", err);
