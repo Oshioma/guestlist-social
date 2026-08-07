@@ -166,16 +166,22 @@ function PlatformChips({ platforms }: { platforms: PublishQueuePlatform[] }) {
   );
 }
 
+// A blocked destination, enriched with the accounts actually connected for
+// this client on that platform — so "no account matches" reads as an obvious
+// "your account isn't in this list" rather than a dead end.
+type CardIssue = QueueBlock & { connected: string[] };
+
 // The "Not published yet" banner on a queue card. Each destination that is
 // blocked gets its own line, so an Instagram handle problem and a Facebook
 // Page problem read as two distinct, individually-actionable issues rather
 // than one merged blob. Actionable lines carry an "Edit here" link straight
-// to the client's edit page.
+// to the client's edit page, and — when the block is a no-match — show what
+// IS connected so the operator can see the mismatch.
 function NotPublishedNotice({
   blocks,
   clientId,
 }: {
-  blocks: QueueBlock[];
+  blocks: CardIssue[];
   clientId: string;
 }) {
   if (blocks.length === 0) return null;
@@ -208,6 +214,15 @@ function NotPublishedNotice({
                 Edit here
               </Link>
             </>
+          ) : null}
+          {isClientSettingsReason(b.notes) ? (
+            <div style={{ color: "#9a6a6a", marginTop: 2 }}>
+              {b.connected.length > 0
+                ? `Connected here: ${b.connected.join(", ")}. Connect ${platformLabel(
+                    b.platform
+                  )} for this client if the right account isn't listed.`
+                : `No ${platformLabel(b.platform)} account is connected for this client yet — use "Connect Meta".`}
+            </div>
           ) : null}
         </div>
       ))}
@@ -355,6 +370,7 @@ export default function PublishQueueBoard({
   clients = [],
   connectedAccounts = [],
   metaConnectionError = null,
+  connectResult = null,
   timeZone = "Etc/GMT",
 }: {
   queueItems: QueueItem[];
@@ -362,6 +378,13 @@ export default function PublishQueueBoard({
   clients?: ClientLite[];
   connectedAccounts?: ConnectedAccount[];
   metaConnectionError?: string | null;
+  connectResult?: {
+    status: "success" | "error";
+    message?: string;
+    pages: string[];
+    fbCount?: number;
+    igCount?: number;
+  } | null;
   timeZone?: string;
 }) {
   const router = useRouter();
@@ -465,7 +488,7 @@ export default function PublishQueueBoard({
   // on any cron-written note (post not approved, Meta API error) for reasons
   // the live check can't see.
   const computeCardBlocks = useCallback(
-    (item: QueueGroup): QueueBlock[] => {
+    (item: QueueGroup): CardIssue[] => {
       const client = clientById[item.clientId];
       const all = accountsByClient[item.clientId] ?? [];
       const merged = new Map<PublishQueuePlatform, string>();
@@ -487,7 +510,13 @@ export default function PublishQueueBoard({
         if (!merged.has(b.platform)) merged.set(b.platform, b.notes);
       }
 
-      return [...merged.entries()].map(([platform, notes]) => ({ platform, notes }));
+      return [...merged.entries()].map(([platform, notes]) => ({
+        platform,
+        notes,
+        connected: all
+          .filter((a) => a.platform === platform)
+          .map((a) => a.accountName || a.accountId),
+      }));
     },
     [clientById, accountsByClient]
   );
@@ -1825,6 +1854,38 @@ export default function PublishQueueBoard({
               </span>
             )}
           </div>
+
+          {connectResult && (
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: connectResult.status === "success" ? "#166534" : "#991b1b",
+                background: connectResult.status === "success" ? "#f0fdf4" : "#fee2e2",
+                border: `1px solid ${connectResult.status === "success" ? "#bbf7d0" : "#fca5a5"}`,
+                borderRadius: 8,
+                padding: "8px 11px",
+              }}
+            >
+              {connectResult.status === "success" ? (
+                <div style={{ fontWeight: 700 }}>
+                  Connected {connectResult.fbCount ?? 0} Facebook Page
+                  {connectResult.fbCount === 1 ? "" : "s"} and {connectResult.igCount ?? 0} Instagram
+                  account{connectResult.igCount === 1 ? "" : "s"}.
+                </div>
+              ) : (
+                <div style={{ fontWeight: 700 }}>{connectResult.message}</div>
+              )}
+              {connectResult.pages.length > 0 ? (
+                <div style={{ marginTop: 4 }}>
+                  Facebook returned: {connectResult.pages.join(", ")}.
+                  {connectResult.status === "success"
+                    ? " If the account you wanted isn't here, it isn't shared with this login — pick it in the business asset picker, or grant this app access to that Page in Meta Business settings."
+                    : ""}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {metaConnectionError && (
             <div

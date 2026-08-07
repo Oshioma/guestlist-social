@@ -8,7 +8,40 @@ import TokenExpiryBanner from "../../components/TokenExpiryBanner";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProoferPublishPage() {
+type ConnectResult = {
+  status: "success" | "error";
+  message?: string;
+  pages: string[];
+  fbCount?: number;
+  igCount?: number;
+};
+
+export default async function ProoferPublishPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  // Surface the Meta OAuth callback's outcome — including exactly which Pages
+  // Facebook returned — so a connect attempt isn't a black box.
+  const sp = await searchParams;
+  const first = (v: string | string[] | undefined) =>
+    Array.isArray(v) ? v[0] : v;
+  const metaFlag = first(sp.meta);
+  const metaError = first(sp.meta_error);
+  const pagesParam = first(sp.pages);
+  const returnedPages = pagesParam ? pagesParam.split("|").filter(Boolean) : [];
+  let connectResult: ConnectResult | null = null;
+  if (metaError) {
+    connectResult = { status: "error", message: metaError, pages: returnedPages };
+  } else if (metaFlag === "connected") {
+    connectResult = {
+      status: "success",
+      pages: returnedPages,
+      fbCount: Number(first(sp.fb)) || 0,
+      igCount: Number(first(sp.ig)) || 0,
+    };
+  }
+
   let queueItems: Awaited<ReturnType<typeof getProoferPublishQueueData>>["queueItems"] = [];
   try {
     const data = await getProoferPublishQueueData();
@@ -94,6 +127,7 @@ export default async function ProoferPublishPage() {
       clients={clients}
       connectedAccounts={connectedAccounts}
       metaConnectionError={metaConnectionError}
+      connectResult={connectResult}
       timeZone={displayTimezone}
     />
     </>

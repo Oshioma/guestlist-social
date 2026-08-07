@@ -54,14 +54,37 @@ export function metaAuthorizeUrl(state: string): string {
     client_id: appId,
     redirect_uri: redirectUri,
     state,
-    scope: META_SCOPES,
     response_type: "code",
-    // rerequest forces Meta's consent dialog to re-ask for any scope the
-    // user hasn't granted yet. Without it, users who've previously
-    // connected with a smaller scope set silently reuse the old grant
-    // and new scopes never land on the token.
-    auth_type: "rerequest",
   });
+
+  // Facebook Login for Business. When a Login configuration id is set, use it
+  // instead of a raw scope list. The configuration (created in the Meta app
+  // dashboard → Facebook Login for Business → Configurations) defines the
+  // requested permissions AND the asset types, so the consent dialog shows a
+  // *business asset picker*. This is the ONLY reliable way to reach Pages that
+  // are owned by a Business Portfolio / use the New Pages Experience — the
+  // classic scope flow below can't see them, which surfaces to the user as
+  // "No Pages to control" / "No Facebook Pages found".
+  //
+  // The default is this workspace's own configuration; it's not a secret (it
+  // travels in the browser's OAuth URL). Override it with a different id via
+  // env, or set the env var to "off" to fall back to the classic scope flow.
+  const DEFAULT_LOGIN_CONFIG_ID = "2158869421359858";
+  const envConfigId = process.env.META_SOCIAL_LOGIN_CONFIG_ID;
+  const configId =
+    envConfigId === "off" ? "" : envConfigId || DEFAULT_LOGIN_CONFIG_ID;
+  if (configId) {
+    params.set("config_id", configId);
+    return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
+  }
+
+  // Classic Facebook Login. Works for Pages the user administers directly.
+  params.set("scope", META_SCOPES);
+  // rerequest forces Meta's consent dialog to re-ask for any scope the user
+  // hasn't granted yet. Without it, users who've previously connected with a
+  // smaller scope set silently reuse the old grant and new scopes never land
+  // on the token.
+  params.set("auth_type", "rerequest");
   return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
 }
 

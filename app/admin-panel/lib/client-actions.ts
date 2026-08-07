@@ -13,6 +13,23 @@ function normalizeStatus(status: string) {
   return "onboarding";
 }
 
+// True when a Supabase write failed specifically because `column` doesn't
+// exist yet (an unapplied migration). PostgREST returns code PGRST204 with a
+// message like: Could not find the 'fb_page' column of 'clients' in the schema
+// cache. We use this to turn a silent "field vanished" into an actionable
+// "run this migration" message.
+function isMissingColumnError(
+  error: { code?: string; message?: string } | null | undefined,
+  column: string
+): boolean {
+  if (!error) return false;
+  const message = error.message ?? "";
+  return (
+    (error.code === "PGRST204" || /column/i.test(message)) &&
+    message.includes(column)
+  );
+}
+
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 type ParsedConsultationImport = {
@@ -415,6 +432,7 @@ export async function createClientAction(formData: FormData) {
     .select("id")
     .single();
   let { error } = insertResult;
+  const firstError = error;
   let createdClient = insertResult.data as { id: number } | null;
 
   // If a newer optional column (industry / fb_page) doesn't exist yet, retry
@@ -434,6 +452,14 @@ export async function createClientAction(formData: FormData) {
   if (error || !createdClient) {
     console.error("createClientAction error:", error);
     throw new Error("Could not create client.");
+  }
+
+  // Surface the missing-column case instead of silently dropping the Facebook
+  // Page the publish guard depends on (see updateClientAction for the rationale).
+  if (fbPage && isMissingColumnError(firstError, "fb_page")) {
+    throw new Error(
+      "Client created, but the Facebook Page could not be stored — your database is missing the clients.fb_page column. Apply migration supabase/migrations/20260803_client_fb_page.sql, then set the Facebook Page on the client."
+    );
   }
 
   const createdClientId = Number(createdClient.id);
@@ -514,6 +540,7 @@ export async function updateClientAction(clientId: string, formData: FormData) {
     .from("clients")
     .update(updatePayload)
     .eq("id", clientId);
+  const firstError = error;
 
   // If a newer optional column doesn't exist yet, retry without the ones that
   // might be missing so a lagging migration never blocks a client edit.
@@ -536,6 +563,17 @@ export async function updateClientAction(clientId: string, formData: FormData) {
   if (error) {
     console.error("updateClientAction error:", error);
     throw new Error("Could not update client.");
+  }
+
+  // The retry above quietly drops fb_page when the column is missing so the
+  // rest of the edit still saves — but the Facebook Page gates publishing, so
+  // silently losing it is exactly the confusing "I typed it, it vanished, no
+  // error" case. If the operator actually entered a Page and the only reason
+  // it didn't save is the missing column, say so with the exact fix.
+  if (fbPage && isMissingColumnError(firstError, "fb_page")) {
+    throw new Error(
+      "Client saved, but the Facebook Page could not be stored — your database is missing the clients.fb_page column. Apply migration supabase/migrations/20260803_client_fb_page.sql, then set the Facebook Page again."
+    );
   }
 
   revalidatePath("/admin-panel/clients");
