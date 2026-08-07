@@ -23,7 +23,7 @@ export const maxDuration = 300;
 //      post never goes live long after its date. Cron downtime shorter than
 //      the window is absorbed transparently; anything older is marked
 //      'failed' (visible in the queue) rather than sent late.
-//   2. Mass-send circuit breaker (MAX_AUTO_PUBLISH_BATCH, default 10) — if a
+//   2. Mass-send circuit breaker (MAX_AUTO_PUBLISH_BATCH, default 50) — if a
 //      single tick finds more due posts than this, it publishes NOTHING and
 //      leaves them 'scheduled' for a human to review. A batch that large
 //      signals something abnormal (cron recovering from a long outage, clock
@@ -145,8 +145,11 @@ async function handle(req: Request) {
   // NOTHING: the rows stay 'scheduled' (not failed, so nothing is lost) for a
   // human to review and release via "Publish now", or re-time on the Proofer.
   // Idempotent — every tick re-detects and re-halts until the backlog clears.
-  // Tunable via env; defaults to 10.
-  const maxBatch = Number(process.env.MAX_AUTO_PUBLISH_BATCH) || 10;
+  // Tunable via env; defaults to 50 — comfortably above a normal busy slot
+  // (10–20 posts, or ~40 if two adjacent slots land in one tick) so routine
+  // batches sail through, but well under the size of a full backlog that a
+  // recovering cron would try to fire at once.
+  const maxBatch = Number(process.env.MAX_AUTO_PUBLISH_BATCH) || 50;
   const { count: dueCount, error: countErr } = await admin
     .from("proofer_publish_queue")
     .select("id", { count: "exact", head: true })
