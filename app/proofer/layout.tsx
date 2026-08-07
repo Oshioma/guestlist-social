@@ -4,6 +4,7 @@
 // while every board behaviour (media, Instagram/Facebook publishing, statuses,
 // comments, ideas) stays byte-for-byte the same code as /app/proofer.
 import "../admin-panel/admin.css";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
 import ProoferNav from "./ProoferNav";
@@ -28,6 +29,27 @@ export default async function ProoferStandaloneLayout({
       >
         <ProoferNav />
         <main style={{ flex: 1, minWidth: 0, padding: 24 }}>{children}</main>
+        <footer
+          style={{
+            flexShrink: 0,
+            borderTop: "1px solid #e4e4e7",
+            padding: "16px 24px",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <Link
+            href="/app/dashboard"
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#52525b",
+              textDecoration: "none",
+            }}
+          >
+            ← Guestlist Dashboard
+          </Link>
+        </footer>
       </div>
     </>
   );
