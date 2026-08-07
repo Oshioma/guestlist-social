@@ -1791,7 +1791,9 @@ export default function PublishQueueBoard({
           Meta connection
           <span style={{ fontSize: 12, fontWeight: 500, color: "#71717a", marginLeft: 4 }}>
             {connectedClientIds.length > 0
-              ? `${connectedAccounts.length} accounts connected`
+              ? `${connectedAccounts.filter((a) => a.platform === "facebook").length} Pages · ` +
+                `${connectedAccounts.filter((a) => a.platform === "instagram").length} Instagram ` +
+                `across ${connectedClientIds.length} client${connectedClientIds.length === 1 ? "" : "s"}`
               : "Not connected"}
           </span>
         </summary>
@@ -1914,7 +1916,37 @@ export default function PublishQueueBoard({
                 const accs = accountsByClient[cid] ?? [];
                 const fb = accs.filter((a) => a.platform === "facebook");
                 const ig = accs.filter((a) => a.platform === "instagram");
-                const count = accs.length;
+                const client = clientById[cid];
+
+                // The one Page / Instagram account posts will actually go to,
+                // per the same guard the publisher uses. Everything else in the
+                // list is a stray from the connecting login's portfolio and is
+                // never published to.
+                const fbMatch = resolveAccountMatch({
+                  accounts: fb.map((a) => ({ account_id: a.accountId, account_name: a.accountName })),
+                  platform: "facebook",
+                  handle: null,
+                  fbPage: client?.fbPage ?? null,
+                });
+                const igMatch = resolveAccountMatch({
+                  accounts: ig.map((a) => ({ account_id: a.accountId, account_name: a.accountName })),
+                  platform: "instagram",
+                  handle: client?.igHandle ?? null,
+                  fbPage: null,
+                });
+                const matchedFbId = fbMatch.ok ? fbMatch.account.account_id : null;
+                const matchedIgId = igMatch.ok ? igMatch.account.account_id : null;
+
+                const activeChip = {
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: "#dcfce7",
+                  border: "1px solid #4ade80",
+                  color: "#166534",
+                } as const;
+
                 return (
                   <details key={cid} style={{ fontSize: 12 }}>
                     <summary
@@ -1930,19 +1962,42 @@ export default function PublishQueueBoard({
                       }}
                     >
                       <span style={{ fontSize: 10, color: "#a1a1aa" }}>&#9654;</span>
-                      {clientNameById[cid] ?? `Client ${cid}`} · {count} account{count === 1 ? "" : "s"}
+                      {clientNameById[cid] ?? `Client ${cid}`} · {fb.length} Page
+                      {fb.length === 1 ? "" : "s"} · {ig.length} Instagram
                     </summary>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "4px 0 2px 16px" }}>
-                      {fb.map((a) => (
-                        <span key={`fb-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#e7f0fe", border: "1px solid #93c5fd", color: "#1d4ed8" }}>
-                          FB · {a.accountName || a.accountId}
-                        </span>
-                      ))}
-                      {ig.map((a) => (
-                        <span key={`ig-${a.accountId}`} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#fdf2f8", border: "1px solid #f9a8d4", color: "#be185d" }}>
-                          IG · @{a.accountName || a.accountId}
-                        </span>
-                      ))}
+                      {fb.map((a) => {
+                        const active = a.accountId === matchedFbId;
+                        return (
+                          <span
+                            key={`fb-${a.accountId}`}
+                            title={active ? "Facebook posts publish to this Page" : undefined}
+                            style={
+                              active
+                                ? activeChip
+                                : { padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#e7f0fe", border: "1px solid #93c5fd", color: "#1d4ed8" }
+                            }
+                          >
+                            {active ? "✓ " : ""}FB · {a.accountName || a.accountId}
+                          </span>
+                        );
+                      })}
+                      {ig.map((a) => {
+                        const active = a.accountId === matchedIgId;
+                        return (
+                          <span
+                            key={`ig-${a.accountId}`}
+                            title={active ? "Instagram posts publish to this account" : undefined}
+                            style={
+                              active
+                                ? activeChip
+                                : { padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600, background: "#fdf2f8", border: "1px solid #f9a8d4", color: "#be185d" }
+                            }
+                          >
+                            {active ? "✓ " : ""}IG · @{a.accountName || a.accountId}
+                          </span>
+                        );
+                      })}
                     </div>
                   </details>
                 );
