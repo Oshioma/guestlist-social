@@ -22,6 +22,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSafeNext } from "@/lib/auth/next";
 import { verifyTurnstile } from "@/lib/auth/turnstile";
 import { publicSignupEnabled } from "@/lib/auth/public-signup";
+import { looksLikeBot } from "@/lib/auth/bot-guard";
+import { getClientIp, checkRateLimits } from "@/lib/auth/rate-limit";
+
+// Shown whenever a bot signal (honeypot / timing) or a rate limit trips. Kept
+// deliberately generic so it doesn't tell an attacker which layer caught them.
+const THROTTLED = "Too many attempts. Please wait a moment and try again.";
 
 export type ActionState = {
   error?: string | null;
@@ -73,8 +79,27 @@ export async function signUpWithPassword(
     return { error: "Sign-up is invite-only right now." };
   }
 
+  // Cheap bot signals first — shed obvious bots before doing any real work.
+  if (looksLikeBot(formData)) {
+    return { error: THROTTLED };
+  }
+
+  const ip = await getClientIp();
+
+  // Throttle by IP up front (before the Turnstile round-trip). 5 sign-ups per
+  // IP per hour is generous for humans, hostile to farms.
+  const ipOk = await checkRateLimits([
+    { key: `signup:ip:${ip ?? "unknown"}`, limit: 5, windowSeconds: 3600 },
+  ]);
+  if (!ipOk) {
+    return { error: THROTTLED };
+  }
+
   try {
-    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null);
+    await verifyTurnstile(
+      formData.get("cf-turnstile-response") as string | null,
+      { remoteip: ip }
+    );
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Verification failed." };
   }
@@ -86,6 +111,18 @@ export async function signUpWithPassword(
   });
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  // Throttle by email too, so one address can't be churned across IPs.
+  const emailOk = await checkRateLimits([
+    {
+      key: `signup:email:${parsed.data.email.toLowerCase()}`,
+      limit: 3,
+      windowSeconds: 3600,
+    },
+  ]);
+  if (!emailOk) {
+    return { error: THROTTLED };
   }
 
   const supabase = await createClient();
@@ -134,7 +171,9 @@ export async function signInWithPassword(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null);
+    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null, {
+      remoteip: await getClientIp(),
+    });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Verification failed." };
   }
@@ -148,6 +187,21 @@ export async function signInWithPassword(
   const parsed = signInSchema.safeParse(raw);
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  // Throttle credential-stuffing: cap attempts per IP and per targeted email in
+  // a short window. Generic error keeps it from leaking which addresses exist.
+  const ip = await getClientIp();
+  const allowed = await checkRateLimits([
+    { key: `signin:ip:${ip ?? "unknown"}`, limit: 10, windowSeconds: 900 },
+    {
+      key: `signin:email:${parsed.data.email.toLowerCase()}`,
+      limit: 5,
+      windowSeconds: 900,
+    },
+  ]);
+  if (!allowed) {
+    return { error: THROTTLED };
   }
 
   const supabase = await createClient();
@@ -169,7 +223,9 @@ export async function sendPasswordReset(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null);
+    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null, {
+      remoteip: await getClientIp(),
+    });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Verification failed." };
   }
@@ -178,6 +234,26 @@ export async function sendPasswordReset(
   const parsed = forgotPasswordSchema.safeParse(raw);
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  // Throttle reset-email sends so the form can't be used to bomb an inbox or
+  // enumerate addresses. Same generic response either way (see below).
+  const ip = await getClientIp();
+  const allowed = await checkRateLimits([
+    { key: `reset:ip:${ip ?? "unknown"}`, limit: 5, windowSeconds: 3600 },
+    {
+      key: `reset:email:${parsed.data.email.toLowerCase()}`,
+      limit: 3,
+      windowSeconds: 3600,
+    },
+  ]);
+  if (!allowed) {
+    // Mirror the generic success copy so a throttled attacker can't distinguish
+    // "rate limited" from "sent" and use it as an oracle.
+    return {
+      success: true,
+      message: "If that address is registered, a reset link has been sent.",
+    };
   }
 
   const callbackUrl = new URL(`${siteUrl()}/auth/callback`);
