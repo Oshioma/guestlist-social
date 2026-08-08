@@ -213,6 +213,9 @@ export default function ProoferNav({
                 <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
                   👥 Clients
                 </Link>
+                <Link href={`${base}/teams`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
+                  🏷️ Teams
+                </Link>
                 {clientId && (
                   <Link
                     href={`${parentOrigin}/portal/${encodeURIComponent(clientId)}`}

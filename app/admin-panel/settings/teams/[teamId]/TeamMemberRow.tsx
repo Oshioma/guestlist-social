@@ -6,7 +6,7 @@ import {
   removeTeamMember,
   type ActionState,
 } from "@/lib/auth/team-actions";
-import type { TeamMember } from "./page";
+import type { TeamMember } from "./types";
 import { inputStyle, secondaryButtonStyle, errorBoxStyle } from "../form-styles";
 
 export function TeamMemberRow({

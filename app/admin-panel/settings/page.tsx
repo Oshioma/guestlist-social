@@ -181,7 +181,7 @@ export default async function SettingsPage() {
             only their accounts, then invite them to see just their content.
           </p>
           <Link
-            href="/app/settings/teams"
+            href="/proofer/teams"
             style={{
               padding: "8px 14px",
               borderRadius: 8,

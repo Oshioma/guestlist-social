@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { setTeamAccount, type ActionState } from "@/lib/auth/team-actions";
-import type { AccountOption } from "./page";
+import type { AccountOption } from "./types";
 import { secondaryButtonStyle, errorBoxStyle } from "../form-styles";
 
 export function TeamAccountsManager({
