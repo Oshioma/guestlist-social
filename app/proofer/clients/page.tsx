@@ -1,0 +1,163 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import EmptyState from "../../admin-panel/components/EmptyState";
+import ProoferNav from "../ProoferNav";
+import { resolveNavData } from "../navData";
+
+export const dynamic = "force-dynamic";
+
+const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, padding: 24 };
+const centerStyle: React.CSSProperties = { maxWidth: 1160, margin: "0 auto", width: "100%" };
+
+type ClientRow = {
+  id: string;
+  name: string;
+  status: string | null;
+  platform: string | null;
+  monthly_budget: number | string | null;
+  ig_handle: string | null;
+  archived: boolean | null;
+};
+
+export default async function ProoferClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ client?: string; month?: string }>;
+}) {
+  const sp = await searchParams;
+  const nav = await resolveNavData(sp.client, sp.month);
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clients")
+    .select("id, name, status, platform, monthly_budget, ig_handle, archived")
+    .order("name", { ascending: true });
+  const clients = ((data ?? []) as ClientRow[]).filter((c) => !c.archived);
+
+  const qs = `client=${encodeURIComponent(nav.clientId)}&month=${encodeURIComponent(nav.month)}`;
+
+  return (
+    <>
+      <ProoferNav
+        clients={nav.clients}
+        clientId={nav.clientId}
+        month={nav.month}
+        pillars={nav.pillars}
+        posts={nav.posts}
+      />
+      <main style={mainStyle}>
+        <div style={centerStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
+              Clients
+            </h1>
+            <span style={{ fontSize: 13, color: "#71717a" }}>{clients.length} active</span>
+            <Link
+              href={`/proofer/clients/new?${qs}`}
+              style={{
+                marginLeft: "auto",
+                border: "none",
+                background: "#18181b",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                borderRadius: 9,
+                padding: "9px 15px",
+                textDecoration: "none",
+              }}
+            >
+              ＋ New client
+            </Link>
+          </div>
+
+          {clients.length === 0 ? (
+            <EmptyState title="No clients yet" description="Add your first client to get started." />
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: 14,
+              }}
+            >
+              {clients.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 14,
+                    background: "#fff",
+                    padding: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>
+                      {c.name}
+                    </span>
+                    {c.status && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#3f3f46",
+                          background: "#f4f4f5",
+                          borderRadius: 999,
+                          padding: "2px 9px",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {c.status}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#71717a", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {c.platform && <span>{c.platform}</span>}
+                    {c.ig_handle && <span>@{c.ig_handle.replace(/^@/, "")}</span>}
+                    {c.monthly_budget != null && c.monthly_budget !== "" && (
+                      <span>£{Number(c.monthly_budget).toLocaleString()}/mo</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <Link
+                      href={`/proofer/clients/${c.id}/edit?${qs}`}
+                      style={{
+                        border: "1px solid #e4e4e7",
+                        background: "#fff",
+                        color: "#18181b",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        padding: "7px 12px",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Edit
+                    </Link>
+                    <Link
+                      href={`/proofer?client=${encodeURIComponent(c.id)}&month=${encodeURIComponent(nav.month)}`}
+                      style={{
+                        border: "1px solid #99e2d0",
+                        background: "#effaf6",
+                        color: "#1f6b5c",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        padding: "7px 12px",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Open board →
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </>
+  );
+}

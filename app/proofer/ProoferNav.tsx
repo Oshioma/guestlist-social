@@ -221,6 +221,26 @@ export default function ProoferNav({
         </div>
       </div>
 
+      <Link
+        href={`/proofer/clients?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`}
+        title="Clients"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 9,
+          padding: "7px 11px",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 600,
+          textDecoration: "none",
+        }}
+      >
+        👥 Clients
+      </Link>
+
       {/* Content pillars — hover a chip to see the posts filed under it */}
       {pillars.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -339,6 +359,26 @@ export default function ProoferNav({
           })}
         </div>
       )}
+      {/* Manage / add pillars */}
+      <Link
+        href={`/proofer/pillars?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`}
+        title="Add or manage pillars"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px dashed rgba(255,255,255,0.28)",
+          borderRadius: 999,
+          padding: "5px 11px",
+          color: "#e4e4e7",
+          fontSize: 12,
+          fontWeight: 700,
+          textDecoration: "none",
+        }}
+      >
+        ＋ Pillar
+      </Link>
 
       <div style={{ flex: 1 }} />
 

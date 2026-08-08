@@ -4327,7 +4327,14 @@ export default function ProoferBoard({
                               border: "1px solid #e4e4e7",
                               background: "#fff",
                             }
-                          : { flexDirection: "column" }),
+                          : {
+                              flexDirection: "column",
+                              // Standalone: nudge the traffic lights right and
+                              // keep them centred on the image.
+                              ...(standalone
+                                ? { marginLeft: 14, alignSelf: "center" }
+                                : {}),
+                            }),
                       }}
                     >
                       {["proofed", "check", "improve"].map((statusValue) => {
