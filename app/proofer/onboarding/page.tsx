@@ -32,13 +32,20 @@ export default async function OnboardingPage({
     Array.isArray(v) ? v[0] : v;
 
   const replay = first(sp.replay) === "1";
+  // Explicit (re)start intent — e.g. the board's "Start guided setup" CTA. This
+  // runs the REAL flow and must override a stale "completed" flag, otherwise a
+  // user who finished once but has no account is stuck (the guard below would
+  // bounce them straight back to the empty board).
+  const start = first(sp.start) === "1";
   // Only posters run the real tour; staff can still preview it in replay mode.
   const demo = replay || access.kind === "staff";
 
   const state = await getOnboardingState(access.userId);
 
-  // Already finished and not replaying → send them to their board.
-  if (state.completed && !replay) {
+  // Already finished → send them to their board. But NOT when they explicitly
+  // asked to (re)start or replay, and never when they somehow completed without
+  // ever getting an account (a broken state they need onboarding to fix).
+  if (state.completed && !replay && !start && state.accountClientId) {
     redirect(base || "/");
   }
 
@@ -67,7 +74,8 @@ export default async function OnboardingPage({
     <OnboardingFlow
       base={base}
       accountClientId={state.accountClientId}
-      initialStep={state.step}
+      // An explicit restart begins cleanly at the welcome screen.
+      initialStep={start ? 0 : state.step}
       demo={demo}
       metaResult={metaResult}
       todayISO={todayISO}
