@@ -203,7 +203,12 @@ export default async function ProoferTeamDetailPage({
                 draft, caption, schedule and proof — but never see stored
                 passwords, and only agency staff push posts live to Meta.
               </p>
-              <InviteToTeamForm teamId={teamId} plan={plan} />
+              <InviteToTeamForm
+                teamId={teamId}
+                teamName={team.name as string}
+                plan={plan}
+                accountNames={accountsInTeam.map((a) => a.name)}
+              />
             </section>
 
             <section style={cardStyle}>

@@ -14,10 +14,14 @@ import {
 
 export function InviteToTeamForm({
   teamId,
+  teamName,
   plan,
+  accountNames,
 }: {
   teamId: string;
+  teamName: string;
   plan: "free" | "pro";
+  accountNames: string[];
 }) {
   const [state, action, isPending] = useActionState<ActionState | null, FormData>(
     inviteToTeam,
@@ -34,6 +38,32 @@ export function InviteToTeamForm({
       )}
 
       <input type="hidden" name="teamId" value={teamId} />
+
+      <div style={contextBoxStyle}>
+        <div style={{ fontSize: 13 }}>
+          Adding to <strong>{teamName}</strong>
+        </div>
+        {accountNames.length === 0 ? (
+          <div style={{ fontSize: 12, color: "#a86a12", marginTop: 6 }}>
+            This team has no accounts yet — add one above first, or they&rsquo;ll
+            have nothing to see.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 12, color: "#71717a", margin: "6px 0 6px" }}>
+              They&rsquo;ll have access to {accountNames.length} account
+              {accountNames.length === 1 ? "" : "s"}:
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {accountNames.map((n) => (
+                <span key={n} style={accountChipStyle}>
+                  {n}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 170px", gap: 8 }}>
         <div>
@@ -78,3 +108,20 @@ export function InviteToTeamForm({
     </form>
   );
 }
+
+const contextBoxStyle: React.CSSProperties = {
+  background: "#f7f8f9",
+  border: "1px solid #e6e6e9",
+  borderRadius: 10,
+  padding: "12px 14px",
+};
+
+const accountChipStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  background: "#e7f5ef",
+  color: "#1f6b5c",
+  border: "1px solid #cfe9df",
+  borderRadius: 999,
+  padding: "3px 10px",
+};
