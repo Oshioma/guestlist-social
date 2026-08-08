@@ -11,9 +11,14 @@ import {
   ensureOnboardingAccountAction,
   renameOnboardingAccountAction,
   pickTourConnectionAction,
+  listMyAccountsAction,
+  useExistingOnboardingAccountAction,
+  getOnboardingOccupiedDatesAction,
   saveFirstPostAction,
   logOnboardingEvent,
 } from "./actions";
+
+type MyAccount = { clientId: string; name: string };
 
 // ---------------------------------------------------------------------------
 // The guided first-run tour. A single-post composer wired to the REAL AI,
@@ -165,6 +170,13 @@ export default function OnboardingFlow({
   const [pickedName, setPickedName] = useState<string | null>(null);
   // Whether we still need the user to choose which account to keep.
   const needsPick = connectedAccounts.length > 1 && !pickedName;
+
+  // Existing accounts the user could post to instead of a new one. null = not
+  // loaded; [] = none (genuinely new user → auto-create).
+  const [myAccounts, setMyAccounts] = useState<MyAccount[] | null>(null);
+  // Days already taken on the chosen account — the tour only saves onto a blank
+  // day so it can't overwrite existing content.
+  const [occupied, setOccupied] = useState<Set<string>>(new Set());
 
   // Stock image step.
   const [imgQuery, setImgQuery] = useState("");
@@ -339,27 +351,83 @@ export default function OnboardingFlow({
     router.push(`${base}/` || "/");
   }, [demo, step, base, router, clearDraft]);
 
-  // Auto-provision the account the moment we reach the connect step, so the
-  // user lands straight on "connect a platform" — no "add a client" step.
-  const provisionedRef = useRef(false);
+  // On reaching the connect step, decide the account. A brand-new solo user
+  // (no accounts) gets one auto-created; a user whose team already has accounts
+  // is asked to reuse one or create a new one — so invited teammates don't get
+  // a duplicate account.
+  const accountInitRef = useRef(false);
   useEffect(() => {
     if (step !== "connect" || demo) return;
-    if (accountClientId || provisionedRef.current) return;
-    provisionedRef.current = true;
+    if (accountClientId || accountInitRef.current) return;
+    accountInitRef.current = true;
     setBusy("provision");
     void (async () => {
-      const res = await ensureOnboardingAccountAction();
+      const list = await listMyAccountsAction();
+      if (!list.ok) {
+        accountInitRef.current = false;
+        setBusy(null);
+        setError(list.error);
+        return;
+      }
+      if (list.accounts.length === 0) {
+        const res = await ensureOnboardingAccountAction();
+        setBusy(null);
+        if (!res.ok) {
+          accountInitRef.current = false;
+          setError(res.error);
+          return;
+        }
+        setAccountClientId(res.clientId);
+        if (res.name && !accountName) setAccountName(res.name);
+      } else {
+        setBusy(null);
+        setMyAccounts(list.accounts); // show the account chooser
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, demo, accountClientId]);
+
+  const chooseExistingAccount = useCallback(
+    async (acc: MyAccount) => {
+      setBusy("account");
+      setError(null);
+      const res = await useExistingOnboardingAccountAction(acc.clientId);
       setBusy(null);
       if (!res.ok) {
-        provisionedRef.current = false;
         setError(res.error);
         return;
       }
       setAccountClientId(res.clientId);
-      if (res.name && !accountName) setAccountName(res.name);
+      setAccountName(res.name || acc.name);
+      setMyAccounts(null);
+      goto("idea"); // existing account: skip the connect lesson
+    },
+    [goto]
+  );
+
+  const createNewAccount = useCallback(async () => {
+    setBusy("account");
+    setError(null);
+    const res = await ensureOnboardingAccountAction();
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setAccountClientId(res.clientId);
+    if (res.name) setAccountName(res.name);
+    setMyAccounts(null); // stay on connect → Meta connect UI now shows
+  }, []);
+
+  // Load the taken days for the chosen account so date choices stay on blank
+  // days only.
+  useEffect(() => {
+    if (demo || !accountClientId) return;
+    void (async () => {
+      const res = await getOnboardingOccupiedDatesAction(accountClientId);
+      if (res.ok) setOccupied(new Set(res.dates));
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, demo, accountClientId]);
+  }, [demo, accountClientId]);
 
   const handleRename = useCallback(
     async (name: string) => {
@@ -500,19 +568,40 @@ export default function OnboardingFlow({
 
   const applyPreset = useCallback(
     (date: string, time: string) => {
+      setError(null);
       setPostDate(date);
       setPublishTime(time);
     },
     []
   );
 
+  // Custom date entry — only free days are allowed, so the tour never
+  // overwrites an existing post.
+  const handleDatePick = useCallback(
+    (date: string) => {
+      if (occupied.has(date)) {
+        setError("That day already has a post — pick a free day.");
+        return;
+      }
+      setError(null);
+      setPostDate(date);
+    },
+    [occupied]
+  );
+
   const handleTimeChosen = useCallback(() => {
+    // Never let them proceed on a taken day — the tour must not overwrite a
+    // real post.
+    if (occupied.has(postDate)) {
+      setError("That day already has a post — pick a free day.");
+      return;
+    }
     if (!demo) void logOnboardingEvent("schedule_time_selected", STEP_NUMBER.save, {
       postDate,
       publishTime,
     });
     goto("save");
-  }, [demo, postDate, publishTime, goto]);
+  }, [demo, occupied, postDate, publishTime, goto]);
 
   const handleSave = useCallback(async () => {
     setBusy("save");
@@ -566,7 +655,17 @@ export default function OnboardingFlow({
     postDate,
     publishTime,
   ]);
-  const presets = useMemo(() => buildPresets(todayISO), [todayISO]);
+  const presets = useMemo(() => buildPresets(todayISO, occupied), [todayISO, occupied]);
+
+  // If the currently-chosen day is taken on this account, snap to the first
+  // free suggestion so the user never starts on an occupied day.
+  useEffect(() => {
+    if (occupied.has(postDate) && presets[0]) {
+      setPostDate(presets[0].date);
+      setPublishTime(presets[0].time);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [occupied]);
 
   if (!hydrated) {
     return (
@@ -639,6 +738,9 @@ export default function OnboardingFlow({
               picking={picking}
               pickedName={pickedName}
               onPick={handlePickAccount}
+              myAccounts={myAccounts}
+              onChooseExisting={chooseExistingAccount}
+              onCreateNew={createNewAccount}
               busy={busy}
               demo={demo}
               metaError={metaResult?.status === "error" ? metaResult.message : null}
@@ -676,8 +778,10 @@ export default function OnboardingFlow({
               presets={presets}
               postDate={postDate}
               publishTime={publishTime}
+              todayISO={todayISO}
+              dateTaken={occupied.has(postDate)}
               onPreset={applyPreset}
-              setPostDate={setPostDate}
+              onDatePick={handleDatePick}
               setPublishTime={setPublishTime}
               onTimeChosen={handleTimeChosen}
               scheduleLabel={scheduleLabel}
@@ -830,6 +934,9 @@ function ConnectPanel({
   picking,
   pickedName,
   onPick,
+  myAccounts,
+  onChooseExisting,
+  onCreateNew,
   busy,
   demo,
   metaError,
@@ -846,6 +953,9 @@ function ConnectPanel({
   picking: boolean;
   pickedName: string | null;
   onPick: (acc: ConnectedAccount) => void;
+  myAccounts: MyAccount[] | null;
+  onChooseExisting: (acc: MyAccount) => void;
+  onCreateNew: () => void;
   busy: string | null;
   demo: boolean;
   metaError: string | null;
@@ -858,6 +968,45 @@ function ConnectPanel({
   const fbOn = connectedPlatforms.includes("facebook");
   const anyOn = igOn || fbOn;
   const [editingName, setEditingName] = useState(false);
+
+  // The user's team already has accounts → let them reuse one or make a new
+  // one, so an invited teammate doesn't get a duplicate account.
+  if (!accountClientId && myAccounts && myAccounts.length > 0) {
+    return (
+      <div style={cardStyle} className="ob-pop">
+        <h3 style={{ ...cardTitle, fontSize: 16 }}>Where should this post go?</h3>
+        <p style={cardSub}>
+          Post to one of your existing accounts, or start a brand-new one.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }}>
+          {myAccounts.map((acc) => (
+            <button
+              key={acc.clientId}
+              type="button"
+              onClick={() => onChooseExisting(acc)}
+              disabled={busy === "account"}
+              style={pickRowStyle}
+            >
+              <span style={{ fontSize: 18 }}>📋</span>
+              <span style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {acc.name}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#6d28d9" }}>Use this →</span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="ob-btn"
+          onClick={onCreateNew}
+          disabled={busy === "account"}
+          style={{ ...secondaryBtn, marginTop: 12 }}
+        >
+          {busy === "account" ? <span className="ob-spinner ob-spinner-dark" /> : "＋"} Create a new account
+        </button>
+      </div>
+    );
+  }
 
   // The login returned several accounts — let the user keep just one. Instagram
   // accounts first (that's what the post targets), then Facebook Pages.
@@ -1045,8 +1194,10 @@ type ComposerProps = {
   presets: { label: string; date: string; time: string }[];
   postDate: string;
   publishTime: string;
+  todayISO: string;
+  dateTaken: boolean;
   onPreset: (date: string, time: string) => void;
-  setPostDate: (v: string) => void;
+  onDatePick: (v: string) => void;
   setPublishTime: (v: string) => void;
   onTimeChosen: () => void;
   scheduleLabel: string;
@@ -1225,15 +1376,36 @@ function Composer(props: ComposerProps) {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#71717a", fontWeight: 600 }}>Or choose:</span>
-              <input type="date" value={props.postDate} onChange={(e) => props.setPostDate(e.target.value)} style={inputStyle} />
+              <input
+                type="date"
+                value={props.postDate}
+                min={props.todayISO}
+                onChange={(e) => props.onDatePick(e.target.value)}
+                style={inputStyle}
+              />
               <input type="time" value={props.publishTime} onChange={(e) => props.setPublishTime(e.target.value)} style={inputStyle} />
             </div>
+            <span style={{ fontSize: 12, color: "#a1a1aa" }}>
+              We only show free days so your first post won&apos;t clash with anything.
+            </span>
           </div>
-          <div style={scheduleBanner}>
-            📅 Instagram • <strong>{props.scheduleLabel}</strong>
-          </div>
+          {props.dateTaken ? (
+            <div style={{ ...scheduleBanner, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c" }}>
+              That day already has a post — pick a free day above.
+            </div>
+          ) : (
+            <div style={scheduleBanner}>
+              📅 Instagram • <strong>{props.scheduleLabel}</strong>
+            </div>
+          )}
           <div style={{ marginTop: 14 }}>
-            <button type="button" className="ob-btn" onClick={props.onTimeChosen} style={primaryBtn}>
+            <button
+              type="button"
+              className="ob-btn"
+              onClick={props.onTimeChosen}
+              disabled={props.dateTaken}
+              style={primaryBtn}
+            >
               Looks good →
             </button>
           </div>
@@ -1486,29 +1658,43 @@ function coachFor(
   }
 }
 
-// Two friendly presets + nothing complex (per spec: keep timing simple).
-function buildPresets(todayISO: string): { label: string; date: string; time: string }[] {
-  const tomorrow = addDaysISO(todayISO, 1);
-  return [
-    { label: "Today · 6:30 PM", date: todayISO, time: "18:30" },
-    { label: "Tomorrow · 9:00 AM", date: tomorrow, time: "09:00" },
-    { label: "This weekend · 11:00 AM", date: nextSaturdayISO(todayISO), time: "11:00" },
-  ];
+// A few friendly suggestions — but only ever days that are FREE on this
+// account, so the tour can't land on (and overwrite) an existing post. Walks
+// forward from today collecting the first blank days.
+function buildPresets(
+  todayISO: string,
+  occupied: Set<string>
+): { label: string; date: string; time: string }[] {
+  const times = ["18:30", "09:00", "11:00"];
+  const out: { label: string; date: string; time: string }[] = [];
+  for (let i = 0; i < 60 && out.length < 3; i++) {
+    const date = addDaysISO(todayISO, i);
+    if (occupied.has(date)) continue;
+    const time = times[out.length] ?? "18:30";
+    const label = `${friendlyDayLabel(date, todayISO)} · ${formatClock(time)}`;
+    out.push({ label, date, time });
+  }
+  return out;
+}
+
+function friendlyDayLabel(dateISO: string, todayISO: string): string {
+  if (dateISO === todayISO) return "Today";
+  if (dateISO === addDaysISO(todayISO, 1)) return "Tomorrow";
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatClock(time: string): string {
+  const [hh, mm] = time.split(":").map(Number);
+  const dt = new Date(2000, 0, 1, hh ?? 18, mm ?? 0);
+  return dt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function addDaysISO(iso: string, days: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
-function nextSaturdayISO(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  const day = dt.getUTCDay(); // 0 Sun .. 6 Sat
-  const delta = (6 - day + 7) % 7 || 7;
-  dt.setUTCDate(dt.getUTCDate() + delta);
   return dt.toISOString().slice(0, 10);
 }
 

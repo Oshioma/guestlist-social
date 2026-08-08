@@ -260,6 +260,103 @@ export async function renameOnboardingAccountAction(
   }
 }
 
+// The account ids the user may post to (accounts in any team where they hold a
+// posting role). Mirrors the writable_account_ids() RLS helper, computed here
+// with the service role so onboarding actions can trust it.
+async function writableAccountIds(userId: string): Promise<Set<string>> {
+  const admin = createAdminClient();
+  const { data: tm } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin", "member"]);
+  const teamIds = Array.from(new Set((tm ?? []).map((r) => String(r.team_id))));
+  if (teamIds.length === 0) return new Set();
+  const { data: ta } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .in("team_id", teamIds);
+  return new Set((ta ?? []).map((r) => String(r.client_id)));
+}
+
+// The user's existing accounts, so onboarding can offer to post to one instead
+// of always minting a new account (e.g. an invited teammate whose team already
+// has content). Empty for a genuinely new solo user.
+export async function listMyAccountsAction(): Promise<
+  Result<{ accounts: { clientId: string; name: string }[] }>
+> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const ids = Array.from(await writableAccountIds(access.userId));
+    if (ids.length === 0) return { ok: true, accounts: [] };
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("clients")
+      .select("id, name, archived")
+      .in("id", ids)
+      .order("name", { ascending: true });
+    const accounts = (data ?? [])
+      .filter((c) => !c.archived)
+      .map((c) => ({ clientId: String(c.id), name: (c.name as string) ?? `Account ${c.id}` }));
+    return { ok: true, accounts };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load your accounts." };
+  }
+}
+
+// Point onboarding at an EXISTING account the user already owns/manages, rather
+// than creating a new one. Verified against their writable set.
+export async function useExistingOnboardingAccountAction(
+  clientId: string
+): Promise<Result<{ clientId: string; name: string }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  const id = String(clientId ?? "").trim();
+  if (!id) return { ok: false, error: "No account selected." };
+  try {
+    const writable = await writableAccountIds(access.userId);
+    if (!writable.has(id)) return { ok: false, error: "That isn't one of your accounts." };
+    const admin = createAdminClient();
+    const { data } = await admin.from("clients").select("name").eq("id", id).maybeSingle();
+    await patchState(access.userId, {
+      onboarding_started: true,
+      account_client_id: Number(id),
+      onboarding_step: 2,
+    });
+    await logOnboardingEvent("account_selected_existing", 2, { clientId: id });
+    return { ok: true, clientId: id, name: (data?.name as string) ?? "" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not use that account." };
+  }
+}
+
+// Days that already carry a post on the chosen account (any platform), so the
+// tour only ever saves onto a blank day and never overwrites existing content.
+export async function getOnboardingOccupiedDatesAction(
+  clientId: string
+): Promise<Result<{ dates: string[] }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("proofer_posts")
+      .select("post_date")
+      .eq("client_id", clientId);
+    const dates = Array.from(
+      new Set((data ?? []).map((r) => String(r.post_date).slice(0, 10)))
+    );
+    return { ok: true, dates };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not check the calendar." };
+  }
+}
+
 // Which platforms the tour account has connected via Meta OAuth (for the "✓
 // connected" state). Scoped to the user's own account.
 export async function getConnectedPlatformsAction(
@@ -400,6 +497,27 @@ export async function saveFirstPostAction(input: {
   const state = await getOnboardingState(access.userId);
   if (state.accountClientId !== clientId) {
     return { ok: false, error: "Unknown account." };
+  }
+
+  // Blank-day guard: saveProoferPostAction upserts on (client, date, platform),
+  // so saving onto a day that already has a post would OVERWRITE real content.
+  // Refuse unless the day is blank — the tour's own post (re-save/retry) aside.
+  {
+    const admin = createAdminClient();
+    const { data: dayPosts } = await admin
+      .from("proofer_posts")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("post_date", postDate);
+    const foreign = (dayPosts ?? []).filter(
+      (p) => String(p.id) !== String(state.firstPostId ?? "")
+    );
+    if (foreign.length > 0) {
+      return {
+        ok: false,
+        error: "That day already has a post. Please pick a free day for your first post.",
+      };
+    }
   }
 
   // The real save — ends as status "check" (yellow). Never proofed/green. Only
