@@ -105,7 +105,7 @@ export default function ProoferNav({
           gap: 16,
           rowGap: 10,
           flexWrap: "wrap",
-          padding: "12px 20px",
+          padding: "18px 20px 12px",
           flexShrink: 0,
           position: "relative",
           zIndex: 30,
@@ -167,7 +167,10 @@ export default function ProoferNav({
                   minWidth: 190,
                 }}
               >
-                <Link href={`/proofer/clients?${qs}`} style={menuItem}>
+                <Link href={`/proofer/pillars?${qs}`} style={menuItem}>
+                  ＋ Add pillar
+                </Link>
+                <Link href={`/proofer/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
                   👥 Clients
                 </Link>
                 {clientId && (
@@ -365,39 +368,19 @@ export default function ProoferNav({
             })}
           </div>
         )}
-        {/* Manage / add pillars */}
-        <Link
-          href={`/proofer/pillars?${qs}`}
-          title="Add or manage pillars"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px dashed rgba(255,255,255,0.28)",
-            borderRadius: 999,
-            padding: "5px 11px",
-            color: "#e4e4e7",
-            fontSize: 12,
-            fontWeight: 700,
-            textDecoration: "none",
-          }}
-        >
-          ＋ Pillar
-        </Link>
-
         <NotificationsBell />
       </header>
 
-      {/* Powered-by strip under the bar */}
+      {/* Powered-by strip under the bar — darker so it reads as its own band */}
       <div
         style={{
-          background: "#2b2b31",
-          color: "#9a9aa2",
+          background: "#141417",
+          color: "#8b8b93",
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: "0.02em",
-          padding: "5px 20px",
+          padding: "6px 20px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
           display: "flex",
           alignItems: "center",
           gap: 6,

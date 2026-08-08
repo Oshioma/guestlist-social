@@ -4340,9 +4340,10 @@ export default function ProoferBoard({
                           : {
                               flexDirection: "column",
                               // Standalone: nudge the traffic lights right and
-                              // keep them centred on the image.
+                              // lift them up so they sit on the image (the card's
+                              // header/caption otherwise pull the centre down).
                               ...(standalone
-                                ? { marginLeft: 14, alignSelf: "center" }
+                                ? { marginLeft: 14, alignSelf: "center", marginTop: -90 }
                                 : {}),
                             }),
                       }}
