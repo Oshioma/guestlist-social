@@ -367,6 +367,342 @@ function defaultScheduleForPost(postDate: string): string {
   return local.toISOString().slice(0, 16);
 }
 
+// ── At-a-glance day overview ─────────────────────────────────────────────────
+// A per-client horizontal strip of the month's days, mirroring the proofer's
+// day layout: company name on the left, then one cell per calendar day tinted
+// by the state of that client's queued post(s) that day (green = published,
+// blue = scheduled, amber = queued, red = failed, grey = nothing). Lets an
+// operator see at a glance which companies have posts approved/going out and
+// which days are empty.
+
+function ymParts(month: string): { y: number; m: number } | null {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return null;
+  return { y, m };
+}
+
+function shiftMonthValue(month: string, delta: number): string {
+  const p = ymParts(month);
+  if (!p) return month;
+  const d = new Date(p.y, p.m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string): string {
+  const p = ymParts(month);
+  if (!p) return month;
+  return new Date(p.y, p.m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function daysInMonthValue(month: string): number {
+  const p = ymParts(month);
+  if (!p) return 0;
+  return new Date(p.y, p.m, 0).getDate();
+}
+
+// When a client has more than one queue item on a single day, surface the most
+// attention-worthy state first: a failure should never hide behind a green.
+const OVERVIEW_STATUS_PRIORITY: PublishQueueStatus[] = [
+  "failed",
+  "queued",
+  "scheduled",
+  "published",
+];
+
+const OVERVIEW_STATUS_LABEL: Record<PublishQueueStatus, string> = {
+  queued: "Queued",
+  scheduled: "Scheduled",
+  published: "Published",
+  failed: "Failed",
+};
+
+function firstMonthWithItems(items: QueueItem[]): string {
+  let min = "";
+  for (const it of items) {
+    const key = (it.postDate ?? "").slice(0, 7);
+    if (!key) continue;
+    if (!min || key < min) min = key;
+  }
+  return min;
+}
+
+function bestOverviewStatus(
+  set: Set<PublishQueueStatus> | undefined
+): PublishQueueStatus | null {
+  if (!set || set.size === 0) return null;
+  for (const s of OVERVIEW_STATUS_PRIORITY) if (set.has(s)) return s;
+  return null;
+}
+
+const OVERVIEW_NAME_COL = 168;
+const OVERVIEW_CELL = 22;
+const OVERVIEW_GAP = 3;
+
+function ClientDayOverview({
+  items,
+  currentMonth,
+}: {
+  items: QueueItem[];
+  currentMonth: string;
+}) {
+  // Open on the current month; if "now" has nothing, fall back to the earliest
+  // month that does so the strip isn't blank on first paint.
+  const [month, setMonth] = useState(
+    () => currentMonth || firstMonthWithItems(items) || currentMonth
+  );
+
+  // clientId → { name, days: dateKey → set of that day's queue statuses },
+  // scoped to the month on screen and sorted by company name.
+  const rows = useMemo(() => {
+    const byClient = new Map<
+      string,
+      { name: string; days: Map<string, Set<PublishQueueStatus>> }
+    >();
+    for (const it of items) {
+      const dateKey = (it.postDate ?? "").slice(0, 10);
+      if (!dateKey || dateKey.slice(0, 7) !== month) continue;
+      let entry = byClient.get(it.clientId);
+      if (!entry) {
+        entry = { name: it.clientName, days: new Map() };
+        byClient.set(it.clientId, entry);
+      }
+      let set = entry.days.get(dateKey);
+      if (!set) {
+        set = new Set();
+        entry.days.set(dateKey, set);
+      }
+      set.add(it.status);
+    }
+    return [...byClient.entries()]
+      .map(([clientId, v]) => ({ clientId, name: v.name, days: v.days }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, month]);
+
+  const dayCount = daysInMonthValue(month);
+  const dayNums = useMemo(
+    () => Array.from({ length: dayCount }, (_, i) => i + 1),
+    [dayCount]
+  );
+  const p = ymParts(month);
+
+  const gridTemplate = `${OVERVIEW_NAME_COL}px repeat(${dayCount}, ${OVERVIEW_CELL}px)`;
+
+  return (
+    <section style={{ ...panelStyle, padding: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          padding: "13px 16px 11px",
+          borderBottom: `1px solid ${LINE}`,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>
+          At a glance
+        </div>
+
+        {/* Month stepper — client-side only, all queue data is already loaded. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setMonth((m) => shiftMonthValue(m, -1))}
+            style={{ ...buttonBase, padding: "4px 9px" }}
+          >
+            &lsaquo;
+          </button>
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: INK_2,
+              minWidth: 122,
+              textAlign: "center",
+            }}
+          >
+            {monthLabel(month)}
+          </div>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setMonth((m) => shiftMonthValue(m, 1))}
+            style={{ ...buttonBase, padding: "4px 9px" }}
+          >
+            &rsaquo;
+          </button>
+          {currentMonth && month !== currentMonth && (
+            <button
+              type="button"
+              onClick={() => setMonth(currentMonth)}
+              style={{ ...buttonBase, padding: "4px 9px", background: SUNK }}
+            >
+              This month
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Legend */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {OVERVIEW_STATUS_PRIORITY.slice()
+            .reverse()
+            .map((s) => (
+              <span
+                key={s}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: INK_3,
+                }}
+              >
+                <span
+                  style={{
+                    width: 11,
+                    height: 11,
+                    borderRadius: 3,
+                    background: STATUS_TONES[s].fill,
+                    border: `1px solid ${STATUS_TONES[s].edge}`,
+                  }}
+                />
+                {OVERVIEW_STATUS_LABEL[s]}
+              </span>
+            ))}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 600,
+              color: INK_3,
+            }}
+          >
+            <span
+              style={{
+                width: 11,
+                height: 11,
+                borderRadius: 3,
+                background: SUNK,
+                border: `1px solid ${LINE_2}`,
+              }}
+            />
+            Empty
+          </span>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: INK_3, padding: "14px 16px" }}>
+          No posts on the queue for {monthLabel(month)}.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", padding: "10px 16px 14px" }}>
+          <div style={{ minWidth: "fit-content" }}>
+            {/* Day-number header */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridTemplate,
+                gap: OVERVIEW_GAP,
+                alignItems: "end",
+                marginBottom: 6,
+              }}
+            >
+              <div />
+              {dayNums.map((day) => {
+                const weekend = p
+                  ? [0, 6].includes(new Date(p.y, p.m - 1, day).getDay())
+                  : false;
+                return (
+                  <div
+                    key={day}
+                    style={{
+                      fontSize: 9.5,
+                      textAlign: "center",
+                      fontWeight: 700,
+                      color: weekend ? INK_2 : INK_3,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {day}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* One row per company */}
+            <div style={{ display: "flex", flexDirection: "column", gap: OVERVIEW_GAP }}>
+              {rows.map((row) => (
+                <div
+                  key={row.clientId}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: gridTemplate,
+                    gap: OVERVIEW_GAP,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    title={row.name}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: INK,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      paddingRight: 8,
+                    }}
+                  >
+                    {row.name}
+                  </div>
+                  {dayNums.map((day) => {
+                    const key = `${month}-${String(day).padStart(2, "0")}`;
+                    const status = bestOverviewStatus(row.days.get(key));
+                    const tone = status ? STATUS_TONES[status] : null;
+                    return (
+                      <div
+                        key={day}
+                        title={
+                          status
+                            ? `${row.name} · ${monthLabel(month).replace(/ \d{4}$/, "")} ${day} · ${OVERVIEW_STATUS_LABEL[status]}`
+                            : `${row.name} · ${monthLabel(month).replace(/ \d{4}$/, "")} ${day} · nothing queued`
+                        }
+                        style={{
+                          height: OVERVIEW_CELL,
+                          borderRadius: 5,
+                          background: tone ? tone.fill : SUNK,
+                          border: `1px solid ${tone ? tone.edge : LINE_2}`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PublishQueueBoard({
   queueItems,
   defaultScheduleValue,
@@ -375,6 +711,7 @@ export default function PublishQueueBoard({
   metaConnectionError = null,
   connectResult = null,
   timeZone = "Etc/GMT",
+  currentMonth = "",
 }: {
   queueItems: QueueItem[];
   defaultScheduleValue: string;
@@ -389,6 +726,9 @@ export default function PublishQueueBoard({
     igCount?: number;
   } | null;
   timeZone?: string;
+  // Current "YYYY-MM" in the agency's display zone — seeds the at-a-glance
+  // day overview so it opens on this month without a hydration mismatch.
+  currentMonth?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -995,6 +1335,13 @@ export default function PublishQueueBoard({
           </span>
         </label>
       </div>
+
+      {/* At-a-glance day overview — one horizontal day strip per company,
+          tinted by each day's queue state, so it's obvious which companies
+          have posts approved/going out and which days are empty. */}
+      {queueItems.length > 0 && (
+        <ClientDayOverview items={queueItems} currentMonth={currentMonth} />
+      )}
 
       {/* Summary tiles double as status filters — click one to show only that
           section, click again (or "Show all") to clear. */}

@@ -124,6 +124,15 @@ export default async function ProoferPublishPage({
     connectedAccounts = [];
   }
 
+  // Current "YYYY-MM" in the agency's display zone, so the at-a-glance day
+  // overview opens on the right month even when the server clock is in UTC.
+  // en-CA renders as YYYY-MM, which is exactly the key the board groups by.
+  const currentMonth = new Intl.DateTimeFormat("en-CA", {
+    timeZone: displayTimezone,
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
+
   return (
     <>
     <TokenExpiryBanner />
@@ -135,6 +144,7 @@ export default async function ProoferPublishPage({
       metaConnectionError={metaConnectionError}
       connectResult={connectResult}
       timeZone={displayTimezone}
+      currentMonth={currentMonth}
     />
     </>
   );
