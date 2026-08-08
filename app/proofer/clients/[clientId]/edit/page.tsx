@@ -24,6 +24,7 @@ export default async function ProoferEditClientPage({
   const { clientId } = await params;
   const sp = await searchParams;
   const nav = await resolveNavData(sp.client, sp.month);
+  const clientsPath = `${nav.base}/clients`;
 
   const supabase = await createClient();
   const { data: client } = await supabase
@@ -45,7 +46,7 @@ export default async function ProoferEditClientPage({
     } catch (error) {
       // updateClientAction redirects to the admin client page on success — the
       // save already happened, so send them back to the standalone list.
-      if (isRedirectError(error)) redirect("/proofer/clients");
+      if (isRedirectError(error)) redirect(clientsPath);
       return {
         error: error instanceof Error ? error.message : "Could not save client.",
       };
@@ -60,11 +61,13 @@ export default async function ProoferEditClientPage({
         month={nav.month}
         pillars={nav.pillars}
         posts={nav.posts}
+        base={nav.base}
+        parentOrigin={nav.parentOrigin}
       />
       <main style={mainStyle}>
         <div style={centerStyle}>
           <Link
-            href="/proofer/clients"
+            href={clientsPath}
             style={{ fontSize: 13, fontWeight: 600, color: "#52525b", textDecoration: "none" }}
           >
             ← All clients

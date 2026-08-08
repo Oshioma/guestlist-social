@@ -10,15 +10,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
 import { getMemberAccess } from "@/lib/auth/permissions";
+import { getProoferBase } from "./base";
 
 export default async function ProoferStandaloneLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { base, parentOrigin } = await getProoferBase();
   const access = await getMemberAccess();
   if (!access) {
-    redirect("/sign-in?next=/proofer");
+    redirect(`/sign-in?next=${encodeURIComponent(base || "/")}`);
   }
 
   return (
@@ -39,7 +41,7 @@ export default async function ProoferStandaloneLayout({
           }}
         >
           <Link
-            href="/app/dashboard"
+            href={`${parentOrigin}/app/dashboard`}
             target="_blank"
             rel="noopener"
             style={{

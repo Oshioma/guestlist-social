@@ -44,6 +44,8 @@ export default async function ProoferClientsPage({
         month={nav.month}
         pillars={nav.pillars}
         posts={nav.posts}
+        base={nav.base}
+        parentOrigin={nav.parentOrigin}
       />
       <main style={mainStyle}>
         <div style={centerStyle}>
@@ -53,7 +55,7 @@ export default async function ProoferClientsPage({
             </h1>
             <span style={{ fontSize: 13, color: "#71717a" }}>{clients.length} active</span>
             <Link
-              href={`/proofer/clients/new?${qs}`}
+              href={`${nav.base}/clients/new?${qs}`}
               style={{
                 marginLeft: "auto",
                 border: "none",
@@ -122,7 +124,7 @@ export default async function ProoferClientsPage({
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                     <Link
-                      href={`/proofer/clients/${c.id}/edit?${qs}`}
+                      href={`${nav.base}/clients/${c.id}/edit?${qs}`}
                       style={{
                         border: "1px solid #e4e4e7",
                         background: "#fff",
@@ -137,7 +139,7 @@ export default async function ProoferClientsPage({
                       Edit
                     </Link>
                     <Link
-                      href={`/proofer?client=${encodeURIComponent(c.id)}&month=${encodeURIComponent(nav.month)}`}
+                      href={`${nav.base || "/"}?client=${encodeURIComponent(c.id)}&month=${encodeURIComponent(nav.month)}`}
                       style={{
                         border: "1px solid #99e2d0",
                         background: "#effaf6",

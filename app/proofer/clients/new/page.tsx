@@ -20,7 +20,9 @@ async function action(
     return { error: null };
   } catch (error) {
     // The action redirects to the admin clients list on success; the client was
-    // already created by then, so send them to the standalone list instead.
+    // already created by then, so send them to the standalone list instead. On
+    // the standalone Proofer domain the middleware canonical redirect strips the
+    // /proofer prefix, so this resolves to /clients there.
     if (isRedirectError(error)) redirect("/proofer/clients");
     return {
       error: error instanceof Error ? error.message : "Could not create client.",
@@ -43,6 +45,8 @@ export default async function ProoferNewClientPage({
         month={nav.month}
         pillars={nav.pillars}
         posts={nav.posts}
+        base={nav.base}
+        parentOrigin={nav.parentOrigin}
       />
       <main style={mainStyle}>
         <div style={centerStyle}>

@@ -5,6 +5,7 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
+import { getProoferBase } from "./base";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export default async function ProoferStandalonePage({
 
   const cookieStore = await cookies();
   const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  const { base, parentOrigin } = await getProoferBase();
 
   try {
     let selectedClientId = sp.client ?? "";
@@ -83,6 +85,8 @@ export default async function ProoferStandalonePage({
           month={selectedMonth}
           pillars={data.pillars}
           posts={pillarPosts}
+          base={base}
+          parentOrigin={parentOrigin}
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
@@ -99,7 +103,8 @@ export default async function ProoferStandalonePage({
               initialIdeas={data.ideas}
               initialPostIdeas={data.postIdeas}
               timeZone={displayTimezone}
-              basePath="/proofer"
+              basePath={base || "/"}
+              publishPath={`${parentOrigin}/app/proofer/publish`}
               standalone
             />
           </div>
@@ -110,7 +115,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />

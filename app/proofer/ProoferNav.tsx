@@ -52,12 +52,20 @@ export default function ProoferNav({
   month,
   pillars,
   posts,
+  // Prefix the Proofer routes live under ("" on the standalone domain, where
+  // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
+  base = "/proofer",
+  // Absolute origin of the parent Guestlist app for links that leave Proofer.
+  // Empty on the normal host, where those links stay relative.
+  parentOrigin = "",
 }: {
   clients: ClientLite[];
   clientId: string;
   month: string;
   pillars: PillarLite[];
   posts: PostLite[];
+  base?: string;
+  parentOrigin?: string;
 }) {
   const router = useRouter();
   const [hoverPillar, setHoverPillar] = useState<string | null>(null);
@@ -83,9 +91,12 @@ export default function ProoferNav({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // The board home — "/" on the standalone domain, "/proofer" otherwise.
+  const home = base || "/";
+
   const go = (c: string, m: string) =>
     router.push(
-      `/proofer?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}`
+      `${home}?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}`
     );
 
   const viewedMonth = Number(month.split("-")[1]) || 0;
@@ -196,15 +207,15 @@ export default function ProoferNav({
                   minWidth: 190,
                 }}
               >
-                <Link href={`/proofer/pillars?${qs}`} style={menuItem}>
+                <Link href={`${base}/pillars?${qs}`} style={menuItem}>
                   ＋ Add pillar
                 </Link>
-                <Link href={`/proofer/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
+                <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
                   👥 Clients
                 </Link>
                 {clientId && (
                   <Link
-                    href={`/portal/${encodeURIComponent(clientId)}`}
+                    href={`${parentOrigin}/portal/${encodeURIComponent(clientId)}`}
                     target="_blank"
                     rel="noopener"
                     style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}
@@ -323,7 +334,7 @@ export default function ProoferNav({
                             {pillarPosts.length} post{pillarPosts.length === 1 ? "" : "s"} · all time
                           </span>
                           <Link
-                            href={`/proofer/pillars/${p.id}?${qs}`}
+                            href={`${base}/pillars/${p.id}?${qs}`}
                             style={{
                               marginLeft: "auto",
                               fontSize: 12,
@@ -418,7 +429,7 @@ export default function ProoferNav({
       >
         Powered by
         <Link
-          href="/app/dashboard"
+          href={`${parentOrigin}/app/dashboard`}
           target="_blank"
           rel="noopener"
           title="Open Guestlist dashboard in a new tab"
