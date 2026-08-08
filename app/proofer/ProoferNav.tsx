@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 
@@ -62,6 +62,26 @@ export default function ProoferNav({
   const router = useRouter();
   const [hoverPillar, setHoverPillar] = useState<string | null>(null);
   const [brandMenu, setBrandMenu] = useState(false);
+  // Hide the floating nav when scrolling down; reveal it on the slightest
+  // scroll up (smooth fade/slide via the transition below).
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (y > lastY + 4 && y > 120) setHidden(true);
+        else if (y < lastY - 2) setHidden(false);
+        lastY = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const go = (c: string, m: string) =>
     router.push(
@@ -95,7 +115,16 @@ export default function ProoferNav({
   const qs = `client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`;
 
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 40 }}>
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 40,
+        transform: hidden ? "translateY(-100%)" : "translateY(0)",
+        opacity: hidden ? 0 : 1,
+        transition: "transform 300ms ease, opacity 300ms ease",
+      }}
+    >
       <header
         style={{
           background: "#35353c",
@@ -371,16 +400,16 @@ export default function ProoferNav({
         <NotificationsBell />
       </header>
 
-      {/* Powered-by strip under the bar — darker so it reads as its own band */}
+      {/* Powered-by strip — light band under the dark nav */}
       <div
         style={{
-          background: "#141417",
-          color: "#8b8b93",
+          background: "#eceef1",
+          color: "#52525b",
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: "0.02em",
           padding: "6px 20px",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid #dcdee2",
           display: "flex",
           alignItems: "center",
           gap: 6,
@@ -393,7 +422,7 @@ export default function ProoferNav({
           target="_blank"
           rel="noopener"
           title="Open Guestlist dashboard in a new tab"
-          style={{ color: "#b8e3d8", textDecoration: "none", fontWeight: 700 }}
+          style={{ color: "#1d4ed8", textDecoration: "none", fontWeight: 800 }}
         >
           Guestlist Social ↗
         </Link>

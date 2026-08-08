@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import ImageUpload from "../../../admin-panel/components/ImageUpload";
+import { AutoGrowTextarea } from "../../../admin-panel/components/mobile";
 import { PROOFER_PLATFORM_LABELS, type ProoferPlatform } from "../../../admin-panel/lib/types";
 import { formatUtcClockInZone } from "@/lib/timezone";
 import {
@@ -37,6 +38,7 @@ export type ClientPost = {
   mediaUrls: string[];
   publishTime: string;
   status: string;
+  published: boolean;
   comments: ClientComment[];
 };
 
@@ -421,6 +423,16 @@ function PostCard({
   const dirty = caption !== post.caption || !arraysEqual(mediaUrls, post.mediaUrls);
   const clock = formatUtcClockInZone(post.postDate, post.publishTime, timeZone);
 
+  // A post whose day has passed (or that's already published) is history: no
+  // approve/edit controls — it shows "Published" or nothing.
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const readOnly = post.published || post.postDate < todayStr;
+
   function run(fn: () => Promise<{ error: string | null }>, onOk?: () => void) {
     setError("");
     startTransition(async () => {
@@ -486,84 +498,123 @@ function PostCard({
         </span>
         {clock && <span style={{ fontSize: 12, color: "#94a3b8" }}>{clock}</span>}
         <span style={{ flex: 1 }} />
-        <StatusPill status={post.status} />
+        {post.published ? (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "3px 12px",
+              borderRadius: 999,
+              background: "#dcfce7",
+              color: "#166534",
+            }}
+          >
+            Published
+          </span>
+        ) : readOnly ? null : (
+          <StatusPill status={post.status} />
+        )}
       </div>
 
       {mediaUrls.length > 0 && (
-        <MediaCarousel urls={mediaUrls} onRemove={removeMedia} disabled={pending} />
+        <MediaCarousel
+          urls={mediaUrls}
+          onRemove={removeMedia}
+          disabled={pending || readOnly}
+        />
       )}
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <ImageUpload
-          folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
-          bucket="postimages"
-          accept="image/*"
-          label="Add image"
-          compact
-          onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
-        />
-        <ImageUpload
-          folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
-          bucket="postimages"
-          accept="video/*"
-          label="Add video"
-          compact
-          onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
-        />
-      </div>
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <ImageUpload
+            folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
+            bucket="postimages"
+            accept="image/*"
+            label="Add image"
+            compact
+            onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
+          />
+          <ImageUpload
+            folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
+            bucket="postimages"
+            accept="video/*"
+            label="Add video"
+            compact
+            onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
+          />
+        </div>
+      )}
 
-      <textarea
-        value={caption}
-        onChange={(e) => setCaption(e.target.value)}
-        rows={4}
-        placeholder="Write a caption…"
-        style={{
-          width: "100%",
-          resize: "vertical",
-          padding: 12,
-          borderRadius: 10,
-          border: "1px solid #e2e8f0",
-          fontSize: 14,
-          lineHeight: 1.6,
-          color: "#0f172a",
-          fontFamily: "inherit",
-          boxSizing: "border-box",
-        }}
-      />
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={pending || !dirty}
-          style={btnStyle(dirty ? "#0f172a" : "#e2e8f0", dirty ? "#fff" : "#94a3b8", pending || !dirty)}
+      {/* Caption. Read-only history shows the full text; editable posts grow to
+          fit so the client never has to scroll inside the box. */}
+      {readOnly ? (
+        <div
+          style={{
+            width: "100%",
+            fontSize: 14,
+            lineHeight: 1.6,
+            color: "#0f172a",
+            whiteSpace: "pre-wrap",
+          }}
         >
-          {savedFlash ? "Saved ✓" : "Save changes"}
-        </button>
+          {caption.trim() || <span style={{ color: "#94a3b8" }}>No caption</span>}
+        </div>
+      ) : (
+        <AutoGrowTextarea
+          value={caption}
+          minHeight={90}
+          maxHeight={4000}
+          onChange={(e) => setCaption(e.target.value)}
+          placeholder="Write a caption…"
+          style={{
+            width: "100%",
+            padding: 12,
+            borderRadius: 10,
+            border: "1px solid #e2e8f0",
+            fontSize: 14,
+            lineHeight: 1.6,
+            color: "#0f172a",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+          }}
+        />
+      )}
 
-        {isApproved ? (
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button
             type="button"
-            onClick={() => handleApproval(false)}
-            disabled={pending}
-            style={btnStyle("#fff", "#991b1b", pending, "#fecaca")}
+            onClick={handleSave}
+            disabled={pending || !dirty}
+            style={btnStyle(dirty ? "#0f172a" : "#e2e8f0", dirty ? "#fff" : "#94a3b8", pending || !dirty)}
           >
-            Unapprove
+            {savedFlash ? "Saved ✓" : "Save changes"}
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => handleApproval(true)}
-            disabled={pending}
-            style={btnStyle("#16a34a", "#fff", pending)}
-          >
-            Approve
-          </button>
-        )}
-        {dirty && (
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>Unsaved changes</span>
-        )}
-      </div>
+
+          {isApproved ? (
+            <button
+              type="button"
+              onClick={() => handleApproval(false)}
+              disabled={pending}
+              style={btnStyle("#fff", "#991b1b", pending, "#fecaca")}
+            >
+              Unapprove
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleApproval(true)}
+              disabled={pending}
+              style={btnStyle("#16a34a", "#fff", pending)}
+            >
+              Approve
+            </button>
+          )}
+          {dirty && (
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>Unsaved changes</span>
+          )}
+        </div>
+      )}
 
       {error && <div style={{ fontSize: 12, color: "#dc2626" }}>{error}</div>}
 

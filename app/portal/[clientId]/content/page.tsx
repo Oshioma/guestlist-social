@@ -122,6 +122,20 @@ export default async function PortalContentPage({
   const postIds = meaningful.map((p) => String(p.id));
   const commentsByPost = new Map<string, ClientComment[]>();
 
+  // Which of these posts have actually gone out — so the client sees
+  // "Published" rather than an approve button on things already live.
+  const publishedIds = new Set<string>();
+  if (postIds.length > 0) {
+    const { data: queueRows } = await admin
+      .from("proofer_publish_queue")
+      .select("post_id, status")
+      .in("post_id", postIds)
+      .eq("status", "published");
+    for (const r of (queueRows ?? []) as Array<{ post_id: string | number | null }>) {
+      if (r.post_id != null) publishedIds.add(String(r.post_id));
+    }
+  }
+
   if (postIds.length > 0) {
     const { data: commentRows } = await admin
       .from("proofer_comments")
@@ -165,6 +179,7 @@ export default async function PortalContentPage({
         : [],
     publishTime: p.publish_time ?? "18:00",
     status: p.status ?? "none",
+    published: publishedIds.has(String(p.id)),
     comments: commentsByPost.get(String(p.id)) ?? [],
   }));
 
