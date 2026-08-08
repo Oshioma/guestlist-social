@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-type NavItem = { label: string; href: string };
+type NavItem = { label: string; href: string; newTab?: boolean };
 type NavGroup = {
   heading: string;
   items: NavItem[];
@@ -37,8 +37,12 @@ function buildNavGroups(canRunAds: boolean, isAdmin: boolean): NavGroup[] {
   }
 
   // Sits immediately above Publisher, where it used to live, so it's still
-  // where the eye looks for it.
-  groups.push({ heading: "Proofer", items: [], headingHref: "/app/proofer" });
+  // where the eye looks for it. The standalone Proofer opens in a new tab.
+  groups.push({
+    heading: "Proofer",
+    items: [{ label: "Open standalone ↗", href: "/proofer", newTab: true }],
+    headingHref: "/app/proofer",
+  });
 
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
@@ -208,6 +212,8 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      target={item.newTab ? "_blank" : undefined}
+      rel={item.newTab ? "noopener" : undefined}
       className={`app-sidebar-link${active ? " app-sidebar-link-active" : ""}${indented ? " app-sidebar-link-indented" : ""}`}
     >
       {item.label}
