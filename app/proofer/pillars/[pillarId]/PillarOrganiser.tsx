@@ -285,19 +285,29 @@ export default function PillarOrganiser({
                   </button>
                 </div>
 
-                {/* Media */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {/* Media — large previews */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      urls.length > 1 ? "repeat(2, 1fr)" : "1fr",
+                    gap: 8,
+                  }}
+                >
                   {urls.map((url) => (
-                    <div key={url} style={{ position: "relative", width: 72, height: 72 }}>
+                    <div
+                      key={url}
+                      style={{ position: "relative", width: "100%", aspectRatio: "1 / 1" }}
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={url}
                         alt=""
                         style={{
-                          width: 72,
-                          height: 72,
+                          width: "100%",
+                          height: "100%",
                           objectFit: "cover",
-                          borderRadius: 10,
+                          borderRadius: 12,
                           border: "1px solid #e4e4e7",
                           display: "block",
                           background: "#f4f4f5",
@@ -310,15 +320,15 @@ export default function PillarOrganiser({
                         aria-label="Remove image"
                         style={{
                           position: "absolute",
-                          top: 3,
-                          right: 3,
-                          width: 20,
-                          height: 20,
+                          top: 8,
+                          right: 8,
+                          width: 26,
+                          height: 26,
                           borderRadius: "50%",
                           border: "none",
                           background: "rgba(0,0,0,0.6)",
                           color: "#fff",
-                          fontSize: 12,
+                          fontSize: 14,
                           lineHeight: 1,
                           cursor: saving ? "wait" : "pointer",
                         }}
@@ -327,11 +337,13 @@ export default function PillarOrganiser({
                       </button>
                     </div>
                   ))}
+                </div>
+                <div>
                   <ImageUpload
                     bucket="postimages"
                     folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
                     onUploaded={(url) => addImage(post, url)}
-                    label="＋ Add"
+                    label="＋ Add image"
                     accept="image/*,video/*"
                   />
                 </div>

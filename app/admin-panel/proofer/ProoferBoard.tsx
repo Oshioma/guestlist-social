@@ -545,6 +545,9 @@ export default function ProoferBoard({
   const [openFmtKey, setOpenFmtKey] = useState<string | null>(null);
   // Standalone Clear: which slot is awaiting an inline "Confirm" click.
   const [confirmClearKey, setConfirmClearKey] = useState<string | null>(null);
+  // Optimistic status per slot so a traffic-light click flips instantly instead
+  // of waiting for the server round-trip.
+  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ProoferStatus>>({});
 
   const [clientId, setClientId] = useState(initialClientId);
   const [month, setMonth] = useState(initialMonth);
@@ -1041,6 +1044,8 @@ export default function ProoferBoard({
     status: ProoferStatus
   ) {
     const key = postKey(dateKey, platform);
+    // Flip the dot immediately; reconcile/revert once the server responds.
+    setOptimisticStatus((prev) => ({ ...prev, [key]: status }));
     startTransition(async () => {
       try {
         const draft = drafts[key];
@@ -1068,6 +1073,12 @@ export default function ProoferBoard({
         await updateProoferStatusAction(clientId, dateKey, platform, status);
         router.refresh();
       } catch (err) {
+        // Revert the optimistic flip on failure.
+        setOptimisticStatus((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
         notify(err instanceof Error ? err.message : "Could not update status", "error");
       }
     });
@@ -2649,9 +2660,8 @@ export default function ProoferBoard({
             const commentsOpen = Boolean(openComments[key]);
 
             const effectiveStatus: ProoferStatus =
-              post?.status && post.status !== "none"
-                ? post.status
-                : "none";
+              optimisticStatus[key] ??
+              (post?.status && post.status !== "none" ? post.status : "none");
 
             const isLocked = effectiveStatus === "proofed" || effectiveStatus === "approved";
 
