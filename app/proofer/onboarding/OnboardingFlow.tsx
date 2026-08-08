@@ -100,6 +100,29 @@ const AI_LABELS: Record<string, string> = {
 
 const DRAFT_KEY = "proofer_onboarding_draft_v1";
 
+// The board's real traffic-light dot colours (STATUS_BUTTONS in ProoferBoard):
+// check = yellow/Save, proofed = green/Schedule. Reused here so the tour's
+// Save/Schedule buttons look exactly like the controls the user meets next.
+const STATUS_DOT = { check: "#f59e0b", proofed: "#22c55e" } as const;
+
+// A solid coloured status dot, drawn the same way the board draws it.
+function TrafficDot({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-block",
+        flexShrink: 0,
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        border: "1px solid #e4e4e7",
+        background: color,
+      }}
+    />
+  );
+}
+
 export default function OnboardingFlow({
   base,
   accountClientId: initialAccountId,
@@ -1232,7 +1255,7 @@ function Composer(props: ComposerProps) {
 
             {!showBoard && (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                {/* YELLOW = SAVE */}
+                {/* YELLOW = SAVE — matches the board's traffic-light dot */}
                 <button
                   type="button"
                   className={"ob-btn" + (showSave ? " ob-highlight" : "")}
@@ -1241,7 +1264,12 @@ function Composer(props: ComposerProps) {
                   style={yellowBtn}
                   aria-label="Save post (yellow)"
                 >
-                  {props.busy === "save" ? <span className="ob-spinner ob-spinner-dark" /> : "🟡"} Save
+                  {props.busy === "save" ? (
+                    <span className="ob-spinner ob-spinner-dark" />
+                  ) : (
+                    <TrafficDot color={STATUS_DOT.check} />
+                  )}{" "}
+                  Save
                 </button>
 
                 {/* GREEN = SCHEDULE (demonstrated, not pressed) */}
@@ -1254,7 +1282,7 @@ function Composer(props: ComposerProps) {
                   style={{ ...greenBtn, ...(showSave ? { opacity: 0.5 } : {}) }}
                   aria-label="Schedule post (green)"
                 >
-                  🟢 Schedule
+                  <TrafficDot color={STATUS_DOT.proofed} /> Schedule
                 </button>
 
                 {showSave && (
@@ -1365,9 +1393,8 @@ function FinishBlock({
       <h3 style={{ margin: "4px 0 6px", fontSize: 22, fontWeight: 850 }}>You&apos;re ready</h3>
       <p style={{ ...cardSub, marginBottom: 10 }}>
         You just created your first post with Proofer — it&apos;s <strong>saved</strong> and waiting
-        for {scheduleLabel}. Here&apos;s the mental model:
+        for {scheduleLabel}.
       </p>
-      <div style={mentalModel}>Idea → Improve → Add image → Choose time → Save → Green when ready</div>
       <div style={{ display: "flex", gap: 12, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
         <span style={legendYellow}>🟡 Yellow = Saved</span>
         <span style={legendGreen}>🟢 Green = Ready to go</span>
@@ -1379,9 +1406,6 @@ function FinishBlock({
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <button type="button" className="ob-btn" onClick={onFinish} disabled={!!busy} style={primaryBtn}>
           {busy === "finish" ? <span className="ob-spinner" /> : null}
-          Create another post
-        </button>
-        <button type="button" className="ob-btn" onClick={onFinish} disabled={!!busy} style={secondaryBtn}>
           Go to my posts
         </button>
       </div>
@@ -1783,17 +1807,6 @@ const previewImagePlaceholder: React.CSSProperties = {
   color: "#a1a1aa",
   fontSize: 13,
   background: "#f4f4f5",
-};
-
-const mentalModel: React.CSSProperties = {
-  background: "#f5f3ff",
-  border: "1px solid #ede9fe",
-  borderRadius: 10,
-  padding: "10px 12px",
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#5b21b6",
-  lineHeight: 1.5,
 };
 
 const legendYellow: React.CSSProperties = {
