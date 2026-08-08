@@ -102,6 +102,20 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    // On a Proofer host the domain root is public: a logged-out visitor lands
+    // on the marketing / sign-up home page instead of a bare sign-in bounce.
+    // Deep links still go through sign-in so they return where they asked.
+    if (isProoferHost && path === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/welcome";
+      url.search = "";
+      const rewrite = NextResponse.rewrite(url, { request });
+      response.cookies
+        .getAll()
+        .forEach((cookie) => rewrite.cookies.set(cookie));
+      return rewrite;
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.search = "";
