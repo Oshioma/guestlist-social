@@ -4343,7 +4343,7 @@ export default function ProoferBoard({
                               // lift them up so they sit on the image (the card's
                               // header/caption otherwise pull the centre down).
                               ...(standalone
-                                ? { marginLeft: 14, alignSelf: "center", marginTop: -90 }
+                                ? { marginLeft: 14, alignSelf: "center", marginTop: -140 }
                                 : {}),
                             }),
                       }}
