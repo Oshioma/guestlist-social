@@ -37,6 +37,10 @@ type ClientLite = {
   name: string;
   igHandle?: string | null;
   fbPage?: string | null;
+  // Whether the client's status is "active". The at-a-glance overview lists
+  // only active clients; the Connect Meta picker and publishability checks
+  // still use the full (non-archived) list.
+  active?: boolean;
 };
 
 type ConnectedAccount = {
@@ -181,9 +185,14 @@ type CardIssue = QueueBlock & { connected: string[] };
 function NotPublishedNotice({
   blocks,
   clientId,
+  editBase = "/app/clients",
 }: {
   blocks: CardIssue[];
   clientId: string;
+  // Base path for the "Edit here" link. Differs by surface: "/app/clients" in
+  // the admin panel, "/proofer/clients" (or "/clients" on postproofer.com) in
+  // the standalone Proofer app.
+  editBase?: string;
 }) {
   if (blocks.length === 0) return null;
   return (
@@ -209,7 +218,7 @@ function NotPublishedNotice({
             <>
               {" "}
               <Link
-                href={`/app/clients/${clientId}/edit`}
+                href={`${editBase}/${clientId}/edit`}
                 style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline" }}
               >
                 Edit here
@@ -486,10 +495,12 @@ function ClientDayOverview({
 
   // One row per active client, sorted by name — a client with nothing filed
   // this month still shows, as an all-grey row, so an empty calendar reads as
-  // an obvious gap rather than a missing company.
+  // an obvious gap rather than a missing company. Only clients whose status is
+  // "active" are listed (paused/onboarding clients are left off).
   const rows = useMemo(
     () =>
-      [...clients]
+      clients
+        .filter((c) => c.active)
         .map((c) => ({ clientId: c.id, name: c.name, days: byClient.get(c.id) }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [byClient, clients]
@@ -706,6 +717,10 @@ export default function PublishQueueBoard({
   timeZone = "Etc/GMT",
   currentMonth = "",
   overviewPosts = [],
+  backHref = "/app/proofer",
+  settingsHref = "/app/settings",
+  clientEditBase = "/app/clients",
+  showMetaConnection = true,
 }: {
   queueItems: QueueItem[];
   defaultScheduleValue: string;
@@ -725,6 +740,14 @@ export default function PublishQueueBoard({
   currentMonth?: string;
   // Every proofer post (all statuses) for the at-a-glance day strip.
   overviewPosts?: OverviewPost[];
+  // Surface-aware links, so the board works both inside the admin panel and
+  // inside the standalone Proofer app (postproofer.com).
+  backHref?: string;
+  settingsHref?: string;
+  clientEditBase?: string;
+  // The Meta connection panel's OAuth callback returns to the admin surface, so
+  // it's hidden on the standalone Proofer app where that redirect can't land.
+  showMetaConnection?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1246,7 +1269,7 @@ export default function PublishQueueBoard({
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
         <Link
-          href="/app/proofer"
+          href={backHref}
           style={{
             fontSize: 13,
             color: INK_3,
@@ -1298,7 +1321,7 @@ export default function PublishQueueBoard({
               {zone.label} · {zone.abbrev}
             </span>{" "}
             <Link
-              href="/app/settings"
+              href={settingsHref}
               style={{ color: INK_2, textDecoration: "none", fontWeight: 600 }}
             >
               change in Settings &rarr;
@@ -1550,7 +1573,7 @@ export default function PublishQueueBoard({
 
                   {/* Warn at queue/schedule time — before the send window — if
                       this post has no valid target account for a destination. */}
-                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                   {/* Thumbnail beside the caption rather than under it — the card is
                       full width and the preview is small. */}
@@ -1682,7 +1705,7 @@ export default function PublishQueueBoard({
                     cron leaves the row scheduled (and keeps retrying) when a
                     pre-flight check fails; this surfaces the reason — per
                     destination — instead of it sitting here silently. */}
-                <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                 {/* Proactively flag a post that has missed its send window,
                     before the cron gets to mark it failed — same message the
@@ -2020,7 +2043,7 @@ export default function PublishQueueBoard({
                     <div style={statusPill(item.status)}>{item.status}</div>
                   </div>
 
-                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                   <CarouselPreview
                     size={170}
@@ -2149,6 +2172,7 @@ export default function PublishQueueBoard({
               </div>
             )}
           </div>
+      {showMetaConnection && (
       <details
         id="meta-connection"
         style={{
@@ -2415,6 +2439,7 @@ export default function PublishQueueBoard({
           )}
         </div>
       </details>
+      )}
         </aside>
       </div>
     </div>
