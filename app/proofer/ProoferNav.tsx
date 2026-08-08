@@ -248,6 +248,22 @@ export default function ProoferNav({
                       <span style={{ color: "#a1a1aa", fontWeight: 600 }}>
                         {pillarPosts.length} post{pillarPosts.length === 1 ? "" : "s"} · all time
                       </span>
+                      <Link
+                        href={`/proofer/pillars/${p.id}?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`}
+                        style={{
+                          marginLeft: "auto",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#1f6b5c",
+                          background: "#b8e3d8",
+                          borderRadius: 8,
+                          padding: "5px 10px",
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Organise →
+                      </Link>
                     </div>
                     {pillarPosts.length === 0 ? (
                       <div style={{ padding: "12px 14px", fontSize: 13, color: "#71717a" }}>
