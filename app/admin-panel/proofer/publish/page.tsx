@@ -1,4 +1,7 @@
-import { getProoferPublishQueueData } from "../../lib/queries";
+import {
+  getProoferPublishQueueData,
+  getProoferOverviewPosts,
+} from "../../lib/queries";
 import { createClient } from "../../../../lib/supabase/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 import { getDisplayTimezone } from "../../../../lib/app-settings";
@@ -56,20 +59,32 @@ export default async function ProoferPublishPage({
     console.error("Publish queue data error:", err);
   }
 
-  // Lightweight clients list used by the "Connect Meta" picker and by the
+  // Every proofer post (all statuses), for the at-a-glance day overview — it
+  // needs the "saved but not approved" days the publish queue never sees.
+  let overviewPosts: Awaited<ReturnType<typeof getProoferOverviewPosts>> = [];
+  try {
+    overviewPosts = await getProoferOverviewPosts();
+  } catch (err) {
+    console.error("Overview posts error:", err);
+  }
+
+  // Active clients (archived excluded) — used by the "Connect Meta" picker, the
   // board's schedule-time publishability check (needs each client's declared
-  // Instagram handle / Facebook Page). `fb_page` is a newer column, so fall
-  // back gracefully if the migration hasn't run yet.
+  // Instagram handle / Facebook Page), and the at-a-glance overview, which
+  // shows one row per active client (all-grey when nothing is filed). `fb_page`
+  // is a newer column, so fall back gracefully if the migration hasn't run yet.
   const supabase = await createClient();
   let clientsRows: { id: string | number; name?: string | null; ig_handle?: string | null; fb_page?: string | null }[] = [];
   const clientsFull = await supabase
     .from("clients")
     .select("id, name, ig_handle, fb_page")
+    .eq("archived", false)
     .order("name", { ascending: true });
   if (clientsFull.error) {
     const fallback = await supabase
       .from("clients")
       .select("id, name, ig_handle")
+      .eq("archived", false)
       .order("name", { ascending: true });
     clientsRows = (fallback.data ?? []) as typeof clientsRows;
   } else {
@@ -124,6 +139,15 @@ export default async function ProoferPublishPage({
     connectedAccounts = [];
   }
 
+  // Current "YYYY-MM" in the agency's display zone, so the at-a-glance day
+  // overview opens on the right month even when the server clock is in UTC.
+  // en-CA renders as YYYY-MM, which is exactly the key the board groups by.
+  const currentMonth = new Intl.DateTimeFormat("en-CA", {
+    timeZone: displayTimezone,
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
+
   return (
     <>
     <TokenExpiryBanner />
@@ -135,6 +159,8 @@ export default async function ProoferPublishPage({
       metaConnectionError={metaConnectionError}
       connectResult={connectResult}
       timeZone={displayTimezone}
+      currentMonth={currentMonth}
+      overviewPosts={overviewPosts}
     />
     </>
   );
