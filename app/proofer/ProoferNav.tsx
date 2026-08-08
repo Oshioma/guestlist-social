@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
+import { moveProoferPostAction } from "../admin-panel/lib/proofer-actions";
 
 type ClientLite = { id: string; name: string };
 type TeamLite = { id: string; name: string; isOwner: boolean };
@@ -56,6 +57,8 @@ function dayLabel(postDate: string): string {
   });
 }
 
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
 // Standalone top navigation for /proofer. The logo reveals an account menu
 // (Clients, Sign out) on hover; client/month sit on the left, pillars on the
 // right; a "Powered by Guestlist Social" strip (linking to the dashboard) sits
@@ -68,6 +71,9 @@ export default function ProoferNav({
   posts,
   // Teams the current user belongs to, for the switcher in the brand menu.
   teams = [],
+  // Every date (all time) that already carries a post — used to grey out taken
+  // days in the reschedule calendar so a move never overwrites another post.
+  occupiedDates = [],
   // Prefix the Proofer routes live under ("" on the standalone domain, where
   // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
   base = "/proofer",
@@ -81,12 +87,18 @@ export default function ProoferNav({
   pillars: PillarLite[];
   posts: PostLite[];
   teams?: TeamLite[];
+  occupiedDates?: string[];
   base?: string;
   parentOrigin?: string;
 }) {
   const router = useRouter();
   const [hoverPillar, setHoverPillar] = useState<string | null>(null);
   const [brandMenu, setBrandMenu] = useState(false);
+  // Reschedule calendar: which post's picker is open, and the month it shows.
+  const [pickFor, setPickFor] = useState<string | null>(null);
+  const [pickMonth, setPickMonth] = useState<string>(month);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   // Hide the floating nav when scrolling down; reveal it on the slightest
   // scroll up (smooth fade/slide via the transition below).
   const [hidden, setHidden] = useState(false);
@@ -148,6 +160,49 @@ export default function ProoferNav({
     }
     return map;
   }, [posts, viewedMonth]);
+
+  const occupied = useMemo(() => new Set(occupiedDates), [occupiedDates]);
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Calendar cells for the month currently shown in the reschedule picker.
+  const [cy, cm] = pickMonth.split("-").map(Number);
+  const monthCells = useMemo(() => {
+    if (!cy || !cm) return [] as (number | null)[];
+    const lead = new Date(cy, cm - 1, 1).getDay();
+    const total = new Date(cy, cm, 0).getDate();
+    const cells: (number | null)[] = Array(lead).fill(null);
+    for (let d = 1; d <= total; d++) cells.push(d);
+    return cells;
+  }, [cy, cm]);
+  const dateStr = (d: number) =>
+    `${cy}-${String(cm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  // Move a post to the chosen day, then jump to that month's board to see it
+  // (yellow / not-yet-approved). The server action keeps all its content and
+  // scheduling settings — only the date changes.
+  function reschedule(post: PostLite, day: number) {
+    const target = dateStr(day);
+    setSavingId(post.id);
+    startTransition(async () => {
+      try {
+        await moveProoferPostAction(
+          clientId,
+          post.postDate,
+          post.platform,
+          target
+        );
+        setPickFor(null);
+        setHoverPillar(null);
+        router.push(
+          `${home}?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
+        );
+      } finally {
+        setSavingId(null);
+      }
+    });
+  }
 
   const ctlBg = "rgba(255,255,255,0.06)";
   const ctlBorder = "1px solid rgba(255,255,255,0.12)";
@@ -373,13 +428,18 @@ export default function ProoferNav({
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             {pillars.map((p) => {
               const pillarPosts = postsByPillar.get(p.id) ?? [];
-              const open = hoverPillar === p.id;
+              const pickPost = pillarPosts.find((pp) => pp.id === pickFor) ?? null;
+              // Keep the popup mounted while one of its posts has the reschedule
+              // calendar open, even if the pointer has left the chip.
+              const open = hoverPillar === p.id || pickPost !== null;
               return (
                 <div
                   key={p.id}
                   style={{ position: "relative" }}
                   onMouseEnter={() => setHoverPillar(p.id)}
-                  onMouseLeave={() => setHoverPillar((cur) => (cur === p.id ? null : cur))}
+                  onMouseLeave={() =>
+                    setHoverPillar((cur) => (cur === p.id ? null : cur))
+                  }
                 >
                   <button type="button" style={pillarChip}>
                     <span
@@ -441,7 +501,7 @@ export default function ProoferNav({
                                     />
                                   )}
                                 </div>
-                                <div style={{ minWidth: 0 }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: "#71717a" }}>
                                     {dayLabel(post.postDate)}
                                   </div>
@@ -460,11 +520,121 @@ export default function ProoferNav({
                                     {post.caption.trim() || <span style={{ color: "#a1a1aa" }}>No caption</span>}
                                   </div>
                                 </div>
+                                <button
+                                  type="button"
+                                  aria-label="Reschedule to another day"
+                                  title="Reschedule to another day"
+                                  disabled={isPending}
+                                  onClick={() => {
+                                    setPickMonth(month);
+                                    setPickFor((cur) =>
+                                      cur === post.id ? null : post.id
+                                    );
+                                  }}
+                                  style={{
+                                    flexShrink: 0,
+                                    alignSelf: "center",
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 9,
+                                    border:
+                                      pickFor === post.id
+                                        ? "1px solid #1f6b5c"
+                                        : "1px solid #e4e4e7",
+                                    background:
+                                      pickFor === post.id ? "#b8e3d8" : "#fff",
+                                    color: "#1f6b5c",
+                                    fontSize: 16,
+                                    lineHeight: 1,
+                                    cursor: isPending ? "wait" : "pointer",
+                                  }}
+                                >
+                                  📅
+                                </button>
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
+                      {pickPost && (
+                        <>
+                          {/* Tap-away catcher closes the picker */}
+                          <div
+                            aria-hidden
+                            onClick={() => setPickFor(null)}
+                            style={{ position: "fixed", inset: 0, zIndex: 51 }}
+                          />
+                          <div style={calPopup} role="dialog" aria-label="Reschedule to another day">
+                            <div style={{ fontSize: 12, fontWeight: 800, color: "#18181b", marginBottom: 6 }}>
+                              Reschedule this post
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 8 }}>
+                              <button type="button" aria-label="Previous month" onClick={() => setPickMonth((m) => shiftMonth(m, -1))} style={calNavBtn}>
+                                ‹
+                              </button>
+                              <span style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: 800, color: "#18181b" }}>
+                                {monthLabel(pickMonth)}
+                              </span>
+                              <button type="button" aria-label="Next month" onClick={() => setPickMonth((m) => shiftMonth(m, 1))} style={calNavBtn}>
+                                ›
+                              </button>
+                            </div>
+                            <div style={calGrid}>
+                              {WEEKDAYS.map((w, i) => (
+                                <div key={`w${i}`} style={{ fontSize: 10, fontWeight: 700, color: "#a1a1aa", textAlign: "center" }}>
+                                  {w}
+                                </div>
+                              ))}
+                              {monthCells.map((d, i) =>
+                                d === null ? (
+                                  <div key={`b${i}`} />
+                                ) : (
+                                  (() => {
+                                    const ds = dateStr(d);
+                                    const isSelf = ds === pickPost.postDate.slice(0, 10);
+                                    const taken = occupied.has(ds) && !isSelf;
+                                    const past = ds < todayStr;
+                                    const disabled = taken || past || isSelf || isPending;
+                                    return (
+                                      <button
+                                        key={d}
+                                        type="button"
+                                        disabled={disabled}
+                                        onClick={() => reschedule(pickPost, d)}
+                                        title={
+                                          isSelf
+                                            ? "Already on this day"
+                                            : taken
+                                            ? "Already has a post"
+                                            : past
+                                            ? "In the past"
+                                            : "Move here"
+                                        }
+                                        style={{
+                                          height: 30,
+                                          borderRadius: 7,
+                                          border: "1px solid",
+                                          borderColor: disabled ? "transparent" : "#99e2d0",
+                                          background: isSelf ? "#e4e4e7" : taken ? "#f4f4f5" : past ? "#fafafa" : "#effaf6",
+                                          color: disabled ? "#c4c4cc" : "#1f6b5c",
+                                          fontSize: 12,
+                                          fontWeight: 700,
+                                          cursor: disabled ? "default" : "pointer",
+                                        }}
+                                      >
+                                        {d}
+                                      </button>
+                                    );
+                                  })()
+                                )
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 8 }}>
+                              Green days are free & upcoming — moves this post there (not approved yet).
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -567,4 +737,34 @@ const popupRow: React.CSSProperties = {
   gap: 12,
   padding: "11px 14px",
   borderTop: "1px solid #f7f7f8",
+};
+
+// The reschedule calendar sits just to the left of the pillar popup card, so it
+// escapes the card's clipped, scrollable post list.
+const calPopup: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  right: "calc(100% + 8px)",
+  zIndex: 52,
+  width: 250,
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 12,
+  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+  padding: 12,
+};
+const calNavBtn: React.CSSProperties = {
+  width: 26,
+  height: 26,
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  color: "#52525b",
+  fontSize: 15,
+  borderRadius: 7,
+  cursor: "pointer",
+};
+const calGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(7, 1fr)",
+  gap: 4,
 };

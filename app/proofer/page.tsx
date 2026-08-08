@@ -1,5 +1,9 @@
 import { cookies } from "next/headers";
-import { getProoferData, getProoferPillarPosts } from "../admin-panel/lib/queries";
+import {
+  getProoferData,
+  getProoferPillarPosts,
+  getProoferOccupiedDates,
+} from "../admin-panel/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
@@ -78,6 +82,9 @@ export default async function ProoferStandalonePage({
     const pillarPosts = selectedClientId
       ? await getProoferPillarPosts(selectedClientId)
       : [];
+    const occupiedDates = selectedClientId
+      ? await getProoferOccupiedDates(selectedClientId)
+      : [];
 
     return (
       <>
@@ -88,6 +95,7 @@ export default async function ProoferStandalonePage({
           pillars={data.pillars}
           posts={pillarPosts}
           teams={myTeams}
+          occupiedDates={occupiedDates}
           base={base}
           parentOrigin={parentOrigin}
         />
