@@ -542,3 +542,50 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ── Proofer brand-menu (nav dropdown) — modern monogram-tile rows ────────── */
+.pnav-menu { padding: 6px; }
+.pnav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.pnav-item:hover { background: #f4f4f6; }
+.pnav-item .pnav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pnav-tile {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.pnav-tile--brand { background: #e7f5ef; color: #1f6b5c; border: 1px solid #cfe9df; }
+.pnav-tile--muted { background: #f4f4f5; color: #71717a; border: 1px solid #e6e6e9; }
+.pnav-tile--two { font-size: 10px; }
+.pnav-section {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  padding: 10px 12px 4px;
+}
+.pnav-sep { height: 1px; background: #efeff1; margin: 6px 8px; border: 0; }
+.pnav-signout { color: #b91c1c; }
+.pnav-signout:hover { background: #fef2f2; }
