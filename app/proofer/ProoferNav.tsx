@@ -95,6 +95,17 @@ export default function ProoferNav({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Remember the account you're viewing so that leaving and coming back to the
+  // board resumes on the same one. The board pages read this cookie when no
+  // ?client= is present; persisting it on every view (not just when the board's
+  // own picker changes) means the nav switcher and plain navigation are
+  // remembered too.
+  useEffect(() => {
+    if (clientId) {
+      document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
+    }
+  }, [clientId]);
+
   // The board home — "/" on the standalone domain, "/proofer" otherwise.
   const home = base || "/";
 
@@ -214,9 +225,6 @@ export default function ProoferNav({
                 <Link href={`${base}/pillars?${qs}`} style={menuItem}>
                   ＋ Add pillar
                 </Link>
-                <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
-                  👥 Clients
-                </Link>
                 <div style={{ borderTop: "1px solid #f4f4f5", padding: "9px 15px 4px" }}>
                   <div
                     style={{
@@ -240,16 +248,9 @@ export default function ProoferNav({
                       <Link
                         key={t.id}
                         href={`${base}/teams/${t.id}`}
-                        style={{ ...menuItem, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+                        style={{ ...menuItem, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       >
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          🏷️ {t.name}
-                        </span>
-                        {t.isOwner && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "#9d2b5b", flexShrink: 0 }}>
-                            My team
-                          </span>
-                        )}
+                        🏷️ {t.name}
                       </Link>
                     ))}
                   </div>
@@ -259,6 +260,9 @@ export default function ProoferNav({
                   style={{ ...menuItem, borderTop: "1px solid #f4f4f5", fontSize: 13, color: "#52525b" }}
                 >
                   Manage all teams →
+                </Link>
+                <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
+                  👥 Clients
                 </Link>
                 {clientId && (
                   <Link
