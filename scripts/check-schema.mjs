@@ -39,6 +39,12 @@ const supabase = createClient(url, key, {
 // the migration files, just the contract the runtime depends on.
 // ---------------------------------------------------------------------------
 const SCHEMA = {
+  // Teams layer. getViewer() and the middleware resolve a non-staff user's
+  // client account from team_accounts, so the auth path now hard-depends on
+  // these being applied (20260808_teams.sql).
+  team_accounts: ["team_id", "client_id"],
+  team_members: ["team_id", "user_id", "role"],
+  teams: ["id", "name", "owner_user_id", "plan"],
   // Only the trust-layer creative columns are listed here — the full ads
   // table has dozens of columns and isn't worth mirroring. This entry exists
   // to catch the specific drift the meta_creative_fields migration adds.

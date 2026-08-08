@@ -105,39 +105,42 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Resolve the viewer's client link by reading client_user_links directly.
-  // Middleware can't import the full viewer helper because that file is
-  // server-only and middleware runs in the edge runtime; this lightweight
-  // query is sufficient.
-  const { data: link } = await supabase
-    .from("client_user_links")
-    .select("client_id")
-    .eq("auth_user_id", user.id)
-    .order("id", { ascending: true })
-    .limit(1)
+  // Resolve the viewer team-side, mirroring getViewer() (which middleware
+  // can't import — that file is server-only and this runs in the edge
+  // runtime). Agency staff take precedence: a user_roles row → admin, who
+  // roams. Otherwise the client account comes from team membership; RLS
+  // scopes team_accounts to the caller's own teams, so this only returns
+  // accounts they belong to.
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
     .maybeSingle();
-  const linkedClientId = (link as { client_id: number } | null)?.client_id ?? null;
+  const isStaff = roleRow !== null;
+
+  let linkedClientId: number | null = null;
+  if (!isStaff) {
+    const { data: acct } = await supabase
+      .from("team_accounts")
+      .select("client_id")
+      .order("client_id", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    linkedClientId = (acct as { client_id: number } | null)?.client_id ?? null;
+  }
   const isClientUser = linkedClientId !== null;
 
-  // Admission is deny-by-default. A logged-in account that is neither a
-  // client (client_user_links) nor an invited admin-panel user (user_roles)
-  // is NOT admitted — bounce it to /sign-in instead of letting it roam the
-  // admin panel. This is the gate that stops an account created outside the
-  // invite flow from gaining access. Keep it in sync with getViewer().
-  if (!isClientUser) {
-    const { data: roleRow } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!roleRow) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/sign-in";
-      url.search = "";
-      url.searchParams.set("error", "not-authorized");
-      return NextResponse.redirect(url);
-    }
+  // Admission is deny-by-default. A logged-in account that is neither agency
+  // staff (user_roles) nor a member of any team with an account is NOT
+  // admitted — bounce it to /sign-in instead of letting it roam. This is the
+  // gate that stops an account created outside the invite flow from gaining
+  // access. Keep it in sync with getViewer().
+  if (!isStaff && !isClientUser) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.search = "";
+    url.searchParams.set("error", "not-authorized");
+    return NextResponse.redirect(url);
   }
 
   // Client users can only see /portal/{theirClientId}/*. Anywhere else gets

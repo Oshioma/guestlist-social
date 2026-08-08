@@ -4,16 +4,27 @@
 // Every page that needs to know "who is looking at this and what are they
 // allowed to see" goes through getViewer(). It looks up the current Supabase
 // auth user, then decides admission:
-//   - a client_user_links row      → client portal user (scoped to a client)
-//   - else a user_roles row         → admin-panel user
+//   - a user_roles row              → admin-panel (agency staff) user
+//   - else a team account           → client user, scoped to that account
 //   - neither                       → NOT admitted (null)
 //
-// Admission is deny-by-default: an authenticated account with no client link
-// and no user_roles row resolves to null. This is what keeps an account that
-// slipped past sign-up (there is no public sign-up — admission is invite-only)
-// from silently gaining admin-panel access. Legitimate accounts are admitted
-// only when an admin invites them (which writes a user_roles row) or they are
-// linked to a client.
+// Client scoping is team-based: a client is a member of one or more teams
+// (team_members), and each team holds a set of accounts (team_accounts). The
+// client's account id is the first account across their teams — which, for
+// an isolated client team, is simply their one account. This replaces the
+// older client_user_links lookup; the 20260808 backfill migrated every
+// portal client into an isolated team, so existing clients resolve
+// identically.
+//
+// Staff take precedence: a user_roles row means agency staff (admin), even
+// if they also belong to teams that contain accounts (staff belong to the
+// "Guestlist Social" team, which holds every account). Keeping staff keyed on
+// user_roles means the existing member-invite flow needs no change.
+//
+// Admission is deny-by-default: an authenticated account with no user_roles
+// row and no team account resolves to null. This is what keeps an account
+// that slipped past sign-up (there is no public sign-up — admission is
+// invite-only) from silently gaining access.
 //
 // Why server-side: viewer state must be authoritative (a client must not be
 // able to flip themselves into admin from the browser), and every gate in
@@ -41,34 +52,38 @@ export async function getViewer(): Promise<Viewer | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: link } = await supabase
-    .from("client_user_links")
-    .select("client_id")
-    .eq("auth_user_id", user.id)
-    .order("id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (link) {
-    return {
-      role: "client",
-      userId: user.id,
-      email: user.email ?? null,
-      clientId: (link as any).client_id as number,
-    };
-  }
-
-  // No client link — admitted to the admin panel only with an explicit
-  // user_roles row. Missing row → not admitted (deny-by-default).
+  // Agency staff take precedence: an explicit user_roles row → admin panel.
   const { data: roleRow } = await supabase
     .from("user_roles")
     .select("user_id")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!roleRow) return null;
+  if (roleRow) {
+    return { role: "admin", userId: user.id, email: user.email ?? null };
+  }
 
-  return { role: "admin", userId: user.id, email: user.email ?? null };
+  // Not staff — resolve the client account from team membership. RLS scopes
+  // team_accounts to the caller's own teams, so this only ever returns
+  // accounts the user is actually a member of.
+  const { data: acct } = await supabase
+    .from("team_accounts")
+    .select("client_id")
+    .order("client_id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (acct) {
+    return {
+      role: "client",
+      userId: user.id,
+      email: user.email ?? null,
+      clientId: (acct as { client_id: number }).client_id,
+    };
+  }
+
+  // Neither staff nor a member of any team with an account → not admitted.
+  return null;
 }
 
 // assertCanViewClient: defense-in-depth gate every portal page calls before
