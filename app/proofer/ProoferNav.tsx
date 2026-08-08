@@ -33,6 +33,19 @@ function monthLabel(value: string): string {
   });
 }
 
+// Monogram tile used in the brand dropdown — a lettered box in place of an
+// icon (C for Clients, CV for Client view, a team's initial, etc.).
+function Tile({ text, tone = "brand" }: { text: string; tone?: "brand" | "muted" }) {
+  return (
+    <span
+      aria-hidden
+      className={`pnav-tile pnav-tile--${tone}${text.length > 1 ? " pnav-tile--two" : ""}`}
+    >
+      {text}
+    </span>
+  );
+}
+
 function dayLabel(postDate: string): string {
   const [y, m, d] = postDate.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return postDate;
@@ -212,71 +225,71 @@ export default function ProoferNav({
               />
             <div style={{ position: "absolute", top: "100%", left: 0, paddingTop: 8, zIndex: 60 }}>
               <div
+                className="pnav-menu"
                 style={{
                   background: "#fff",
                   color: "#18181b",
-                  border: "1px solid #e4e4e7",
-                  borderRadius: 12,
-                  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-                  overflow: "hidden",
-                  minWidth: 190,
+                  border: "1px solid #e6e6e9",
+                  borderRadius: 16,
+                  boxShadow: "0 18px 44px -14px rgba(16,24,40,0.30)",
+                  minWidth: 250,
                 }}
               >
-                <Link href={`${base}/pillars?${qs}`} style={menuItem}>
-                  ＋ Add pillar
+                <Link href={`${base}/pillars?${qs}`} className="pnav-item">
+                  <Tile text="+" />
+                  <span className="pnav-label">Add pillar</span>
                 </Link>
-                <div style={{ borderTop: "1px solid #f4f4f5", padding: "9px 15px 4px" }}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "#a1a1aa",
-                    }}
-                  >
-                    Teams
-                  </div>
-                </div>
+
+                <div className="pnav-section">Teams</div>
                 {teams.length === 0 ? (
-                  <span style={{ ...menuItem, color: "#a1a1aa", fontWeight: 500 }}>
-                    No teams yet
+                  <span className="pnav-item" style={{ fontWeight: 500 }}>
+                    <Tile text="—" tone="muted" />
+                    <span className="pnav-label" style={{ color: "#a1a1aa" }}>
+                      No teams yet
+                    </span>
                   </span>
                 ) : (
-                  <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  <div style={{ maxHeight: 232, overflowY: "auto" }}>
                     {teams.map((t) => (
-                      <Link
-                        key={t.id}
-                        href={`${base}/teams/${t.id}`}
-                        style={{ ...menuItem, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      >
-                        🏷️ {t.name}
+                      <Link key={t.id} href={`${base}/teams/${t.id}`} className="pnav-item">
+                        <Tile text={(t.name.trim()[0] || "T").toUpperCase()} />
+                        <span className="pnav-label">{t.name}</span>
                       </Link>
                     ))}
                   </div>
                 )}
                 <Link
                   href={`${base}/teams`}
-                  style={{ ...menuItem, borderTop: "1px solid #f4f4f5", fontSize: 13, color: "#52525b" }}
+                  className="pnav-item"
+                  style={{ color: "#52525b", fontSize: 13 }}
                 >
-                  Manage all teams →
+                  <Tile text="→" tone="muted" />
+                  <span className="pnav-label">Manage all teams</span>
                 </Link>
-                <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
-                  👥 Clients
+
+                <hr className="pnav-sep" />
+
+                <Link href={`${base}/clients?${qs}`} className="pnav-item">
+                  <Tile text="C" />
+                  <span className="pnav-label">Clients</span>
                 </Link>
                 {clientId && (
                   <Link
                     href={`${parentOrigin}/portal/${encodeURIComponent(clientId)}`}
                     target="_blank"
                     rel="noopener"
-                    style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}
+                    className="pnav-item"
                   >
-                    👁 Client view ↗
+                    <Tile text="CV" />
+                    <span className="pnav-label">Client view ↗</span>
                   </Link>
                 )}
+
+                <hr className="pnav-sep" />
+
                 <form action="/sign-out" method="post" style={{ margin: 0 }}>
-                  <button type="submit" style={{ ...menuItem, width: "100%", textAlign: "left", background: "transparent", border: "none", borderTop: "1px solid #f4f4f5", cursor: "pointer" }}>
-                    Sign out
+                  <button type="submit" className="pnav-item pnav-signout">
+                    <span className="pnav-label">Sign out</span>
                   </button>
                 </form>
               </div>
@@ -503,15 +516,6 @@ const monthBtn: React.CSSProperties = {
   lineHeight: 1,
   borderRadius: 7,
   cursor: "pointer",
-};
-
-const menuItem: React.CSSProperties = {
-  display: "block",
-  padding: "11px 15px",
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#18181b",
-  textDecoration: "none",
 };
 
 const pillarChip: React.CSSProperties = {
