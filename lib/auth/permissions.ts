@@ -135,15 +135,26 @@ export async function getProoferAccess(): Promise<ProoferAccess | null> {
   return null;
 }
 
-// The single super admin — the platform owner. Hardcoded by email; only this
-// account sees the Super admin page and its nav link, and only it can invite
-// people to their own independent team.
-export const SUPER_ADMIN_EMAIL = "oshi@guestlist.net";
+// Super admins — the platform owner(s). Configured via the SUPER_ADMIN_EMAILS
+// env var (comma-separated, case-insensitive), so admins can be added or
+// changed without a code deploy. Falls back to the founder's address if the
+// var isn't set, so the feature keeps working out of the box. Only these
+// accounts see the Super admin page + nav link and can invite people to their
+// own independent team.
+const DEFAULT_SUPER_ADMIN_EMAILS = "oshi@guestlist.net";
+
+export function superAdminEmails(): string[] {
+  return (process.env.SUPER_ADMIN_EMAILS || DEFAULT_SUPER_ADMIN_EMAILS)
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 export async function isSuperAdmin(): Promise<boolean> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return (user?.email ?? "").toLowerCase() === SUPER_ADMIN_EMAIL;
+  const email = (user?.email ?? "").toLowerCase();
+  return email !== "" && superAdminEmails().includes(email);
 }
