@@ -75,6 +75,7 @@ export default async function ProoferPublishStandalone({
             settingsHref={`${nav.parentOrigin}/app/settings`}
             clientEditBase={`${nav.base}/clients`}
             showMetaConnection={true}
+            connectOrigin={nav.parentOrigin}
           />
         </div>
       </main>
