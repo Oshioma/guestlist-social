@@ -354,7 +354,7 @@ export default function ProoferNav({
                 )}
 
                 {isSuperAdmin && (
-                  <Link href={`${base}/admin`} className="pnav-item">
+                  <Link href={`${base}/super-admin`} className="pnav-item">
                     <Tile text="SA" tone="muted" />
                     <span className="pnav-label">Super admin</span>
                   </Link>
