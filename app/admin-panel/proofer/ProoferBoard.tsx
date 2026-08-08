@@ -3079,29 +3079,35 @@ export default function ProoferBoard({
                           </span>
                           Instagram
                         </button>
-                        {/* Format sub-toggle — only while Instagram is on */}
+                        {/* Format sub-toggle — only while Instagram is on.
+                            Collapsed it shows just the chosen format; hovering
+                            reveals Feed / Story / Reel to pick from (see the
+                            .proofer-fmt rules in admin.css). */}
                         {draft.publishTargets.includes("instagram") && (
                           <div
+                            className="proofer-fmt"
                             style={{
                               display: "inline-flex",
+                              alignItems: "center",
                               border: "1px solid #e4e4e7",
                               borderRadius: 9,
                               overflow: "hidden",
+                              background: "#fff",
                             }}
                           >
-                            {INSTAGRAM_FORMATS.map((p, i) => {
+                            {INSTAGRAM_FORMATS.map((p) => {
                               const active = activePlatform === p;
                               return (
                                 <button
                                   key={p}
                                   type="button"
+                                  className={`fmt-opt${active ? " active" : ""}`}
                                   disabled={isLocked}
                                   onClick={() => {
                                     if (p !== activePlatform) handlePlatformChange(dateKey, p);
                                   }}
                                   style={{
                                     border: "none",
-                                    borderLeft: i === 0 ? "none" : "1px solid #e4e4e7",
                                     background: active ? "#3f3f46" : "#fff",
                                     color: active ? "#fff" : "#52525b",
                                     fontSize: 12,
@@ -3114,6 +3120,7 @@ export default function ProoferBoard({
                                 </button>
                               );
                             })}
+                            <span className="fmt-caret" aria-hidden>▾</span>
                           </div>
                         )}
                         {/* Facebook: one-click on/off (the "send to Facebook") */}
