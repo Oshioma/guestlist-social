@@ -315,14 +315,15 @@ export async function saveFirstPostAction(input: {
     return { ok: false, error: "Add a caption or an image first." };
   }
 
-  try {
-    // Guard: only the user's own tour account may be written here.
-    const state = await getOnboardingState(access.userId);
-    if (state.accountClientId !== clientId) {
-      return { ok: false, error: "Unknown account." };
-    }
+  // Guard: only the user's own tour account may be written here.
+  const state = await getOnboardingState(access.userId);
+  if (state.accountClientId !== clientId) {
+    return { ok: false, error: "Unknown account." };
+  }
 
-    // Real save — ends as status "check" (yellow). Never proofed/green.
+  // The real save — ends as status "check" (yellow). Never proofed/green. Only
+  // a genuine failure here should keep the user on the Save step.
+  try {
     await saveProoferPostAction(
       clientId,
       postDate,
@@ -335,7 +336,15 @@ export async function saveFirstPostAction(input: {
       publishTime,
       ["instagram"]
     );
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not save your post." };
+  }
 
+  // The post is now saved. Recording its id + analytics is best-effort
+  // bookkeeping — a hiccup here must NOT strand the user, since their post
+  // already exists.
+  let postId = "";
+  try {
     const admin = createAdminClient();
     const { data: post } = await admin
       .from("proofer_posts")
@@ -345,17 +354,18 @@ export async function saveFirstPostAction(input: {
       .eq("platform", "instagram_feed")
       .maybeSingle();
 
-    const postId = post?.id != null ? String(post.id) : "";
+    postId = post?.id != null ? String(post.id) : "";
     await patchState(access.userId, {
       onboarding_started: true,
       first_post_id: post?.id ?? null,
       onboarding_step: 9,
     });
     await logOnboardingEvent("first_post_saved", 9, { postId });
-    revalidatePath("/proofer");
-    revalidatePath("/app/proofer");
-    return { ok: true, postId };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not save your post." };
+  } catch (err) {
+    console.error("saveFirstPostAction bookkeeping failed (post already saved):", err);
   }
+
+  revalidatePath("/proofer");
+  revalidatePath("/app/proofer");
+  return { ok: true, postId };
 }
