@@ -105,6 +105,14 @@ export default async function PublishQueueView({
   // the connected_meta_accounts table has RLS enabled with no policies. We
   // strip the access_token before handing it to the client component —
   // tokens must never land in browser HTML.
+  //
+  // SECURITY: the service role bypasses RLS, so this MUST be scoped to only the
+  // clients the viewer is allowed to see. `clientsRows` above was loaded with
+  // the session client (RLS-enforced), so it already contains exactly this
+  // viewer's clients — staff see all, a team member sees only their team's.
+  // Filtering the connected accounts to those ids stops one team's accounts
+  // (handles + which brands exist) leaking to another team's users.
+  const allowedClientIds = clientsRows.map((c) => c.id);
   let connectedAccounts: {
     clientId: string;
     platform: "facebook" | "instagram";
@@ -112,26 +120,29 @@ export default async function PublishQueueView({
     accountName: string;
   }[] = [];
   let metaConnectionError: string | null = null;
-  try {
-    const svc = metaServiceClient();
-    const { data, error } = await svc
-      .from("connected_meta_accounts")
-      .select("client_id, platform, account_id, account_name")
-      .order("platform", { ascending: true })
-      .order("account_name", { ascending: true });
-    if (error) {
-      metaConnectionError = error.message;
+  if (allowedClientIds.length > 0) {
+    try {
+      const svc = metaServiceClient();
+      const { data, error } = await svc
+        .from("connected_meta_accounts")
+        .select("client_id, platform, account_id, account_name")
+        .in("client_id", allowedClientIds)
+        .order("platform", { ascending: true })
+        .order("account_name", { ascending: true });
+      if (error) {
+        metaConnectionError = error.message;
+      }
+      connectedAccounts = (data ?? []).map((row) => ({
+        clientId: String(row.client_id),
+        platform: row.platform as "facebook" | "instagram",
+        accountId: String(row.account_id),
+        accountName: String(row.account_name ?? ""),
+      }));
+    } catch (err) {
+      metaConnectionError =
+        err instanceof Error ? err.message : "Could not load connected accounts";
+      connectedAccounts = [];
     }
-    connectedAccounts = (data ?? []).map((row) => ({
-      clientId: String(row.client_id),
-      platform: row.platform as "facebook" | "instagram",
-      accountId: String(row.account_id),
-      accountName: String(row.account_name ?? ""),
-    }));
-  } catch (err) {
-    metaConnectionError =
-      err instanceof Error ? err.message : "Could not load connected accounts";
-    connectedAccounts = [];
   }
 
   // Current "YYYY-MM" in the agency's display zone, so the at-a-glance day

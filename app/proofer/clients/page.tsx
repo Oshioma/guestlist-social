@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getProoferAccess } from "@/lib/auth/permissions";
 import EmptyState from "../../admin-panel/components/EmptyState";
 import ProoferNav from "../ProoferNav";
 import { resolveNavData } from "../navData";
@@ -64,8 +65,18 @@ export default async function ProoferClientsPage({
   // Which team(s) each visible client belongs to, so the list can be grouped
   // under team-name headings. Clients can be on more than one team, so a client
   // may appear under several headings. Read with the admin client (scoped to the
-  // client ids the viewer can already see) so the team name still shows for a
-  // super admin browsing accounts outside their own teams.
+  // client ids the viewer can already see).
+  //
+  // SECURITY: a visible client can also be linked to a team the viewer does NOT
+  // belong to (a shared account), and resolving that team's name would leak a
+  // foreign team's name to a non-staff poster. So restrict name resolution and
+  // grouping to teams the viewer may see: staff see all; a poster sees only the
+  // teams they're a member of (nav.teams).
+  const access = await getProoferAccess();
+  const isStaff = access?.kind === "staff";
+  const myTeamIds = new Set(nav.teams.map((t) => t.id));
+  const maySeeTeam = (teamId: string) => isStaff || myTeamIds.has(teamId);
+
   const NO_TEAM = "__none__";
   const clientTeams = new Map<string, { id: string; name: string }[]>();
   const clientIds = clients.map((c) => Number(c.id));
@@ -76,7 +87,7 @@ export default async function ProoferClientsPage({
       .select("client_id, team_id")
       .in("client_id", clientIds);
     const teamIds = Array.from(
-      new Set((taRows ?? []).map((r) => String(r.team_id)))
+      new Set((taRows ?? []).map((r) => String(r.team_id)).filter(maySeeTeam))
     );
     const teamNameById = new Map<string, string>();
     if (teamIds.length > 0) {
@@ -89,8 +100,9 @@ export default async function ProoferClientsPage({
       }
     }
     for (const r of taRows ?? []) {
-      const cid = String(r.client_id);
       const tid = String(r.team_id);
+      if (!maySeeTeam(tid)) continue;
+      const cid = String(r.client_id);
       const arr = clientTeams.get(cid) ?? [];
       arr.push({ id: tid, name: teamNameById.get(tid) ?? "Team" });
       clientTeams.set(cid, arr);
