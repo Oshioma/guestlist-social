@@ -234,10 +234,14 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Only the routes that need gating. This covers the product surfaces plus the
-  // Proofer host's clean paths ("/", "/pillars", "/clients") so that host still
-  // rewrites correctly — without running the session refresh + auth queries on
-  // every asset, API call, RSC fetch and server action across the whole app
-  // (which the previous catch-all matcher did, making saves crawl).
+  // Proofer host's clean paths ("/", "/pillars", "/clients", "/teams",
+  // "/super-admin", "/publish") so that host rewrites them onto the /proofer
+  // tree — without
+  // running the session refresh + auth queries on every asset, API call, RSC
+  // fetch and server action across the whole app (which the previous catch-all
+  // matcher did, making saves crawl). Keep this in sync with
+  // isProoferSurfacePath above: every clean path it maps must be matched here,
+  // or the middleware never runs for it on the Proofer host and it 404s.
   matcher: [
     "/",
     "/app/:path*",
@@ -246,6 +250,10 @@ export const config = {
     "/proofer/:path*",
     "/pillars/:path*",
     "/clients/:path*",
+    "/teams/:path*",
+    "/teams",
+    "/super-admin/:path*",
+    "/super-admin",
     "/publish",
   ],
 };
