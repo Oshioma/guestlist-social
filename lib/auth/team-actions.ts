@@ -30,7 +30,7 @@ import { authRedirectOrigin } from "@/lib/auth/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 import { sendEmail } from "@/lib/email";
-import { renderInviteEmail } from "@/lib/auth/invite-email";
+import { renderEmailTemplate } from "@/lib/email/templates";
 
 export type ActionState = {
   error?: string | null;
@@ -129,7 +129,10 @@ async function resolveOrInviteUser(
       const link = `${origin}/auth/callback?token_hash=${encodeURIComponent(
         data.properties.hashed_token
       )}&type=invite`;
-      const { subject, html, text } = renderInviteEmail(link, opts?.teamName);
+      const { subject, html, text } = await renderEmailTemplate("invite", {
+        team_name: opts?.teamName?.trim() || "Post Proofer",
+        accept_link: link,
+      });
       const sent = await sendEmail({ to: email, subject, html, text });
       if (sent.ok) return { userId: data.user.id, invited: true };
 
