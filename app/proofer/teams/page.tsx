@@ -4,7 +4,6 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
-import { InviteOwnerForm } from "./InviteOwnerForm";
 
 export const dynamic = "force-dynamic";
 
@@ -82,20 +81,6 @@ export default async function ProoferTeamsPage() {
           </p>
           <CreateTeamForm />
         </section>
-
-        {access.kind === "staff" && (
-          <section style={cardStyle}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-              Invite someone to their own team
-            </h3>
-            <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#71717a" }}>
-              Onboard an independent user: they get their own workspace as owner
-              (not added to any of your teams) and can add and connect their own
-              accounts after signing in.
-            </p>
-            <InviteOwnerForm />
-          </section>
-        )}
 
         <section style={cardStyle}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600 }}>

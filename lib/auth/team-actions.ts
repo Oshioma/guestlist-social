@@ -27,7 +27,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getProoferAccess } from "@/lib/auth/permissions";
+import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 
 export type ActionState = {
   error?: string | null;
@@ -176,9 +176,8 @@ export async function inviteToOwnTeam(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  const actor = await getActor();
-  if (!actor?.isStaff) {
-    return { error: "Only agency staff can invite someone to their own team." };
+  if (!(await isSuperAdmin())) {
+    return { error: "Only the super admin can invite someone to their own team." };
   }
 
   const parsed = inviteOwnerSchema.safeParse({

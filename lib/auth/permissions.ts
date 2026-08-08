@@ -134,3 +134,16 @@ export async function getProoferAccess(): Promise<ProoferAccess | null> {
 
   return null;
 }
+
+// The single super admin — the platform owner. Hardcoded by email; only this
+// account sees the Super admin page and its nav link, and only it can invite
+// people to their own independent team.
+export const SUPER_ADMIN_EMAIL = "oshi@guestlist.net";
+
+export async function isSuperAdmin(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return (user?.email ?? "").toLowerCase() === SUPER_ADMIN_EMAIL;
+}
