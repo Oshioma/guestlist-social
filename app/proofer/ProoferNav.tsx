@@ -38,6 +38,7 @@ function dayLabel(postDate: string): string {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
+    year: "numeric",
   });
 }
 
@@ -65,7 +66,10 @@ export default function ProoferNav({
       `/proofer?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}`
     );
 
-  // Posts filed under each pillar, in date order — powers the hover popup.
+  // Posts filed under each pillar — powers the hover popup. Ordered so the same
+  // calendar month as the one on screen (from any year) surfaces first, newest
+  // first within each group: viewing August, last August's posts come up top.
+  const viewedMonth = Number(month.split("-")[1]) || 0;
   const postsByPillar = useMemo(() => {
     const map = new Map<string, PostLite[]>();
     for (const p of posts) {
@@ -74,11 +78,18 @@ export default function ProoferNav({
       arr.push(p);
       map.set(p.pillarId, arr);
     }
+    const sameMonth = (d: string) =>
+      Number(d.slice(5, 7)) === viewedMonth ? 0 : 1;
     for (const arr of map.values()) {
-      arr.sort((a, b) => a.postDate.localeCompare(b.postDate));
+      arr.sort((a, b) => {
+        const ra = sameMonth(a.postDate);
+        const rb = sameMonth(b.postDate);
+        if (ra !== rb) return ra - rb; // this-month posts first
+        return b.postDate.localeCompare(a.postDate); // then newest first
+      });
     }
     return map;
-  }, [posts]);
+  }, [posts, viewedMonth]);
 
   const ctlBg = "rgba(255,255,255,0.06)";
   const ctlBorder = "1px solid rgba(255,255,255,0.12)";
@@ -235,12 +246,12 @@ export default function ProoferNav({
                       />
                       <span style={{ fontWeight: 800 }}>{p.name}</span>
                       <span style={{ color: "#a1a1aa", fontWeight: 600 }}>
-                        {pillarPosts.length} post{pillarPosts.length === 1 ? "" : "s"} this month
+                        {pillarPosts.length} post{pillarPosts.length === 1 ? "" : "s"} · all time
                       </span>
                     </div>
                     {pillarPosts.length === 0 ? (
                       <div style={{ padding: "12px 14px", fontSize: 13, color: "#71717a" }}>
-                        No posts in this pillar this month.
+                        No posts in this pillar yet.
                       </div>
                     ) : (
                       <div style={{ maxHeight: 320, overflowY: "auto" }}>

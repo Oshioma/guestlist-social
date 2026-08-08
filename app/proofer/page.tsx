@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getProoferData } from "../admin-panel/lib/queries";
+import { getProoferData, getProoferPillarPosts } from "../admin-panel/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
@@ -69,6 +69,12 @@ export default async function ProoferStandalonePage({
       console.error("Display timezone load error:", err);
     }
 
+    // All-time pillar posts power the nav's pillar hover popups (the board's
+    // own data stays month-scoped).
+    const pillarPosts = selectedClientId
+      ? await getProoferPillarPosts(selectedClientId)
+      : [];
+
     return (
       <>
         <ProoferNav
@@ -76,7 +82,7 @@ export default async function ProoferStandalonePage({
           clientId={selectedClientId}
           month={selectedMonth}
           pillars={data.pillars}
-          posts={data.posts}
+          posts={pillarPosts}
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
