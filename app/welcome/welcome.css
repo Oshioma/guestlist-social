@@ -1,3 +1,13 @@
+:root {
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
+  --accent-tint: #f5f3ff;
+  --accent-teal: #0d9488;
+  --accent-teal-tint: #f0fdfa;
+  --accent-amber: #d97706;
+  --accent-amber-tint: #fffbeb;
+}
+
 .welcome {
   min-height: 100vh;
   display: flex;
@@ -24,6 +34,10 @@
   letter-spacing: -0.02em;
 }
 
+.welcome-brand-accent {
+  color: var(--accent);
+}
+
 .welcome-nav-links {
   display: flex;
   align-items: center;
@@ -34,9 +48,21 @@
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
-  padding: 64px 24px 40px;
+  padding: 56px 24px 40px;
   text-align: center;
   box-sizing: border-box;
+}
+
+.welcome-eyebrow {
+  display: inline-block;
+  margin-bottom: 22px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .welcome-title {
@@ -45,6 +71,11 @@
   line-height: 1.1;
   font-weight: 800;
   letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.welcome-title-accent {
+  color: var(--accent);
 }
 
 .welcome-subtitle {
@@ -67,16 +98,17 @@
   display: inline-block;
   border-radius: 10px;
   padding: 12px 22px;
-  background: #18181b;
+  background: var(--accent);
   color: #fff;
   font-weight: 600;
   font-size: 15px;
   text-decoration: none;
-  border: 1px solid #18181b;
+  border: 1px solid var(--accent);
 }
 
 .welcome-btn:hover {
-  background: #000;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .welcome-btn-sm {
@@ -86,11 +118,13 @@
 
 .welcome-btn-ghost {
   background: #fff;
-  color: #18181b;
+  color: var(--accent);
+  border-color: #e4e4e7;
 }
 
 .welcome-btn-ghost:hover {
-  background: #f4f4f5;
+  background: var(--accent-tint);
+  border-color: var(--accent);
 }
 
 .welcome-note {
@@ -127,6 +161,25 @@
   padding: 24px;
   background: #fafafa;
 }
+
+.welcome-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  margin-bottom: 14px;
+}
+
+.welcome-feature-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tone-violet { background: var(--accent-tint); color: var(--accent); }
+.tone-teal { background: var(--accent-teal-tint); color: var(--accent-teal); }
+.tone-amber { background: var(--accent-amber-tint); color: var(--accent-amber); }
 
 .welcome-feature-title {
   margin: 0;
