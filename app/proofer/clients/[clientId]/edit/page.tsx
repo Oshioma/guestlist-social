@@ -61,6 +61,7 @@ export default async function ProoferEditClientPage({
         month={nav.month}
         pillars={nav.pillars}
         posts={nav.posts}
+        teams={nav.teams}
         base={nav.base}
         parentOrigin={nav.parentOrigin}
       />

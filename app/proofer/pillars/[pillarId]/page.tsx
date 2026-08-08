@@ -6,6 +6,7 @@ import {
 } from "../../../admin-panel/lib/queries";
 import EmptyState from "../../../admin-panel/components/EmptyState";
 import ProoferNav from "../../ProoferNav";
+import { getMyTeams } from "../../navData";
 import PillarOrganiser from "./PillarOrganiser";
 import { getProoferBase } from "../../base";
 
@@ -39,6 +40,7 @@ export default async function PillarOrganisePage({
   const cookieStore = await cookies();
   const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
   const { base, parentOrigin } = await getProoferBase();
+  const myTeams = await getMyTeams();
 
   try {
     let clientId = sp.client ?? "";
@@ -65,6 +67,7 @@ export default async function PillarOrganisePage({
           month={month}
           pillars={pillars}
           posts={allPillarPosts}
+          teams={myTeams}
           base={base}
           parentOrigin={parentOrigin}
         />
@@ -93,7 +96,7 @@ export default async function PillarOrganisePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={month} pillars={[]} posts={[]} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={month} pillars={[]} posts={[]} teams={myTeams} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load pillar" description={message} />

@@ -2,13 +2,31 @@ name: Apply DB migrations
 
 # Runs the pending Supabase migrations against production whenever a merge to
 # main changes anything under supabase/migrations/. Also runnable on demand
-# (Actions tab -> "Run workflow") — use that once after setup to baseline.
+# (Actions tab -> "Run workflow").
+#
+# SUPABASE_DB_URL must be reachable from GitHub's IPv4-only runners. Supabase's
+# DIRECT host (db.<ref>.supabase.co) is IPv6-only and fails here with "Network
+# is unreachable" — use the IPv4 Session pooler string instead
+# (aws-0-<region>.pooler.supabase.com:5432, user postgres.<ref>).
+#
+# FIRST successful run only: the tracking table is empty, so the script refuses
+# to guess. Trigger this workflow manually once with first_run_mode set —
+# "baseline" if the DB is already current, "apply_all" if it's empty/new.
 on:
   push:
     branches: [main]
     paths:
       - "supabase/migrations/**"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      first_run_mode:
+        description: "Only used when the tracking table is empty (first run)."
+        type: choice
+        options:
+          - none
+          - baseline
+          - apply_all
+        default: none
 
 # Never let two migration runs overlap.
 concurrency:
@@ -27,4 +45,6 @@ jobs:
       - name: Apply pending migrations
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MIGRATIONS_BASELINE: ${{ github.event.inputs.first_run_mode == 'baseline' && 'true' || '' }}
+          MIGRATIONS_APPLY_ALL: ${{ github.event.inputs.first_run_mode == 'apply_all' && 'true' || '' }}
         run: bash scripts/apply-migrations.sh
