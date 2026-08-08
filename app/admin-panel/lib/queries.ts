@@ -815,6 +815,28 @@ export async function getProoferPillarPosts(
     .filter((p) => p.caption.trim() !== "" || p.mediaUrls.length > 0);
 }
 
+// Every date (all time) that already carries a post for a client — used by the
+// "add to a day" picker to grey out days that are taken.
+export async function getProoferOccupiedDates(
+  clientId: string
+): Promise<string[]> {
+  if (!clientId) return [];
+  const supabase = await createClient();
+  const res = await supabase
+    .from("proofer_posts")
+    .select("post_date")
+    .eq("client_id", clientId);
+  if (res.error) {
+    console.error("getProoferOccupiedDates:", res.error.message);
+    return [];
+  }
+  const set = new Set<string>();
+  for (const row of res.data ?? []) {
+    if (row.post_date) set.add(String(row.post_date).slice(0, 10));
+  }
+  return Array.from(set);
+}
+
 export async function getPostIdeas(
   clientId: string,
   month: string

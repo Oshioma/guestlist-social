@@ -23,8 +23,6 @@ type Post = {
   linkedIdeaKind: string | null;
 };
 
-type MonthPost = { postDate: string; platform: string };
-
 function dayLabel(postDate: string): string {
   const [y, m, d] = postDate.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return postDate;
@@ -35,7 +33,20 @@ function dayLabel(postDate: string): string {
     year: "numeric",
   });
 }
-
+function shiftMonth(value: string, delta: number): string {
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m) return value;
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function monthLabel(value: string): string {
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m) return value;
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function PillarOrganiser({
@@ -43,13 +54,13 @@ export default function PillarOrganiser({
   pillar,
   month,
   posts,
-  monthPosts,
+  occupiedDates,
 }: {
   clientId: string;
   pillar: { id: string; name: string; color: string };
   month: string;
   posts: Post[];
-  monthPosts: MonthPost[];
+  occupiedDates: string[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -60,11 +71,14 @@ export default function PillarOrganiser({
   const [media, setMedia] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(posts.map((p) => [p.id, p.mediaUrls]))
   );
-  const [times, setTimes] = useState<Record<string, string>>(() =>
-    Object.fromEntries(posts.map((p) => [p.id, p.publishTime || "18:00"]))
-  );
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [pickFor, setPickFor] = useState<string | null>(null);
+  const [pickMonth, setPickMonth] = useState<string>(month);
+
+  const occupied = useMemo(() => new Set(occupiedDates), [occupiedDates]);
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const viewedMonth = Number(month.split("-")[1]) || 0;
   const ordered = useMemo(() => {
@@ -78,37 +92,20 @@ export default function PillarOrganiser({
     });
   }, [posts, viewedMonth]);
 
-  // Month grid + which days already carry a post per platform (to grey them out
-  // in the "add to a day" picker).
-  const [gy, gm] = month.split("-").map(Number);
+  // Calendar cells for the month currently shown in the picker.
+  const [cy, cm] = pickMonth.split("-").map(Number);
   const monthCells = useMemo(() => {
-    if (!gy || !gm) return [] as (number | null)[];
-    const lead = new Date(gy, gm - 1, 1).getDay();
-    const total = new Date(gy, gm, 0).getDate();
+    if (!cy || !cm) return [] as (number | null)[];
+    const lead = new Date(cy, cm - 1, 1).getDay();
+    const total = new Date(cy, cm, 0).getDate();
     const cells: (number | null)[] = Array(lead).fill(null);
     for (let d = 1; d <= total; d++) cells.push(d);
     return cells;
-  }, [gy, gm]);
-
-  const occupiedByPlatform = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const mp of monthPosts) {
-      const set = map.get(mp.platform) ?? new Set<string>();
-      set.add(mp.postDate.slice(0, 10));
-      map.set(mp.platform, set);
-    }
-    return map;
-  }, [monthPosts]);
-
+  }, [cy, cm]);
   const dateStr = (d: number) =>
-    `${gy}-${String(gm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    `${cy}-${String(cm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  function persist(
-    post: Post,
-    caption: string,
-    mediaUrls: string[],
-    publishTime: string
-  ) {
+  function persist(post: Post, caption: string, mediaUrls: string[]) {
     setSavingId(post.id);
     startTransition(async () => {
       try {
@@ -121,7 +118,7 @@ export default function PillarOrganiser({
           pillar.id,
           post.linkedIdeaId,
           post.linkedIdeaKind,
-          publishTime,
+          post.publishTime,
           post.publishTargets
         );
         router.refresh();
@@ -130,22 +127,18 @@ export default function PillarOrganiser({
       }
     });
   }
-
   function addImage(post: Post, url: string) {
     const next = [...(media[post.id] ?? []), url];
     setMedia((m) => ({ ...m, [post.id]: next }));
-    persist(post, captions[post.id] ?? post.caption, next, times[post.id] ?? post.publishTime);
+    persist(post, captions[post.id] ?? post.caption, next);
   }
   function removeImage(post: Post, url: string) {
     const next = (media[post.id] ?? []).filter((u) => u !== url);
     setMedia((m) => ({ ...m, [post.id]: next }));
-    persist(post, captions[post.id] ?? post.caption, next, times[post.id] ?? post.publishTime);
+    persist(post, captions[post.id] ?? post.caption, next);
   }
   function saveCaption(post: Post) {
-    persist(post, captions[post.id] ?? "", media[post.id] ?? [], times[post.id] ?? post.publishTime);
-  }
-  function reschedule(post: Post) {
-    persist(post, captions[post.id] ?? post.caption, media[post.id] ?? [], times[post.id] ?? "18:00");
+    persist(post, captions[post.id] ?? "", media[post.id] ?? []);
   }
   function deletePost(post: Post) {
     if (!window.confirm("Delete this post from the library? This removes it from the board too."))
@@ -161,7 +154,8 @@ export default function PillarOrganiser({
       }
     });
   }
-  // Copy this post's (possibly edited) content into an empty day this month.
+  // Copy this post's (possibly edited) content into a future empty day, then
+  // jump to that month's board to see the new (yellow / not-yet-approved) post.
   function addToDay(post: Post, day: number) {
     const target = dateStr(day);
     setSavingId(post.id);
@@ -176,11 +170,13 @@ export default function PillarOrganiser({
           pillar.id,
           post.linkedIdeaId,
           post.linkedIdeaKind,
-          times[post.id] ?? post.publishTime,
+          post.publishTime,
           post.publishTargets
         );
         setPickFor(null);
-        router.refresh();
+        router.push(
+          `/proofer?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
+        );
       } finally {
         setSavingId(null);
       }
@@ -240,8 +236,6 @@ export default function PillarOrganiser({
             const urls = media[post.id] ?? [];
             const platformLabel =
               PROOFER_PLATFORM_LABELS[post.platform as ProoferPlatform] ?? post.platform;
-            const occupied = occupiedByPlatform.get(post.platform) ?? new Set<string>();
-            const timeChanged = (times[post.id] ?? "") !== post.publishTime;
             const captionChanged = (captions[post.id] ?? "") !== post.caption;
             return (
               <div
@@ -255,7 +249,6 @@ export default function PillarOrganiser({
                   flexDirection: "column",
                   gap: 10,
                   opacity: saving ? 0.7 : 1,
-                  position: "relative",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -276,7 +269,6 @@ export default function PillarOrganiser({
                     type="button"
                     onClick={() => deletePost(post)}
                     disabled={saving}
-                    aria-label="Delete from library"
                     style={{
                       marginLeft: "auto",
                       border: "1px solid #fca5a5",
@@ -363,41 +355,20 @@ export default function PillarOrganiser({
                     minHeight: 66,
                   }}
                 />
-                {captionChanged && (
-                  <button type="button" onClick={() => saveCaption(post)} disabled={saving} style={darkBtn}>
-                    Save text
-                  </button>
-                )}
 
-                {/* Reschedule + add-to-a-day */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
-                  <input
-                    type="time"
-                    value={times[post.id] ?? ""}
-                    onChange={(e) => setTimes((t) => ({ ...t, [post.id]: e.target.value }))}
-                    aria-label="Publish time"
-                    style={{
-                      border: "1px solid #e4e4e7",
-                      borderRadius: 8,
-                      padding: "6px 8px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "#18181b",
-                      fontFamily: "inherit",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => reschedule(post)}
-                    disabled={saving || !timeChanged}
-                    style={{ ...ghostBtn, opacity: timeChanged ? 1 : 0.5 }}
-                  >
-                    Reschedule
-                  </button>
+                  {captionChanged && (
+                    <button type="button" onClick={() => saveCaption(post)} disabled={saving} style={darkBtn}>
+                      Save text
+                    </button>
+                  )}
                   <div style={{ position: "relative", marginLeft: "auto" }}>
                     <button
                       type="button"
-                      onClick={() => setPickFor(pickFor === post.id ? null : post.id)}
+                      onClick={() => {
+                        setPickMonth(month);
+                        setPickFor(pickFor === post.id ? null : post.id);
+                      }}
                       disabled={saving}
                       style={accentBtn}
                     >
@@ -410,9 +381,17 @@ export default function PillarOrganiser({
                           onClick={() => setPickFor(null)}
                           style={{ position: "fixed", inset: 0, zIndex: 40 }}
                         />
-                        <div style={calPopup} role="dialog" aria-label="Choose an empty day">
-                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: "#18181b" }}>
-                            Add to an empty day
+                        <div style={calPopup} role="dialog" aria-label="Choose a future empty day">
+                          <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 8 }}>
+                            <button type="button" aria-label="Previous month" onClick={() => setPickMonth((m) => shiftMonth(m, -1))} style={calNavBtn}>
+                              ‹
+                            </button>
+                            <span style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: 800, color: "#18181b" }}>
+                              {monthLabel(pickMonth)}
+                            </span>
+                            <button type="button" aria-label="Next month" onClick={() => setPickMonth((m) => shiftMonth(m, 1))} style={calNavBtn}>
+                              ›
+                            </button>
                           </div>
                           <div style={calGrid}>
                             {WEEKDAYS.map((w, i) => (
@@ -425,24 +404,29 @@ export default function PillarOrganiser({
                                 <div key={`b${i}`} />
                               ) : (
                                 (() => {
-                                  const taken = occupied.has(dateStr(d));
+                                  const ds = dateStr(d);
+                                  const taken = occupied.has(ds);
+                                  const past = ds < todayStr;
+                                  const disabled = taken || past || saving;
                                   return (
                                     <button
                                       key={d}
                                       type="button"
-                                      disabled={taken || saving}
+                                      disabled={disabled}
                                       onClick={() => addToDay(post, d)}
-                                      title={taken ? "Already has a post" : "Add here"}
+                                      title={
+                                        taken ? "Already has a post" : past ? "In the past" : "Add here"
+                                      }
                                       style={{
                                         height: 30,
                                         borderRadius: 7,
                                         border: "1px solid",
-                                        borderColor: taken ? "transparent" : "#c3edd0",
-                                        background: taken ? "#f4f4f5" : "#effaf6",
-                                        color: taken ? "#c4c4cc" : "#1f6b5c",
+                                        borderColor: disabled ? "transparent" : "#99e2d0",
+                                        background: taken ? "#f4f4f5" : past ? "#fafafa" : "#effaf6",
+                                        color: disabled ? "#c4c4cc" : "#1f6b5c",
                                         fontSize: 12,
                                         fontWeight: 700,
-                                        cursor: taken ? "default" : "pointer",
+                                        cursor: disabled ? "default" : "pointer",
                                       }}
                                     >
                                       {d}
@@ -453,7 +437,7 @@ export default function PillarOrganiser({
                             )}
                           </div>
                           <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 8 }}>
-                            Green days are empty ({month}). Copies this post there.
+                            Green days are free & upcoming — copies this post there.
                           </div>
                         </div>
                       </>
@@ -470,7 +454,6 @@ export default function PillarOrganiser({
 }
 
 const darkBtn: React.CSSProperties = {
-  alignSelf: "flex-start",
   border: "1px solid #18181b",
   background: "#18181b",
   color: "#fff",
@@ -478,16 +461,6 @@ const darkBtn: React.CSSProperties = {
   fontWeight: 700,
   borderRadius: 8,
   padding: "7px 12px",
-  cursor: "pointer",
-};
-const ghostBtn: React.CSSProperties = {
-  border: "1px solid #e4e4e7",
-  background: "#fff",
-  color: "#3f3f46",
-  fontSize: 12,
-  fontWeight: 700,
-  borderRadius: 8,
-  padding: "7px 11px",
   cursor: "pointer",
 };
 const accentBtn: React.CSSProperties = {
@@ -512,6 +485,16 @@ const calPopup: React.CSSProperties = {
   borderRadius: 12,
   boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
   padding: 12,
+};
+const calNavBtn: React.CSSProperties = {
+  width: 26,
+  height: 26,
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  color: "#52525b",
+  fontSize: 15,
+  borderRadius: 7,
+  cursor: "pointer",
 };
 const calGrid: React.CSSProperties = {
   display: "grid",
