@@ -123,8 +123,11 @@ export async function completeOnboardingAction(): Promise<VoidResult> {
 }
 
 // Resolve the poster's own team (the personal team created at sign-up). Prefers
-// a team they own, else any team they manage.
-async function resolveOwnTeamId(userId: string): Promise<string | null> {
+// a team they own, else any team they manage. Returns id + name so we can give
+// their first account a sensible default name without asking.
+async function resolveOwnTeam(
+  userId: string
+): Promise<{ id: string; name: string } | null> {
   const admin = createAdminClient();
   const { data: rows } = await admin
     .from("team_members")
@@ -133,51 +136,71 @@ async function resolveOwnTeamId(userId: string): Promise<string | null> {
     .in("role", ["owner", "admin"]);
   if (!rows || rows.length === 0) return null;
   const owned = rows.find((r) => r.role === "owner");
-  return String((owned ?? rows[0]).team_id);
+  const teamId = String((owned ?? rows[0]).team_id);
+  const { data: team } = await admin
+    .from("teams")
+    .select("name")
+    .eq("id", teamId)
+    .maybeSingle();
+  return { id: teamId, name: (team?.name as string) ?? "" };
 }
 
-// Step 2 — create the user's first real account (a clients row linked to their
-// team). Idempotent: if the tour already made one, reuse it. Mirrors
-// createTeamAccount so the account behaves identically everywhere else.
-export async function createOnboardingAccountAction(
-  nameRaw: string
-): Promise<Result<{ clientId: string }>> {
+// A friendly default brand name derived from the personal team ("Oshi's Team"
+// → "Oshi"). The user can rename it inline; nothing is blocked on it.
+function defaultAccountName(teamName: string): string {
+  const trimmed = (teamName ?? "").trim();
+  const stripped = trimmed.replace(/['’]s Team$/i, "").replace(/ Team$/i, "").trim();
+  return stripped || trimmed || "My business";
+}
+
+// Step 2 — make sure the user has a real account to post to, WITHOUT asking
+// them to "add a client". Auto-provisions one (named from their team) the first
+// time, links it to their team, and is idempotent thereafter. This is what lets
+// onboarding lead straight into connecting a social platform.
+export async function ensureOnboardingAccountAction(): Promise<
+  Result<{ clientId: string; name: string }>
+> {
   const access = await requirePoster();
   if (!access) return { ok: false, error: "Not signed in." };
 
-  const name = (nameRaw ?? "").trim();
-  if (!name) return { ok: false, error: "Please enter a name for your account." };
-  if (name.length > 120) return { ok: false, error: "That name is too long." };
-
   try {
-    // Reuse an account this tour already created.
+    const admin = createAdminClient();
     const existing = await getOnboardingState(access.userId);
     if (existing.accountClientId) {
-      return { ok: true, clientId: existing.accountClientId };
+      const { data } = await admin
+        .from("clients")
+        .select("name")
+        .eq("id", existing.accountClientId)
+        .maybeSingle();
+      return {
+        ok: true,
+        clientId: existing.accountClientId,
+        name: (data?.name as string) ?? "",
+      };
     }
 
-    const admin = createAdminClient();
-    const teamId = await resolveOwnTeamId(access.userId);
-    if (!teamId) {
+    const team = await resolveOwnTeam(access.userId);
+    if (!team) {
       return {
         ok: false,
         error: "We couldn't find your team. Please refresh and try again.",
       };
     }
 
+    const name = defaultAccountName(team.name);
     const { data: client, error } = await admin
       .from("clients")
       .insert({ name, platform: "Meta", status: "testing", monthly_budget: 0 })
       .select("id")
       .single();
     if (error || !client) {
-      return { ok: false, error: error?.message ?? "Could not create the account." };
+      return { ok: false, error: error?.message ?? "Could not set up your account." };
     }
 
     const { error: linkErr } = await admin
       .from("team_accounts")
       .upsert(
-        { team_id: teamId, client_id: client.id },
+        { team_id: team.id, client_id: client.id },
         { onConflict: "team_id,client_id" }
       );
     if (linkErr) {
@@ -191,9 +214,33 @@ export async function createOnboardingAccountAction(
       onboarding_step: 2,
     });
     await logOnboardingEvent("account_created", 2, { clientId });
-    return { ok: true, clientId };
+    return { ok: true, clientId, name };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not create the account." };
+    return { ok: false, error: e instanceof Error ? e.message : "Could not set up your account." };
+  }
+}
+
+// Optional inline rename of the tour account (so the auto-name isn't final).
+export async function renameOnboardingAccountAction(
+  nameRaw: string
+): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  const name = (nameRaw ?? "").trim();
+  if (!name) return { ok: false, error: "Please enter a name." };
+  if (name.length > 120) return { ok: false, error: "That name is too long." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (!state.accountClientId) return { ok: false, error: "No account yet." };
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("clients")
+      .update({ name })
+      .eq("id", state.accountClientId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not rename." };
   }
 }
 

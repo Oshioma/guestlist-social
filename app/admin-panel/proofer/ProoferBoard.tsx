@@ -2608,11 +2608,35 @@ export default function ProoferBoard({
       )}
 
       {clients.length === 0 ? (
-        <SectionCard title="No clients">
-          <div style={{ fontSize: 13, color: "#71717a" }}>
-            Add a client first on the Clients page.
-          </div>
-        </SectionCard>
+        standalone ? (
+          <SectionCard title="Let's set up your first post">
+            <div style={{ fontSize: 13.5, color: "#52525b", lineHeight: 1.5, marginBottom: 12 }}>
+              You don&apos;t have an account yet. The 2-minute guided setup connects
+              a social account and walks you through creating your first post.
+            </div>
+            <a
+              href={`${basePath.replace(/\/$/, "")}/onboarding`}
+              style={{
+                display: "inline-block",
+                background: "#6d28d9",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 700,
+                borderRadius: 10,
+                padding: "10px 18px",
+                textDecoration: "none",
+              }}
+            >
+              Start guided setup →
+            </a>
+          </SectionCard>
+        ) : (
+          <SectionCard title="No clients">
+            <div style={{ fontSize: 13, color: "#71717a" }}>
+              Add a client first on the Clients page.
+            </div>
+          </SectionCard>
+        )
       ) : (
         <div
           style={{ display: "flex", flexDirection: "column", gap: 4 }}
