@@ -1,0 +1,142 @@
+/* Guided first-run onboarding — animations + responsive rules that inline
+   styles can't express. The rest of the styling lives inline (React.CSSProperties)
+   to match the Proofer/admin convention. */
+
+.ob-root {
+  --ob-ink: #18181b;
+  --ob-ink-2: #52525b;
+  --ob-ink-3: #8b8b93;
+  --ob-line: #e4e4e7;
+  --ob-sunk: #f4f4f5;
+  --ob-yellow: #f59e0b;
+  --ob-yellow-bg: #fef9c3;
+  --ob-yellow-border: #fde047;
+  --ob-green: #22c55e;
+  --ob-green-bg: #dcfce7;
+  --ob-green-border: #86efac;
+  --ob-accent: #6d28d9;
+  min-height: 100dvh;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #f5f3ff 0%, rgba(245, 243, 255, 0) 60%),
+    #fafafa;
+  color: var(--ob-ink);
+}
+
+@keyframes ob-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ob-pop {
+  0% { opacity: 0; transform: scale(0.96); }
+  60% { transform: scale(1.01); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ob-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(109, 40, 217, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(109, 40, 217, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(109, 40, 217, 0); }
+}
+
+@keyframes ob-text-flash {
+  0% { background-color: rgba(253, 224, 71, 0.55); }
+  100% { background-color: rgba(253, 224, 71, 0); }
+}
+
+@keyframes ob-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ob-fade-up { animation: ob-fade-up 0.35s ease both; }
+.ob-pop { animation: ob-pop 0.28s ease both; }
+
+/* Spotlight: the control the user should act on next. */
+.ob-highlight {
+  position: relative;
+  border-radius: 12px;
+  outline: 2px solid var(--ob-accent);
+  outline-offset: 3px;
+  animation: ob-pulse 1.8s ease-out infinite;
+  z-index: 2;
+}
+
+/* A control that's part of the composer but not the current focus. */
+.ob-dim {
+  opacity: 0.45;
+  filter: saturate(0.7);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+/* Freshly AI-rewritten caption briefly flashes so the change is visible. */
+.ob-changed {
+  animation: ob-text-flash 1.4s ease-out both;
+  border-radius: 8px;
+}
+
+.ob-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ob-spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+.ob-spinner.ob-spinner-dark {
+  border: 2px solid rgba(24, 24, 27, 0.25);
+  border-top-color: #18181b;
+}
+
+/* Layout: coach-mark rail beside the composer on desktop, stacked on mobile. */
+.ob-stage {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 20px 96px;
+  align-items: start;
+}
+
+.ob-coach {
+  position: sticky;
+  top: 20px;
+}
+
+@media (max-width: 820px) {
+  .ob-stage {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 12px 12px 120px;
+  }
+  .ob-coach {
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+  }
+}
+
+/* Sticky action bar so the Save/Schedule buttons are always reachable on mobile. */
+.ob-actionbar {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(250, 250, 250, 0), #fafafa 40%);
+  padding: 14px 0 4px;
+}
+
+.ob-btn {
+  cursor: pointer;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  border: 1px solid transparent;
+  transition: transform 0.06s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ob-btn:active { transform: translateY(1px); }
+.ob-btn:disabled { opacity: 0.55; cursor: not-allowed; }

@@ -339,6 +339,11 @@ export default function ProoferNav({
                   <span className="pnav-label">Manage teams</span>
                 </Link>
 
+                <Link href={`${base}/onboarding?replay=1`} className="pnav-item">
+                  <Tile text="?" tone="muted" />
+                  <span className="pnav-label">Take the Proofer tour</span>
+                </Link>
+
                 <hr className="pnav-sep" />
 
                 <Link href={`${base}/clients?${qs}`} className="pnav-item">

@@ -1,0 +1,1656 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import "./onboarding.css";
+import {
+  startOnboardingAction,
+  saveOnboardingStepAction,
+  skipOnboardingAction,
+  completeOnboardingAction,
+  createOnboardingAccountAction,
+  saveFirstPostAction,
+  logOnboardingEvent,
+} from "./actions";
+
+// ---------------------------------------------------------------------------
+// The guided first-run tour. A single-post composer wired to the REAL AI,
+// stock-image and save backends. It teaches by doing: the user turns a rough
+// idea into a finished, saved Instagram post in ~2 minutes — and learns that
+// yellow = Save (stays safe) and green = Schedule (go), without ever pressing
+// green. Nothing here can publish.
+// ---------------------------------------------------------------------------
+
+type StepId =
+  | "welcome"
+  | "connect"
+  | "idea"
+  | "hook"
+  | "fun"
+  | "shorter"
+  | "image"
+  | "time"
+  | "save"
+  | "green"
+  | "board"
+  | "finish";
+
+// Ordered steps that count toward the "Step X of 11" progress indicator.
+const PROGRESS_STEPS: StepId[] = [
+  "welcome",
+  "connect",
+  "idea",
+  "hook",
+  "fun",
+  "shorter",
+  "image",
+  "time",
+  "save",
+  "green",
+  "board",
+];
+
+// Numeric step persisted server-side (1-based), used for resume.
+const STEP_NUMBER: Record<StepId, number> = {
+  welcome: 1,
+  connect: 2,
+  idea: 3,
+  hook: 4,
+  fun: 5,
+  shorter: 6,
+  image: 7,
+  time: 8,
+  save: 9,
+  green: 10,
+  board: 11,
+  finish: 11,
+};
+
+type Photo = {
+  id: string | number;
+  thumb: string;
+  full: string;
+  photographer?: string;
+};
+
+type MetaResult =
+  | { status: "success"; platforms: string[] }
+  | { status: "error"; message: string }
+  | null;
+
+export type OnboardingFlowProps = {
+  base: string; // "" on postproofer.com, else "/proofer"
+  accountClientId: string | null;
+  initialStep: number;
+  demo: boolean; // replay / tour-again: never creates or saves real data
+  metaResult: MetaResult;
+  todayISO: string; // YYYY-MM-DD from the server (avoids hydration drift)
+};
+
+const AI_LABELS: Record<string, string> = {
+  new_hook: "Hook",
+  more_playful: "More Fun",
+  shorter: "Shorter",
+  regenerate: "Regenerate",
+};
+
+const DRAFT_KEY = "proofer_onboarding_draft_v1";
+
+export default function OnboardingFlow({
+  base,
+  accountClientId: initialAccountId,
+  initialStep,
+  demo,
+  metaResult,
+  todayISO,
+}: OnboardingFlowProps) {
+  const router = useRouter();
+
+  const [step, setStep] = useState<StepId>("welcome");
+  const [accountClientId, setAccountClientId] = useState<string | null>(
+    initialAccountId
+  );
+  const [accountName, setAccountName] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Composer working state.
+  const [idea, setIdea] = useState("");
+  const [caption, setCaption] = useState("");
+  const [prevCaption, setPrevCaption] = useState<string | null>(null); // for Undo
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [postDate, setPostDate] = useState(todayISO);
+  const [publishTime, setPublishTime] = useState("18:30");
+  const [captionFlash, setCaptionFlash] = useState(0); // bump to replay flash
+
+  // Async / error state.
+  const [busy, setBusy] = useState<string | null>(null); // which async op is running
+  const [error, setError] = useState<string | null>(null);
+
+  // Connect step.
+  const [connectedPlatforms] = useState<string[]>(
+    metaResult?.status === "success" ? metaResult.platforms : []
+  );
+
+  // Stock image step.
+  const [imgQuery, setImgQuery] = useState("");
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [imgSearched, setImgSearched] = useState(false);
+
+  const captionRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ---- resume / hydrate ---------------------------------------------------
+  useEffect(() => {
+    // Restore in-progress UI draft (survives refresh / navigation to Meta).
+    let restored: Partial<{
+      step: StepId;
+      idea: string;
+      caption: string;
+      mediaUrls: string[];
+      postDate: string;
+      publishTime: string;
+      accountName: string;
+    }> = {};
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) restored = JSON.parse(raw);
+    } catch {
+      /* ignore */
+    }
+
+    if (restored.idea) setIdea(restored.idea);
+    if (restored.caption) setCaption(restored.caption);
+    if (Array.isArray(restored.mediaUrls)) setMediaUrls(restored.mediaUrls);
+    if (restored.postDate) setPostDate(restored.postDate);
+    if (restored.publishTime) setPublishTime(restored.publishTime);
+    if (restored.accountName) setAccountName(restored.accountName);
+
+    // Decide where to resume.
+    let start: StepId = "welcome";
+    if (metaResult) {
+      // Just came back from the Meta OAuth round-trip → land on connect.
+      start = "connect";
+    } else if (initialStep >= 2 && !initialAccountId) {
+      start = "connect";
+    } else if (initialAccountId) {
+      // Account exists. Restore the composer step if we have a local draft,
+      // else restart the composer cleanly at "idea".
+      const restoredStep = restored.step;
+      const composerSteps: StepId[] = [
+        "idea",
+        "hook",
+        "fun",
+        "shorter",
+        "image",
+        "time",
+        "save",
+        "green",
+        "board",
+      ];
+      if (restoredStep && composerSteps.includes(restoredStep) && restored.caption) {
+        start = restoredStep;
+      } else {
+        start = "idea";
+      }
+    } else if (initialStep >= 1) {
+      start = "connect";
+    }
+
+    if (demo) start = "welcome";
+    setStep(start);
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the in-progress draft locally whenever it changes.
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ step, idea, caption, mediaUrls, postDate, publishTime, accountName })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [hydrated, step, idea, caption, mediaUrls, postDate, publishTime, accountName]);
+
+  // Persist coarse step server-side for cross-device resume (fire-and-forget).
+  useEffect(() => {
+    if (!hydrated || demo) return;
+    if (step === "welcome" || step === "finish") return;
+    void saveOnboardingStepAction(STEP_NUMBER[step]);
+  }, [hydrated, demo, step]);
+
+  const clearDraft = useCallback(() => {
+    try {
+      window.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // ---- helpers ------------------------------------------------------------
+  const progressIndex = PROGRESS_STEPS.indexOf(step);
+  const progressNumber = progressIndex >= 0 ? progressIndex + 1 : PROGRESS_STEPS.length;
+
+  const goto = useCallback((next: StepId) => {
+    setError(null);
+    setStep(next);
+    // Scroll the coach into view on mobile.
+    if (typeof window !== "undefined" && window.innerWidth <= 820) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, []);
+
+  const flashCaption = useCallback(() => setCaptionFlash((n) => n + 1), []);
+
+  const aiModify = useCallback(
+    async (modifier: string, nextStep: StepId, eventName: string) => {
+      const text = caption.trim();
+      if (!text) return;
+      setBusy(modifier);
+      setError(null);
+      const before = caption;
+      try {
+        const res = await fetch("/api/modify-caption", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: accountClientId ?? "",
+            text,
+            modifier,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok || typeof data.value !== "string") {
+          throw new Error(data?.error || "The AI is busy — try again.");
+        }
+        setPrevCaption(before);
+        setCaption(data.value);
+        flashCaption();
+        if (!demo) void logOnboardingEvent(eventName, STEP_NUMBER[nextStep]);
+        // Small beat so the flash is visible before the coach advances.
+        window.setTimeout(() => goto(nextStep), 650);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Something went wrong.");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [caption, accountClientId, demo, flashCaption, goto]
+  );
+
+  const undoCaption = useCallback(() => {
+    if (prevCaption == null) return;
+    setCaption(prevCaption);
+    setPrevCaption(null);
+    flashCaption();
+  }, [prevCaption, flashCaption]);
+
+  // ---- step actions -------------------------------------------------------
+  const handleStart = useCallback(async () => {
+    setBusy("start");
+    if (!demo) await startOnboardingAction();
+    setBusy(null);
+    goto("connect");
+  }, [demo, goto]);
+
+  const handleSkipAll = useCallback(async () => {
+    setBusy("skip");
+    if (!demo) await skipOnboardingAction(STEP_NUMBER[step]);
+    clearDraft();
+    router.push(`${base}/` || "/");
+  }, [demo, step, base, router, clearDraft]);
+
+  const handleCreateAccount = useCallback(async () => {
+    const name = accountName.trim();
+    if (!name) {
+      setError("Give your account a name to continue.");
+      return;
+    }
+    setBusy("account");
+    setError(null);
+    if (demo) {
+      setBusy(null);
+      goto("idea");
+      return;
+    }
+    const res = await createOnboardingAccountAction(name);
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setAccountClientId(res.clientId);
+    goto("idea");
+  }, [accountName, demo, goto]);
+
+  const connectHref = useMemo(() => {
+    if (!accountClientId) return "#";
+    const returnTo = `${base}/onboarding?fromconnect=1`;
+    return `/api/meta/connect?clientId=${encodeURIComponent(
+      accountClientId
+    )}&returnTo=${encodeURIComponent(returnTo)}`;
+  }, [accountClientId, base]);
+
+  const handleGenerate = useCallback(async () => {
+    const seed = idea.trim();
+    if (seed.length < 4) {
+      setError("Tell Proofer a little more about your idea first.");
+      return;
+    }
+    setBusy("generate");
+    setError(null);
+    try {
+      const res = await fetch("/api/modify-caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: accountClientId ?? "",
+          text: seed,
+          modifier: "regenerate",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok || typeof data.value !== "string") {
+        throw new Error(data?.error || "The AI is busy — try again.");
+      }
+      setCaption(data.value);
+      setPrevCaption(null);
+      flashCaption();
+      if (!demo) void logOnboardingEvent("first_post_generated", STEP_NUMBER.hook);
+      window.setTimeout(() => goto("hook"), 500);
+    } catch (e) {
+      // Keep their original text; offer Try Again.
+      setError(e instanceof Error ? e.message : "Couldn't generate — try again.");
+    } finally {
+      setBusy(null);
+    }
+  }, [idea, accountClientId, demo, flashCaption, goto]);
+
+  const runImageSearch = useCallback(
+    async (q: string) => {
+      const query = q.trim();
+      if (!query) return;
+      setBusy("image-search");
+      setError(null);
+      setImgSearched(true);
+      try {
+        const res = await fetch(
+          `/api/suggest-images?q=${encodeURIComponent(query)}&per_page=12`
+        );
+        const data = await res.json();
+        if (!res.ok || !data?.ok || !Array.isArray(data.photos)) {
+          throw new Error(data?.error || "Image search is unavailable.");
+        }
+        setPhotos(data.photos as Photo[]);
+        if ((data.photos as Photo[]).length === 0) {
+          setError("No images for that search — try different words, or skip.");
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Image search failed — you can skip this."
+        );
+      } finally {
+        setBusy(null);
+      }
+    },
+    []
+  );
+
+  // Auto-seed the image search from the caption when entering the image step.
+  useEffect(() => {
+    if (step !== "image" || imgSearched) return;
+    const seed =
+      idea.trim().split(/\s+/).slice(0, 5).join(" ") ||
+      caption.trim().split(/\s+/).slice(0, 4).join(" ");
+    if (seed) {
+      setImgQuery(seed);
+      void runImageSearch(seed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const selectPhoto = useCallback(
+    (p: Photo) => {
+      setMediaUrls([p.full]);
+      if (!demo) void logOnboardingEvent("stock_image_selected", STEP_NUMBER.image);
+      goto("time");
+    },
+    [demo, goto]
+  );
+
+  const applyPreset = useCallback(
+    (date: string, time: string) => {
+      setPostDate(date);
+      setPublishTime(time);
+    },
+    []
+  );
+
+  const handleTimeChosen = useCallback(() => {
+    if (!demo) void logOnboardingEvent("schedule_time_selected", STEP_NUMBER.save, {
+      postDate,
+      publishTime,
+    });
+    goto("save");
+  }, [demo, postDate, publishTime, goto]);
+
+  const handleSave = useCallback(async () => {
+    setBusy("save");
+    setError(null);
+    if (demo) {
+      setBusy(null);
+      goto("green");
+      return;
+    }
+    if (!accountClientId) {
+      setBusy(null);
+      setError("Your account is missing — please restart the tour.");
+      return;
+    }
+    const res = await saveFirstPostAction({
+      clientId: accountClientId,
+      caption,
+      mediaUrls,
+      postDate,
+      publishTime,
+    });
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error); // do NOT advance
+      return;
+    }
+    goto("green");
+  }, [demo, accountClientId, caption, mediaUrls, postDate, publishTime, goto]);
+
+  const handleGreenAck = useCallback(() => {
+    if (!demo) void logOnboardingEvent("green_explained", STEP_NUMBER.green);
+    goto("board");
+  }, [demo, goto]);
+
+  const finish = useCallback(async () => {
+    setBusy("finish");
+    if (!demo) await completeOnboardingAction();
+    clearDraft();
+    const url = `${base}/?tour=done&d=${encodeURIComponent(postDate)}`;
+    router.push(url || "/");
+  }, [demo, base, postDate, router, clearDraft]);
+
+  // ---- derived display ----------------------------------------------------
+  const scheduleLabel = useMemo(() => formatSchedule(postDate, publishTime), [
+    postDate,
+    publishTime,
+  ]);
+  const presets = useMemo(() => buildPresets(todayISO), [todayISO]);
+
+  if (!hydrated) {
+    return (
+      <div className="ob-root" style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+        <span className="ob-spinner ob-spinner-dark" />
+      </div>
+    );
+  }
+
+  // Full-screen moments: welcome + finish.
+  if (step === "welcome") {
+    return (
+      <WelcomeScreen
+        demo={demo}
+        busy={busy}
+        onStart={handleStart}
+        onSkip={handleSkipAll}
+      />
+    );
+  }
+  if (step === "finish") {
+    return null;
+  }
+
+  // ---- the guided composer ------------------------------------------------
+  const coach = coachFor(step, {
+    accountName,
+    scheduleLabel,
+    connectedPlatforms,
+  });
+
+  return (
+    <div className="ob-root">
+      <TopBar
+        progressNumber={progressNumber}
+        total={PROGRESS_STEPS.length}
+        demo={demo}
+        onSkip={handleSkipAll}
+      />
+
+      <div className="ob-stage">
+        {/* Coach-mark rail */}
+        <div className="ob-coach">
+          <CoachCard
+            key={step}
+            eyebrow={`Step ${progressNumber} of ${PROGRESS_STEPS.length}`}
+            title={coach.title}
+            body={coach.body}
+            example={coach.example}
+            tone={coach.tone}
+          />
+          {error && (
+            <div style={errorBox} role="alert">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Working surface */}
+        <div>
+          {step === "connect" ? (
+            <ConnectPanel
+              accountName={accountName}
+              setAccountName={setAccountName}
+              accountClientId={accountClientId}
+              connectHref={connectHref}
+              connectedPlatforms={connectedPlatforms}
+              busy={busy}
+              demo={demo}
+              metaError={metaResult?.status === "error" ? metaResult.message : null}
+              onCreate={handleCreateAccount}
+              onContinue={() => goto("idea")}
+            />
+          ) : (
+            <Composer
+              step={step}
+              busy={busy}
+              // idea
+              idea={idea}
+              setIdea={setIdea}
+              onGenerate={handleGenerate}
+              // caption
+              caption={caption}
+              setCaption={setCaption}
+              captionRef={captionRef}
+              captionFlash={captionFlash}
+              canUndo={prevCaption != null}
+              onUndo={undoCaption}
+              onHook={() => aiModify("new_hook", "fun", "hook_used")}
+              onFun={() => aiModify("more_playful", "shorter", "more_fun_used")}
+              onShorter={() => aiModify("shorter", "image", "shorter_used")}
+              // image
+              accountName={accountName}
+              mediaUrls={mediaUrls}
+              imgQuery={imgQuery}
+              setImgQuery={setImgQuery}
+              photos={photos}
+              onSearch={() => runImageSearch(imgQuery)}
+              onSelectPhoto={selectPhoto}
+              onSkipImage={() => goto("time")}
+              // time
+              presets={presets}
+              postDate={postDate}
+              publishTime={publishTime}
+              onPreset={applyPreset}
+              setPostDate={setPostDate}
+              setPublishTime={setPublishTime}
+              onTimeChosen={handleTimeChosen}
+              scheduleLabel={scheduleLabel}
+              // save / green / board
+              onSave={handleSave}
+              onGreenAck={handleGreenAck}
+              onFinish={finish}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================== */
+/* Sub-components                                                             */
+/* ========================================================================== */
+
+function TopBar({
+  progressNumber,
+  total,
+  demo,
+  onSkip,
+}: {
+  progressNumber: number;
+  total: number;
+  demo: boolean;
+  onSkip: () => void;
+}) {
+  return (
+    <div style={topBarStyle}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={brandStyle}>
+          Post<span style={{ color: "#6d28d9" }}>Proofer</span>
+        </span>
+        {demo && <span style={demoPill}>Tour replay · nothing is saved</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", gap: 4 }} aria-hidden>
+          {Array.from({ length: total }).map((_, i) => (
+            <span
+              key={i}
+              style={{
+                width: 18,
+                height: 5,
+                borderRadius: 3,
+                background: i < progressNumber ? "#6d28d9" : "#e4e4e7",
+              }}
+            />
+          ))}
+        </div>
+        <span style={{ fontSize: 12, color: "#71717a", fontWeight: 600 }}>
+          Getting started · {progressNumber} of {total}
+        </span>
+        <button type="button" onClick={onSkip} style={skipLinkStyle}>
+          {demo ? "Exit" : "Skip for now"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CoachCard({
+  eyebrow,
+  title,
+  body,
+  example,
+  tone,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  example?: string;
+  tone?: "default" | "yellow" | "green";
+}) {
+  const accent =
+    tone === "yellow" ? "#f59e0b" : tone === "green" ? "#22c55e" : "#6d28d9";
+  return (
+    <div className="ob-pop" style={{ ...coachCardStyle, borderTopColor: accent }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: accent, textTransform: "uppercase" }}>
+        {eyebrow}
+      </div>
+      <h2 style={{ margin: "8px 0 6px", fontSize: 19, fontWeight: 800, lineHeight: 1.25 }}>
+        {title}
+      </h2>
+      <p style={{ margin: 0, fontSize: 14, color: "#3f3f46", lineHeight: 1.5 }}>{body}</p>
+      {example && (
+        <p style={exampleStyle}>
+          e.g. “{example}”
+        </p>
+      )}
+    </div>
+  );
+}
+
+function WelcomeScreen({
+  demo,
+  busy,
+  onStart,
+  onSkip,
+}: {
+  demo: boolean;
+  busy: string | null;
+  onStart: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="ob-root" style={{ display: "grid", placeItems: "center", padding: 24 }}>
+      <div className="ob-fade-up" style={welcomeCardStyle}>
+        <div style={{ fontSize: 40 }}>👋</div>
+        <h1 style={{ margin: "8px 0 0", fontSize: 30, fontWeight: 850, letterSpacing: -0.5 }}>
+          Let&apos;s create your first post
+        </h1>
+        <p style={{ margin: "12px 0 0", fontSize: 16, color: "#52525b", lineHeight: 1.55, maxWidth: 460 }}>
+          We&apos;ll show you how Proofer works by making one together. It takes
+          about 2 minutes — and you stay in control the whole way.
+        </p>
+        <button
+          type="button"
+          className="ob-btn"
+          onClick={onStart}
+          disabled={!!busy}
+          style={{ ...primaryBtn, marginTop: 26, padding: "14px 26px", fontSize: 16 }}
+        >
+          {busy === "start" ? <span className="ob-spinner" /> : null}
+          Let&apos;s go →
+        </button>
+        <button type="button" onClick={onSkip} style={{ ...skipLinkStyle, marginTop: 14 }}>
+          {demo ? "Exit tour" : "Skip for now"}
+        </button>
+        {!demo && (
+          <p style={{ margin: "18px 0 0", fontSize: 12, color: "#a1a1aa" }}>
+            You can restart this tour any time from the “?” menu.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConnectPanel({
+  accountName,
+  setAccountName,
+  accountClientId,
+  connectHref,
+  connectedPlatforms,
+  busy,
+  demo,
+  metaError,
+  onCreate,
+  onContinue,
+}: {
+  accountName: string;
+  setAccountName: (v: string) => void;
+  accountClientId: string | null;
+  connectHref: string;
+  connectedPlatforms: string[];
+  busy: string | null;
+  demo: boolean;
+  metaError: string | null;
+  onCreate: () => void;
+  onContinue: () => void;
+}) {
+  const hasAccount = !!accountClientId || demo;
+  const igOn = connectedPlatforms.includes("instagram");
+  const fbOn = connectedPlatforms.includes("facebook");
+  const anyOn = igOn || fbOn;
+
+  return (
+    <div style={cardStyle}>
+      <h3 style={cardTitle}>First, set up somewhere to post</h3>
+      <p style={cardSub}>
+        Give your account a name — usually your business or brand. This is where
+        your posts live.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <input
+          className={!hasAccount ? "ob-highlight" : undefined}
+          value={accountName}
+          onChange={(e) => setAccountName(e.target.value)}
+          placeholder="e.g. My Café"
+          disabled={hasAccount && !demo}
+          style={{ ...inputStyle, maxWidth: 300, flex: 1 }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !hasAccount) onCreate();
+          }}
+        />
+        {!hasAccount ? (
+          <button
+            type="button"
+            className="ob-btn"
+            onClick={onCreate}
+            disabled={busy === "account"}
+            style={primaryBtn}
+          >
+            {busy === "account" ? <span className="ob-spinner" /> : null}
+            Create account
+          </button>
+        ) : (
+          <span style={successPill}>✓ {accountName || "Account"} ready</span>
+        )}
+      </div>
+
+      {hasAccount && (
+        <div className="ob-fade-up" style={{ marginTop: 22, borderTop: "1px solid #f0f0f2", paddingTop: 20 }}>
+          <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>
+            Connect Instagram or Facebook <span style={{ color: "#a1a1aa", fontWeight: 500 }}>(optional)</span>
+          </h4>
+          <p style={cardSub}>
+            Connecting lets Proofer publish for you later. You can do this now or
+            any time — you don&apos;t need it to build and save your first post.
+          </p>
+
+          {metaError && (
+            <div style={errorBox}>
+              Couldn&apos;t connect: {metaError}. You can retry, or skip and connect later.
+            </div>
+          )}
+
+          {anyOn ? (
+            <div style={{ ...successPill, display: "inline-flex" }}>
+              ✓ {igOn ? "Instagram" : ""}
+              {igOn && fbOn ? " & " : ""}
+              {fbOn ? "Facebook" : ""} connected
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {demo ? (
+                <span style={{ ...secondaryBtn, opacity: 0.6 }}>Connect (disabled in replay)</span>
+              ) : (
+                <a href={connectHref} className="ob-btn" style={secondaryBtn}>
+                  🔗 Connect a social account
+                </a>
+              )}
+            </div>
+          )}
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#a1a1aa" }}>
+            You can connect more accounts later.
+          </p>
+
+          <div style={{ marginTop: 22 }}>
+            <button type="button" className="ob-btn" onClick={onContinue} style={primaryBtn}>
+              {anyOn ? "Great — next →" : "Skip for now →"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ComposerProps = {
+  step: StepId;
+  busy: string | null;
+  idea: string;
+  setIdea: (v: string) => void;
+  onGenerate: () => void;
+  caption: string;
+  setCaption: (v: string) => void;
+  captionRef: React.RefObject<HTMLTextAreaElement | null>;
+  captionFlash: number;
+  canUndo: boolean;
+  onUndo: () => void;
+  onHook: () => void;
+  onFun: () => void;
+  onShorter: () => void;
+  accountName: string;
+  mediaUrls: string[];
+  imgQuery: string;
+  setImgQuery: (v: string) => void;
+  photos: Photo[];
+  onSearch: () => void;
+  onSelectPhoto: (p: Photo) => void;
+  onSkipImage: () => void;
+  presets: { label: string; date: string; time: string }[];
+  postDate: string;
+  publishTime: string;
+  onPreset: (date: string, time: string) => void;
+  setPostDate: (v: string) => void;
+  setPublishTime: (v: string) => void;
+  onTimeChosen: () => void;
+  scheduleLabel: string;
+  onSave: () => void;
+  onGreenAck: () => void;
+  onFinish: () => void;
+};
+
+function Composer(props: ComposerProps) {
+  const { step } = props;
+  const showIdea = step === "idea";
+  const hasCaption = props.caption.trim().length > 0;
+  const aiStep = step === "hook" || step === "fun" || step === "shorter";
+  const showImage = step === "image";
+  const showTime = step === "time";
+  const showSave = step === "save";
+  const showGreen = step === "green";
+  const showBoard = step === "board";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* IDEA */}
+      {showIdea && (
+        <div style={cardStyle} className="ob-fade-up">
+          <label style={cardTitle}>What would you like to post about?</label>
+          <p style={cardSub}>
+            Just tell Proofer the idea. Don&apos;t worry about writing the perfect
+            caption — we&apos;ll do that next.
+          </p>
+          <textarea
+            className="ob-highlight"
+            value={props.idea}
+            onChange={(e) => props.setIdea(e.target.value)}
+            rows={4}
+            placeholder="Tell people about our new summer menu and invite them to come this weekend."
+            style={textareaStyle}
+            autoFocus
+          />
+          <div style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              className="ob-btn"
+              onClick={props.onGenerate}
+              disabled={props.busy === "generate" || props.idea.trim().length < 4}
+              style={primaryBtn}
+            >
+              {props.busy === "generate" ? (
+                <>
+                  <span className="ob-spinner" /> Writing your post…
+                </>
+              ) : (
+                "Create my post →"
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CAPTION + AI TOOLS */}
+      {!showIdea && hasCaption && (
+        <div style={cardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={cardTitle}>Your post</span>
+            {props.canUndo && (
+              <button type="button" onClick={props.onUndo} style={undoBtn} title="Undo last change">
+                ↶ Undo
+              </button>
+            )}
+          </div>
+          <textarea
+            key={`cap-${props.captionFlash}`}
+            ref={props.captionRef}
+            className={props.captionFlash ? "ob-changed" : undefined}
+            value={props.caption}
+            onChange={(e) => props.setCaption(e.target.value)}
+            rows={7}
+            style={{
+              ...textareaStyle,
+              ...(aiStep ? {} : {}),
+            }}
+          />
+
+          {/* AI editing chips */}
+          <div
+            className={aiStep ? "ob-highlight" : undefined}
+            style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, padding: aiStep ? 6 : 0, borderRadius: 12 }}
+          >
+            <AiChip
+              label={AI_LABELS.new_hook}
+              hint="stronger opening"
+              active={step === "hook"}
+              running={props.busy === "new_hook"}
+              disabled={!!props.busy || step !== "hook"}
+              onClick={props.onHook}
+            />
+            <AiChip
+              label={AI_LABELS.more_playful}
+              hint="more personality"
+              active={step === "fun"}
+              running={props.busy === "more_playful"}
+              disabled={!!props.busy || step !== "fun"}
+              onClick={props.onFun}
+            />
+            <AiChip
+              label={AI_LABELS.shorter}
+              hint="trim it down"
+              active={step === "shorter"}
+              running={props.busy === "shorter"}
+              disabled={!!props.busy || step !== "shorter"}
+              onClick={props.onShorter}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE */}
+      {showImage && (
+        <div style={cardStyle} className="ob-fade-up">
+          <span style={cardTitle}>Let&apos;s give your post an image</span>
+          <p style={cardSub}>Search free stock photos and pick one you like.</p>
+          <div className="ob-highlight" style={{ display: "flex", gap: 8, padding: 6, borderRadius: 12 }}>
+            <input
+              value={props.imgQuery}
+              onChange={(e) => props.setImgQuery(e.target.value)}
+              placeholder="Stock images — e.g. summer cocktails"
+              style={{ ...inputStyle, flex: 1 }}
+              onKeyDown={(e) => e.key === "Enter" && props.onSearch()}
+            />
+            <button type="button" className="ob-btn" onClick={props.onSearch} disabled={props.busy === "image-search"} style={primaryBtn}>
+              {props.busy === "image-search" ? <span className="ob-spinner" /> : "Search"}
+            </button>
+          </div>
+
+          <div style={photoGrid}>
+            {props.photos.map((p) => (
+              <button key={String(p.id)} type="button" onClick={() => props.onSelectPhoto(p)} style={photoBtn} title="Choose this image">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.thumb} alt="" style={photoImg} />
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <button type="button" onClick={props.onSkipImage} style={undoBtn}>
+              Skip image for now →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE PREVIEW (from image step onward) */}
+      {(showImage || showTime || showSave || showGreen || showBoard) && hasCaption && (
+        <PostPreview accountName={props.accountName} caption={props.caption} mediaUrls={props.mediaUrls} />
+      )}
+
+      {/* TIME */}
+      {showTime && (
+        <div style={cardStyle} className="ob-fade-up">
+          <span style={cardTitle}>When would you like this to go out?</span>
+          <p style={cardSub}>Pick a suggested time or choose your own. (You&apos;re just setting it — nothing sends yet.)</p>
+          <div className="ob-highlight" style={{ display: "flex", flexDirection: "column", gap: 10, padding: 8, borderRadius: 12 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {props.presets.map((pre) => {
+                const on = pre.date === props.postDate && pre.time === props.publishTime;
+                return (
+                  <button
+                    key={pre.label}
+                    type="button"
+                    onClick={() => props.onPreset(pre.date, pre.time)}
+                    style={on ? presetBtnOn : presetBtn}
+                  >
+                    {pre.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#71717a", fontWeight: 600 }}>Or choose:</span>
+              <input type="date" value={props.postDate} onChange={(e) => props.setPostDate(e.target.value)} style={inputStyle} />
+              <input type="time" value={props.publishTime} onChange={(e) => props.setPublishTime(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <div style={scheduleBanner}>
+            📅 Instagram • <strong>{props.scheduleLabel}</strong>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <button type="button" className="ob-btn" onClick={props.onTimeChosen} style={primaryBtn}>
+              Looks good →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SAVE (YELLOW) + SCHEDULE (GREEN) action bar */}
+      {(showSave || showGreen || showBoard) && (
+        <div className="ob-actionbar">
+          <div style={cardStyle}>
+            {showSave && (
+              <p style={{ ...cardSub, marginBottom: 12 }}>
+                <strong style={{ color: "#18181b" }}>Yellow means SAVE.</strong> Your post stays
+                safely in Proofer and won&apos;t be published. Press it to save your first post.
+              </p>
+            )}
+            {showGreen && (
+              <p style={{ ...cardSub, marginBottom: 12 }}>
+                <strong style={{ color: "#18181b" }}>Green means GO.</strong> When you&apos;re happy
+                with a post, press green and Proofer schedules it for the time you chose —{" "}
+                <em>{props.scheduleLabel}</em>. We&apos;re leaving your first post <strong>saved</strong> for
+                now. Press green whenever you&apos;re ready.
+              </p>
+            )}
+
+            {!showBoard && (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                {/* YELLOW = SAVE */}
+                <button
+                  type="button"
+                  className={"ob-btn" + (showSave ? " ob-highlight" : "")}
+                  onClick={props.onSave}
+                  disabled={!showSave || props.busy === "save"}
+                  style={yellowBtn}
+                  aria-label="Save post (yellow)"
+                >
+                  {props.busy === "save" ? <span className="ob-spinner ob-spinner-dark" /> : "🟡"} Save
+                </button>
+
+                {/* GREEN = SCHEDULE (demonstrated, not pressed) */}
+                <button
+                  type="button"
+                  className={"ob-btn" + (showGreen ? " ob-highlight" : "")}
+                  onClick={showGreen ? props.onGreenAck : undefined}
+                  disabled={showSave}
+                  title={showSave ? "We'll get to green next" : "Green = Schedule"}
+                  style={{ ...greenBtn, ...(showSave ? { opacity: 0.5 } : {}) }}
+                  aria-label="Schedule post (green)"
+                >
+                  🟢 Schedule
+                </button>
+
+                {showSave && (
+                  <span style={{ fontSize: 12, color: "#a1a1aa" }}>
+                    Nothing posts automatically — you&apos;re in control.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {showGreen && (
+              <div style={{ marginTop: 16 }}>
+                <button type="button" className="ob-btn" onClick={props.onGreenAck} style={primaryBtn}>
+                  Got it →
+                </button>
+              </div>
+            )}
+
+            {showBoard && (
+              <FinishBlock scheduleLabel={props.scheduleLabel} onFinish={props.onFinish} busy={props.busy} />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AiChip({
+  label,
+  hint,
+  active,
+  running,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  active: boolean;
+  running: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...aiChipStyle,
+        ...(active ? aiChipActive : {}),
+        ...(disabled && !active ? { opacity: 0.5 } : {}),
+      }}
+    >
+      {running ? <span className="ob-spinner ob-spinner-dark" /> : null}
+      <span style={{ fontWeight: 800 }}>{label}</span>
+      <span style={{ fontSize: 11, color: active ? "#5b21b6" : "#a1a1aa" }}>· {hint}</span>
+    </button>
+  );
+}
+
+function PostPreview({
+  accountName,
+  caption,
+  mediaUrls,
+}: {
+  accountName: string;
+  caption: string;
+  mediaUrls: string[];
+}) {
+  const handle = (accountName || "yourbrand").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 24) || "yourbrand";
+  return (
+    <div className="ob-fade-up" style={previewCard}>
+      <div style={previewHeader}>
+        <div style={previewAvatar}>{(accountName || "Y").slice(0, 1).toUpperCase()}</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{handle}</span>
+          <span style={{ fontSize: 11, color: "#a1a1aa" }}>Instagram · preview</span>
+        </div>
+      </div>
+      {mediaUrls[0] ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mediaUrls[0]} alt="" style={previewImage} />
+      ) : (
+        <div style={previewImagePlaceholder}>🖼️ Your image will appear here</div>
+      )}
+      <div style={{ padding: "12px 14px" }}>
+        <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", color: "#27272a" }}>
+          <strong>{handle}</strong> {caption}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FinishBlock({
+  scheduleLabel,
+  onFinish,
+  busy,
+}: {
+  scheduleLabel: string;
+  onFinish: () => void;
+  busy: string | null;
+}) {
+  return (
+    <div className="ob-fade-up" style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 34 }}>🎉</div>
+      <h3 style={{ margin: "4px 0 6px", fontSize: 22, fontWeight: 850 }}>You&apos;re ready</h3>
+      <p style={{ ...cardSub, marginBottom: 10 }}>
+        You just created your first post with Proofer — it&apos;s <strong>saved</strong> and waiting
+        for {scheduleLabel}. Here&apos;s the mental model:
+      </p>
+      <div style={mentalModel}>Idea → Improve → Add image → Choose time → Save → Green when ready</div>
+      <div style={{ display: "flex", gap: 12, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={legendYellow}>🟡 Yellow = Saved</span>
+        <span style={legendGreen}>🟢 Green = Ready to go</span>
+      </div>
+      <p style={{ ...cardSub, marginTop: 12 }}>
+        Your post now lives on your board. Tap it any time to reopen and edit — and press
+        green when you&apos;re ready.
+      </p>
+      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+        <button type="button" className="ob-btn" onClick={onFinish} disabled={!!busy} style={primaryBtn}>
+          {busy === "finish" ? <span className="ob-spinner" /> : null}
+          Create another post
+        </button>
+        <button type="button" className="ob-btn" onClick={onFinish} disabled={!!busy} style={secondaryBtn}>
+          Go to my posts
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================== */
+/* Content + helpers                                                          */
+/* ========================================================================== */
+
+function coachFor(
+  step: StepId,
+  ctx: { accountName: string; scheduleLabel: string; connectedPlatforms: string[] }
+): { title: string; body: string; example?: string; tone?: "default" | "yellow" | "green" } {
+  switch (step) {
+    case "connect":
+      return {
+        title: "Connect somewhere to post",
+        body: "Name your account, then optionally link Instagram or Facebook. You can always connect more later.",
+      };
+    case "idea":
+      return {
+        title: "Give Proofer a rough idea",
+        body: "Type a sentence or two about what you want to say. Proofer turns it into a real caption.",
+        example: "Tell people about our new summer menu and invite them to come this weekend.",
+      };
+    case "hook":
+      return {
+        title: "Want a stronger opening?",
+        body: "Press Hook and Proofer rewrites just your first line to grab attention.",
+      };
+    case "fun":
+      return {
+        title: "Change the personality",
+        body: "Press More Fun to give it more energy. You can change the tone whenever you like.",
+      };
+    case "shorter":
+      return {
+        title: "Too much? Make it shorter",
+        body: "Press Shorter to trim it down. You're always in control — edit it yourself or use Undo. Nothing posts automatically.",
+      };
+    case "image":
+      return {
+        title: "Add an image",
+        body: "Search free stock photos and choose one you like. This is where your rough idea starts to look like a real post.",
+      };
+    case "time":
+      return {
+        title: "Choose when it could post",
+        body: "Pick a suggested time or set your own. You're only choosing a time — nothing sends yet.",
+      };
+    case "save":
+      return {
+        title: "Yellow means SAVE",
+        body: "Press the yellow Save button. Your post stays safely in Proofer and won't be published.",
+        tone: "yellow",
+      };
+    case "green":
+      return {
+        title: "Green means GO",
+        body: `Green schedules a post for the time you chose (${ctx.scheduleLabel}). We're leaving yours saved — press green whenever you're ready.`,
+        tone: "green",
+      };
+    case "board":
+      return {
+        title: "That's your first post 🎉",
+        body: "It's saved on your board. Yellow = Saved, Green = Ready to go. Tap any post to reopen it.",
+      };
+    default:
+      return { title: "", body: "" };
+  }
+}
+
+// Two friendly presets + nothing complex (per spec: keep timing simple).
+function buildPresets(todayISO: string): { label: string; date: string; time: string }[] {
+  const tomorrow = addDaysISO(todayISO, 1);
+  return [
+    { label: "Today · 6:30 PM", date: todayISO, time: "18:30" },
+    { label: "Tomorrow · 9:00 AM", date: tomorrow, time: "09:00" },
+    { label: "This weekend · 11:00 AM", date: nextSaturdayISO(todayISO), time: "11:00" },
+  ];
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+function nextSaturdayISO(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay(); // 0 Sun .. 6 Sat
+  const delta = (6 - day + 7) % 7 || 7;
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}
+
+function formatSchedule(dateISO: string, time: string): string {
+  try {
+    const [y, m, d] = dateISO.split("-").map(Number);
+    const [hh, mm] = time.split(":").map(Number);
+    const dt = new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 18, mm ?? 0);
+    const weekday = dt.toLocaleDateString(undefined, { weekday: "long" });
+    const clock = dt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return `${weekday} at ${clock}`;
+  } catch {
+    return `${dateISO} at ${time}`;
+  }
+}
+
+/* ========================================================================== */
+/* Inline styles (match the Proofer/admin convention)                        */
+/* ========================================================================== */
+
+const topBarStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: "12px 20px",
+  borderBottom: "1px solid #ececef",
+  background: "rgba(255,255,255,0.8)",
+  backdropFilter: "blur(6px)",
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+  flexWrap: "wrap",
+};
+
+const brandStyle: React.CSSProperties = { fontSize: 16, fontWeight: 850, letterSpacing: -0.3 };
+
+const demoPill: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#6d28d9",
+  background: "#f5f3ff",
+  border: "1px solid #ddd6fe",
+  borderRadius: 999,
+  padding: "3px 9px",
+};
+
+const skipLinkStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#71717a",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+  textDecoration: "underline",
+  padding: 0,
+};
+
+const coachCardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderTop: "3px solid #6d28d9",
+  borderRadius: 14,
+  padding: 18,
+  boxShadow: "0 1px 2px rgba(24,24,27,.04), 0 10px 30px -18px rgba(24,24,27,.18)",
+};
+
+const exampleStyle: React.CSSProperties = {
+  margin: "12px 0 0",
+  fontSize: 13,
+  color: "#6d28d9",
+  background: "#f5f3ff",
+  border: "1px solid #ede9fe",
+  borderRadius: 10,
+  padding: "8px 10px",
+  lineHeight: 1.45,
+};
+
+const cardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 14,
+  padding: 18,
+};
+
+const cardTitle: React.CSSProperties = { fontSize: 15, fontWeight: 750, color: "#18181b", display: "block" };
+const cardSub: React.CSSProperties = { margin: "6px 0 12px", fontSize: 13.5, color: "#71717a", lineHeight: 1.5 };
+
+const inputStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #d4d4d8",
+  fontSize: 14,
+  color: "#18181b",
+  outline: "none",
+  background: "#fff",
+};
+
+const textareaStyle: React.CSSProperties = {
+  ...inputStyle,
+  width: "100%",
+  resize: "vertical",
+  lineHeight: 1.5,
+  fontFamily: "inherit",
+};
+
+const primaryBtn: React.CSSProperties = {
+  background: "#6d28d9",
+  color: "#fff",
+  border: "1px solid #6d28d9",
+  padding: "11px 18px",
+};
+
+const secondaryBtn: React.CSSProperties = {
+  background: "#fff",
+  color: "#3f3f46",
+  border: "1px solid #d4d4d8",
+  padding: "11px 18px",
+  textDecoration: "none",
+};
+
+const yellowBtn: React.CSSProperties = {
+  background: "#fef9c3",
+  color: "#854d0e",
+  border: "1px solid #fde047",
+  padding: "12px 22px",
+  fontSize: 15,
+};
+
+const greenBtn: React.CSSProperties = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  padding: "12px 22px",
+  fontSize: 15,
+};
+
+const undoBtn: React.CSSProperties = {
+  background: "#f4f4f5",
+  color: "#52525b",
+  border: "1px solid #e4e4e7",
+  borderRadius: 8,
+  padding: "6px 10px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const aiChipStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 999,
+  padding: "8px 14px",
+  fontSize: 13,
+  color: "#3f3f46",
+  cursor: "pointer",
+};
+
+const aiChipActive: React.CSSProperties = {
+  border: "1px solid #c4b5fd",
+  background: "#f5f3ff",
+  color: "#5b21b6",
+  boxShadow: "0 0 0 3px rgba(109,40,217,0.12)",
+};
+
+const presetBtn: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  padding: "9px 14px",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#3f3f46",
+  cursor: "pointer",
+};
+const presetBtnOn: React.CSSProperties = {
+  ...presetBtn,
+  border: "1px solid #6d28d9",
+  background: "#f5f3ff",
+  color: "#5b21b6",
+};
+
+const scheduleBanner: React.CSSProperties = {
+  marginTop: 12,
+  background: "#faf5ff",
+  border: "1px solid #ede9fe",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 14,
+  color: "#5b21b6",
+};
+
+const errorBox: React.CSSProperties = {
+  marginTop: 12,
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  color: "#b91c1c",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
+const successPill: React.CSSProperties = {
+  alignSelf: "center",
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "8px 14px",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const welcomeCardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 20,
+  padding: "40px 32px",
+  maxWidth: 560,
+  textAlign: "center",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  boxShadow: "0 1px 2px rgba(24,24,27,.04), 0 30px 60px -30px rgba(24,24,27,.22)",
+};
+
+const photoGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+  gap: 8,
+  marginTop: 12,
+};
+
+const photoBtn: React.CSSProperties = {
+  padding: 0,
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  overflow: "hidden",
+  cursor: "pointer",
+  background: "#f4f4f5",
+  aspectRatio: "1 / 1",
+};
+
+const photoImg: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", display: "block" };
+
+const previewCard: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 14,
+  overflow: "hidden",
+  maxWidth: 420,
+};
+
+const previewHeader: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "10px 12px",
+};
+
+const previewAvatar: React.CSSProperties = {
+  width: 32,
+  height: 32,
+  borderRadius: 999,
+  background: "linear-gradient(135deg,#dd2a7b,#f59e0b)",
+  color: "#fff",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 800,
+  fontSize: 14,
+};
+
+const previewImage: React.CSSProperties = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  objectFit: "cover",
+  display: "block",
+  background: "#f4f4f5",
+};
+
+const previewImagePlaceholder: React.CSSProperties = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  display: "grid",
+  placeItems: "center",
+  color: "#a1a1aa",
+  fontSize: 13,
+  background: "#f4f4f5",
+};
+
+const mentalModel: React.CSSProperties = {
+  background: "#f5f3ff",
+  border: "1px solid #ede9fe",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#5b21b6",
+  lineHeight: 1.5,
+};
+
+const legendYellow: React.CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: "#854d0e",
+  background: "#fef9c3",
+  border: "1px solid #fde047",
+  borderRadius: 999,
+  padding: "5px 12px",
+};
+const legendGreen: React.CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: "#166534",
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "5px 12px",
+};

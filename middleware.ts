@@ -27,7 +27,8 @@ function isProoferSurfacePath(path: string): boolean {
     path.startsWith("/teams/") ||
     path === "/super-admin" ||
     path.startsWith("/super-admin/") ||
-    path === "/publish"
+    path === "/publish" ||
+    path === "/onboarding"
   );
 }
 
@@ -269,5 +270,6 @@ export const config = {
     "/super-admin/:path*",
     "/super-admin",
     "/publish",
+    "/onboarding",
   ],
 };
