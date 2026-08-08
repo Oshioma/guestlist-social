@@ -117,7 +117,14 @@ export default function ProoferNav({
           onMouseEnter={() => setBrandMenu(true)}
           onMouseLeave={() => setBrandMenu(false)}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 13, cursor: "pointer" }}>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-haspopup="menu"
+            aria-expanded={brandMenu}
+            onClick={() => setBrandMenu((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 13, cursor: "pointer" }}
+          >
             <div
               aria-hidden
               style={{
@@ -137,9 +144,17 @@ export default function ProoferNav({
             <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1 }}>
               Proofer
             </div>
+            <span aria-hidden style={{ color: "#a1a1aa", fontSize: 11, marginLeft: 2 }}>▾</span>
           </div>
 
           {brandMenu && (
+            <>
+              {/* Tap-away catcher (touch has no hover) */}
+              <div
+                aria-hidden
+                onClick={() => setBrandMenu(false)}
+                style={{ position: "fixed", inset: 0, zIndex: 55 }}
+              />
             <div style={{ position: "absolute", top: "100%", left: 0, paddingTop: 8, zIndex: 60 }}>
               <div
                 style={{
@@ -155,6 +170,16 @@ export default function ProoferNav({
                 <Link href={`/proofer/clients?${qs}`} style={menuItem}>
                   👥 Clients
                 </Link>
+                {clientId && (
+                  <Link
+                    href={`/portal/${encodeURIComponent(clientId)}`}
+                    target="_blank"
+                    rel="noopener"
+                    style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}
+                  >
+                    👁 Client view ↗
+                  </Link>
+                )}
                 <form action="/sign-out" method="post" style={{ margin: 0 }}>
                   <button type="submit" style={{ ...menuItem, width: "100%", textAlign: "left", background: "transparent", border: "none", borderTop: "1px solid #f4f4f5", cursor: "pointer" }}>
                     Sign out
@@ -162,6 +187,7 @@ export default function ProoferNav({
                 </form>
               </div>
             </div>
+            </>
           )}
         </div>
 

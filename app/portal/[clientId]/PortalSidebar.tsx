@@ -65,9 +65,10 @@ export default function PortalSidebar({
         <div
           style={{
             fontSize: 11,
-            color: "#94a3b8",
+            color: "#b8e3d8",
             textTransform: "uppercase",
-            letterSpacing: "0.06em",
+            letterSpacing: "0.08em",
+            fontWeight: 700,
           }}
         >
           Client portal
@@ -89,9 +90,9 @@ export default function PortalSidebar({
               fontSize: 10,
               padding: "3px 8px",
               borderRadius: 999,
-              background: "rgba(251, 191, 36, 0.2)",
-              color: "#fde68a",
-              fontWeight: 600,
+              background: "rgba(184, 227, 216, 0.2)",
+              color: "#b8e3d8",
+              fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: "0.04em",
               display: "inline-block",
@@ -114,11 +115,12 @@ export default function PortalSidebar({
               href={item.href}
               style={{
                 display: "block",
-                padding: "8px 12px",
-                borderRadius: 6,
+                padding: "9px 13px",
+                borderRadius: 9,
                 fontSize: 14,
-                color: active ? "#fff" : "#94a3b8",
-                background: active ? "rgba(255,255,255,0.1)" : "transparent",
+                fontWeight: active ? 700 : 500,
+                color: active ? "#fff" : "#a6a6ad",
+                background: active ? "rgba(184,227,216,0.18)" : "transparent",
                 textDecoration: "none",
                 whiteSpace: "nowrap",
               }}
