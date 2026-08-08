@@ -7,12 +7,72 @@ import { updateSession } from "./lib/supabase/middleware";
 const PROTECTED_PREFIXES = ["/app", "/admin-panel", "/portal", "/proofer"];
 const ADMIN_PREFIXES = ["/app", "/admin-panel", "/proofer"];
 
-export async function middleware(request: NextRequest) {
-  const response = await updateSession(request);
+// Hosts that serve the standalone Proofer at their own root. On these hosts the
+// Proofer route tree (which physically lives under /proofer) is exposed with
+// the /proofer prefix hidden, so postproofer.com/ IS the board, /pillars is the
+// pillars page, and so on. Keep this list in sync with app/proofer/base.ts.
+const PROOFER_HOSTS = new Set(["postproofer.com", "www.postproofer.com"]);
 
+// The clean (prefix-less) paths that map onto the /proofer route tree on a
+// Proofer host. Everything else on that host either passes straight through
+// (auth pages, API, assets) or is bounced (the other product surfaces).
+function isProoferSurfacePath(path: string): boolean {
+  return (
+    path === "/" ||
+    path === "/pillars" ||
+    path.startsWith("/pillars/") ||
+    path === "/clients" ||
+    path.startsWith("/clients/")
+  );
+}
+
+export async function middleware(request: NextRequest) {
+  const host =
+    request.headers.get("host")?.toLowerCase().split(":")[0] ?? "";
+  const isProoferHost = PROOFER_HOSTS.has(host);
   const path = request.nextUrl.pathname;
-  const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
-  if (!isProtected) return response;
+
+  // `internalPath` is the route the app actually serves. On a Proofer host the
+  // clean URL is mapped onto the physical /proofer/* tree; everywhere else it
+  // is just the request path unchanged.
+  let internalPath = path;
+
+  if (isProoferHost) {
+    // Canonical URLs on this domain never show the /proofer prefix. If an old
+    // or server-generated link leaks one in, redirect to the clean address so
+    // there's a single URL per page.
+    if (path === "/proofer" || path.startsWith("/proofer/")) {
+      const url = request.nextUrl.clone();
+      url.pathname = path.slice("/proofer".length) || "/";
+      return NextResponse.redirect(url);
+    }
+
+    // This domain only exposes Proofer plus the shared auth pages. The other
+    // product surfaces don't belong here — send them to the Proofer home.
+    if (
+      path.startsWith("/admin-panel") ||
+      path.startsWith("/app") ||
+      path.startsWith("/portal")
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    if (isProoferSurfacePath(path)) {
+      internalPath = path === "/" ? "/proofer" : `/proofer${path}`;
+    }
+  }
+
+  const isProtected = PROTECTED_PREFIXES.some((p) => internalPath.startsWith(p));
+
+  // Non-protected requests (auth pages, API, static, marketing pages) pass
+  // straight through. The matcher is broad enough to run on the Proofer host's
+  // clean root, so this early exit keeps every other route behaving as before.
+  if (!isProtected) return NextResponse.next();
+
+  const response = await updateSession(request);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,6 +100,7 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.search = "";
+    // Return the viewer to the clean URL they asked for, not the internal one.
     url.searchParams.set("next", path);
     return NextResponse.redirect(url);
   }
@@ -83,6 +144,16 @@ export async function middleware(request: NextRequest) {
   // bounced. The bounce target is always their own portal — that's the
   // "calmer mirror" the feature promises.
   if (isClientUser) {
+    // The standalone Proofer domain has no portal to bounce to — Proofer is an
+    // admin-only surface, so a client account simply isn't authorised here.
+    if (isProoferHost) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/sign-in";
+      url.search = "";
+      url.searchParams.set("error", "not-authorized");
+      return NextResponse.redirect(url);
+    }
+
     const ownPortal = `/portal/${linkedClientId}`;
 
     if (ADMIN_PREFIXES.some((p) => path.startsWith(p))) {
@@ -110,11 +181,26 @@ export async function middleware(request: NextRequest) {
   }
 
   // Admins are free to roam anywhere — including /portal/{anyClientId} for
-  // previewing what a client sees. The "Client view" link in the admin
-  // sidebar is the operator's intended entry point.
+  // previewing what a client sees. On a Proofer host, serve the physical
+  // /proofer/* route behind the clean URL, carrying the refreshed session
+  // cookies onto the rewrite response.
+  if (internalPath !== path) {
+    const url = request.nextUrl.clone();
+    url.pathname = internalPath;
+    const rewrite = NextResponse.rewrite(url, { request });
+    response.cookies.getAll().forEach((cookie) => rewrite.cookies.set(cookie));
+    return rewrite;
+  }
+
   return response;
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/admin-panel/:path*", "/portal/:path*", "/proofer/:path*"],
+  // Runs on everything except Next internals and static assets. The broad
+  // matcher is needed so the standalone Proofer host's clean root (/, /pillars,
+  // /clients) is seen here; non-Proofer hosts fall through the early exits above
+  // exactly as they did when the matcher only covered the protected prefixes.
+  matcher: [
+    "/((?!_next/static|_next/image|_next/data|favicon.ico|icon.jpg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf)$).*)",
+  ],
 };

@@ -3,6 +3,7 @@ import {
   getProoferData,
   getProoferPillarPosts,
 } from "../admin-panel/lib/queries";
+import { getProoferBase } from "./base";
 
 const COOKIE_NAME = "proofer_last_client";
 
@@ -29,6 +30,7 @@ export async function resolveNavData(spClient?: string, spMonth?: string) {
 
   const { clients, pillars } = await getProoferData(clientId, month);
   const posts = clientId ? await getProoferPillarPosts(clientId) : [];
+  const { base, parentOrigin } = await getProoferBase();
 
-  return { clientId, month, clients, pillars, posts };
+  return { clientId, month, clients, pillars, posts, base, parentOrigin };
 }

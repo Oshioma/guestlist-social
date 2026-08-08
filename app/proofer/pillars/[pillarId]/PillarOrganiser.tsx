@@ -55,12 +55,16 @@ export default function PillarOrganiser({
   month,
   posts,
   occupiedDates,
+  // Prefix the Proofer routes live under ("" on the standalone domain, where
+  // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
+  base = "/proofer",
 }: {
   clientId: string;
   pillar: { id: string; name: string; color: string };
   month: string;
   posts: Post[];
   occupiedDates: string[];
+  base?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -175,7 +179,7 @@ export default function PillarOrganiser({
         );
         setPickFor(null);
         router.push(
-          `/proofer?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
+          `${base || "/"}?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
         );
       } finally {
         setSavingId(null);
