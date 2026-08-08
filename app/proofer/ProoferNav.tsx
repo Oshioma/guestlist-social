@@ -328,6 +328,10 @@ export default function ProoferNav({
                   <Tile text="C" />
                   <span className="pnav-label">Clients</span>
                 </Link>
+                <Link href={`${base}/publish?${qs}`} className="pnav-item">
+                  <Tile text="PQ" />
+                  <span className="pnav-label">Publish queue</span>
+                </Link>
                 {clientId && (
                   <Link
                     href={`${parentOrigin}/portal/${encodeURIComponent(clientId)}`}

@@ -24,7 +24,8 @@ function isProoferSurfacePath(path: string): boolean {
     path === "/clients" ||
     path.startsWith("/clients/") ||
     path === "/teams" ||
-    path.startsWith("/teams/")
+    path.startsWith("/teams/") ||
+    path === "/publish"
   );
 }
 
@@ -243,5 +244,6 @@ export const config = {
     "/proofer/:path*",
     "/pillars/:path*",
     "/clients/:path*",
+    "/publish",
   ],
 };
