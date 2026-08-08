@@ -9,7 +9,7 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
-import { getMyTeams } from "./navData";
+import { getMyTeams, getTeamClientIds } from "./navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
 
@@ -44,7 +44,7 @@ const centerStyle: React.CSSProperties = {
 export default async function ProoferStandalonePage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; month?: string }>;
+  searchParams: Promise<{ client?: string; month?: string; team?: string }>;
 }) {
   const sp = await searchParams;
   const months = getNextSixMonths();
@@ -57,20 +57,36 @@ export default async function ProoferStandalonePage({
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
 
+  // Optional team filter: clicking a team in the nav lands here with ?team=,
+  // which limits the account picker to that team's accounts.
+  const teamId = sp.team ?? "";
+  const teamClientIds = teamId ? new Set(await getTeamClientIds(teamId)) : null;
+  const inTeam = (id: string) => !teamClientIds || teamClientIds.has(id);
+
   try {
     let selectedClientId = sp.client ?? "";
-    if (!selectedClientId && lastClient) {
+    if (selectedClientId && !inTeam(selectedClientId)) selectedClientId = "";
+    if (!selectedClientId && lastClient && inTeam(lastClient)) {
       selectedClientId = lastClient;
     }
     if (!selectedClientId) {
       const { clients } = await getProoferData();
-      selectedClientId = clients[0]?.id ?? "";
+      const pool = teamClientIds
+        ? clients.filter((c) => teamClientIds.has(String(c.id)))
+        : clients;
+      selectedClientId = pool[0]?.id ?? "";
     }
 
-    const data = await getProoferData(
+    const raw = await getProoferData(
       selectedClientId || undefined,
       selectedClientId ? selectedMonth : undefined
     );
+    const data = {
+      ...raw,
+      clients: teamClientIds
+        ? raw.clients.filter((c) => teamClientIds.has(String(c.id)))
+        : raw.clients,
+    };
 
     let displayTimezone = "Etc/GMT";
     try {
@@ -97,6 +113,7 @@ export default async function ProoferStandalonePage({
           pillars={data.pillars}
           posts={pillarPosts}
           teams={myTeams}
+          teamId={teamId}
           occupiedDates={occupiedDates}
           isSuperAdmin={superAdmin}
           base={base}
@@ -132,7 +149,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} isSuperAdmin={superAdmin} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} teamId={teamId} isSuperAdmin={superAdmin} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />

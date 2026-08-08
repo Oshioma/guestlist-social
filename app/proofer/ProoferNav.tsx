@@ -71,6 +71,9 @@ export default function ProoferNav({
   posts,
   // Teams the current user belongs to, for the switcher in the brand menu.
   teams = [],
+  // Active team filter (from ?team=). When set, the account picker only lists
+  // that team's accounts and board navigation keeps the filter.
+  teamId = "",
   // Every date (all time) that already carries a post — used to grey out taken
   // days in the reschedule calendar so a move never overwrites another post.
   occupiedDates = [],
@@ -93,6 +96,7 @@ export default function ProoferNav({
   pillars: PillarLite[];
   posts: PostLite[];
   teams?: TeamLite[];
+  teamId?: string;
   occupiedDates?: string[];
   isSuperAdmin?: boolean;
   showBoardControls?: boolean;
@@ -113,19 +117,29 @@ export default function ProoferNav({
   useEffect(() => {
     let lastY = window.scrollY;
     let ticking = false;
+    // Stay visible for a beat after landing: browsers can restore a downward
+    // scroll position just after mount, which would otherwise auto-hide the nav
+    // before the user has done anything. Only allow hiding once things settle.
+    let settled = false;
+    const settle = window.setTimeout(() => {
+      settled = true;
+    }, 700);
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
         const y = window.scrollY;
-        if (y > lastY + 4 && y > 120) setHidden(true);
+        if (settled && y > lastY + 4 && y > 120) setHidden(true);
         else if (y < lastY - 2) setHidden(false);
         lastY = y;
         ticking = false;
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.clearTimeout(settle);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   // Remember the account you're viewing so that leaving and coming back to the
@@ -144,7 +158,8 @@ export default function ProoferNav({
 
   const go = (c: string, m: string) =>
     router.push(
-      `${home}?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}`
+      `${home}?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}` +
+        (teamId ? `&team=${encodeURIComponent(teamId)}` : "")
     );
 
   const viewedMonth = Number(month.split("-")[1]) || 0;
@@ -319,7 +334,12 @@ export default function ProoferNav({
                 ) : (
                   <div style={{ maxHeight: 232, overflowY: "auto" }}>
                     {teams.map((t) => (
-                      <Link key={t.id} href={`${base}/teams/${t.id}`} className="pnav-item">
+                      <Link
+                        key={t.id}
+                        href={`${home}?team=${encodeURIComponent(t.id)}`}
+                        className="pnav-item"
+                        aria-current={teamId === t.id ? "true" : undefined}
+                      >
                         <Tile text={(t.name.trim()[0] || "T").toUpperCase()} />
                         <span className="pnav-label">{t.name}</span>
                       </Link>
