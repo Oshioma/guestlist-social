@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 
 type ClientLite = { id: string; name: string };
+type TeamLite = { id: string; name: string; isOwner: boolean };
 type PillarLite = { id: string; name: string; color: string };
 type PostLite = {
   id: string;
@@ -52,6 +53,8 @@ export default function ProoferNav({
   month,
   pillars,
   posts,
+  // Teams the current user belongs to, for the switcher in the brand menu.
+  teams = [],
   // Prefix the Proofer routes live under ("" on the standalone domain, where
   // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
   base = "/proofer",
@@ -64,6 +67,7 @@ export default function ProoferNav({
   month: string;
   pillars: PillarLite[];
   posts: PostLite[];
+  teams?: TeamLite[];
   base?: string;
   parentOrigin?: string;
 }) {
@@ -213,8 +217,48 @@ export default function ProoferNav({
                 <Link href={`${base}/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
                   👥 Clients
                 </Link>
-                <Link href={`${base}/teams`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
-                  🏷️ Teams
+                <div style={{ borderTop: "1px solid #f4f4f5", padding: "9px 15px 4px" }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "#a1a1aa",
+                    }}
+                  >
+                    Teams
+                  </div>
+                </div>
+                {teams.length === 0 ? (
+                  <span style={{ ...menuItem, color: "#a1a1aa", fontWeight: 500 }}>
+                    No teams yet
+                  </span>
+                ) : (
+                  <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                    {teams.map((t) => (
+                      <Link
+                        key={t.id}
+                        href={`${base}/teams/${t.id}`}
+                        style={{ ...menuItem, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+                      >
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          🏷️ {t.name}
+                        </span>
+                        {t.isOwner && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#9d2b5b", flexShrink: 0 }}>
+                            My team
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                <Link
+                  href={`${base}/teams`}
+                  style={{ ...menuItem, borderTop: "1px solid #f4f4f5", fontSize: 13, color: "#52525b" }}
+                >
+                  Manage all teams →
                 </Link>
                 {clientId && (
                   <Link

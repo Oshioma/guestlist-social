@@ -14,7 +14,7 @@ export default async function ProoferPillarsPage({
   searchParams: Promise<{ client?: string; month?: string }>;
 }) {
   const sp = await searchParams;
-  const { clientId, month, clients, pillars, posts, base, parentOrigin } =
+  const { clientId, month, clients, pillars, posts, base, parentOrigin, teams } =
     await resolveNavData(sp.client, sp.month);
 
   return (
@@ -25,6 +25,7 @@ export default async function ProoferPillarsPage({
         month={month}
         pillars={pillars}
         posts={posts}
+        teams={teams}
         base={base}
         parentOrigin={parentOrigin}
       />

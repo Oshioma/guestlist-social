@@ -5,6 +5,7 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
+import { getMyTeams } from "./navData";
 import { getProoferBase } from "./base";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export default async function ProoferStandalonePage({
   const cookieStore = await cookies();
   const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
   const { base, parentOrigin } = await getProoferBase();
+  const myTeams = await getMyTeams();
 
   try {
     let selectedClientId = sp.client ?? "";
@@ -85,6 +87,7 @@ export default async function ProoferStandalonePage({
           month={selectedMonth}
           pillars={data.pillars}
           posts={pillarPosts}
+          teams={myTeams}
           base={base}
           parentOrigin={parentOrigin}
         />
@@ -115,7 +118,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />
