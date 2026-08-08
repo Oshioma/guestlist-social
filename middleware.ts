@@ -196,11 +196,18 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Runs on everything except Next internals and static assets. The broad
-  // matcher is needed so the standalone Proofer host's clean root (/, /pillars,
-  // /clients) is seen here; non-Proofer hosts fall through the early exits above
-  // exactly as they did when the matcher only covered the protected prefixes.
+  // Only the routes that need gating. This covers the product surfaces plus the
+  // Proofer host's clean paths ("/", "/pillars", "/clients") so that host still
+  // rewrites correctly — without running the session refresh + auth queries on
+  // every asset, API call, RSC fetch and server action across the whole app
+  // (which the previous catch-all matcher did, making saves crawl).
   matcher: [
-    "/((?!_next/static|_next/image|_next/data|favicon.ico|icon.jpg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf)$).*)",
+    "/",
+    "/app/:path*",
+    "/admin-panel/:path*",
+    "/portal/:path*",
+    "/proofer/:path*",
+    "/pillars/:path*",
+    "/clients/:path*",
   ],
 };
