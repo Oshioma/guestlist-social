@@ -5,8 +5,12 @@ import { getProoferBase } from "../base";
 import { InviteOwnerForm } from "./InviteOwnerForm";
 import EmailTemplatesEditor from "./EmailTemplatesEditor";
 import { loadEmailTemplatesForEditor } from "@/lib/email/template-actions";
+import UsersOverview from "./UsersOverview";
+import { loadUsersOverview } from "@/lib/admin/users-overview";
 
 export const dynamic = "force-dynamic";
+
+type Tab = "tools" | "emails" | "users";
 
 export default async function SuperAdminPage({
   searchParams,
@@ -19,11 +23,13 @@ export default async function SuperAdminPage({
 
   const { base } = await getProoferBase();
   const sp = await searchParams;
-  const tab = sp.tab === "emails" ? "emails" : "tools";
+  const tab: Tab =
+    sp.tab === "emails" ? "emails" : sp.tab === "users" ? "users" : "tools";
 
   const templates = tab === "emails" ? await loadEmailTemplatesForEditor() : [];
+  const users = tab === "users" ? await loadUsersOverview() : [];
 
-  const maxWidth = tab === "emails" ? 1080 : 760;
+  const maxWidth = tab === "emails" ? 1080 : tab === "users" ? 1000 : 760;
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
@@ -46,9 +52,12 @@ export default async function SuperAdminPage({
           <Link href={`${base}/super-admin?tab=emails`} style={tabStyle(tab === "emails")}>
             Emails
           </Link>
+          <Link href={`${base}/super-admin?tab=users`} style={tabStyle(tab === "users")}>
+            Users
+          </Link>
         </div>
 
-        {tab === "tools" ? (
+        {tab === "tools" && (
           <section style={cardStyle}>
             <h3 style={sectionTitleStyle}>Invite someone to their own team</h3>
             <p style={sectionSubStyle}>
@@ -58,7 +67,9 @@ export default async function SuperAdminPage({
             </p>
             <InviteOwnerForm />
           </section>
-        ) : (
+        )}
+
+        {tab === "emails" && (
           <section style={cardStyle}>
             <h3 style={sectionTitleStyle}>Email designs</h3>
             <p style={sectionSubStyle}>
@@ -67,6 +78,18 @@ export default async function SuperAdminPage({
               on the next email sent.
             </p>
             <EmailTemplatesEditor templates={templates} />
+          </section>
+        )}
+
+        {tab === "users" && (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>All users</h3>
+            <p style={sectionSubStyle}>
+              Everyone using the product, with their teams, accounts and
+              onboarding progress. Your board only shows your own teams — this is
+              where you keep an eye on everyone. Click a row to expand.
+            </p>
+            <UsersOverview users={users} />
           </section>
         )}
       </div>

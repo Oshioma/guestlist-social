@@ -82,6 +82,25 @@ export async function getTeamClientIds(teamId: string): Promise<string[]> {
   return (data ?? []).map((r) => String(r.client_id));
 }
 
+// The union of account (client) ids across ALL teams the current user belongs
+// to. This is the hard boundary of what the viewer may see on the board — even
+// agency staff (who could technically SELECT every client via RLS) are scoped
+// to their own teams here, so an independent invitee's account never leaks into
+// the picker. Empty set → the caller should show no accounts (fail closed).
+export async function getMyTeamClientIds(): Promise<Set<string>> {
+  const teams = await getMyTeams();
+  if (teams.length === 0) return new Set();
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .in(
+      "team_id",
+      teams.map((t) => t.id)
+    );
+  return new Set((data ?? []).map((r) => String(r.client_id)));
+}
+
 // Resolves everything the standalone top nav needs (client list, selected
 // client/month, pillars and their posts) so every /proofer page can render the
 // same nav consistently.
@@ -98,27 +117,28 @@ export async function resolveNavData(
   const lastClient =
     cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
 
-  // Optional team filter: when set, the account picker only shows that team's
-  // accounts and the selected client is resolved within them.
+  // Hard tenant boundary: the accounts in teams the viewer belongs to. Even
+  // agency staff are scoped to this on the board, so other tenants' accounts
+  // never appear. An optional ?team= filter narrows WITHIN this set.
+  const myClientIds = await getMyTeamClientIds();
   const teamId = spTeam ?? "";
   const teamClientIds = teamId ? new Set(await getTeamClientIds(teamId)) : null;
-  const inTeam = (id: string) => !teamClientIds || teamClientIds.has(id);
+  // A client is visible if it's in one of my teams AND (no team filter, or in
+  // the filtered team).
+  const inScope = (id: string) =>
+    myClientIds.has(id) && (!teamClientIds || teamClientIds.has(id));
 
   let clientId = spClient ?? "";
-  if (clientId && !inTeam(clientId)) clientId = "";
-  if (!clientId && lastClient && inTeam(lastClient)) clientId = lastClient;
+  if (clientId && !inScope(clientId)) clientId = "";
+  if (!clientId && lastClient && inScope(lastClient)) clientId = lastClient;
   if (!clientId) {
     const { clients } = await getProoferData();
-    const pool = teamClientIds
-      ? clients.filter((c) => teamClientIds.has(String(c.id)))
-      : clients;
+    const pool = clients.filter((c) => inScope(String(c.id)));
     clientId = pool[0]?.id ?? "";
   }
 
   const { clients: allClients, pillars } = await getProoferData(clientId, month);
-  const clients = teamClientIds
-    ? allClients.filter((c) => teamClientIds.has(String(c.id)))
-    : allClients;
+  const clients = allClients.filter((c) => inScope(String(c.id)));
   const posts = clientId ? await getProoferPillarPosts(clientId) : [];
   const occupiedDates = clientId ? await getProoferOccupiedDates(clientId) : [];
   const { base, parentOrigin } = await getProoferBase();

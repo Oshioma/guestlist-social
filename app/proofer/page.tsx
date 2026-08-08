@@ -12,7 +12,12 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
-import { getMyTeams, getTeamClientIds, getLastProoferClientId } from "./navData";
+import {
+  getMyTeams,
+  getTeamClientIds,
+  getMyTeamClientIds,
+  getLastProoferClientId,
+} from "./navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
 
@@ -94,23 +99,25 @@ export default async function ProoferStandalonePage({
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
 
-  // Optional team filter: clicking a team in the nav lands here with ?team=,
-  // which limits the account picker to that team's accounts.
+  // Hard tenant boundary: only accounts in teams the viewer belongs to are ever
+  // shown — even for agency staff, so another tenant's account can't leak into
+  // the picker. An optional ?team= filter (clicking a team in the nav) narrows
+  // WITHIN that boundary.
+  const myClientIds = await getMyTeamClientIds();
   const teamId = sp.team ?? "";
   const teamClientIds = teamId ? new Set(await getTeamClientIds(teamId)) : null;
-  const inTeam = (id: string) => !teamClientIds || teamClientIds.has(id);
+  const inScope = (id: string) =>
+    myClientIds.has(id) && (!teamClientIds || teamClientIds.has(id));
 
   try {
     let selectedClientId = sp.client ?? "";
-    if (selectedClientId && !inTeam(selectedClientId)) selectedClientId = "";
-    if (!selectedClientId && lastClient && inTeam(lastClient)) {
+    if (selectedClientId && !inScope(selectedClientId)) selectedClientId = "";
+    if (!selectedClientId && lastClient && inScope(lastClient)) {
       selectedClientId = lastClient;
     }
     if (!selectedClientId) {
       const { clients } = await getProoferData();
-      const pool = teamClientIds
-        ? clients.filter((c) => teamClientIds.has(String(c.id)))
-        : clients;
+      const pool = clients.filter((c) => inScope(String(c.id)));
       selectedClientId = pool[0]?.id ?? "";
     }
 
@@ -120,9 +127,7 @@ export default async function ProoferStandalonePage({
     );
     const data = {
       ...raw,
-      clients: teamClientIds
-        ? raw.clients.filter((c) => teamClientIds.has(String(c.id)))
-        : raw.clients,
+      clients: raw.clients.filter((c) => inScope(String(c.id))),
     };
 
     let displayTimezone = "Etc/GMT";
