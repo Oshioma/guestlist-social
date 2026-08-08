@@ -26,6 +26,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { authRedirectOrigin } from "@/lib/auth/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 
@@ -36,9 +37,6 @@ export type ActionState = {
   message?: string;
 };
 
-function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-}
 
 function revalidateTeams(teamId?: string) {
   revalidatePath("/proofer/teams");
@@ -93,7 +91,7 @@ async function resolveOrInviteUser(
 ): Promise<{ userId?: string; invited?: boolean; error?: string }> {
   try {
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${siteUrl()}/auth/callback?type=invite`,
+      redirectTo: `${await authRedirectOrigin()}/auth/callback?type=invite`,
     });
 
     if (!error && data?.user) {

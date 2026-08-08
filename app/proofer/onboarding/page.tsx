@@ -11,8 +11,10 @@ export const metadata = {
   title: "Get started · PostProofer",
 };
 
+type ConnectedAccount = { platform: string; accountId: string; accountName: string };
+
 type MetaResult =
-  | { status: "success"; platforms: string[] }
+  | { status: "success"; platforms: string[]; accounts: ConnectedAccount[] }
   | { status: "error"; message: string }
   | null;
 
@@ -57,15 +59,21 @@ export default async function OnboardingPage({
     metaResult = { status: "error", message: metaError };
   } else if (metaFlag === "connected" || first(sp.fromconnect) === "1") {
     let platforms: string[] = [];
+    let accounts: ConnectedAccount[] = [];
     if (state.accountClientId) {
       const admin = createAdminClient();
       const { data } = await admin
         .from("connected_meta_accounts")
-        .select("platform")
+        .select("platform, account_id, account_name")
         .eq("client_id", state.accountClientId);
-      platforms = Array.from(new Set((data ?? []).map((r) => String(r.platform))));
+      accounts = (data ?? []).map((r) => ({
+        platform: String(r.platform),
+        accountId: String(r.account_id),
+        accountName: String(r.account_name ?? r.account_id),
+      }));
+      platforms = Array.from(new Set(accounts.map((a) => a.platform)));
     }
-    metaResult = { status: "success", platforms };
+    metaResult = { status: "success", platforms, accounts };
   }
 
   const todayISO = new Date().toISOString().slice(0, 10);

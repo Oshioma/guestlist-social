@@ -288,6 +288,87 @@ export async function getConnectedPlatformsAction(
   }
 }
 
+// A Meta login can control a whole portfolio, so the callback attaches every
+// Page + Instagram account it finds to the (undeclared) tour account. For a
+// friendly first run we let the user keep just ONE. Keep the chosen identity
+// and its linked pair (an Instagram account and its parent Facebook Page share
+// the Page's access token), drop the rest, and stamp the account's ig_handle /
+// fb_page so any future reconnect stays scoped to that one brand.
+export async function pickTourConnectionAction(
+  clientId: string,
+  platform: string,
+  accountId: string
+): Promise<Result<{ platforms: string[]; name: string }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+
+    const admin = createAdminClient();
+    const { data: rows } = await admin
+      .from("connected_meta_accounts")
+      .select("platform, account_id, account_name, access_token")
+      .eq("client_id", clientId);
+
+    const all = rows ?? [];
+    const chosen = all.find(
+      (r) => String(r.platform) === platform && String(r.account_id) === accountId
+    );
+    if (!chosen) return { ok: false, error: "That account isn't connected anymore." };
+
+    // The chosen identity and its pair share one Page access token.
+    const keepToken = chosen.access_token as string | null;
+
+    // Drop every other brand's rows. Guard against a null token (keep only the
+    // exact chosen row in that unlikely case).
+    if (keepToken) {
+      await admin
+        .from("connected_meta_accounts")
+        .delete()
+        .eq("client_id", clientId)
+        .neq("access_token", keepToken);
+    } else {
+      await admin
+        .from("connected_meta_accounts")
+        .delete()
+        .eq("client_id", clientId)
+        .or(`platform.neq.${platform},account_id.neq.${accountId}`);
+    }
+
+    const kept = keepToken
+      ? all.filter((r) => r.access_token === keepToken)
+      : [chosen];
+    const igName =
+      (kept.find((r) => r.platform === "instagram")?.account_name as string) ?? null;
+    const fbName =
+      (kept.find((r) => r.platform === "facebook")?.account_name as string) ?? null;
+
+    // Stamp the handle/page so future reconnects only re-attach this brand.
+    const patch: Record<string, string> = {};
+    if (igName) patch.ig_handle = igName;
+    if (fbName) patch.fb_page = fbName;
+    if (Object.keys(patch).length > 0) {
+      await admin.from("clients").update(patch).eq("id", clientId);
+    }
+
+    const keptPlatforms = Array.from(new Set(kept.map((r) => String(r.platform))));
+    await logOnboardingEvent("social_account_picked", 2, {
+      platform,
+      name: chosen.account_name,
+    });
+    return {
+      ok: true,
+      platforms: keptPlatforms,
+      name: (chosen.account_name as string) ?? "",
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not set that account." };
+  }
+}
+
 // Step 9 — save the first post FOR REAL, as status "check" (yellow / saved).
 // Reuses the app's own saveProoferPostAction so the row is byte-for-byte a
 // normal post; then reads its id back to remember it (dedupe on replay).
