@@ -76,6 +76,10 @@ export default function ProoferNav({
   occupiedDates = [],
   // Only the platform owner sees the Super admin link.
   isSuperAdmin = false,
+  // Whether to show the board-context controls (client picker, month stepper
+  // and pillar chips). Off on non-board pages like Clients and Progress, where
+  // there's no single client/month in focus. The brand menu stays either way.
+  showBoardControls = true,
   // Prefix the Proofer routes live under ("" on the standalone domain, where
   // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
   base = "/proofer",
@@ -91,6 +95,7 @@ export default function ProoferNav({
   teams?: TeamLite[];
   occupiedDates?: string[];
   isSuperAdmin?: boolean;
+  showBoardControls?: boolean;
   base?: string;
   parentOrigin?: string;
 }) {
@@ -369,6 +374,7 @@ export default function ProoferNav({
         </div>
 
         {/* Client + Month controls */}
+        {showBoardControls && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <select
             aria-label="Client"
@@ -434,12 +440,13 @@ export default function ProoferNav({
             </button>
           </div>
         </div>
+        )}
 
         {/* Push pillars to the right */}
         <div style={{ flex: 1 }} />
 
         {/* Content pillars — hover a chip to see the posts filed under it */}
-        {pillars.length > 0 && (
+        {showBoardControls && pillars.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             {pillars.map((p) => {
               const pillarPosts = postsByPillar.get(p.id) ?? [];
