@@ -29,12 +29,14 @@ export default async function PublishQueueView({
   settingsHref = "/app/settings",
   clientEditBase = "/app/clients",
   showMetaConnection = true,
+  connectOrigin = "",
 }: {
   connectResult?: ConnectResult | null;
   backHref?: string;
   settingsHref?: string;
   clientEditBase?: string;
   showMetaConnection?: boolean;
+  connectOrigin?: string;
 }) {
   let queueItems: Awaited<ReturnType<typeof getProoferPublishQueueData>>["queueItems"] = [];
   try {
@@ -158,6 +160,7 @@ export default async function PublishQueueView({
         settingsHref={settingsHref}
         clientEditBase={clientEditBase}
         showMetaConnection={showMetaConnection}
+        connectOrigin={connectOrigin}
       />
     </>
   );

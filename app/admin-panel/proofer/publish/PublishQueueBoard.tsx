@@ -721,6 +721,7 @@ export default function PublishQueueBoard({
   settingsHref = "/app/settings",
   clientEditBase = "/app/clients",
   showMetaConnection = true,
+  connectOrigin = "",
 }: {
   queueItems: QueueItem[];
   defaultScheduleValue: string;
@@ -748,6 +749,14 @@ export default function PublishQueueBoard({
   // The Meta connection panel's OAuth callback returns to the admin surface, so
   // it's hidden on the standalone Proofer app where that redirect can't land.
   showMetaConnection?: boolean;
+  // Origin to run the Meta OAuth flow on. Empty = same origin (admin surface).
+  // On the standalone Proofer host it must be the admin origin: the OAuth state
+  // cookie is set by /api/meta/connect and read back by the callback, and the
+  // callback always lands on the admin domain (the fixed Meta redirect URI). If
+  // the flow starts on postproofer.com the cookie is set on the wrong domain and
+  // the callback fails with "OAuth state mismatch" — so start it on the admin
+  // origin, where set and read share a domain.
+  connectOrigin?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1085,7 +1094,11 @@ export default function PublishQueueBoard({
       alert("Pick a client first.");
       return;
     }
-    const url = `/api/meta/connect?clientId=${encodeURIComponent(
+    // Run the whole OAuth on the admin origin (connectOrigin) when we're on the
+    // standalone Proofer host, so the state cookie and the callback share a
+    // domain — otherwise Meta returns to the admin domain and the cookie set on
+    // postproofer.com isn't there ("OAuth state mismatch").
+    const url = `${connectOrigin}/api/meta/connect?clientId=${encodeURIComponent(
       connectClientId
     )}`;
     // Open Facebook's login/OAuth flow in a separate window so the publish
