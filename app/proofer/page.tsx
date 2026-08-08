@@ -75,6 +75,8 @@ export default async function ProoferStandalonePage({
           clients={data.clients}
           clientId={selectedClientId}
           month={selectedMonth}
+          pillars={data.pillars}
+          posts={data.posts}
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
@@ -102,7 +104,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />

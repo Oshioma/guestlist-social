@@ -1797,7 +1797,7 @@ export default function ProoferBoard({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        flexWrap: isNarrow ? "wrap" : "nowrap",
+        flexWrap: isNarrow || standalone ? "wrap" : "nowrap",
         marginBottom: isNarrow ? 14 : 0,
       }}
     >
@@ -1849,6 +1849,29 @@ export default function ProoferBoard({
         >
           {showPast ? "Hide past days" : "🕓 View history"}
         </button>
+      )}
+      {/* On the standalone surface the hide-empty toggle sits here next to the
+          frequency controls (the board's Settings card omits it there). */}
+      {standalone && (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#52525b",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
+          />
+          Hide empty days
+        </label>
       )}
     </div>
   );
@@ -2080,6 +2103,10 @@ export default function ProoferBoard({
           on mobile it stays at the top of this sheet. */}
       {isNarrow && frequencyBlock}
 
+      {/* The standalone /proofer surface drops the whole Settings block:
+          client & month live in the top nav, hide-empty sits by the frequency
+          toggle, and pillars are managed on /app/proofer. */}
+      {!standalone && (
       <SectionCard title="Settings">
         <div
           style={{
@@ -2148,23 +2175,26 @@ export default function ProoferBoard({
               </label>
             )}
 
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 13,
-                color: "#52525b",
-                paddingBottom: 8,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={hideEmpty}
-                onChange={(e) => setHideEmpty(e.target.checked)}
-              />
-              Hide empty days
-            </label>
+            {/* Standalone shows this next to the frequency controls instead. */}
+            {!standalone && (
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 13,
+                  color: "#52525b",
+                  paddingBottom: 8,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={hideEmpty}
+                  onChange={(e) => setHideEmpty(e.target.checked)}
+                />
+                Hide empty days
+              </label>
+            )}
 
             <div style={{ fontSize: 12, color: "#71717a", paddingBottom: 10 }}>
               {totalWithContent} of {days.length} days have content
@@ -2403,6 +2433,7 @@ export default function ProoferBoard({
           )}
         </div>
       </SectionCard>
+      )}
       </BottomSheet>
       </div>{/* right column */}
       </div>{/* desktop header/settings row wrapper */}
