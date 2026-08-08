@@ -85,6 +85,8 @@ export default async function ProoferStandalonePage({
 
   const showFinishBanner = sp.tour === "done";
   const finishDateLabel = formatFinishDate(sp.d);
+  const finishDateISO =
+    sp.d && /^\d{4}-\d{2}-\d{2}$/.test(sp.d) ? sp.d : null;
 
   const months = getNextSixMonths();
   const defaultMonth = months[0]?.value ?? "";
@@ -164,7 +166,7 @@ export default async function ProoferStandalonePage({
         <main style={mainStyle}>
           <div style={centerStyle}>
             {showFinishBanner && (
-              <OnboardingFinishBanner dateLabel={finishDateLabel} />
+              <OnboardingFinishBanner dateLabel={finishDateLabel} date={finishDateISO} />
             )}
             <ProoferBoard
               // Remount when client/month change (driven from the top nav) so
