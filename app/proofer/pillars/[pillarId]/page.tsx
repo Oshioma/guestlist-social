@@ -68,6 +68,7 @@ export default async function PillarOrganisePage({
           pillars={pillars}
           posts={allPillarPosts}
           teams={myTeams}
+          occupiedDates={occupiedDates}
           base={base}
           parentOrigin={parentOrigin}
         />

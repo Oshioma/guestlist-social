@@ -959,6 +959,79 @@ export async function propagateProoferPillarForwardAction(
   revalidateProoferPaths();
 }
 
+// Move a post to a different day, keeping its content and scheduling settings
+// (caption, media, pillar, publish time/targets, linked idea) intact — only the
+// date changes. A rescheduled post drops back to "check" (yellow / not approved
+// yet) and leaves the publish queue until it's re-approved, mirroring how
+// marking a post "check" de-queues it. This is the single source of truth for
+// rescheduling from the standalone nav's pillar popups.
+export async function moveProoferPostAction(
+  clientId: string,
+  fromDate: string,
+  platform: string,
+  toDate: string
+) {
+  if (!clientId || !fromDate || !toDate) {
+    throw new Error("Client and dates are required.");
+  }
+
+  const normalizedPlatform = normalizePlatform(platform);
+  const supabase = await createClient();
+  const authorEmail = await getCurrentUserEmail();
+
+  const { data: existing } = await supabase
+    .from("proofer_posts")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("post_date", fromDate)
+    .eq("platform", normalizedPlatform)
+    .maybeSingle();
+
+  if (!existing) {
+    throw new Error("Post not found.");
+  }
+
+  // Don't overwrite a post already sitting on the target day for this platform.
+  const { data: clash } = await supabase
+    .from("proofer_posts")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("post_date", toDate)
+    .eq("platform", normalizedPlatform)
+    .maybeSingle();
+
+  if (clash && String(clash.id) !== String(existing.id)) {
+    throw new Error("That day already has a post for this platform.");
+  }
+
+  const { error } = await supabase
+    .from("proofer_posts")
+    .update({
+      post_date: toDate,
+      status: "check",
+      updated_by: authorEmail,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", existing.id);
+
+  if (error) {
+    console.error("moveProoferPostAction update error:", error);
+    throw new Error("Could not reschedule post.");
+  }
+
+  // No longer approved → remove it from the publish queue until re-approved.
+  const { error: queueError } = await supabase
+    .from("proofer_publish_queue")
+    .delete()
+    .eq("post_id", existing.id);
+  if (queueError) {
+    // Non-fatal: the post itself moved. Log and continue.
+    console.error("moveProoferPostAction queue-cleanup error:", queueError);
+  }
+
+  revalidatePillarConsumers();
+}
+
 export async function deleteProoferPostAction(
   clientId: string,
   postDate: string,

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import {
   getProoferData,
   getProoferPillarPosts,
+  getProoferOccupiedDates,
 } from "../admin-panel/lib/queries";
 import { getProoferBase } from "./base";
 import { getProoferAccess } from "@/lib/auth/permissions";
@@ -64,8 +65,19 @@ export async function resolveNavData(spClient?: string, spMonth?: string) {
 
   const { clients, pillars } = await getProoferData(clientId, month);
   const posts = clientId ? await getProoferPillarPosts(clientId) : [];
+  const occupiedDates = clientId ? await getProoferOccupiedDates(clientId) : [];
   const { base, parentOrigin } = await getProoferBase();
   const teams = await getMyTeams();
 
-  return { clientId, month, clients, pillars, posts, base, parentOrigin, teams };
+  return {
+    clientId,
+    month,
+    clients,
+    pillars,
+    posts,
+    occupiedDates,
+    base,
+    parentOrigin,
+    teams,
+  };
 }

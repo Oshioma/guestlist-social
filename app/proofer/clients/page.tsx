@@ -45,6 +45,7 @@ export default async function ProoferClientsPage({
         pillars={nav.pillars}
         posts={nav.posts}
         teams={nav.teams}
+        occupiedDates={nav.occupiedDates}
         base={nav.base}
         parentOrigin={nav.parentOrigin}
       />
