@@ -4,8 +4,8 @@ import { updateSession } from "./lib/supabase/middleware";
 
 // Anything under one of these prefixes requires a logged-in user. The role
 // gating below additionally restricts each prefix to admins or clients.
-const PROTECTED_PREFIXES = ["/app", "/admin-panel", "/portal"];
-const ADMIN_PREFIXES = ["/app", "/admin-panel"];
+const PROTECTED_PREFIXES = ["/app", "/admin-panel", "/portal", "/proofer"];
+const ADMIN_PREFIXES = ["/app", "/admin-panel", "/proofer"];
 
 export async function middleware(request: NextRequest) {
   const response = await updateSession(request);
@@ -116,5 +116,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/admin-panel/:path*", "/portal/:path*"],
+  matcher: ["/app/:path*", "/admin-panel/:path*", "/portal/:path*", "/proofer/:path*"],
 };

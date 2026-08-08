@@ -418,6 +418,33 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
   };
 }
 
+// One-click platform toggle used on the standalone /proofer surface. `on`
+// reflects whether the message currently publishes to that platform; the kind
+// tints the active state with Instagram's magenta or Facebook's blue.
+function platToggleStyle(
+  on: boolean,
+  kind: "ig" | "fb",
+  disabled: boolean
+): React.CSSProperties {
+  const base: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    border: "1px solid #d4d4d8",
+    background: "#fff",
+    color: "#52525b",
+    fontSize: 13,
+    fontWeight: 700,
+    padding: "9px 13px",
+    borderRadius: 10,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+  if (!on) return { ...base, opacity: disabled ? 0.45 : 0.6 };
+  return kind === "ig"
+    ? { ...base, borderColor: "#dd2a7b", background: "#fdf2f8", color: "#9d174d" }
+    : { ...base, borderColor: "#1877f2", background: "#eff6ff", color: "#1d4ed8" };
+}
+
 function selectStyle(isNarrow: boolean, disabled: boolean): React.CSSProperties {
   return {
     ...inputStyle,
@@ -478,6 +505,18 @@ export default function ProoferBoard({
   initialIdeas,
   initialPostIdeas,
   timeZone = "Etc/GMT",
+  // Where the board's own client/month navigation and Publish Queue button
+  // point. Defaults to the admin-panel route so the existing /app/proofer page
+  // is unchanged; the standalone /proofer page overrides basePath so switching
+  // client or month keeps the user on the standalone page.
+  basePath = "/app/proofer",
+  publishPath = "/app/proofer/publish",
+  // Opt-in cosmetic variant for the standalone /proofer surface. When true the
+  // per-message Instagram/Facebook selectors render as one-click toggle
+  // buttons; when false (the /app/proofer default) the original dropdowns are
+  // used. Only the control's presentation changes — the publishTargets it
+  // writes, and every other behaviour, are identical.
+  standalone = false,
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -488,6 +527,9 @@ export default function ProoferBoard({
   initialIdeas: ProoferIdeaLite[];
   initialPostIdeas: PostIdea[];
   timeZone?: string;
+  basePath?: string;
+  publishPath?: string;
+  standalone?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -970,7 +1012,7 @@ export default function ProoferBoard({
     setOpenComments({});
     setCommentDrafts({});
     setActivePlatformByDate({});
-    router.push(`/app/proofer?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
   }
 
   function handleSelectClient(id: string) {
@@ -1942,7 +1984,7 @@ export default function ProoferBoard({
         {!isNarrow && (
           <button
             type="button"
-            onClick={() => router.push("/app/proofer/publish")}
+            onClick={() => router.push(publishPath)}
             style={{
               position: "absolute",
               top: 0,
@@ -2008,7 +2050,7 @@ export default function ProoferBoard({
           </button>
           <button
             type="button"
-            onClick={() => router.push("/app/proofer/publish")}
+            onClick={() => router.push(publishPath)}
             style={{
               ...mobileToolbarButtonStyle(true),
               border: "1px solid #18181b",
@@ -2991,6 +3033,129 @@ export default function ProoferBoard({
                       order: isNarrow ? 3 : undefined,
                     }}
                   >
+                    {standalone ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          alignItems: "center",
+                          gridColumn: isNarrow ? "1 / -1" : undefined,
+                        }}
+                      >
+                        {/* Instagram: one-click on/off */}
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          onClick={() => {
+                            const on = draft.publishTargets.includes("instagram");
+                            updateDraft(dateKey, activePlatform, {
+                              publishTargets: on
+                                ? draft.publishTargets.filter((t) => t !== "instagram")
+                                : [...draft.publishTargets, "instagram"],
+                            });
+                          }}
+                          style={platToggleStyle(
+                            draft.publishTargets.includes("instagram"),
+                            "ig",
+                            isLocked
+                          )}
+                        >
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 17,
+                              height: 17,
+                              borderRadius: 5,
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color: "#fff",
+                              background: "linear-gradient(45deg,#f58529,#dd2a7b,#8134af)",
+                            }}
+                          >
+                            ◎
+                          </span>
+                          Instagram
+                        </button>
+                        {/* Format sub-toggle — only while Instagram is on */}
+                        {draft.publishTargets.includes("instagram") && (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              border: "1px solid #e4e4e7",
+                              borderRadius: 9,
+                              overflow: "hidden",
+                            }}
+                          >
+                            {INSTAGRAM_FORMATS.map((p, i) => {
+                              const active = activePlatform === p;
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  disabled={isLocked}
+                                  onClick={() => {
+                                    if (p !== activePlatform) handlePlatformChange(dateKey, p);
+                                  }}
+                                  style={{
+                                    border: "none",
+                                    borderLeft: i === 0 ? "none" : "1px solid #e4e4e7",
+                                    background: active ? "#3f3f46" : "#fff",
+                                    color: active ? "#fff" : "#52525b",
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    padding: "8px 12px",
+                                    cursor: isLocked ? "not-allowed" : "pointer",
+                                  }}
+                                >
+                                  {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* Facebook: one-click on/off (the "send to Facebook") */}
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          onClick={() => {
+                            const on = draft.publishTargets.includes("facebook");
+                            const without = draft.publishTargets.filter(
+                              (t) => t !== "facebook"
+                            );
+                            updateDraft(dateKey, activePlatform, {
+                              publishTargets: on ? without : [...without, "facebook"],
+                            });
+                          }}
+                          style={platToggleStyle(
+                            draft.publishTargets.includes("facebook"),
+                            "fb",
+                            isLocked
+                          )}
+                        >
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 17,
+                              height: 17,
+                              borderRadius: 5,
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color: "#fff",
+                              background: "#1877f2",
+                            }}
+                          >
+                            f
+                          </span>
+                          Facebook
+                        </button>
+                      </div>
+                    ) : (
+                      <>
                     <div
                       style={{
                         display: "flex",
@@ -3082,6 +3247,8 @@ export default function ProoferBoard({
                         <option value="on">On</option>
                       </select>
                     </div>
+                      </>
+                    )}
 
                     {(() => {
                       const selectedPillar = draft.pillarId
