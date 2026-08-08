@@ -1,5 +1,12 @@
 # Working conventions for Claude
 
+## Always open a NEW pull request (check every time)
+
+Every deliverable goes on its **own new pull request**. Do **not** reuse an
+existing PR or just edit its description to fold in new work — open a fresh PR
+and share the link. Before finishing any change, check that the work is on a
+new PR, not stacked onto an old one.
+
 ## One task = one fresh branch (default)
 
 Do **each task on its own new branch**, created from the latest `origin/main`.

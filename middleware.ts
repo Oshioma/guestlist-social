@@ -22,7 +22,9 @@ function isProoferSurfacePath(path: string): boolean {
     path === "/pillars" ||
     path.startsWith("/pillars/") ||
     path === "/clients" ||
-    path.startsWith("/clients/")
+    path.startsWith("/clients/") ||
+    path === "/teams" ||
+    path.startsWith("/teams/")
   );
 }
 

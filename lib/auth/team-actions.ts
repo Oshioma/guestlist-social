@@ -1,9 +1,15 @@
 "use server";
 
-// Service-role actions for the teams management surface. Every action calls
-// requireAdmin() first, so only agency staff (a user_roles row) can create or
-// mutate teams, membership, or account assignments — even if a non-admin
-// reaches the URL. This mirrors member-actions.ts.
+// Service-role actions for the teams management surface, authorized PER TEAM.
+//
+// Authorization model:
+//   - Agency staff (a user_roles row) may manage any team.
+//   - A team's owner or admin may manage THAT team (rename, plan, delete,
+//     invite, roles, accounts) — but no other team.
+//   - Creating a team is open to any admitted non-client user (staff or a
+//     team poster); the creator becomes the owner.
+// Mutations run through the service-role client, so the per-team check below
+// is the real gate — never assume the caller only reached an allowed page.
 //
 // Model recap (see supabase/migrations/20260808_teams.sql):
 //   teams          — a workspace: name, owner, plan (free|pro)
@@ -15,13 +21,13 @@
 //
 // Invite gating: inviting a *collaborator* (admin/member) requires the team
 // to be on the Pro plan — "pro members can invite people to their teams".
-// Inviting a *client* (a read/approve viewer) is always allowed, because
-// giving a client sight of their own content is core, not an upsell.
+// Inviting a *client* (a read/approve viewer) is always allowed.
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { getProoferAccess } from "@/lib/auth/permissions";
 
 export type ActionState = {
   error?: string | null;
@@ -35,8 +41,47 @@ function siteUrl(): string {
 }
 
 function revalidateTeams(teamId?: string) {
-  revalidatePath("/app/settings/teams");
-  if (teamId) revalidatePath(`/app/settings/teams/${teamId}`);
+  revalidatePath("/proofer/teams");
+  if (teamId) revalidatePath(`/proofer/teams/${teamId}`);
+}
+
+// The signed-in actor plus whether they are agency staff, or null if not
+// signed in. Read via the authed (RLS) client so identity is authoritative.
+async function getActor(): Promise<{ userId: string; isStaff: boolean } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return { userId: user.id, isStaff: roleRow !== null };
+}
+
+// May this actor manage this team? Agency staff → any team; otherwise only a
+// team they own or admin. Returns the actor's id on success, or an error
+// string suitable for an ActionState.
+async function requireTeamManager(
+  admin: ReturnType<typeof createAdminClient>,
+  teamId: string
+): Promise<{ userId?: string; isStaff?: boolean; error?: string }> {
+  const actor = await getActor();
+  if (!actor) return { error: "You're not signed in." };
+  if (actor.isStaff) return { userId: actor.userId, isStaff: true };
+
+  const { data: m } = await admin
+    .from("team_members")
+    .select("role")
+    .eq("team_id", teamId)
+    .eq("user_id", actor.userId)
+    .maybeSingle();
+  if (m && (m.role === "owner" || m.role === "admin")) {
+    return { userId: actor.userId, isStaff: false };
+  }
+  return { error: "You don't have permission to manage this team." };
 }
 
 // Find an existing auth user by email, or send them an invite. Returns the
@@ -76,7 +121,13 @@ export async function createTeam(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  const actor = await requireAdmin();
+  // Anyone admitted to the Proofer surface (agency staff or a team poster)
+  // can start a team; they become its owner. Clients cannot.
+  const access = await getProoferAccess();
+  if (!access) {
+    return { error: "You need an account to create a team." };
+  }
+  const actorUserId = access.userId;
 
   const parsed = createSchema.safeParse({
     name: formData.get("name"),
@@ -90,7 +141,7 @@ export async function createTeam(
 
   const { data: team, error } = await admin
     .from("teams")
-    .insert({ name: parsed.data.name, owner_user_id: actor.userId, plan: parsed.data.plan })
+    .insert({ name: parsed.data.name, owner_user_id: actorUserId, plan: parsed.data.plan })
     .select("id")
     .single();
 
@@ -101,7 +152,7 @@ export async function createTeam(
   // The creator is the owner.
   const { error: memberErr } = await admin
     .from("team_members")
-    .insert({ team_id: team.id, user_id: actor.userId, role: "owner" });
+    .insert({ team_id: team.id, user_id: actorUserId, role: "owner" });
 
   if (memberErr) {
     return { error: `Team created, but owner could not be set: ${memberErr.message}` };
@@ -120,8 +171,6 @@ export async function renameTeam(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = renameSchema.safeParse({
     teamId: formData.get("teamId"),
     name: formData.get("name"),
@@ -129,6 +178,9 @@ export async function renameTeam(
   if (!parsed.success) return { error: "Invalid form data." };
 
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
+
   const { error } = await admin
     .from("teams")
     .update({ name: parsed.data.name })
@@ -149,8 +201,6 @@ export async function setTeamPlan(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = planSchema.safeParse({
     teamId: formData.get("teamId"),
     plan: formData.get("plan"),
@@ -158,6 +208,9 @@ export async function setTeamPlan(
   if (!parsed.success) return { error: "Invalid form data." };
 
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
+
   const { error } = await admin
     .from("teams")
     .update({ plan: parsed.data.plan })
@@ -178,12 +231,12 @@ export async function deleteTeam(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = deleteSchema.safeParse({ teamId: formData.get("teamId") });
   if (!parsed.success) return { error: "Invalid form data." };
 
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
 
   // Guard against accidental catastrophic deletes: a team must be emptied of
   // accounts and of everyone but its owner before it can go. Deleting still
@@ -204,7 +257,7 @@ export async function deleteTeam(
   const { error } = await admin.from("teams").delete().eq("id", parsed.data.teamId);
   if (error) return { error: error.message };
 
-  revalidatePath("/app/settings/teams");
+  revalidatePath("/proofer/teams");
   return { success: true, message: "Team deleted." };
 }
 
@@ -220,8 +273,6 @@ export async function inviteToTeam(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = inviteSchema.safeParse({
     teamId: formData.get("teamId"),
     email: formData.get("email"),
@@ -233,6 +284,8 @@ export async function inviteToTeam(
 
   const { teamId, email, role } = parsed.data;
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, teamId);
+  if (gate.error) return { error: gate.error };
 
   // Pro gate: collaborators (member/admin) need a Pro team — "pro members can
   // invite people to their teams". Clients are always allowed, since giving a
@@ -281,8 +334,6 @@ export async function updateTeamMemberRole(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = roleSchema.safeParse({
     teamId: formData.get("teamId"),
     userId: formData.get("userId"),
@@ -291,6 +342,8 @@ export async function updateTeamMemberRole(
   if (!parsed.success) return { error: "Invalid form data." };
 
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
 
   // The owner's role is immutable here — ownership transfer is a separate,
   // deliberate action we haven't built yet.
@@ -333,8 +386,6 @@ export async function removeTeamMember(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = removeMemberSchema.safeParse({
     teamId: formData.get("teamId"),
     userId: formData.get("userId"),
@@ -342,6 +393,8 @@ export async function removeTeamMember(
   if (!parsed.success) return { error: "Invalid form data." };
 
   const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
 
   const { data: team } = await admin
     .from("teams")
@@ -378,8 +431,6 @@ export async function setTeamAccount(
   _prev: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
-
   const parsed = accountSchema.safeParse({
     teamId: formData.get("teamId"),
     clientId: formData.get("clientId"),
@@ -390,7 +441,35 @@ export async function setTeamAccount(
   const admin = createAdminClient();
   const { teamId, clientId, action } = parsed.data;
 
+  const gate = await requireTeamManager(admin, teamId);
+  if (gate.error) return { error: gate.error };
+
   if (action === "add") {
+    // Guard against privilege escalation: a non-staff manager could otherwise
+    // pull an arbitrary account into their team and gain access to its content
+    // via RLS. Restrict adds to accounts they already control (agency staff
+    // may add any account).
+    if (!gate.isStaff) {
+      const { data: managed } = await admin
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", gate.userId as string)
+        .in("role", ["owner", "admin"]);
+      const managedTeamIds = (managed ?? []).map((r) => r.team_id);
+      const { data: controls } = managedTeamIds.length
+        ? await admin
+            .from("team_accounts")
+            .select("team_id")
+            .eq("client_id", clientId)
+            .in("team_id", managedTeamIds)
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
+      if (!controls) {
+        return { error: "You can only add accounts you already manage." };
+      }
+    }
+
     const { error } = await admin
       .from("team_accounts")
       .upsert({ team_id: teamId, client_id: clientId }, { onConflict: "team_id,client_id" });
