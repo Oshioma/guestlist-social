@@ -29,6 +29,8 @@ import { createClient } from "@/lib/supabase/server";
 import { authRedirectOrigin } from "@/lib/auth/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
+import { sendEmail } from "@/lib/email";
+import { renderEmailTemplate } from "@/lib/email/templates";
 
 export type ActionState = {
   error?: string | null;
@@ -82,24 +84,66 @@ async function requireTeamManager(
   return { error: "You don't have permission to manage this team." };
 }
 
-// Find an existing auth user by email, or send them an invite. Returns the
-// user id either way so the caller can attach a membership. Handles the
+// Find an existing auth user by email, or create + invite a new one. Returns
+// the user id either way so the caller can attach a membership. Handles the
 // "already registered" case so re-inviting or adding an existing client works.
+//
+// The invite email goes through our own Resend transport (lib/email), NOT
+// Supabase's built-in auth mailer, which is heavily rate-limited on the free
+// tier. We create the user and mint a confirmation token with generateLink
+// (which does NOT send an email), build a link at our own /auth/callback
+// verifyOtp route, and send it ourselves.
+//
+// Result shape:
+//   invited:true    — brand-new user created AND the invite email was sent.
+//   invited:false   — the account already existed (no email needed).
+//   emailError set  — user was created but the invite email couldn't be sent;
+//                     the caller should surface this so the operator can
+//                     resend once email is configured.
 async function resolveOrInviteUser(
   admin: ReturnType<typeof createAdminClient>,
-  email: string
-): Promise<{ userId?: string; invited?: boolean; error?: string }> {
+  email: string,
+  opts?: { teamName?: string }
+): Promise<{
+  userId?: string;
+  invited?: boolean;
+  emailError?: string;
+  error?: string;
+}> {
   try {
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${await authRedirectOrigin()}/auth/callback?type=invite`,
+    // Create the user + mint an invite token without triggering Supabase's
+    // (rate-limited) built-in email. We deliver the email via Resend below.
+    // authRedirectOrigin() keeps the invitee on the domain the invite was sent
+    // from (postproofer.com vs the main app).
+    const origin = await authRedirectOrigin();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { redirectTo: `${origin}/auth/callback?type=invite` },
     });
 
-    if (!error && data?.user) {
-      return { userId: data.user.id, invited: true };
+    if (!error && data?.user && data.properties?.hashed_token) {
+      // Point at OUR callback (the verifyOtp path every other auth email uses),
+      // not Supabase's raw action_link, so the SSR session is established the
+      // same way and the invitee lands on /accept-invite.
+      const link = `${origin}/auth/callback?token_hash=${encodeURIComponent(
+        data.properties.hashed_token
+      )}&type=invite`;
+      const { subject, html, text } = await renderEmailTemplate("invite", {
+        team_name: opts?.teamName?.trim() || "Post Proofer",
+        accept_link: link,
+      });
+      const sent = await sendEmail({ to: email, subject, html, text });
+      if (sent.ok) return { userId: data.user.id, invited: true };
+
+      // User exists now but we couldn't email them — surface why so the
+      // operator knows to configure Resend (or check the address) and resend.
+      const reason = sent.skipped ? sent.reason : sent.error;
+      return { userId: data.user.id, invited: false, emailError: reason };
     }
 
-    // Invite failed — most commonly because the account already exists. Look it
-    // up and reuse it rather than surfacing an error.
+    // generateLink failed — most commonly because the account already exists.
+    // Look it up and reuse it rather than surfacing an error.
     const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
     const existing = list?.users?.find(
       (u) => (u.email ?? "").toLowerCase() === email.toLowerCase()
@@ -108,8 +152,8 @@ async function resolveOrInviteUser(
 
     return { error: error?.message ?? "Could not invite that email." };
   } catch (e) {
-    // Never let a thrown error (bad service key, Supabase Auth email not
-    // configured, network) crash the page — surface it as a readable message.
+    // Never let a thrown error (bad service key, network) crash the page —
+    // surface it as a readable message.
     console.error("resolveOrInviteUser threw:", e);
     return {
       error:
@@ -200,13 +244,15 @@ export async function inviteToOwnTeam(
 
   try {
     const admin = createAdminClient();
-    const resolved = await resolveOrInviteUser(admin, parsed.data.email);
+    const localPart = parsed.data.email.split("@")[0] || "New";
+    const teamName = parsed.data.teamName?.trim() || `${localPart}'s Team`;
+
+    const resolved = await resolveOrInviteUser(admin, parsed.data.email, {
+      teamName,
+    });
     if (resolved.error || !resolved.userId) {
       return { error: resolved.error ?? "Could not invite that email." };
     }
-
-    const localPart = parsed.data.email.split("@")[0] || "New";
-    const teamName = parsed.data.teamName?.trim() || `${localPart}'s Team`;
 
     // ensure_personal_team is idempotent: creates the owned team if they don't
     // have one, otherwise returns their existing one.
@@ -219,6 +265,12 @@ export async function inviteToOwnTeam(
     }
 
     revalidatePath("/proofer/teams");
+    if (resolved.emailError) {
+      return {
+        success: true,
+        message: `${parsed.data.email}'s team is set up, but the invite email couldn't be sent: ${resolved.emailError}`,
+      };
+    }
     return {
       success: true,
       message: resolved.invited
@@ -361,21 +413,24 @@ export async function inviteToTeam(
   const gate = await requireTeamManager(admin, teamId);
   if (gate.error) return { error: gate.error };
 
+  const { data: team } = await admin
+    .from("teams")
+    .select("name, plan")
+    .eq("id", teamId)
+    .maybeSingle();
+
   // Pro gate: collaborators (member/admin) need a Pro team — "pro members can
   // invite people to their teams". Clients are always allowed, since giving a
   // client sight of their own content is core, not an upsell.
   if (role === "admin" || role === "member") {
-    const { data: team } = await admin
-      .from("teams")
-      .select("plan")
-      .eq("id", teamId)
-      .maybeSingle();
     if ((team?.plan ?? "free") !== "pro") {
       return { error: "Upgrade this team to Pro to invite admins or members." };
     }
   }
 
-  const resolved = await resolveOrInviteUser(admin, email);
+  const resolved = await resolveOrInviteUser(admin, email, {
+    teamName: team?.name ?? undefined,
+  });
   if (resolved.error || !resolved.userId) {
     return { error: resolved.error ?? "Could not resolve that email." };
   }
@@ -390,6 +445,12 @@ export async function inviteToTeam(
   if (error) return { error: `Could not add them to the team: ${error.message}` };
 
   revalidateTeams(teamId);
+  if (resolved.emailError) {
+    return {
+      success: true,
+      message: `${email} was added, but the invite email couldn't be sent: ${resolved.emailError}`,
+    };
+  }
   return {
     success: true,
     message: resolved.invited

@@ -3,19 +3,31 @@ import { notFound } from "next/navigation";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "../base";
 import { InviteOwnerForm } from "./InviteOwnerForm";
+import EmailTemplatesEditor from "./EmailTemplatesEditor";
+import { loadEmailTemplatesForEditor } from "@/lib/email/template-actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function SuperAdminPage() {
+export default async function SuperAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   // Only the platform owner. notFound() rather than a redirect so the page's
   // existence isn't revealed to anyone else.
   if (!(await isSuperAdmin())) notFound();
 
   const { base } = await getProoferBase();
+  const sp = await searchParams;
+  const tab = sp.tab === "emails" ? "emails" : "tools";
+
+  const templates = tab === "emails" ? await loadEmailTemplatesForEditor() : [];
+
+  const maxWidth = tab === "emails" ? 1080 : 760;
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
-      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ maxWidth, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
         <div>
           <Link href={base || "/"} style={backLinkStyle}>
             &larr; Board
@@ -26,15 +38,37 @@ export default async function SuperAdminPage() {
           </p>
         </div>
 
-        <section style={cardStyle}>
-          <h3 style={sectionTitleStyle}>Invite someone to their own team</h3>
-          <p style={sectionSubStyle}>
-            Onboard an independent user: they get their own workspace as owner
-            (not added to any of your teams) and can add and connect their own
-            accounts after signing in.
-          </p>
-          <InviteOwnerForm />
-        </section>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #e4e4e7" }}>
+          <Link href={`${base}/super-admin`} style={tabStyle(tab === "tools")}>
+            Tools
+          </Link>
+          <Link href={`${base}/super-admin?tab=emails`} style={tabStyle(tab === "emails")}>
+            Emails
+          </Link>
+        </div>
+
+        {tab === "tools" ? (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>Invite someone to their own team</h3>
+            <p style={sectionSubStyle}>
+              Onboard an independent user: they get their own workspace as owner
+              (not added to any of your teams) and can add and connect their own
+              accounts after signing in.
+            </p>
+            <InviteOwnerForm />
+          </section>
+        ) : (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>Email designs</h3>
+            <p style={sectionSubStyle}>
+              Edit the subject and wording of the emails the site sends. Use the
+              toolbar for bold, italics, underline and fonts. Changes take effect
+              on the next email sent.
+            </p>
+            <EmailTemplatesEditor templates={templates} />
+          </section>
+        )}
       </div>
     </main>
   );
@@ -47,6 +81,18 @@ const backLinkStyle: React.CSSProperties = {
   textDecoration: "none",
   marginBottom: 8,
 };
+
+function tabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "8px 14px",
+    fontSize: 14,
+    fontWeight: 600,
+    textDecoration: "none",
+    color: active ? "#1e293b" : "#71717a",
+    borderBottom: active ? "2px solid #1e293b" : "2px solid transparent",
+    marginBottom: -1,
+  };
+}
 
 const cardStyle: React.CSSProperties = {
   background: "#fff",
