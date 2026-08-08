@@ -95,7 +95,7 @@ export default function ProoferNav({
   const qs = `client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`;
 
   return (
-    <>
+    <div style={{ position: "sticky", top: 0, zIndex: 40 }}>
       <header
         style={{
           background: "#35353c",
@@ -105,7 +105,7 @@ export default function ProoferNav({
           gap: 16,
           rowGap: 10,
           flexWrap: "wrap",
-          padding: "12px 20px",
+          padding: "18px 20px 12px",
           flexShrink: 0,
           position: "relative",
           zIndex: 30,
@@ -117,7 +117,14 @@ export default function ProoferNav({
           onMouseEnter={() => setBrandMenu(true)}
           onMouseLeave={() => setBrandMenu(false)}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 13, cursor: "pointer" }}>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-haspopup="menu"
+            aria-expanded={brandMenu}
+            onClick={() => setBrandMenu((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 13, cursor: "pointer" }}
+          >
             <div
               aria-hidden
               style={{
@@ -137,9 +144,17 @@ export default function ProoferNav({
             <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1 }}>
               Proofer
             </div>
+            <span aria-hidden style={{ color: "#a1a1aa", fontSize: 11, marginLeft: 2 }}>▾</span>
           </div>
 
           {brandMenu && (
+            <>
+              {/* Tap-away catcher (touch has no hover) */}
+              <div
+                aria-hidden
+                onClick={() => setBrandMenu(false)}
+                style={{ position: "fixed", inset: 0, zIndex: 55 }}
+              />
             <div style={{ position: "absolute", top: "100%", left: 0, paddingTop: 8, zIndex: 60 }}>
               <div
                 style={{
@@ -152,9 +167,22 @@ export default function ProoferNav({
                   minWidth: 190,
                 }}
               >
-                <Link href={`/proofer/clients?${qs}`} style={menuItem}>
+                <Link href={`/proofer/pillars?${qs}`} style={menuItem}>
+                  ＋ Add pillar
+                </Link>
+                <Link href={`/proofer/clients?${qs}`} style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}>
                   👥 Clients
                 </Link>
+                {clientId && (
+                  <Link
+                    href={`/portal/${encodeURIComponent(clientId)}`}
+                    target="_blank"
+                    rel="noopener"
+                    style={{ ...menuItem, borderTop: "1px solid #f4f4f5" }}
+                  >
+                    👁 Client view ↗
+                  </Link>
+                )}
                 <form action="/sign-out" method="post" style={{ margin: 0 }}>
                   <button type="submit" style={{ ...menuItem, width: "100%", textAlign: "left", background: "transparent", border: "none", borderTop: "1px solid #f4f4f5", cursor: "pointer" }}>
                     Sign out
@@ -162,6 +190,7 @@ export default function ProoferNav({
                 </form>
               </div>
             </div>
+            </>
           )}
         </div>
 
@@ -339,39 +368,19 @@ export default function ProoferNav({
             })}
           </div>
         )}
-        {/* Manage / add pillars */}
-        <Link
-          href={`/proofer/pillars?${qs}`}
-          title="Add or manage pillars"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px dashed rgba(255,255,255,0.28)",
-            borderRadius: 999,
-            padding: "5px 11px",
-            color: "#e4e4e7",
-            fontSize: 12,
-            fontWeight: 700,
-            textDecoration: "none",
-          }}
-        >
-          ＋ Pillar
-        </Link>
-
         <NotificationsBell />
       </header>
 
-      {/* Powered-by strip under the bar */}
+      {/* Powered-by strip under the bar — darker so it reads as its own band */}
       <div
         style={{
-          background: "#2b2b31",
-          color: "#9a9aa2",
+          background: "#141417",
+          color: "#8b8b93",
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: "0.02em",
-          padding: "5px 20px",
+          padding: "6px 20px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
           display: "flex",
           alignItems: "center",
           gap: 6,
@@ -389,7 +398,7 @@ export default function ProoferNav({
           Guestlist Social ↗
         </Link>
       </div>
-    </>
+    </div>
   );
 }
 
