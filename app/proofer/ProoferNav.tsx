@@ -74,6 +74,8 @@ export default function ProoferNav({
   // Every date (all time) that already carries a post — used to grey out taken
   // days in the reschedule calendar so a move never overwrites another post.
   occupiedDates = [],
+  // Only the platform owner sees the Super admin link.
+  isSuperAdmin = false,
   // Prefix the Proofer routes live under ("" on the standalone domain, where
   // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
   base = "/proofer",
@@ -88,6 +90,7 @@ export default function ProoferNav({
   posts: PostLite[];
   teams?: TeamLite[];
   occupiedDates?: string[];
+  isSuperAdmin?: boolean;
   base?: string;
   parentOrigin?: string;
 }) {
@@ -337,6 +340,13 @@ export default function ProoferNav({
                   >
                     <Tile text="CV" />
                     <span className="pnav-label">Client view ↗</span>
+                  </Link>
+                )}
+
+                {isSuperAdmin && (
+                  <Link href={`${base}/admin`} className="pnav-item">
+                    <Tile text="SA" tone="muted" />
+                    <span className="pnav-label">Super admin</span>
                   </Link>
                 )}
 

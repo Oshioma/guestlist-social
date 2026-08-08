@@ -5,7 +5,7 @@ import {
   getProoferOccupiedDates,
 } from "../admin-panel/lib/queries";
 import { getProoferBase } from "./base";
-import { getProoferAccess } from "@/lib/auth/permissions";
+import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const COOKIE_NAME = "proofer_last_client";
@@ -68,6 +68,7 @@ export async function resolveNavData(spClient?: string, spMonth?: string) {
   const occupiedDates = clientId ? await getProoferOccupiedDates(clientId) : [];
   const { base, parentOrigin } = await getProoferBase();
   const teams = await getMyTeams();
+  const superAdmin = await isSuperAdmin();
 
   return {
     clientId,
@@ -79,5 +80,6 @@ export async function resolveNavData(spClient?: string, spMonth?: string) {
     base,
     parentOrigin,
     teams,
+    superAdmin,
   };
 }

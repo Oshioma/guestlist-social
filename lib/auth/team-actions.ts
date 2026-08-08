@@ -27,7 +27,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getProoferAccess } from "@/lib/auth/permissions";
+import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 
 export type ActionState = {
   error?: string | null;
@@ -160,6 +160,60 @@ export async function createTeam(
 
   revalidateTeams(team.id);
   return { success: true, message: `Team "${parsed.data.name}" created.` };
+}
+
+// Invite someone to their OWN independent team (self-serve style, but targeted
+// rather than a public sign-up door). Agency-staff only: it provisions a new
+// account + a team owned by that person. If they already have an account /
+// owned team, this is a no-op beyond (re)sending the invite. They land on the
+// Proofer as owner of an empty team, ready to add + connect their own accounts.
+const inviteOwnerSchema = z.object({
+  email: z.string().email("Enter a valid email address."),
+  teamName: z.string().trim().max(120).optional(),
+});
+
+export async function inviteToOwnTeam(
+  _prev: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  if (!(await isSuperAdmin())) {
+    return { error: "Only the super admin can invite someone to their own team." };
+  }
+
+  const parsed = inviteOwnerSchema.safeParse({
+    email: formData.get("email"),
+    teamName: (formData.get("teamName") as string) || undefined,
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const admin = createAdminClient();
+  const resolved = await resolveOrInviteUser(admin, parsed.data.email);
+  if (resolved.error || !resolved.userId) {
+    return { error: resolved.error ?? "Could not invite that email." };
+  }
+
+  const localPart = parsed.data.email.split("@")[0] || "New";
+  const teamName = parsed.data.teamName?.trim() || `${localPart}'s Team`;
+
+  // ensure_personal_team is idempotent: creates the owned team if they don't
+  // have one, otherwise returns their existing one.
+  const { error } = await admin.rpc("ensure_personal_team", {
+    p_user: resolved.userId,
+    p_name: teamName,
+  });
+  if (error) {
+    return { error: `Invite sent, but their team couldn't be set up: ${error.message}` };
+  }
+
+  revalidatePath("/proofer/teams");
+  return {
+    success: true,
+    message: resolved.invited
+      ? `Invite sent to ${parsed.data.email} — they'll own their own team.`
+      : `${parsed.data.email} already has an account; their own team is set up.`,
+  };
 }
 
 const renameSchema = z.object({
