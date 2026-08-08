@@ -293,6 +293,11 @@ export default function ProoferNav({
                   minWidth: 250,
                 }}
               >
+                <Link href={`${base}/publish?${qs}`} className="pnav-item">
+                  <Tile text="P" />
+                  <span className="pnav-label">Progress</span>
+                </Link>
+
                 <Link href={`${base}/pillars?${qs}`} className="pnav-item">
                   <Tile text="+" />
                   <span className="pnav-label">Add pillar</span>
@@ -330,10 +335,6 @@ export default function ProoferNav({
                 <Link href={`${base}/clients?${qs}`} className="pnav-item">
                   <Tile text="C" />
                   <span className="pnav-label">Clients</span>
-                </Link>
-                <Link href={`${base}/publish?${qs}`} className="pnav-item">
-                  <Tile text="PQ" />
-                  <span className="pnav-label">Publish queue</span>
                 </Link>
                 {clientId && (
                   <Link
