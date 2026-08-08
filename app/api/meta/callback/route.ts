@@ -7,7 +7,10 @@ import {
   fetchUserPages,
   metaServiceClient,
 } from "../../../admin-panel/lib/meta-auth";
-import { normalizeHandle } from "../../../admin-panel/lib/account-match";
+import {
+  normalizeHandle,
+  facebookPageMatches,
+} from "../../../admin-panel/lib/account-match";
 
 // GET /api/meta/callback
 //
@@ -126,11 +129,9 @@ export async function GET(req: Request) {
       fbPage = (clientRow.data?.fb_page as string | null) ?? null;
     }
     const wantedHandle = normalizeHandle(handle);
-    const wantedPage = normalizeHandle(fbPage);
     const matchesFbPage = (p: { id: string; name: string }) =>
-      !wantedPage ||
-      normalizeHandle(p.name) === wantedPage ||
-      p.id.trim().toLowerCase() === wantedPage;
+      !normalizeHandle(fbPage) ||
+      facebookPageMatches(fbPage, { account_id: p.id, account_name: p.name });
     const matchesHandle = (username: string) =>
       !wantedHandle || normalizeHandle(username) === wantedHandle;
 
