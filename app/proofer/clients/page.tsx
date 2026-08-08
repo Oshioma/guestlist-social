@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import EmptyState from "../../admin-panel/components/EmptyState";
 import ProoferNav from "../ProoferNav";
 import { resolveNavData } from "../navData";
@@ -59,6 +60,142 @@ export default async function ProoferClientsPage({
     { key: "inactive", label: "Inactive" },
     { key: "all", label: "All" },
   ];
+
+  // Which team(s) each visible client belongs to, so the list can be grouped
+  // under team-name headings. Clients can be on more than one team, so a client
+  // may appear under several headings. Read with the admin client (scoped to the
+  // client ids the viewer can already see) so the team name still shows for a
+  // super admin browsing accounts outside their own teams.
+  const NO_TEAM = "__none__";
+  const clientTeams = new Map<string, { id: string; name: string }[]>();
+  const clientIds = clients.map((c) => Number(c.id));
+  if (clientIds.length > 0) {
+    const admin = createAdminClient();
+    const { data: taRows } = await admin
+      .from("team_accounts")
+      .select("client_id, team_id")
+      .in("client_id", clientIds);
+    const teamIds = Array.from(
+      new Set((taRows ?? []).map((r) => String(r.team_id)))
+    );
+    const teamNameById = new Map<string, string>();
+    if (teamIds.length > 0) {
+      const { data: teamRows } = await admin
+        .from("teams")
+        .select("id, name")
+        .in("id", teamIds);
+      for (const t of teamRows ?? []) {
+        teamNameById.set(String(t.id), (t.name as string) ?? "Team");
+      }
+    }
+    for (const r of taRows ?? []) {
+      const cid = String(r.client_id);
+      const tid = String(r.team_id);
+      const arr = clientTeams.get(cid) ?? [];
+      arr.push({ id: tid, name: teamNameById.get(tid) ?? "Team" });
+      clientTeams.set(cid, arr);
+    }
+  }
+
+  type TeamGroup = { id: string; name: string; clients: ClientRow[] };
+  const groupMap = new Map<string, TeamGroup>();
+  for (const c of clients) {
+    const memberships = clientTeams.get(String(c.id)) ?? [];
+    if (memberships.length === 0) {
+      const g = groupMap.get(NO_TEAM) ?? { id: NO_TEAM, name: "No team", clients: [] };
+      g.clients.push(c);
+      groupMap.set(NO_TEAM, g);
+    } else {
+      for (const t of memberships) {
+        const g = groupMap.get(t.id) ?? { id: t.id, name: t.name, clients: [] };
+        g.clients.push(c);
+        groupMap.set(t.id, g);
+      }
+    }
+  }
+  // Alphabetical by team name, with the "No team" bucket always last.
+  const groups = Array.from(groupMap.values()).sort((a, b) => {
+    if (a.id === NO_TEAM) return 1;
+    if (b.id === NO_TEAM) return -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  function clientCard(c: ClientRow) {
+    return (
+      <div
+        key={c.id}
+        style={{
+          border: "1px solid #e4e4e7",
+          borderRadius: 14,
+          background: "#fff",
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>
+            {c.name}
+          </span>
+          {c.status && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#3f3f46",
+                background: "#f4f4f5",
+                borderRadius: 999,
+                padding: "2px 9px",
+                textTransform: "capitalize",
+              }}
+            >
+              {c.status}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: "#71717a", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {c.platform && <span>{c.platform}</span>}
+          {c.ig_handle && <span>@{c.ig_handle.replace(/^@/, "")}</span>}
+          {c.monthly_budget != null && c.monthly_budget !== "" && (
+            <span>£{Number(c.monthly_budget).toLocaleString()}/mo</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <Link
+            href={`${nav.base}/clients/${c.id}/edit?${qs}`}
+            style={{
+              border: "1px solid #e4e4e7",
+              background: "#fff",
+              color: "#18181b",
+              fontSize: 12,
+              fontWeight: 700,
+              borderRadius: 8,
+              padding: "7px 12px",
+              textDecoration: "none",
+            }}
+          >
+            Edit
+          </Link>
+          <Link
+            href={`${nav.base || "/"}?client=${encodeURIComponent(c.id)}&month=${encodeURIComponent(nav.month)}`}
+            style={{
+              border: "1px solid #99e2d0",
+              background: "#effaf6",
+              color: "#1f6b5c",
+              fontSize: 12,
+              fontWeight: 700,
+              borderRadius: 8,
+              padding: "7px 12px",
+              textDecoration: "none",
+            }}
+          >
+            Open board →
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -144,88 +281,35 @@ export default async function ProoferClientsPage({
               />
             )
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {clients.map((c) => (
+            groups.map((group, gi) => (
+              <div key={group.id} style={{ marginTop: gi === 0 ? 0 : 26 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 9, margin: "0 0 12px" }}>
+                  <h2
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      letterSpacing: "-0.01em",
+                      margin: 0,
+                      color: group.id === NO_TEAM ? "#71717a" : "#18181b",
+                    }}
+                  >
+                    {group.name}
+                  </h2>
+                  <span style={{ fontSize: 12, color: "#a1a1aa", fontWeight: 600 }}>
+                    {group.clients.length} client{group.clients.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <div
-                  key={c.id}
                   style={{
-                    border: "1px solid #e4e4e7",
-                    borderRadius: 14,
-                    background: "#fff",
-                    padding: 16,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                    gap: 14,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em" }}>
-                      {c.name}
-                    </span>
-                    {c.status && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#3f3f46",
-                          background: "#f4f4f5",
-                          borderRadius: 999,
-                          padding: "2px 9px",
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {c.status}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#71717a", display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {c.platform && <span>{c.platform}</span>}
-                    {c.ig_handle && <span>@{c.ig_handle.replace(/^@/, "")}</span>}
-                    {c.monthly_budget != null && c.monthly_budget !== "" && (
-                      <span>£{Number(c.monthly_budget).toLocaleString()}/mo</span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                    <Link
-                      href={`${nav.base}/clients/${c.id}/edit?${qs}`}
-                      style={{
-                        border: "1px solid #e4e4e7",
-                        background: "#fff",
-                        color: "#18181b",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        borderRadius: 8,
-                        padding: "7px 12px",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Edit
-                    </Link>
-                    <Link
-                      href={`${nav.base || "/"}?client=${encodeURIComponent(c.id)}&month=${encodeURIComponent(nav.month)}`}
-                      style={{
-                        border: "1px solid #99e2d0",
-                        background: "#effaf6",
-                        color: "#1f6b5c",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        borderRadius: 8,
-                        padding: "7px 12px",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Open board →
-                    </Link>
-                  </div>
+                  {group.clients.map((c) => clientCard(c))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
       </main>
