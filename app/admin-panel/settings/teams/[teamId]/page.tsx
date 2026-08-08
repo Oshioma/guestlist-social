@@ -120,9 +120,10 @@ export default async function TeamDetailPage({
         <h3 style={sectionTitleStyle}>Invite someone</h3>
         <p style={sectionSubStyle}>
           Invite a client to give them a view of just this team&rsquo;s content —
-          they can view and approve, nothing else. Collaborator roles
-          (member/admin) that can post without ever seeing stored passwords are a
-          Pro feature arriving with team workspaces.
+          view and approve, nothing else. Members and admins (a Pro feature) can
+          work the board for this team&rsquo;s accounts — draft, caption,
+          schedule and proof — but never see stored passwords or tokens, and
+          only agency staff push posts live to Meta.
         </p>
         <InviteToTeamForm teamId={teamId} plan={plan} />
       </section>
@@ -134,7 +135,7 @@ export default async function TeamDetailPage({
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {members.map((m) => (
-              <TeamMemberRow key={m.userId} teamId={teamId} member={m} />
+              <TeamMemberRow key={m.userId} teamId={teamId} member={m} plan={plan} />
             ))}
           </div>
         )}

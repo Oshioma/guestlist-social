@@ -10,7 +10,7 @@ import "../admin-panel/admin.css";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
-import { getMemberAccess } from "@/lib/auth/permissions";
+import { getProoferAccess } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
 
 // Give the Proofer surface its own "P" browser-tab icon so it reads as its own
@@ -32,7 +32,7 @@ export default async function ProoferStandaloneLayout({
   children: React.ReactNode;
 }) {
   const { base, parentOrigin } = await getProoferBase();
-  const access = await getMemberAccess();
+  const access = await getProoferAccess();
   if (!access) {
     redirect(`/sign-in?next=${encodeURIComponent(base || "/")}`);
   }

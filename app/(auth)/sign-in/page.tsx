@@ -1,5 +1,7 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { SignInForm } from "./SignInForm";
+import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -23,6 +25,11 @@ export default async function SignInPage({ searchParams }: PageProps) {
       <Suspense fallback={null}>
         <SignInForm next={next} />
       </Suspense>
+      {publicSignupEnabled() && (
+        <p className="auth-subtitle" style={{ marginTop: 16, textAlign: "center" }}>
+          <Link href="/sign-up">New here? Create an account</Link>
+        </p>
+      )}
     </div>
   );
 }

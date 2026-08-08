@@ -18,8 +18,10 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSafeNext } from "@/lib/auth/next";
 import { verifyTurnstile } from "@/lib/auth/turnstile";
+import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
 export type ActionState = {
   error?: string | null;
@@ -48,8 +50,83 @@ const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+const signUpSchema = z.object({
+  fullName: z.string().trim().min(1, "Enter your name.").max(120),
+  email: z.string().email("Enter a valid email address."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+});
+
 function siteUrl(): string {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+}
+
+// Public self-serve sign-up. OFF unless ENABLE_PUBLIC_SIGNUP=true (see
+// public-signup.ts) — this re-checks the flag server-side even if a client
+// reaches the form. On success it creates the auth user and, for a genuinely
+// new account, its personal team ("<First>'s Team", owner, free) via
+// ensure_personal_team, fulfilling "sign up → you already have a team".
+export async function signUpWithPassword(
+  _prevState: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  if (!publicSignupEnabled()) {
+    return { error: "Sign-up is invite-only right now." };
+  }
+
+  try {
+    await verifyTurnstile(formData.get("cf-turnstile-response") as string | null);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Verification failed." };
+  }
+
+  const parsed = signUpSchema.safeParse({
+    fullName: formData.get("fullName") as string,
+    email: formData.get("email") as string,
+    password: formData.get("password") as string,
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      data: { full_name: parsed.data.fullName },
+      emailRedirectTo: `${siteUrl()}/auth/callback?type=signup`,
+    },
+  });
+
+  if (error) return { error: error.message };
+
+  // Supabase obfuscates existing-email sign-ups by returning a user with no
+  // identities. Only provision a personal team for a genuinely new account.
+  const userId = data.user?.id;
+  const isNewUser = (data.user?.identities?.length ?? 0) > 0;
+  if (userId && isNewUser) {
+    const firstName = parsed.data.fullName.split(/\s+/)[0] || parsed.data.fullName;
+    const admin = createAdminClient();
+    const { error: teamErr } = await admin.rpc("ensure_personal_team", {
+      p_user: userId,
+      p_name: `${firstName}'s Team`,
+    });
+    if (teamErr) {
+      // Non-fatal — the account exists; the team can be created later.
+      console.error("ensure_personal_team failed:", teamErr.message);
+    }
+  }
+
+  // If email confirmation is disabled, sign-up returns a live session — go
+  // straight in. Otherwise prompt the user to confirm via email.
+  if (data.session) {
+    redirect("/post-login");
+  }
+
+  return {
+    success: true,
+    message: "Check your email to confirm your account, then sign in.",
+  };
 }
 
 export async function signInWithPassword(
