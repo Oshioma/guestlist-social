@@ -95,7 +95,7 @@ export default function ProoferNav({
   const qs = `client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(month)}`;
 
   return (
-    <>
+    <div style={{ position: "sticky", top: 0, zIndex: 40 }}>
       <header
         style={{
           background: "#35353c",
@@ -398,7 +398,7 @@ export default function ProoferNav({
           Guestlist Social ↗
         </Link>
       </div>
-    </>
+    </div>
   );
 }
 
