@@ -551,9 +551,15 @@ export default function OnboardingFlow({
     setBusy("finish");
     if (!demo) await completeOnboardingAction();
     clearDraft();
-    const url = `${base}/?tour=done&d=${encodeURIComponent(postDate)}`;
-    router.push(url || "/");
-  }, [demo, base, postDate, router, clearDraft]);
+    // Land on THIS account and the post's month, not whatever the board would
+    // default to (a last-viewed / first client, current month) — otherwise a
+    // user whose team already has other accounts lands on the wrong, full board
+    // and can't find the post they just made.
+    const params = new URLSearchParams({ tour: "done", d: postDate });
+    if (accountClientId) params.set("client", accountClientId);
+    params.set("month", postDate.slice(0, 7));
+    router.push(`${base}/?${params.toString()}`);
+  }, [demo, base, postDate, accountClientId, router, clearDraft]);
 
   // ---- derived display ----------------------------------------------------
   const scheduleLabel = useMemo(() => formatSchedule(postDate, publishTime), [
