@@ -49,6 +49,27 @@ function monthLabel(value: string): string {
 }
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
+// Media in a post can be an image, an uploaded video (kept with its original
+// .mp4/.mov/etc. extension by uploadToStorage), or a Google Drive video. A
+// plain <img> can only render the first — the others 404 into a broken-image
+// icon — so mirror the board's detection and pick the right element.
+function isDriveVideo(url: string): boolean {
+  return /drive\.google\.com\/uc\?/.test(url);
+}
+function driveVideoFileId(url: string): string | null {
+  const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function driveThumbUrl(url: string): string | null {
+  const id = driveVideoFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : null;
+}
+function isVideoUrl(url: string): boolean {
+  if (/\.(mp4|mov|webm|m4v|ogv)(\?|$)/i.test(url)) return true;
+  if (isDriveVideo(url)) return true;
+  return false;
+}
+
 export default function PillarOrganiser({
   clientId,
   pillar,
@@ -303,20 +324,27 @@ export default function PillarOrganiser({
                       key={url}
                       style={{ position: "relative", width: "100%", aspectRatio: "1 / 1" }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          borderRadius: 12,
-                          border: "1px solid #e4e4e7",
-                          display: "block",
-                          background: "#f4f4f5",
-                        }}
-                      />
+                      {isDriveVideo(url) ? (
+                        // Drive videos can't be embedded in <video>; show their
+                        // thumbnail instead (matches the board's preview).
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={driveThumbUrl(url) ?? ""}
+                          alt=""
+                          style={mediaStyle}
+                        />
+                      ) : isVideoUrl(url) ? (
+                        <video
+                          src={url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          style={mediaStyle}
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={url} alt="" style={mediaStyle} />
+                      )}
                       <button
                         type="button"
                         onClick={() => removeImage(post, url)}
@@ -469,6 +497,15 @@ export default function PillarOrganiser({
   );
 }
 
+const mediaStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  borderRadius: 12,
+  border: "1px solid #e4e4e7",
+  display: "block",
+  background: "#f4f4f5",
+};
 const darkBtn: React.CSSProperties = {
   border: "1px solid #18181b",
   background: "#18181b",
