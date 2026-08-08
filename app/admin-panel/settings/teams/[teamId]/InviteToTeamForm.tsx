@@ -24,6 +24,8 @@ export function InviteToTeamForm({
     null
   );
 
+  const isFree = plan === "free";
+
   return (
     <form action={action} style={formStyle}>
       {state?.error && <div style={errorBoxStyle}>{state.error}</div>}
@@ -51,21 +53,23 @@ export function InviteToTeamForm({
           <label style={labelStyle}>Role</label>
           <select name="role" defaultValue="client" style={inputStyle}>
             <option value="client">Client (view &amp; approve)</option>
-            <option value="member" disabled>
-              Member · soon
+            <option value="member" disabled={isFree}>
+              Member{isFree ? " · Pro" : ""}
             </option>
-            <option value="admin" disabled>
-              Admin · soon
+            <option value="admin" disabled={isFree}>
+              Admin{isFree ? " · Pro" : ""}
             </option>
           </select>
         </div>
       </div>
 
       <p style={{ fontSize: 12, color: "#71717a", margin: 0 }}>
-        A client sees and approves only the content of the accounts in this team.
-        Collaborator roles (member/admin) that can post — a Pro feature
-        {plan === "pro" ? "" : "; this team is Free"} — arrive with team
-        workspaces.
+        A client sees and approves only this team&rsquo;s content. Members and
+        admins can work the board — draft, caption, schedule and proof — but
+        never see stored passwords or tokens.{" "}
+        {isFree
+          ? "Inviting members or admins needs a Pro team; upgrade in Team settings."
+          : "Only agency staff push posts live to Meta."}
       </p>
 
       <button type="submit" disabled={isPending} style={primaryButtonStyle(isPending)}>

@@ -118,29 +118,58 @@ export async function middleware(request: NextRequest) {
     .maybeSingle();
   const isStaff = roleRow !== null;
 
+  // Non-staff posture comes from team membership. A posting role (owner/admin/
+  // member) in any team makes them a poster (Proofer surface); otherwise a
+  // 'client' membership with an account makes them a portal client. RLS scopes
+  // team_members/team_accounts to the caller's own rows.
+  let isPoster = false;
   let linkedClientId: number | null = null;
   if (!isStaff) {
-    const { data: acct } = await supabase
-      .from("team_accounts")
-      .select("client_id")
-      .order("client_id", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    linkedClientId = (acct as { client_id: number } | null)?.client_id ?? null;
+    const { data: memberships } = await supabase
+      .from("team_members")
+      .select("role")
+      .eq("user_id", user.id);
+    const roles = (memberships as { role: string }[] | null)?.map((m) => m.role) ?? [];
+    isPoster = roles.some((r) => r === "owner" || r === "admin" || r === "member");
+    if (!isPoster) {
+      const { data: acct } = await supabase
+        .from("team_accounts")
+        .select("client_id")
+        .order("client_id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      linkedClientId = (acct as { client_id: number } | null)?.client_id ?? null;
+    }
   }
-  const isClientUser = linkedClientId !== null;
+  const isClientUser = !isStaff && !isPoster && linkedClientId !== null;
 
   // Admission is deny-by-default. A logged-in account that is neither agency
-  // staff (user_roles) nor a member of any team with an account is NOT
-  // admitted — bounce it to /sign-in instead of letting it roam. This is the
-  // gate that stops an account created outside the invite flow from gaining
-  // access. Keep it in sync with getViewer().
-  if (!isStaff && !isClientUser) {
+  // staff (user_roles), a team poster, nor a team client is NOT admitted —
+  // bounce it to /sign-in instead of letting it roam. Keep in sync with
+  // getViewer()/getProoferAccess().
+  if (!isStaff && !isPoster && !isClientUser) {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.search = "";
     url.searchParams.set("error", "not-authorized");
     return NextResponse.redirect(url);
+  }
+
+  // Team posters: the Proofer board is their only surface. On a Proofer host
+  // the top-of-middleware block already fenced off the other product surfaces
+  // and maps clean paths onto /proofer, so only the normal host needs a nudge
+  // off the admin panel and portal.
+  if (isPoster && !isProoferHost) {
+    if (
+      path.startsWith("/app") ||
+      path.startsWith("/admin-panel") ||
+      path.startsWith("/portal")
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/proofer";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Client users can only see /portal/{theirClientId}/*. Anywhere else gets

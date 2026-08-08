@@ -16,6 +16,7 @@
 
 import { redirect } from "next/navigation";
 import { getViewer } from "../admin-panel/lib/viewer";
+import { getProoferAccess } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +39,20 @@ export default async function PostLoginPage({
   const { next } = await searchParams;
   const viewer = await getViewer();
 
-  if (!viewer) {
-    redirect("/sign-in");
+  // Agency staff (admin) — honor validated `next`, otherwise the dashboard.
+  if (viewer?.role === "admin") {
+    redirect(getSafeNext(next));
   }
 
-  if (viewer.role === "client") {
+  // Team posters (member/admin/owner of a team, but not agency staff) land on
+  // the Proofer board, scoped by RLS to their team's accounts. Checked before
+  // the client branch because getViewer() classifies a poster as a client.
+  const prooferAccess = await getProoferAccess();
+  if (prooferAccess?.kind === "poster") {
+    redirect("/proofer");
+  }
+
+  if (viewer?.role === "client") {
     // Defensive fallback if role is client but no linked clientId is available
     if (!viewer.clientId) {
       redirect("/sign-in?error=missing_client");
@@ -50,6 +60,5 @@ export default async function PostLoginPage({
     redirect(`/portal/${viewer.clientId}`);
   }
 
-  // Admin: honor validated `next`, otherwise default.
-  redirect(getSafeNext(next));
+  redirect("/sign-in");
 }

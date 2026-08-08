@@ -234,14 +234,10 @@ export async function inviteToTeam(
   const { teamId, email, role } = parsed.data;
   const admin = createAdminClient();
 
-  // Collaborator (member/admin) posting is not wired end-to-end yet: the auth
-  // layer (getViewer) currently distinguishes only agency staff from clients,
-  // so a non-staff "member" has no scoped posting surface and, on a
-  // multi-account team, would be mis-routed. Until team-scoped workspaces
-  // ship (the switcher), only client invites are actionable here. The Pro
-  // gate below is kept for when collaborators are re-enabled.
-  if (role !== "client") {
-    // Pro gate (future): collaborators will require a Pro team.
+  // Pro gate: collaborators (member/admin) need a Pro team — "pro members can
+  // invite people to their teams". Clients are always allowed, since giving a
+  // client sight of their own content is core, not an upsell.
+  if (role === "admin" || role === "member") {
     const { data: team } = await admin
       .from("teams")
       .select("plan")
@@ -250,10 +246,6 @@ export async function inviteToTeam(
     if ((team?.plan ?? "free") !== "pro") {
       return { error: "Upgrade this team to Pro to invite admins or members." };
     }
-    return {
-      error:
-        "Member and admin access is coming with team workspaces. For now, invite them as a client here, or add agency staff on Settings → Members.",
-    };
   }
 
   const resolved = await resolveOrInviteUser(admin, email);
@@ -304,11 +296,20 @@ export async function updateTeamMemberRole(
   // deliberate action we haven't built yet.
   const { data: team } = await admin
     .from("teams")
-    .select("owner_user_id")
+    .select("owner_user_id, plan")
     .eq("id", parsed.data.teamId)
     .maybeSingle();
   if (team?.owner_user_id === parsed.data.userId) {
     return { error: "The team owner's role can't be changed here." };
+  }
+
+  // Same Pro gate as invites: promoting someone to a collaborator role needs
+  // a Pro team.
+  if (
+    (parsed.data.role === "admin" || parsed.data.role === "member") &&
+    (team?.plan ?? "free") !== "pro"
+  ) {
+    return { error: "Upgrade this team to Pro to assign admin or member roles." };
   }
 
   const { error } = await admin

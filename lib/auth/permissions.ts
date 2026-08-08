@@ -90,3 +90,47 @@ export async function isAdmin(): Promise<boolean> {
   const access = await getMemberAccess();
   return access?.role === "admin";
 }
+
+// getProoferAccess: who may use the Proofer board surface. Broader than
+// getMemberAccess (which gates the full admin panel): it admits agency staff
+// AND team posters — a member/admin/owner of any team. RLS scopes what each
+// one sees and writes (their teams' accounts). A user who is only a 'client'
+// of a team is NOT admitted here — they use the portal instead.
+export type ProoferAccess = {
+  userId: string;
+  email: string | null;
+  kind: "staff" | "poster";
+};
+
+export async function getProoferAccess(): Promise<ProoferAccess | null> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Agency staff (a user_roles row) get in as staff.
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (roleRow) {
+    return { userId: user.id, email: user.email ?? null, kind: "staff" };
+  }
+
+  // Otherwise, a posting role in any team. RLS scopes team_members to the
+  // caller's own memberships, so this only sees their rows.
+  const { data: poster } = await supabase
+    .from("team_members")
+    .select("role")
+    .in("role", ["owner", "admin", "member"])
+    .limit(1)
+    .maybeSingle();
+  if (poster) {
+    return { userId: user.id, email: user.email ?? null, kind: "poster" };
+  }
+
+  return null;
+}
