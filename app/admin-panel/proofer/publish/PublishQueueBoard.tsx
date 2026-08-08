@@ -1292,42 +1292,6 @@ export default function PublishQueueBoard({
         >
           Publish Queue
         </h1>
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: 13,
-            color: INK_2,
-            maxWidth: "62ch",
-            lineHeight: 1.5,
-          }}
-        >
-          Approved posts land here automatically — give each a send time, then
-          track it through to published or failed.{" "}
-          <span style={{ color: INK_3 }}>
-            Times shown in{" "}
-            <span
-              title={`${zone.label} (${timeZone})`}
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: STATUS_TONES.scheduled.ink,
-                background: STATUS_TONES.scheduled.fill,
-                border: `1px solid ${STATUS_TONES.scheduled.edge}`,
-                padding: "1px 7px",
-                borderRadius: 6,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {zone.label} · {zone.abbrev}
-            </span>{" "}
-            <Link
-              href={settingsHref}
-              style={{ color: INK_2, textDecoration: "none", fontWeight: 600 }}
-            >
-              change in Settings &rarr;
-            </Link>
-          </span>
-        </p>
 
         <label
           style={{
@@ -2175,6 +2139,7 @@ export default function PublishQueueBoard({
       {showMetaConnection && (
       <details
         id="meta-connection"
+        open
         style={{
           border: "1px solid #e4e4e7",
           borderRadius: 14,
