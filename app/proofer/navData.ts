@@ -7,6 +7,7 @@ import {
 import { getProoferBase } from "./base";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 const COOKIE_NAME = "proofer_last_client";
 
@@ -42,6 +43,26 @@ export async function getMyTeams(): Promise<NavTeam[]> {
     );
 }
 
+// The account (client) this user last viewed on the Proofer board, persisted
+// server-side so it survives across devices and across the two product domains
+// (a browser cookie can't). Returns "" when unknown or if the prefs table isn't
+// migrated yet — callers fall back to the cookie / first account.
+export async function getLastProoferClientId(): Promise<string> {
+  try {
+    const access = await getProoferAccess();
+    if (!access) return "";
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("user_proofer_prefs")
+      .select("last_client_id")
+      .eq("user_id", access.userId)
+      .maybeSingle();
+    return data?.last_client_id ? String(data.last_client_id) : "";
+  } catch {
+    return "";
+  }
+}
+
 export function currentMonthValue(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -72,7 +93,10 @@ export async function resolveNavData(
   const month = spMonth ?? currentMonthValue();
 
   const cookieStore = await cookies();
-  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  // Prefer the cookie (fast, same-device) but fall back to the server-side
+  // preference so the last account resumes across devices and domains too.
+  const lastClient =
+    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
 
   // Optional team filter: when set, the account picker only shows that team's
   // accounts and the selected client is resolved within them.

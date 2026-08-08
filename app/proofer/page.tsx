@@ -12,7 +12,7 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
-import { getMyTeams, getTeamClientIds } from "./navData";
+import { getMyTeams, getTeamClientIds, getLastProoferClientId } from "./navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
 
@@ -86,7 +86,10 @@ export default async function ProoferStandalonePage({
   const selectedMonth = sp.month ?? defaultMonth;
 
   const cookieStore = await cookies();
-  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  // Prefer the cookie (fast, same-device) but fall back to the server-side
+  // preference so the last account resumes across devices and domains too.
+  const lastClient =
+    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
   const { base, parentOrigin } = await getProoferBase();
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
