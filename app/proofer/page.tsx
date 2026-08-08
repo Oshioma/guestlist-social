@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
+import ProoferNav from "./ProoferNav";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,13 @@ function getNextSixMonths(): { value: string; label: string }[] {
   }
   return months;
 }
+
+const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, padding: 24 };
+const centerStyle: React.CSSProperties = {
+  maxWidth: 1160,
+  margin: "0 auto",
+  width: "100%",
+};
 
 export default async function ProoferStandalonePage({
   searchParams,
@@ -62,24 +70,45 @@ export default async function ProoferStandalonePage({
     }
 
     return (
-      <ProoferBoard
-        clients={data.clients}
-        months={months}
-        initialClientId={selectedClientId}
-        initialMonth={selectedMonth}
-        initialPosts={data.posts}
-        initialPillars={data.pillars}
-        initialIdeas={data.ideas}
-        initialPostIdeas={data.postIdeas}
-        timeZone={displayTimezone}
-        basePath="/proofer"
-        standalone
-      />
+      <>
+        <ProoferNav
+          clients={data.clients}
+          clientId={selectedClientId}
+          month={selectedMonth}
+        />
+        <main style={mainStyle}>
+          <div style={centerStyle}>
+            <ProoferBoard
+              // Remount when client/month change (driven from the top nav) so
+              // the board's internal state re-seeds cleanly from fresh data.
+              key={`${selectedClientId}:${selectedMonth}`}
+              clients={data.clients}
+              months={months}
+              initialClientId={selectedClientId}
+              initialMonth={selectedMonth}
+              initialPosts={data.posts}
+              initialPillars={data.pillars}
+              initialIdeas={data.ideas}
+              initialPostIdeas={data.postIdeas}
+              timeZone={displayTimezone}
+              basePath="/proofer"
+              standalone
+            />
+          </div>
+        </main>
+      </>
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
-      <EmptyState title="Unable to load proofer" description={message} />
+      <>
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} />
+        <main style={mainStyle}>
+          <div style={centerStyle}>
+            <EmptyState title="Unable to load proofer" description={message} />
+          </div>
+        </main>
+      </>
     );
   }
 }
