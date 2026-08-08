@@ -1,4 +1,7 @@
-import { getProoferPublishQueueData } from "../../lib/queries";
+import {
+  getProoferPublishQueueData,
+  getProoferOverviewPosts,
+} from "../../lib/queries";
 import { createClient } from "../../../../lib/supabase/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 import { getDisplayTimezone } from "../../../../lib/app-settings";
@@ -54,6 +57,15 @@ export default async function ProoferPublishPage({
     queueItems = data.queueItems;
   } catch (err) {
     console.error("Publish queue data error:", err);
+  }
+
+  // Every proofer post (all statuses), for the at-a-glance day overview — it
+  // needs the "saved but not approved" days the publish queue never sees.
+  let overviewPosts: Awaited<ReturnType<typeof getProoferOverviewPosts>> = [];
+  try {
+    overviewPosts = await getProoferOverviewPosts();
+  } catch (err) {
+    console.error("Overview posts error:", err);
   }
 
   // Lightweight clients list used by the "Connect Meta" picker and by the
@@ -145,6 +157,7 @@ export default async function ProoferPublishPage({
       connectResult={connectResult}
       timeZone={displayTimezone}
       currentMonth={currentMonth}
+      overviewPosts={overviewPosts}
     />
     </>
   );
