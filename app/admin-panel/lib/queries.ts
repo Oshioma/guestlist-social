@@ -746,6 +746,75 @@ export async function getProoferData(
   return { clients, posts: postsWithRelations, pillars, ideas, postIdeas };
 }
 
+export type ProoferPillarPost = {
+  id: string;
+  postDate: string;
+  caption: string;
+  mediaUrls: string[];
+  pillarId: string | null;
+  platform: string;
+  status: string;
+  // Carried so the Organise editor can save caption/media without clobbering
+  // scheduling fields.
+  publishTime: string;
+  publishTargets: string[];
+  linkedIdeaId: string | null;
+  linkedIdeaKind: string | null;
+};
+
+// All-time posts (with real content) for a client that carry a pillar —
+// lightweight, for the standalone Proofer nav's pillar hover popups. Returned
+// newest-first; the nav re-orders to surface the same calendar month from
+// prior years.
+export async function getProoferPillarPosts(
+  clientId: string
+): Promise<ProoferPillarPost[]> {
+  if (!clientId) return [];
+  const supabase = await createClient();
+  const res = await supabase
+    .from("proofer_posts")
+    .select(
+      "id, post_date, caption, media_urls, pillar_id, platform, status, publish_time, publish_targets, linked_idea_id, linked_idea_kind"
+    )
+    .eq("client_id", clientId)
+    .not("pillar_id", "is", null)
+    .order("post_date", { ascending: false });
+
+  if (res.error) {
+    console.error("getProoferPillarPosts:", res.error.message);
+    return [];
+  }
+
+  return (res.data ?? [])
+    .map((row) => {
+      const mediaUrls: string[] = Array.isArray(row.media_urls)
+        ? row.media_urls.filter(
+            (u: unknown): u is string => typeof u === "string" && u !== ""
+          )
+        : [];
+      return {
+        id: String(row.id),
+        postDate: row.post_date ?? "",
+        caption: row.caption ?? "",
+        mediaUrls,
+        pillarId: row.pillar_id ? String(row.pillar_id) : null,
+        platform: row.platform ?? "instagram_feed",
+        status: row.status ?? "none",
+        publishTime: row.publish_time ?? "18:00",
+        publishTargets: parsePublishTargets(row),
+        linkedIdeaId: row.linked_idea_id ? String(row.linked_idea_id) : null,
+        linkedIdeaKind:
+          row.linked_idea_kind === "video" ||
+          row.linked_idea_kind === "carousel" ||
+          row.linked_idea_kind === "story"
+            ? String(row.linked_idea_kind)
+            : null,
+      };
+    })
+    // Only real posts — skip empty planned slots that happen to carry a pillar.
+    .filter((p) => p.caption.trim() !== "" || p.mediaUrls.length > 0);
+}
+
 export async function getPostIdeas(
   clientId: string,
   month: string
