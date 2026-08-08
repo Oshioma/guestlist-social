@@ -484,19 +484,16 @@ function ClientDayOverview({
     return m;
   }, [posts, month]);
 
-  // One row per company that has any post this month, sorted by name. (A client
-  // with nothing filed this month simply drops out rather than adding an
-  // all-grey row.) Names come from the roster; fall back gracefully.
-  const rows = useMemo(() => {
-    const nameById = new Map(clients.map((c) => [c.id, c.name]));
-    return [...byClient.entries()]
-      .map(([clientId, days]) => ({
-        clientId,
-        name: nameById.get(clientId) ?? "Client",
-        days,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [byClient, clients]);
+  // One row per active client, sorted by name — a client with nothing filed
+  // this month still shows, as an all-grey row, so an empty calendar reads as
+  // an obvious gap rather than a missing company.
+  const rows = useMemo(
+    () =>
+      [...clients]
+        .map((c) => ({ clientId: c.id, name: c.name, days: byClient.get(c.id) }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [byClient, clients]
+  );
 
   const dayCount = daysInMonthValue(month);
   const dayNums = useMemo(
@@ -607,7 +604,7 @@ function ClientDayOverview({
 
       {rows.length === 0 ? (
         <div style={{ fontSize: 12.5, color: INK_3, padding: "14px 16px" }}>
-          No posts filed for {monthLabel(month)}.
+          No active clients to show.
         </div>
       ) : (
         <div style={{ overflowX: "auto", padding: "10px 16px 14px" }}>
@@ -672,7 +669,7 @@ function ClientDayOverview({
                   </div>
                   {dayNums.map((day) => {
                     const key = `${month}-${String(day).padStart(2, "0")}`;
-                    const tone = overviewDayTone(row.days.get(key));
+                    const tone = overviewDayTone(row.days?.get(key));
                     const monthName = monthLabel(month).replace(/ \d{4}$/, "");
                     return (
                       <div
@@ -1335,11 +1332,11 @@ export default function PublishQueueBoard({
         </label>
       </div>
 
-      {/* At-a-glance day overview — one horizontal day strip per company,
+      {/* At-a-glance day overview — one horizontal day strip per active client,
           tinted with the proofer's colours (green approved, yellow saved, grey
           empty), so it's obvious which companies have approved posts for the
-          month and which days are still empty. */}
-      {overviewPosts.length > 0 && (
+          month and which have an empty calendar. */}
+      {clients.length > 0 && (
         <ClientDayOverview
           clients={clients}
           posts={overviewPosts}

@@ -68,20 +68,23 @@ export default async function ProoferPublishPage({
     console.error("Overview posts error:", err);
   }
 
-  // Lightweight clients list used by the "Connect Meta" picker and by the
+  // Active clients (archived excluded) — used by the "Connect Meta" picker, the
   // board's schedule-time publishability check (needs each client's declared
-  // Instagram handle / Facebook Page). `fb_page` is a newer column, so fall
-  // back gracefully if the migration hasn't run yet.
+  // Instagram handle / Facebook Page), and the at-a-glance overview, which
+  // shows one row per active client (all-grey when nothing is filed). `fb_page`
+  // is a newer column, so fall back gracefully if the migration hasn't run yet.
   const supabase = await createClient();
   let clientsRows: { id: string | number; name?: string | null; ig_handle?: string | null; fb_page?: string | null }[] = [];
   const clientsFull = await supabase
     .from("clients")
     .select("id, name, ig_handle, fb_page")
+    .eq("archived", false)
     .order("name", { ascending: true });
   if (clientsFull.error) {
     const fallback = await supabase
       .from("clients")
       .select("id, name, ig_handle")
+      .eq("archived", false)
       .order("name", { ascending: true });
     clientsRows = (fallback.data ?? []) as typeof clientsRows;
   } else {
