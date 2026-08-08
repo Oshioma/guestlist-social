@@ -14,19 +14,26 @@
 // on a 403/redirect loop after signing in.
 // ---------------------------------------------------------------------------
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getViewer } from "../admin-panel/lib/viewer";
 import { getProoferAccess } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
-function getSafeNext(next?: string) {
-  if (!next) return "/app/dashboard";
+// Hosts that serve the standalone Proofer at their own root. Keep in sync with
+// middleware.ts and app/proofer/base.ts. On these hosts an admin login should
+// land on the Proofer board ("/"), never the Guestlist admin dashboard (which
+// this domain doesn't even expose).
+const PROOFER_HOSTS = new Set(["postproofer.com", "www.postproofer.com"]);
+
+function getSafeNext(next: string | undefined, fallback: string) {
+  if (!next) return fallback;
 
   // Allow only internal absolute paths, but block protocol-relative and odd cases
-  if (!next.startsWith("/")) return "/app/dashboard";
-  if (next.startsWith("//")) return "/app/dashboard";
-  if (next.startsWith("/\\")) return "/app/dashboard";
+  if (!next.startsWith("/")) return fallback;
+  if (next.startsWith("//")) return fallback;
+  if (next.startsWith("/\\")) return fallback;
 
   return next;
 }
@@ -39,9 +46,14 @@ export default async function PostLoginPage({
   const { next } = await searchParams;
   const viewer = await getViewer();
 
-  // Agency staff (admin) — honor validated `next`, otherwise the dashboard.
+  // Agency staff (admin) — honor validated `next`, otherwise the default. On the
+  // standalone Proofer domain the default is the board root ("/"), so an admin
+  // login there never bounces through the Guestlist admin dashboard (which this
+  // domain doesn't even expose).
   if (viewer?.role === "admin") {
-    redirect(getSafeNext(next));
+    const host = (await headers()).get("host")?.toLowerCase().split(":")[0] ?? "";
+    const fallback = PROOFER_HOSTS.has(host) ? "/" : "/app/dashboard";
+    redirect(getSafeNext(next, fallback));
   }
 
   // Team posters (member/admin/owner of a team, but not agency staff) land on
