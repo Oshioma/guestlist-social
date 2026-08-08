@@ -1,9 +1,12 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   getProoferData,
   getProoferPillarPosts,
   getProoferOccupiedDates,
 } from "../admin-panel/lib/queries";
+import { shouldRunOnboarding } from "@/lib/onboarding";
+import OnboardingFinishBanner from "./OnboardingFinishBanner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
@@ -34,6 +37,19 @@ function getNextSixMonths(): { value: string; label: string }[] {
   return months;
 }
 
+// Human label for the finish banner's saved-post date (e.g. "Saturday, 9 Aug").
+function formatFinishDate(iso?: string): string | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, padding: 24 };
 const centerStyle: React.CSSProperties = {
   maxWidth: 1160,
@@ -44,9 +60,27 @@ const centerStyle: React.CSSProperties = {
 export default async function ProoferStandalonePage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; month?: string; team?: string }>;
+  searchParams: Promise<{
+    client?: string;
+    month?: string;
+    team?: string;
+    tour?: string;
+    d?: string;
+  }>;
 }) {
   const sp = await searchParams;
+
+  // Divert brand-new posters into the guided first-run tour (resumes if
+  // mid-flow). Must run before the try/catch below so the NEXT_REDIRECT isn't
+  // swallowed. shouldRunOnboarding fails closed for staff / completed / skipped.
+  const { base: obBase } = await getProoferBase();
+  if (await shouldRunOnboarding()) {
+    redirect(`${obBase}/onboarding`);
+  }
+
+  const showFinishBanner = sp.tour === "done";
+  const finishDateLabel = formatFinishDate(sp.d);
+
   const months = getNextSixMonths();
   const defaultMonth = months[0]?.value ?? "";
   const selectedMonth = sp.month ?? defaultMonth;
@@ -121,6 +155,9 @@ export default async function ProoferStandalonePage({
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
+            {showFinishBanner && (
+              <OnboardingFinishBanner dateLabel={finishDateLabel} />
+            )}
             <ProoferBoard
               // Remount when client/month change (driven from the top nav) so
               // the board's internal state re-seeds cleanly from fresh data.
