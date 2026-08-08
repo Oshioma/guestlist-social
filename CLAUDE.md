@@ -1,5 +1,42 @@
 # Working conventions for Claude
 
+## Tenant scoping: never leak one team's data to another
+
+This is a multi-tenant app. Non-staff users ("team members" / "posters") may
+only see their own team's clients (accounts). Row-level security enforces this,
+but **only on the session client** (`createClient()` from `lib/supabase/server`),
+whose queries run through policies like `clients_portal_select` →
+`visible_client_ids()` and the `*_team_write` policies → `writable_account_ids()`.
+
+The **service-role clients — `createAdminClient()` (`lib/supabase/admin`) and
+`metaServiceClient()` (`app/admin-panel/lib/meta-auth.ts`) — BYPASS RLS.** Every
+read they do against a tenant-scoped table (`clients`, `connected_meta_accounts`,
+`proofer_posts`, `proofer_publish_queue`, `ad_*`, `reviews`, `team_accounts`,
+`teams`, …) returns **all tenants' rows** unless you filter it yourself.
+
+Rule: **any service-role read of a tenant table on a page/component reachable by
+a non-staff user MUST be scoped to the viewer's own clients/teams.** The standard
+move is to load the allowed ids with the *session* client first (so RLS scopes
+them) and pass them into the service-role query:
+
+```ts
+const supabase = await createClient();                 // RLS-scoped
+const { data: rows } = await supabase.from("clients").select("id");
+const allowed = (rows ?? []).map((r) => r.id);
+if (allowed.length === 0) return null;                 // fail closed
+const admin = createAdminClient();                     // bypasses RLS
+const { data } = await admin
+  .from("connected_meta_accounts")
+  .select("...")
+  .in("client_id", allowed);                           // ← the scope filter
+```
+
+For team *names* (not client-keyed), gate on membership instead: staff see all,
+a poster sees only `nav.teams` / their own `team_members` rows. When in doubt,
+fail closed (return nothing) rather than open. Prefer the session client
+outright; reach for the service role only when you genuinely need to bypass RLS
+(e.g. reading access tokens) — and then always add the scope filter.
+
 ## Always open a NEW pull request (check every time)
 
 Every deliverable goes on its **own new pull request**. Do **not** reuse an
