@@ -165,35 +165,37 @@ export default function OnboardingFlow({
     if (restored.publishTime) setPublishTime(restored.publishTime);
     if (restored.accountName) setAccountName(restored.accountName);
 
-    // Decide where to resume.
+    // Decide where to resume. initialStep 0 means "not started" (or an explicit
+    // restart) → always begin at the welcome screen, ignoring any stale account
+    // pointer so a clean restart really is clean.
     let start: StepId = "welcome";
     if (metaResult) {
       // Just came back from the Meta OAuth round-trip → land on connect.
       start = "connect";
-    } else if (initialStep >= 2 && !initialAccountId) {
-      start = "connect";
-    } else if (initialAccountId) {
-      // Account exists. Restore the composer step if we have a local draft,
-      // else restart the composer cleanly at "idea".
-      const restoredStep = restored.step;
-      const composerSteps: StepId[] = [
-        "idea",
-        "hook",
-        "fun",
-        "shorter",
-        "image",
-        "time",
-        "save",
-        "green",
-        "board",
-      ];
-      if (restoredStep && composerSteps.includes(restoredStep) && restored.caption) {
-        start = restoredStep;
-      } else {
-        start = "idea";
-      }
     } else if (initialStep >= 1) {
-      start = "connect";
+      if (!initialAccountId) {
+        start = "connect";
+      } else {
+        // Account exists. Restore the composer step if we have a local draft,
+        // else restart the composer cleanly at "idea".
+        const restoredStep = restored.step;
+        const composerSteps: StepId[] = [
+          "idea",
+          "hook",
+          "fun",
+          "shorter",
+          "image",
+          "time",
+          "save",
+          "green",
+          "board",
+        ];
+        if (restoredStep && composerSteps.includes(restoredStep) && restored.caption) {
+          start = restoredStep;
+        } else {
+          start = "idea";
+        }
+      }
     }
 
     if (demo) start = "welcome";

@@ -2610,20 +2610,20 @@ export default function ProoferBoard({
       {clients.length === 0 ? (
         standalone ? (
           <SectionCard title="Let's set up your first post">
-            <div style={{ fontSize: 13.5, color: "#52525b", lineHeight: 1.5, marginBottom: 12 }}>
+            <div style={{ fontSize: 17, color: "#3f3f46", lineHeight: 1.6, marginBottom: 18, maxWidth: 640 }}>
               You don&apos;t have an account yet. The 2-minute guided setup connects
               a social account and walks you through creating your first post.
             </div>
             <a
-              href={`${basePath.replace(/\/$/, "")}/onboarding`}
+              href={`${basePath.replace(/\/$/, "")}/onboarding?start=1`}
               style={{
                 display: "inline-block",
                 background: "#6d28d9",
                 color: "#fff",
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: 700,
-                borderRadius: 10,
-                padding: "10px 18px",
+                borderRadius: 12,
+                padding: "13px 24px",
                 textDecoration: "none",
               }}
             >

@@ -67,6 +67,9 @@ export async function startOnboardingAction(): Promise<VoidResult> {
     await patchState(access.userId, {
       onboarding_started: true,
       onboarding_skipped: false,
+      // Clear a stale completion so an explicit restart genuinely re-runs
+      // (e.g. a user who finished once but ended up with no account).
+      onboarding_completed: false,
       onboarding_step: 1,
     });
     await logOnboardingEvent("onboarding_started", 1);
@@ -167,16 +170,29 @@ export async function ensureOnboardingAccountAction(): Promise<
     const admin = createAdminClient();
     const existing = await getOnboardingState(access.userId);
     if (existing.accountClientId) {
-      const { data } = await admin
+      // Reuse only if the account actually still exists AND is still in one of
+      // the user's teams (a prior tour's account could have been deleted or
+      // removed). Otherwise fall through and provision a fresh one.
+      const { data: clientRow } = await admin
         .from("clients")
-        .select("name")
+        .select("id, name, archived")
         .eq("id", existing.accountClientId)
         .maybeSingle();
-      return {
-        ok: true,
-        clientId: existing.accountClientId,
-        name: (data?.name as string) ?? "",
-      };
+      if (clientRow && !clientRow.archived) {
+        const { data: link } = await admin
+          .from("team_accounts")
+          .select("team_id")
+          .eq("client_id", existing.accountClientId)
+          .limit(1)
+          .maybeSingle();
+        if (link) {
+          return {
+            ok: true,
+            clientId: existing.accountClientId,
+            name: (clientRow.name as string) ?? "",
+          };
+        }
+      }
     }
 
     const team = await resolveOwnTeam(access.userId);
