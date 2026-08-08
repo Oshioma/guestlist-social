@@ -47,23 +47,54 @@ export function currentMonthValue(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// The client ids (accounts) that belong to a team, via the team_accounts link.
+// Read with the admin client so the filter works for any team the user can see
+// in the nav; the caller only ever intersects this with clients the viewer is
+// already allowed to load, so it never widens visibility.
+export async function getTeamClientIds(teamId: string): Promise<string[]> {
+  if (!teamId) return [];
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .eq("team_id", teamId);
+  return (data ?? []).map((r) => String(r.client_id));
+}
+
 // Resolves everything the standalone top nav needs (client list, selected
 // client/month, pillars and their posts) so every /proofer page can render the
 // same nav consistently.
-export async function resolveNavData(spClient?: string, spMonth?: string) {
+export async function resolveNavData(
+  spClient?: string,
+  spMonth?: string,
+  spTeam?: string
+) {
   const month = spMonth ?? currentMonthValue();
 
   const cookieStore = await cookies();
   const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
 
+  // Optional team filter: when set, the account picker only shows that team's
+  // accounts and the selected client is resolved within them.
+  const teamId = spTeam ?? "";
+  const teamClientIds = teamId ? new Set(await getTeamClientIds(teamId)) : null;
+  const inTeam = (id: string) => !teamClientIds || teamClientIds.has(id);
+
   let clientId = spClient ?? "";
-  if (!clientId && lastClient) clientId = lastClient;
+  if (clientId && !inTeam(clientId)) clientId = "";
+  if (!clientId && lastClient && inTeam(lastClient)) clientId = lastClient;
   if (!clientId) {
     const { clients } = await getProoferData();
-    clientId = clients[0]?.id ?? "";
+    const pool = teamClientIds
+      ? clients.filter((c) => teamClientIds.has(String(c.id)))
+      : clients;
+    clientId = pool[0]?.id ?? "";
   }
 
-  const { clients, pillars } = await getProoferData(clientId, month);
+  const { clients: allClients, pillars } = await getProoferData(clientId, month);
+  const clients = teamClientIds
+    ? allClients.filter((c) => teamClientIds.has(String(c.id)))
+    : allClients;
   const posts = clientId ? await getProoferPillarPosts(clientId) : [];
   const occupiedDates = clientId ? await getProoferOccupiedDates(clientId) : [];
   const { base, parentOrigin } = await getProoferBase();
@@ -73,6 +104,7 @@ export async function resolveNavData(spClient?: string, spMonth?: string) {
   return {
     clientId,
     month,
+    teamId,
     clients,
     pillars,
     posts,
