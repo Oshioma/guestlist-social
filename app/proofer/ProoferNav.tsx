@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 import { moveProoferPostAction } from "../admin-panel/lib/proofer-actions";
+import { setLastProoferClientAction } from "./prefs-actions";
 
 type ClientLite = { id: string; name: string };
 type TeamLite = { id: string; name: string; isOwner: boolean };
@@ -143,13 +144,14 @@ export default function ProoferNav({
   }, []);
 
   // Remember the account you're viewing so that leaving and coming back to the
-  // board resumes on the same one. The board pages read this cookie when no
-  // ?client= is present; persisting it on every view (not just when the board's
-  // own picker changes) means the nav switcher and plain navigation are
-  // remembered too.
+  // board resumes on the same one. The cookie is the fast same-device path; the
+  // server-side preference makes it durable across devices and across the two
+  // product domains (where a cookie can't follow). The board pages read the
+  // cookie (then the preference) when no ?client= is present.
   useEffect(() => {
     if (clientId) {
       document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
+      setLastProoferClientAction(clientId).catch(() => {});
     }
   }, [clientId]);
 
