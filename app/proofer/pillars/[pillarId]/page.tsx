@@ -45,7 +45,9 @@ export default async function PillarOrganisePage({
       clientId = clients[0]?.id ?? "";
     }
 
-    const { clients, pillars } = await getProoferData();
+    // Pass clientId so pillars come back (getProoferData returns none without a
+    // selected client).
+    const { clients, pillars } = await getProoferData(clientId, month);
     const allPillarPosts = await getProoferPillarPosts(clientId);
     const pillar = pillars.find((p) => p.id === pillarId) ?? null;
     const pillarPosts = allPillarPosts.filter((p) => p.pillarId === pillarId);

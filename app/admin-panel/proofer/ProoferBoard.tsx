@@ -1970,19 +1970,24 @@ export default function ProoferBoard({
         }}
       >
         {!isNarrow && (
-          <div style={{ flexShrink: 0, width: 360 }}>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 30,
-                lineHeight: 1.05,
-                fontWeight: 700,
-                color: "#18181b",
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Proofer
-            </h1>
+          <div style={{ flexShrink: 0, width: standalone ? "100%" : 360 }}>
+            {/* Standalone drops the duplicate "Proofer" title (the nav brands
+                the page) and the legend, and lets the control bar span the row. */}
+            {!standalone && (
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 30,
+                  lineHeight: 1.05,
+                  fontWeight: 700,
+                  color: "#18181b",
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                Proofer
+              </h1>
+            )}
+            {!standalone && (
             <div style={{ display: "flex", marginTop: 10, flexWrap: "wrap", gap: 16 }}>
               {PROOFER_LIGHT_LEGEND.map((item) => (
                 <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2004,7 +2009,8 @@ export default function ProoferBoard({
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 18 }}>{frequencyBlock}</div>
+            )}
+            <div style={{ marginTop: standalone ? 0 : 18 }}>{frequencyBlock}</div>
           </div>
         )}
 
@@ -2552,18 +2558,35 @@ export default function ProoferBoard({
 
         </div>
 
-        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6, paddingLeft: 4 }}>
-          <span style={{ fontWeight: 600, color: "#475569" }}>AI uses: </span>
-          consultation answers
-          {" · "}
-          {initialPillars.length > 0
-            ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
-            : "no content pillars"}
-          {" · existing posts this month"}
-          {genPrompt.trim()
-            ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
-            : " · no direction prompt"}
-        </div>
+        {standalone ? (
+          // Redesign: tuck the "AI uses…" detail into a hover tooltip instead
+          // of a full line of helper text.
+          <div style={{ fontSize: 11, color: "#94a3b8", paddingLeft: 4 }}>
+            <span
+              title={`AI uses: consultation answers · ${
+                initialPillars.length > 0
+                  ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
+                  : "no content pillars"
+              } · existing posts this month`}
+              style={{ cursor: "help", borderBottom: "1px dotted #cbd5e1" }}
+            >
+              ⓘ What the AI uses
+            </span>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.6, paddingLeft: 4 }}>
+            <span style={{ fontWeight: 600, color: "#475569" }}>AI uses: </span>
+            consultation answers
+            {" · "}
+            {initialPillars.length > 0
+              ? `${initialPillars.length} content pillar${initialPillars.length !== 1 ? "s" : ""}`
+              : "no content pillars"}
+            {" · existing posts this month"}
+            {genPrompt.trim()
+              ? ` · "${genPrompt.trim().slice(0, 50)}${genPrompt.trim().length > 50 ? "…" : ""}"`
+              : " · no direction prompt"}
+          </div>
+        )}
         </BottomSheet>
       )}
 
