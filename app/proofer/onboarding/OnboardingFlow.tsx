@@ -10,6 +10,7 @@ import {
   completeOnboardingAction,
   ensureOnboardingAccountAction,
   renameOnboardingAccountAction,
+  pickTourConnectionAction,
   saveFirstPostAction,
   logOnboardingEvent,
 } from "./actions";
@@ -74,8 +75,10 @@ type Photo = {
   photographer?: string;
 };
 
+type ConnectedAccount = { platform: string; accountId: string; accountName: string };
+
 type MetaResult =
-  | { status: "success"; platforms: string[] }
+  | { status: "success"; platforms: string[]; accounts: ConnectedAccount[] }
   | { status: "error"; message: string }
   | null;
 
@@ -128,9 +131,17 @@ export default function OnboardingFlow({
   const [error, setError] = useState<string | null>(null);
 
   // Connect step.
-  const [connectedPlatforms] = useState<string[]>(
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>(
     metaResult?.status === "success" ? metaResult.platforms : []
   );
+  // A Meta login can return many Pages/IG accounts — collect them so the user
+  // can pick just one instead of attaching the whole portfolio.
+  const connectedAccounts: ConnectedAccount[] =
+    metaResult?.status === "success" ? metaResult.accounts : [];
+  const [picking, setPicking] = useState(false);
+  const [pickedName, setPickedName] = useState<string | null>(null);
+  // Whether we still need the user to choose which account to keep.
+  const needsPick = connectedAccounts.length > 1 && !pickedName;
 
   // Stock image step.
   const [imgQuery, setImgQuery] = useState("");
@@ -336,14 +347,38 @@ export default function OnboardingFlow({
     [demo]
   );
 
-  // Once a social account is connected, celebrate briefly then move on.
+  // Let the user keep just one account when a login returned several.
+  const handlePickAccount = useCallback(
+    async (acc: ConnectedAccount) => {
+      if (!accountClientId) return;
+      setPicking(true);
+      setError(null);
+      const res = await pickTourConnectionAction(
+        accountClientId,
+        acc.platform,
+        acc.accountId
+      );
+      setPicking(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setConnectedPlatforms(res.platforms);
+      setPickedName(res.name || acc.accountName);
+    },
+    [accountClientId]
+  );
+
+  // Once connected (and, when several were returned, once one is chosen),
+  // celebrate briefly then move on.
   useEffect(() => {
     if (step !== "connect") return;
     if (connectedPlatforms.length === 0) return;
+    if (needsPick) return; // wait for the user to choose
     const t = window.setTimeout(() => goto("idea"), 1400);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, connectedPlatforms.length]);
+  }, [step, connectedPlatforms.length, needsPick]);
 
   const connectHref = useMemo(() => {
     if (!accountClientId) return "#";
@@ -570,6 +605,11 @@ export default function OnboardingFlow({
               accountClientId={accountClientId}
               connectHref={connectHref}
               connectedPlatforms={connectedPlatforms}
+              connectedAccounts={connectedAccounts}
+              needsPick={needsPick}
+              picking={picking}
+              pickedName={pickedName}
+              onPick={handlePickAccount}
               busy={busy}
               demo={demo}
               metaError={metaResult?.status === "error" ? metaResult.message : null}
@@ -756,6 +796,11 @@ function ConnectPanel({
   accountClientId,
   connectHref,
   connectedPlatforms,
+  connectedAccounts,
+  needsPick,
+  picking,
+  pickedName,
+  onPick,
   busy,
   demo,
   metaError,
@@ -767,6 +812,11 @@ function ConnectPanel({
   accountClientId: string | null;
   connectHref: string;
   connectedPlatforms: string[];
+  connectedAccounts: ConnectedAccount[];
+  needsPick: boolean;
+  picking: boolean;
+  pickedName: string | null;
+  onPick: (acc: ConnectedAccount) => void;
   busy: string | null;
   demo: boolean;
   metaError: string | null;
@@ -780,12 +830,63 @@ function ConnectPanel({
   const anyOn = igOn || fbOn;
   const [editingName, setEditingName] = useState(false);
 
-  // Connected already → confirmation + auto-advance (handled by the parent).
+  // The login returned several accounts — let the user keep just one. Instagram
+  // accounts first (that's what the post targets), then Facebook Pages.
+  if (needsPick) {
+    const sorted = [...connectedAccounts].sort((a, b) =>
+      a.platform === b.platform ? 0 : a.platform === "instagram" ? -1 : 1
+    );
+    return (
+      <div style={cardStyle} className="ob-pop">
+        <h3 style={{ ...cardTitle, fontSize: 16 }}>Which account do you want to post to?</h3>
+        <p style={cardSub}>
+          Your login has access to {connectedAccounts.length} accounts. Pick the
+          one for this brand — you can add others later from Team settings.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 340, overflowY: "auto" }}>
+          {sorted.map((acc) => {
+            const isIg = acc.platform === "instagram";
+            return (
+              <button
+                key={`${acc.platform}:${acc.accountId}`}
+                type="button"
+                onClick={() => onPick(acc)}
+                disabled={picking}
+                style={pickRowStyle}
+              >
+                <span style={{ fontSize: 18 }}>{isIg ? "📸" : "📘"}</span>
+                <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {isIg ? "@" : ""}
+                    {acc.accountName}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: "#a1a1aa" }}>
+                    {isIg ? "Instagram" : "Facebook Page"}
+                  </span>
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#6d28d9" }}>
+                  {picking ? "" : "Use this →"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {picking && (
+          <p style={{ ...cardSub, marginTop: 12, marginBottom: 0 }}>
+            <span className="ob-spinner ob-spinner-dark" /> Setting that as your account…
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // Connected (and, if several, one chosen) → confirmation + auto-advance.
   if (anyOn) {
     return (
       <div style={cardStyle} className="ob-pop">
         <div style={{ ...successPill, display: "inline-flex", fontSize: 15, padding: "10px 18px" }}>
-          ✓ {igOn ? "Instagram" : ""}
+          ✓ {pickedName ? `${pickedName} · ` : ""}
+          {igOn ? "Instagram" : ""}
           {igOn && fbOn ? " & " : ""}
           {fbOn ? "Facebook" : ""} connected
         </div>
@@ -1544,6 +1645,18 @@ const aiChipActive: React.CSSProperties = {
   background: "#f5f3ff",
   color: "#5b21b6",
   boxShadow: "0 0 0 3px rgba(109,40,217,0.12)",
+};
+
+const pickRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  background: "#fff",
+  cursor: "pointer",
 };
 
 const presetBtn: React.CSSProperties = {
