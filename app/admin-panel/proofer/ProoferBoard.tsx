@@ -48,6 +48,7 @@ import {
   zoneAbbrev,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
+import { setLastProoferClientAction } from "../../proofer/prefs-actions";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -550,6 +551,15 @@ export default function ProoferBoard({
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ProoferStatus>>({});
 
   const [clientId, setClientId] = useState(initialClientId);
+  // Remember the account being viewed so signing back in resumes on it. The
+  // cookie is the fast same-device path; the server-side preference keeps it in
+  // sync across devices and across the two Proofer surfaces (this admin board
+  // and the standalone Proofer). Fires on the current account and on changes.
+  useEffect(() => {
+    if (!clientId) return;
+    document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
+    setLastProoferClientAction(clientId).catch(() => {});
+  }, [clientId]);
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
   const [postFrequency, setPostFrequency] = useState<"every-day" | "every-other-day">("every-other-day");
