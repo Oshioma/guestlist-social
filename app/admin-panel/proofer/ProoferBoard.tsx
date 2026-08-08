@@ -4815,6 +4815,39 @@ function DayScrubber({
         overflow: "hidden",
       }}
     >
+      {/* Back-to-top: a compact dark box above day 1 that returns to the top
+          of the page. Fixed height (doesn't flex-grow like the day cells). */}
+      <button
+        type="button"
+        aria-label="Back to top"
+        title="Back to top"
+        onClick={() => smoothScrollToTop()}
+        style={{
+          width: 36,
+          height: 28,
+          flex: "0 0 auto",
+          background: "#3f3f46",
+          color: "#fafafa",
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "none",
+          borderBottom: "1px solid #d4d4d8",
+          cursor: "pointer",
+          transition: "filter 120ms ease",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.filter = "brightness(1.35)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.filter = "none";
+        }}
+      >
+        ↑
+      </button>
       {days.map((d, i) => {
         const dateKey = toDateKey(d);
         const color = dayColorFor(dateKey, postsByKey);
