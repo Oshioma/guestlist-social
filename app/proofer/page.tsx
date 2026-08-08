@@ -73,6 +73,7 @@ export default async function ProoferStandalonePage({
         initialPostIdeas={data.postIdeas}
         timeZone={displayTimezone}
         basePath="/proofer"
+        standalone
       />
     );
   } catch (err) {
