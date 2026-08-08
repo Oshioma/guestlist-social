@@ -4,8 +4,9 @@ import { useActionState } from "react";
 import Link from "next/link";
 import Script from "next/script";
 import { signUpWithPassword, type ActionState } from "@/lib/auth/actions";
+import { HONEYPOT_FIELD, FORM_TS_FIELD } from "@/lib/auth/bot-guard";
 
-export function SignUpForm() {
+export function SignUpForm({ renderedAt }: { renderedAt: number }) {
   const [state, action, isPending] = useActionState<ActionState | null, FormData>(
     signUpWithPassword,
     null
@@ -31,6 +32,22 @@ export function SignUpForm() {
       {state?.error && (
         <p className="auth-alert auth-alert-error">{state.error}</p>
       )}
+
+      {/* Server-render time, checked server-side to reject sub-2s bot submits. */}
+      <input type="hidden" name={FORM_TS_FIELD} value={renderedAt} />
+
+      {/* Honeypot — off-screen, hidden from humans (aria-hidden + tabIndex -1).
+          A real person never fills it; bots that fill every field trip it. */}
+      <div className="hp-field" aria-hidden="true">
+        <label htmlFor={HONEYPOT_FIELD}>Company</label>
+        <input
+          id={HONEYPOT_FIELD}
+          name={HONEYPOT_FIELD}
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
 
       <div className="auth-field">
         <label htmlFor="fullName">Your name</label>

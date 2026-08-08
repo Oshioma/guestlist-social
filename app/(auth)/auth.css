@@ -128,3 +128,14 @@
   font-size: 12px;
   margin-top: -4px;
 }
+
+/* Honeypot: kept in the DOM (bots read it) but off-screen and out of the tab
+   order for humans and assistive tech. Not display:none — some bots skip
+   hidden inputs, which would defeat the trap. */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
