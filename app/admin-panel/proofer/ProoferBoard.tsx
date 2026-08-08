@@ -543,6 +543,8 @@ export default function ProoferBoard({
   // open (touch has no hover, so a tap expands it; desktop still reveals on
   // hover via CSS).
   const [openFmtKey, setOpenFmtKey] = useState<string | null>(null);
+  // Standalone Clear: which slot is awaiting an inline "Confirm" click.
+  const [confirmClearKey, setConfirmClearKey] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState(initialClientId);
   const [month, setMonth] = useState(initialMonth);
@@ -1110,8 +1112,12 @@ export default function ProoferBoard({
     });
   }
 
-  function handleDelete(dateKey: string, platform: ProoferPlatform) {
-    if (!confirm("Clear this day?")) return;
+  function handleDelete(
+    dateKey: string,
+    platform: ProoferPlatform,
+    skipConfirm = false
+  ) {
+    if (!skipConfirm && !confirm("Clear this day?")) return;
     const key = postKey(dateKey, platform);
     startTransition(async () => {
       try {
@@ -4233,25 +4239,71 @@ export default function ProoferBoard({
                             );
                           })}
                           {(post || hasDraft) && !isLocked && (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(dateKey, activePlatform)}
-                              disabled={isPending}
-                              style={{
-                                flexShrink: 0,
-                                padding: isNarrow ? "8px 14px" : "3px 9px",
-                                borderRadius: 99,
-                                border: "1px solid #fca5a5",
-                                background: "#fff",
-                                color: "#991b1b",
-                                fontSize: isNarrow ? 13 : 11,
-                                fontWeight: 600,
-                                cursor: isPending ? "wait" : "pointer",
-                                marginLeft: "auto",
-                              }}
-                            >
-                              Clear
-                            </button>
+                            standalone && confirmClearKey === key ? (
+                              // Inline confirm right next to Clear.
+                              <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDelete(dateKey, activePlatform, true);
+                                    setConfirmClearKey(null);
+                                  }}
+                                  disabled={isPending}
+                                  style={{
+                                    padding: isNarrow ? "8px 14px" : "3px 10px",
+                                    borderRadius: 99,
+                                    border: "1px solid #b91c1c",
+                                    background: "#b91c1c",
+                                    color: "#fff",
+                                    fontSize: isNarrow ? 13 : 11,
+                                    fontWeight: 700,
+                                    cursor: isPending ? "wait" : "pointer",
+                                  }}
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmClearKey(null)}
+                                  style={{
+                                    padding: isNarrow ? "8px 12px" : "3px 9px",
+                                    borderRadius: 99,
+                                    border: "1px solid #e4e4e7",
+                                    background: "#fff",
+                                    color: "#52525b",
+                                    fontSize: isNarrow ? 13 : 11,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  standalone
+                                    ? setConfirmClearKey(key)
+                                    : handleDelete(dateKey, activePlatform)
+                                }
+                                disabled={isPending}
+                                style={{
+                                  flexShrink: 0,
+                                  padding: isNarrow ? "8px 14px" : "3px 9px",
+                                  borderRadius: 99,
+                                  border: "1px solid #fca5a5",
+                                  background: "#fff",
+                                  color: "#991b1b",
+                                  fontSize: isNarrow ? 13 : 11,
+                                  fontWeight: 600,
+                                  cursor: isPending ? "wait" : "pointer",
+                                  marginLeft: "auto",
+                                }}
+                              >
+                                Clear
+                              </button>
+                            )
                           )}
                         </div>
                       )}
@@ -4296,8 +4348,8 @@ export default function ProoferBoard({
                           <span
                             style={{
                               display: "block",
-                              width: isNarrow ? 22 : 16,
-                              height: isNarrow ? 22 : 16,
+                              width: isNarrow ? 22 : standalone ? 24 : 16,
+                              height: isNarrow ? 22 : standalone ? 24 : 16,
                               borderRadius: "50%",
                               border: "1px solid #e4e4e7",
                               background: btn.dot,
@@ -4319,8 +4371,8 @@ export default function ProoferBoard({
                             disabled={isDisabled}
                             style={{
                               padding: isNarrow ? "7px 6px" : 0,
-                              width: isNarrow ? undefined : 16,
-                              height: isNarrow ? undefined : 16,
+                              width: isNarrow ? undefined : standalone ? 24 : 16,
+                              height: isNarrow ? undefined : standalone ? 24 : 16,
                               flex: isNarrow ? 1 : undefined,
                               borderRadius: isNarrow ? 10 : "50%",
                               border: isNarrow ? "none" : "1px solid #e4e4e7",
