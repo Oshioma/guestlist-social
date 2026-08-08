@@ -118,7 +118,10 @@ export default async function ProoferStandalonePage({
               initialPostIdeas={data.postIdeas}
               timeZone={displayTimezone}
               basePath={base || "/"}
-              publishPath={`${parentOrigin}/app/proofer/publish`}
+              // Publish queue now lives inside the Proofer app itself
+              // ("/publish" on postproofer.com, "/proofer/publish" elsewhere)
+              // rather than bouncing out to the parent Guestlist admin.
+              publishPath={`${base || ""}/publish`}
               standalone
             />
           </div>

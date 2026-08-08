@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import EmptyState from "../../admin-panel/components/EmptyState";
 import ProoferNav from "../ProoferNav";
 import { resolveNavData } from "../navData";
+import { mapClientStatus } from "../../admin-panel/lib/mappers";
 
 export const dynamic = "force-dynamic";
 
@@ -19,22 +20,45 @@ type ClientRow = {
   archived: boolean | null;
 };
 
+type ClientView = "active" | "inactive" | "all";
+
 export default async function ProoferClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; month?: string }>;
+  searchParams: Promise<{ client?: string; month?: string; view?: string }>;
 }) {
   const sp = await searchParams;
   const nav = await resolveNavData(sp.client, sp.month);
+
+  // Active / inactive / all filter. "Active" means status === "active";
+  // "inactive" is every other non-archived client (paused, onboarding, …);
+  // "all" is both. Archived clients are never shown. Defaults to active.
+  const view: ClientView =
+    sp.view === "inactive" || sp.view === "all" ? sp.view : "active";
 
   const supabase = await createClient();
   const { data } = await supabase
     .from("clients")
     .select("id, name, status, platform, monthly_budget, ig_handle, archived")
     .order("name", { ascending: true });
-  const clients = ((data ?? []) as ClientRow[]).filter((c) => !c.archived);
+  // "growing" and "active" both normalise to active (see mapClientStatus).
+  const isActive = (c: ClientRow) => mapClientStatus(c.status ?? "") === "active";
+  const nonArchived = ((data ?? []) as ClientRow[]).filter((c) => !c.archived);
+  const clients = nonArchived.filter((c) =>
+    view === "all" ? true : view === "active" ? isActive(c) : !isActive(c)
+  );
 
   const qs = `client=${encodeURIComponent(nav.clientId)}&month=${encodeURIComponent(nav.month)}`;
+  const viewCounts = {
+    active: nonArchived.filter((c) => isActive(c)).length,
+    inactive: nonArchived.filter((c) => !isActive(c)).length,
+    all: nonArchived.length,
+  };
+  const VIEWS: { key: ClientView; label: string }[] = [
+    { key: "active", label: "Active" },
+    { key: "inactive", label: "Inactive" },
+    { key: "all", label: "All" },
+  ];
 
   return (
     <>
@@ -52,11 +76,45 @@ export default async function ProoferClientsPage({
       />
       <main style={mainStyle}>
         <div style={centerStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
               Clients
             </h1>
-            <span style={{ fontSize: 13, color: "#71717a" }}>{clients.length} active</span>
+
+            {/* Active / inactive / all filter */}
+            <div
+              style={{
+                display: "inline-flex",
+                border: "1px solid #e4e4e7",
+                borderRadius: 9,
+                overflow: "hidden",
+                background: "#fff",
+              }}
+            >
+              {VIEWS.map((v) => {
+                const selected = v.key === view;
+                return (
+                  <Link
+                    key={v.key}
+                    href={`${nav.base}/clients?${qs}&view=${v.key}`}
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      padding: "7px 13px",
+                      textDecoration: "none",
+                      color: selected ? "#fff" : "#52525b",
+                      background: selected ? "#18181b" : "transparent",
+                    }}
+                  >
+                    {v.label}{" "}
+                    <span style={{ opacity: 0.6, fontWeight: 600 }}>
+                      {viewCounts[v.key]}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+
             <Link
               href={`${nav.base}/clients/new?${qs}`}
               style={{
@@ -76,7 +134,14 @@ export default async function ProoferClientsPage({
           </div>
 
           {clients.length === 0 ? (
-            <EmptyState title="No clients yet" description="Add your first client to get started." />
+            nonArchived.length === 0 ? (
+              <EmptyState title="No clients yet" description="Add your first client to get started." />
+            ) : (
+              <EmptyState
+                title={`No ${view === "all" ? "" : view + " "}clients`}
+                description="Try a different filter above."
+              />
+            )
           ) : (
             <div
               style={{
