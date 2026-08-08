@@ -19,6 +19,32 @@ export function normalizeHandle(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/^@+/, "").toLowerCase();
 }
 
+// Looser normalization for Facebook PAGE NAMES only: strips everything but
+// letters/digits so a page called "Guestlist Social" also matches an operator
+// who typed "guestlistsocial" (the handle form). Page names routinely carry
+// spaces, "&", and punctuation the operator won't reproduce exactly. This is
+// safe: it only ever runs against the accounts already connected UNDER ONE
+// client, and if two of them collapse to the same value the matcher reports it
+// as ambiguous and blocks rather than guessing. NOT used for Instagram — IG
+// usernames are exact and dots/underscores are significant.
+export function looseName(value: string | null | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Whether a declared Facebook Page value identifies a given connected account,
+// by exact id, normalized name, or loose (alphanumeric-only) name.
+export function facebookPageMatches(
+  declared: string | null | undefined,
+  account: { account_id: string; account_name: string | null }
+): boolean {
+  const wanted = normalizeHandle(declared);
+  if (!wanted) return false;
+  if ((account.account_id ?? "").trim().toLowerCase() === wanted) return true;
+  if (normalizeHandle(account.account_name) === wanted) return true;
+  const wantedLoose = looseName(declared);
+  return !!wantedLoose && looseName(account.account_name) === wantedLoose;
+}
+
 // Whether a block reason is one the operator fixes on the client edit page
 // (a missing/mismatched Instagram handle or Facebook Page) versus one that
 // needs a different action (connecting an account). The board uses this to
@@ -70,14 +96,11 @@ export function resolveAccountMatch<T extends MatchAccount>(args: {
     return { ok: false, reason: "Instagram handle not set for this client." };
   }
 
-  // Facebook: match the declared Page against the connected Page's name or id.
+  // Facebook: match the declared Page against the connected Page's name or id
+  // (exact id, normalized name, or loose alphanumeric name — see looseName).
   const wantedPage = normalizeHandle(fbPage);
   if (wantedPage) {
-    const matches = accounts.filter(
-      (a) =>
-        normalizeHandle(a.account_name) === wantedPage ||
-        (a.account_id ?? "").trim().toLowerCase() === wantedPage
-    );
+    const matches = accounts.filter((a) => facebookPageMatches(fbPage, a));
     if (matches.length === 1) return { ok: true, account: matches[0] };
     if (matches.length === 0) {
       return {
