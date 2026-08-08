@@ -28,7 +28,13 @@ export default async function ProoferStandaloneLayout({
         style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
       >
         <ProoferNav />
-        <main style={{ flex: 1, minWidth: 0, padding: 24 }}>{children}</main>
+        <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
+          {/* Center the board horizontally on wide screens rather than letting
+              it hug the left edge. */}
+          <div style={{ maxWidth: 1160, margin: "0 auto", width: "100%" }}>
+            {children}
+          </div>
+        </main>
         <footer
           style={{
             flexShrink: 0,
