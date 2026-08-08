@@ -2,12 +2,13 @@
 // and the same ProoferBoard component, but wraps it in its own lightweight
 // chrome instead of the full admin AppShell — so Proofer reads as its own site
 // while every board behaviour (media, Instagram/Facebook publishing, statuses,
-// comments, ideas) stays byte-for-byte the same code as /app/proofer.
+// comments, ideas) stays byte-for-byte the same code as /app/proofer. The top
+// nav is rendered by the page (it needs the client/month selection); this
+// layout provides the shell, auth and the footer link back to the dashboard.
 import "../admin-panel/admin.css";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
-import ProoferNav from "./ProoferNav";
 import { getMemberAccess } from "@/lib/auth/permissions";
 
 export default async function ProoferStandaloneLayout({
@@ -27,14 +28,7 @@ export default async function ProoferStandaloneLayout({
         className="admin-root"
         style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
       >
-        <ProoferNav />
-        <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
-          {/* Center the board horizontally on wide screens rather than letting
-              it hug the left edge. */}
-          <div style={{ maxWidth: 1160, margin: "0 auto", width: "100%" }}>
-            {children}
-          </div>
-        </main>
+        {children}
         <footer
           style={{
             flexShrink: 0,
@@ -46,6 +40,8 @@ export default async function ProoferStandaloneLayout({
         >
           <Link
             href="/app/dashboard"
+            target="_blank"
+            rel="noopener"
             style={{
               fontSize: 13,
               fontWeight: 600,
@@ -53,7 +49,7 @@ export default async function ProoferStandaloneLayout({
               textDecoration: "none",
             }}
           >
-            ← Guestlist Dashboard
+            ← Guestlist Dashboard ↗
           </Link>
         </footer>
       </div>

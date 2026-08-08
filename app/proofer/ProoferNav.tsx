@@ -1,21 +1,60 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 
-// Standalone top navigation for the /proofer page. Deliberately minimal: the
-// board itself carries the client / month / frequency / publish controls, so
-// this bar only needs to establish Proofer as its own destination and offer a
-// quiet way back to the dashboard.
-export default function ProoferNav() {
+type ClientLite = { id: string; name: string };
+
+function shiftMonth(value: string, delta: number): string {
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m) return value;
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(value: string): string {
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m) return value;
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+// Standalone top navigation for /proofer. Carries the Client dropdown and the
+// Month stepper (the board hides its own copies in standalone mode), plus a
+// quiet link back to the Guestlist dashboard. Changing client/month pushes new
+// query params; the page re-renders and remounts the board with fresh data.
+export default function ProoferNav({
+  clients,
+  clientId,
+  month,
+}: {
+  clients: ClientLite[];
+  clientId: string;
+  month: string;
+}) {
+  const router = useRouter();
+  const go = (c: string, m: string) =>
+    router.push(
+      `/proofer?client=${encodeURIComponent(c)}&month=${encodeURIComponent(m)}`
+    );
+
+  const ctlBg = "rgba(255,255,255,0.06)";
+  const ctlBorder = "1px solid rgba(255,255,255,0.12)";
+
   return (
     <header
       style={{
-        height: 60,
         background: "#35353c",
         color: "#fff",
         display: "flex",
         alignItems: "center",
         gap: 16,
-        padding: "0 20px",
+        rowGap: 10,
+        flexWrap: "wrap",
+        padding: "10px 20px",
         flexShrink: 0,
       }}
     >
@@ -40,10 +79,11 @@ export default function ProoferNav() {
           <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1 }}>
             Proofer
           </div>
-          {/* The wordmark under the logo is the way back to the dashboard. */}
           <Link
             href="/app/dashboard"
-            title="Back to Guestlist dashboard"
+            target="_blank"
+            rel="noopener"
+            title="Open Guestlist dashboard in a new tab"
             style={{
               display: "inline-block",
               fontSize: 10,
@@ -57,6 +97,68 @@ export default function ProoferNav() {
           >
             Guestlist Social ↗
           </Link>
+        </div>
+      </div>
+
+      {/* Client + Month controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <select
+          aria-label="Client"
+          value={clientId}
+          onChange={(e) => go(e.target.value, month)}
+          disabled={clients.length === 0}
+          style={{
+            appearance: "none",
+            WebkitAppearance: "none",
+            background: ctlBg,
+            border: ctlBorder,
+            borderRadius: 9,
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "8px 12px",
+            cursor: clients.length === 0 ? "default" : "pointer",
+            maxWidth: 220,
+          }}
+        >
+          {clients.length === 0 && <option value="">No clients</option>}
+          {clients.map((c) => (
+            <option key={c.id} value={c.id} style={{ color: "#18181b" }}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            background: ctlBg,
+            border: ctlBorder,
+            borderRadius: 9,
+            padding: "3px 4px",
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => go(clientId, shiftMonth(month, -1))}
+            style={monthBtn}
+          >
+            ‹
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 700, padding: "0 8px", minWidth: 96, textAlign: "center" }}>
+            {monthLabel(month)}
+          </span>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => go(clientId, shiftMonth(month, 1))}
+            style={monthBtn}
+          >
+            ›
+          </button>
         </div>
       </div>
 
@@ -99,3 +201,15 @@ export default function ProoferNav() {
     </header>
   );
 }
+
+const monthBtn: React.CSSProperties = {
+  width: 26,
+  height: 26,
+  border: "none",
+  background: "transparent",
+  color: "#cfcfd6",
+  fontSize: 16,
+  lineHeight: 1,
+  borderRadius: 7,
+  cursor: "pointer",
+};

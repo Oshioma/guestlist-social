@@ -542,30 +542,3 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
-
-/* ── Standalone Proofer: collapsed Instagram format selector ──────────────────
-   Shows only the chosen format (Feed / Story / Reel); hovering the group
-   reveals the others to pick. Scoped to .proofer-fmt, which only the /proofer
-   surface renders, so /app/proofer is unaffected. */
-.proofer-fmt .fmt-opt {
-  display: none;
-}
-.proofer-fmt .fmt-opt.active {
-  display: inline-flex;
-}
-.proofer-fmt:hover .fmt-opt {
-  display: inline-flex;
-}
-.proofer-fmt:hover .fmt-opt + .fmt-opt {
-  border-left: 1px solid #e4e4e7;
-}
-.proofer-fmt .fmt-caret {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px 0 4px;
-  color: #a1a1aa;
-  font-size: 10px;
-}
-.proofer-fmt:hover .fmt-caret {
-  display: none;
-}

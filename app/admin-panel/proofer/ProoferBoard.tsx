@@ -539,6 +539,10 @@ export default function ProoferBoard({
   // post currently has a reschedule in flight (for the button's pending state).
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  // Standalone format selector: which slot's Feed/Story/Reel group is tapped
+  // open (touch has no hover, so a tap expands it; desktop still reveals on
+  // hover via CSS).
+  const [openFmtKey, setOpenFmtKey] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState(initialClientId);
   const [month, setMonth] = useState(initialMonth);
@@ -2092,51 +2096,57 @@ export default function ProoferBoard({
               alignItems: "flex-end",
             }}
           >
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={labelStyle}>Client</span>
-              <select
-                value={clientId}
-                onChange={(e) => handleSelectClient(e.target.value)}
-                disabled={isPending || clients.length === 0}
-                style={inputStyle}
-              >
-                {clients.length === 0 && <option value="">No clients</option>}
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* On the standalone /proofer surface the Client and Month controls
+                live in the top nav, so the board omits its own copies. */}
+            {!standalone && (
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={labelStyle}>Client</span>
+                <select
+                  value={clientId}
+                  onChange={(e) => handleSelectClient(e.target.value)}
+                  disabled={isPending || clients.length === 0}
+                  style={inputStyle}
+                >
+                  {clients.length === 0 && <option value="">No clients</option>}
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={labelStyle}>Month</span>
-              {/* One-click prev/next month nav — a single tap either way, no
-                  dropdown to open. Steps to any month (history or planning). */}
-              <div style={monthNavStyle}>
-                <button
-                  type="button"
-                  onClick={() => handleSelectMonth(shiftMonthValue(month, -1))}
-                  disabled={isPending}
-                  aria-label="Previous month"
-                  style={monthNavBtnStyle}
-                >
-                  ‹
-                </button>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
-                  {formatMonthValueLabel(month)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleSelectMonth(shiftMonthValue(month, 1))}
-                  disabled={isPending}
-                  aria-label="Next month"
-                  style={monthNavBtnStyle}
-                >
-                  ›
-                </button>
-              </div>
-            </label>
+            {!standalone && (
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={labelStyle}>Month</span>
+                {/* One-click prev/next month nav — a single tap either way, no
+                    dropdown to open. Steps to any month (history or planning). */}
+                <div style={monthNavStyle}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMonth(shiftMonthValue(month, -1))}
+                    disabled={isPending}
+                    aria-label="Previous month"
+                    style={monthNavBtnStyle}
+                  >
+                    ‹
+                  </button>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#18181b" }}>
+                    {formatMonthValueLabel(month)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMonth(shiftMonthValue(month, 1))}
+                    disabled={isPending}
+                    aria-label="Next month"
+                    style={monthNavBtnStyle}
+                  >
+                    ›
+                  </button>
+                </div>
+              </label>
+            )}
 
             <label
               style={{
@@ -3079,48 +3089,92 @@ export default function ProoferBoard({
                           </span>
                           Instagram
                         </button>
-                        {/* Format sub-toggle — only while Instagram is on.
-                            Collapsed it shows just the chosen format; hovering
-                            reveals Feed / Story / Reel to pick from (see the
-                            .proofer-fmt rules in admin.css). */}
+                        {/* Format picker — only while Instagram is on. A fixed
+                            trigger showing the chosen format opens an absolutely
+                            positioned menu, so nothing in the row shifts. Works
+                            the same on desktop (click) and touch (tap). */}
                         {draft.publishTargets.includes("instagram") && (
-                          <div
-                            className="proofer-fmt"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              border: "1px solid #e4e4e7",
-                              borderRadius: 9,
-                              overflow: "hidden",
-                              background: "#fff",
-                            }}
-                          >
-                            {INSTAGRAM_FORMATS.map((p) => {
-                              const active = activePlatform === p;
-                              return (
-                                <button
-                                  key={p}
-                                  type="button"
-                                  className={`fmt-opt${active ? " active" : ""}`}
-                                  disabled={isLocked}
-                                  onClick={() => {
-                                    if (p !== activePlatform) handlePlatformChange(dateKey, p);
-                                  }}
+                          <div style={{ position: "relative", display: "inline-flex" }}>
+                            <button
+                              type="button"
+                              disabled={isLocked}
+                              aria-haspopup="menu"
+                              aria-expanded={openFmtKey === key}
+                              onClick={() =>
+                                setOpenFmtKey(openFmtKey === key ? null : key)
+                              }
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                border: "1px solid #e4e4e7",
+                                borderRadius: 9,
+                                background: "#fff",
+                                color: "#3f3f46",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                padding: "8px 12px",
+                                cursor: isLocked ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
+                              <span style={{ color: "#a1a1aa", fontSize: 10 }}>▾</span>
+                            </button>
+                            {openFmtKey === key && !isLocked && (
+                              <>
+                                {/* click-away catcher */}
+                                <div
+                                  aria-hidden
+                                  onClick={() => setOpenFmtKey(null)}
+                                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                                />
+                                <div
+                                  role="menu"
                                   style={{
-                                    border: "none",
-                                    background: active ? "#3f3f46" : "#fff",
-                                    color: active ? "#fff" : "#52525b",
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    padding: "8px 12px",
-                                    cursor: isLocked ? "not-allowed" : "pointer",
+                                    position: "absolute",
+                                    top: "calc(100% + 4px)",
+                                    left: 0,
+                                    zIndex: 41,
+                                    background: "#fff",
+                                    border: "1px solid #e4e4e7",
+                                    borderRadius: 10,
+                                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                                    overflow: "hidden",
+                                    minWidth: 132,
                                   }}
                                 >
-                                  {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
-                                </button>
-                              );
-                            })}
-                            <span className="fmt-caret" aria-hidden>▾</span>
+                                  {INSTAGRAM_FORMATS.map((p) => {
+                                    const active = activePlatform === p;
+                                    return (
+                                      <button
+                                        key={p}
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                          if (p !== activePlatform)
+                                            handlePlatformChange(dateKey, p);
+                                          setOpenFmtKey(null);
+                                        }}
+                                        style={{
+                                          display: "block",
+                                          width: "100%",
+                                          textAlign: "left",
+                                          border: "none",
+                                          background: active ? "#f4f4f5" : "#fff",
+                                          color: "#18181b",
+                                          fontSize: 13,
+                                          fontWeight: active ? 700 : 500,
+                                          padding: "10px 14px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                         {/* Facebook: one-click on/off (the "send to Facebook") */}
