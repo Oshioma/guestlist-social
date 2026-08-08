@@ -8,7 +8,8 @@ import {
   saveOnboardingStepAction,
   skipOnboardingAction,
   completeOnboardingAction,
-  createOnboardingAccountAction,
+  ensureOnboardingAccountAction,
+  renameOnboardingAccountAction,
   saveFirstPostAction,
   logOnboardingEvent,
 } from "./actions";
@@ -302,28 +303,45 @@ export default function OnboardingFlow({
     router.push(`${base}/` || "/");
   }, [demo, step, base, router, clearDraft]);
 
-  const handleCreateAccount = useCallback(async () => {
-    const name = accountName.trim();
-    if (!name) {
-      setError("Give your account a name to continue.");
-      return;
-    }
-    setBusy("account");
-    setError(null);
-    if (demo) {
+  // Auto-provision the account the moment we reach the connect step, so the
+  // user lands straight on "connect a platform" — no "add a client" step.
+  const provisionedRef = useRef(false);
+  useEffect(() => {
+    if (step !== "connect" || demo) return;
+    if (accountClientId || provisionedRef.current) return;
+    provisionedRef.current = true;
+    setBusy("provision");
+    void (async () => {
+      const res = await ensureOnboardingAccountAction();
       setBusy(null);
-      goto("idea");
-      return;
-    }
-    const res = await createOnboardingAccountAction(name);
-    setBusy(null);
-    if (!res.ok) {
-      setError(res.error);
-      return;
-    }
-    setAccountClientId(res.clientId);
-    goto("idea");
-  }, [accountName, demo, goto]);
+      if (!res.ok) {
+        provisionedRef.current = false;
+        setError(res.error);
+        return;
+      }
+      setAccountClientId(res.clientId);
+      if (res.name && !accountName) setAccountName(res.name);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, demo, accountClientId]);
+
+  const handleRename = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed || demo) return;
+      await renameOnboardingAccountAction(trimmed);
+    },
+    [demo]
+  );
+
+  // Once a social account is connected, celebrate briefly then move on.
+  useEffect(() => {
+    if (step !== "connect") return;
+    if (connectedPlatforms.length === 0) return;
+    const t = window.setTimeout(() => goto("idea"), 1400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, connectedPlatforms.length]);
 
   const connectHref = useMemo(() => {
     if (!accountClientId) return "#";
@@ -553,7 +571,7 @@ export default function OnboardingFlow({
               busy={busy}
               demo={demo}
               metaError={metaResult?.status === "error" ? metaResult.message : null}
-              onCreate={handleCreateAccount}
+              onRename={handleRename}
               onContinue={() => goto("idea")}
             />
           ) : (
@@ -739,7 +757,7 @@ function ConnectPanel({
   busy,
   demo,
   metaError,
-  onCreate,
+  onRename,
   onContinue,
 }: {
   accountName: string;
@@ -750,92 +768,119 @@ function ConnectPanel({
   busy: string | null;
   demo: boolean;
   metaError: string | null;
-  onCreate: () => void;
+  onRename: (name: string) => void;
   onContinue: () => void;
 }) {
-  const hasAccount = !!accountClientId || demo;
+  const ready = !!accountClientId || demo;
+  const provisioning = busy === "provision";
   const igOn = connectedPlatforms.includes("instagram");
   const fbOn = connectedPlatforms.includes("facebook");
   const anyOn = igOn || fbOn;
+  const [editingName, setEditingName] = useState(false);
+
+  // Connected already → confirmation + auto-advance (handled by the parent).
+  if (anyOn) {
+    return (
+      <div style={cardStyle} className="ob-pop">
+        <div style={{ ...successPill, display: "inline-flex", fontSize: 15, padding: "10px 18px" }}>
+          ✓ {igOn ? "Instagram" : ""}
+          {igOn && fbOn ? " & " : ""}
+          {fbOn ? "Facebook" : ""} connected
+        </div>
+        <p style={{ ...cardSub, marginTop: 14, marginBottom: 0 }}>
+          Nice — that&apos;s your posting account linked. Taking you to your first post…
+        </p>
+        <div style={{ marginTop: 14 }}>
+          <button type="button" className="ob-btn" onClick={onContinue} style={primaryBtn}>
+            Continue →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={cardStyle}>
-      <h3 style={cardTitle}>First, set up somewhere to post</h3>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <span style={{ fontSize: 26 }}>📸</span>
+        <h3 style={{ ...cardTitle, fontSize: 17 }}>Connect your Instagram or Facebook</h3>
+      </div>
       <p style={cardSub}>
-        Give your account a name — usually your business or brand. This is where
-        your posts live.
+        This is how Proofer posts for you. Connecting opens Meta&apos;s secure
+        login and takes a few seconds — your account is already set up and
+        waiting.
       </p>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <input
-          className={!hasAccount ? "ob-highlight" : undefined}
-          value={accountName}
-          onChange={(e) => setAccountName(e.target.value)}
-          placeholder="e.g. My Café"
-          disabled={hasAccount && !demo}
-          style={{ ...inputStyle, maxWidth: 300, flex: 1 }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !hasAccount) onCreate();
-          }}
-        />
-        {!hasAccount ? (
-          <button
-            type="button"
-            className="ob-btn"
-            onClick={onCreate}
-            disabled={busy === "account"}
-            style={primaryBtn}
-          >
-            {busy === "account" ? <span className="ob-spinner" /> : null}
-            Create account
-          </button>
+      {metaError && (
+        <div style={errorBox}>
+          Couldn&apos;t connect: {metaError} — you can try again, or skip and connect later.
+        </div>
+      )}
+
+      {/* The real connection — leads the step. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {demo ? (
+          <span style={{ ...primaryBtn, opacity: 0.6, borderRadius: 10, textAlign: "center" }}>
+            🔗 Connect (disabled in tour replay)
+          </span>
+        ) : provisioning || !ready ? (
+          <span style={{ ...primaryBtn, opacity: 0.7, borderRadius: 10, display: "inline-flex", justifyContent: "center", gap: 8 }}>
+            <span className="ob-spinner" /> Setting up your account…
+          </span>
         ) : (
-          <span style={successPill}>✓ {accountName || "Account"} ready</span>
+          <a href={connectHref} className="ob-btn ob-highlight" style={{ ...primaryBtn, justifyContent: "center", fontSize: 15, padding: "13px 20px" }}>
+            🔗 Connect Instagram / Facebook
+          </a>
         )}
+
+        <button type="button" onClick={onContinue} style={{ ...skipLinkStyle, alignSelf: "flex-start" }} disabled={provisioning}>
+          Skip for now — I&apos;ll connect later →
+        </button>
       </div>
 
-      {hasAccount && (
-        <div className="ob-fade-up" style={{ marginTop: 22, borderTop: "1px solid #f0f0f2", paddingTop: 20 }}>
-          <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>
-            Connect Instagram or Facebook <span style={{ color: "#a1a1aa", fontWeight: 500 }}>(optional)</span>
-          </h4>
-          <p style={cardSub}>
-            Connecting lets Proofer publish for you later. You can do this now or
-            any time — you don&apos;t need it to build and save your first post.
-          </p>
-
-          {metaError && (
-            <div style={errorBox}>
-              Couldn&apos;t connect: {metaError}. You can retry, or skip and connect later.
-            </div>
-          )}
-
-          {anyOn ? (
-            <div style={{ ...successPill, display: "inline-flex" }}>
-              ✓ {igOn ? "Instagram" : ""}
-              {igOn && fbOn ? " & " : ""}
-              {fbOn ? "Facebook" : ""} connected
+      {/* Quiet, optional rename of the auto-created account. */}
+      {ready && !demo && (
+        <div style={{ marginTop: 18, borderTop: "1px solid #f0f0f2", paddingTop: 14 }}>
+          {editingName ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                placeholder="Your business name"
+                style={{ ...inputStyle, maxWidth: 260, flex: 1 }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onRename(accountName);
+                    setEditingName(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="ob-btn"
+                style={secondaryBtn}
+                onClick={() => {
+                  onRename(accountName);
+                  setEditingName(false);
+                }}
+              >
+                Save name
+              </button>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {demo ? (
-                <span style={{ ...secondaryBtn, opacity: 0.6 }}>Connect (disabled in replay)</span>
-              ) : (
-                <a href={connectHref} className="ob-btn" style={secondaryBtn}>
-                  🔗 Connect a social account
-                </a>
-              )}
-            </div>
+            <p style={{ margin: 0, fontSize: 12.5, color: "#a1a1aa" }}>
+              Posting as <strong style={{ color: "#52525b" }}>{accountName || "your account"}</strong>{" "}
+              ·{" "}
+              <button
+                type="button"
+                onClick={() => setEditingName(true)}
+                style={{ ...skipLinkStyle, fontSize: 12.5 }}
+              >
+                Rename
+              </button>
+            </p>
           )}
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "#a1a1aa" }}>
-            You can connect more accounts later.
-          </p>
-
-          <div style={{ marginTop: 22 }}>
-            <button type="button" className="ob-btn" onClick={onContinue} style={primaryBtn}>
-              {anyOn ? "Great — next →" : "Skip for now →"}
-            </button>
-          </div>
         </div>
       )}
     </div>
@@ -1252,8 +1297,8 @@ function coachFor(
   switch (step) {
     case "connect":
       return {
-        title: "Connect somewhere to post",
-        body: "Name your account, then optionally link Instagram or Facebook. You can always connect more later.",
+        title: "First, connect a social account",
+        body: "Link the Instagram or Facebook you want to post to. It opens Meta's secure login — or skip and connect later. Either way, you'll build a real post next.",
       };
     case "idea":
       return {
