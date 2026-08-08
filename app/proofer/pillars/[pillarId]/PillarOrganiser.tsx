@@ -23,6 +23,8 @@ type Post = {
   linkedIdeaKind: string | null;
 };
 
+type MonthPost = { postDate: string; platform: string };
+
 function dayLabel(postDate: string): string {
   const [y, m, d] = postDate.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return postDate;
@@ -34,16 +36,20 @@ function dayLabel(postDate: string): string {
   });
 }
 
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
 export default function PillarOrganiser({
   clientId,
   pillar,
   month,
   posts,
+  monthPosts,
 }: {
   clientId: string;
   pillar: { id: string; name: string; color: string };
   month: string;
   posts: Post[];
+  monthPosts: MonthPost[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -54,9 +60,12 @@ export default function PillarOrganiser({
   const [media, setMedia] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(posts.map((p) => [p.id, p.mediaUrls]))
   );
+  const [times, setTimes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(posts.map((p) => [p.id, p.publishTime || "18:00"]))
+  );
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [pickFor, setPickFor] = useState<string | null>(null);
 
-  // Same calendar month as the one on screen surfaces first, newest first.
   const viewedMonth = Number(month.split("-")[1]) || 0;
   const ordered = useMemo(() => {
     const sameMonth = (d: string) =>
@@ -69,7 +78,37 @@ export default function PillarOrganiser({
     });
   }, [posts, viewedMonth]);
 
-  function persist(post: Post, caption: string, mediaUrls: string[]) {
+  // Month grid + which days already carry a post per platform (to grey them out
+  // in the "add to a day" picker).
+  const [gy, gm] = month.split("-").map(Number);
+  const monthCells = useMemo(() => {
+    if (!gy || !gm) return [] as (number | null)[];
+    const lead = new Date(gy, gm - 1, 1).getDay();
+    const total = new Date(gy, gm, 0).getDate();
+    const cells: (number | null)[] = Array(lead).fill(null);
+    for (let d = 1; d <= total; d++) cells.push(d);
+    return cells;
+  }, [gy, gm]);
+
+  const occupiedByPlatform = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const mp of monthPosts) {
+      const set = map.get(mp.platform) ?? new Set<string>();
+      set.add(mp.postDate.slice(0, 10));
+      map.set(mp.platform, set);
+    }
+    return map;
+  }, [monthPosts]);
+
+  const dateStr = (d: number) =>
+    `${gy}-${String(gm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  function persist(
+    post: Post,
+    caption: string,
+    mediaUrls: string[],
+    publishTime: string
+  ) {
     setSavingId(post.id);
     startTransition(async () => {
       try {
@@ -82,7 +121,7 @@ export default function PillarOrganiser({
           pillar.id,
           post.linkedIdeaId,
           post.linkedIdeaKind,
-          post.publishTime,
+          publishTime,
           post.publishTargets
         );
         router.refresh();
@@ -95,25 +134,21 @@ export default function PillarOrganiser({
   function addImage(post: Post, url: string) {
     const next = [...(media[post.id] ?? []), url];
     setMedia((m) => ({ ...m, [post.id]: next }));
-    persist(post, captions[post.id] ?? post.caption, next);
+    persist(post, captions[post.id] ?? post.caption, next, times[post.id] ?? post.publishTime);
   }
-
   function removeImage(post: Post, url: string) {
     const next = (media[post.id] ?? []).filter((u) => u !== url);
     setMedia((m) => ({ ...m, [post.id]: next }));
-    persist(post, captions[post.id] ?? post.caption, next);
+    persist(post, captions[post.id] ?? post.caption, next, times[post.id] ?? post.publishTime);
   }
-
   function saveCaption(post: Post) {
-    persist(post, captions[post.id] ?? "", media[post.id] ?? []);
+    persist(post, captions[post.id] ?? "", media[post.id] ?? [], times[post.id] ?? post.publishTime);
   }
-
+  function reschedule(post: Post) {
+    persist(post, captions[post.id] ?? post.caption, media[post.id] ?? [], times[post.id] ?? "18:00");
+  }
   function deletePost(post: Post) {
-    if (
-      !window.confirm(
-        "Delete this post from the library? This removes it from the board too."
-      )
-    )
+    if (!window.confirm("Delete this post from the library? This removes it from the board too."))
       return;
     setSavingId(post.id);
     startTransition(async () => {
@@ -126,12 +161,36 @@ export default function PillarOrganiser({
       }
     });
   }
+  // Copy this post's (possibly edited) content into an empty day this month.
+  function addToDay(post: Post, day: number) {
+    const target = dateStr(day);
+    setSavingId(post.id);
+    startTransition(async () => {
+      try {
+        await saveProoferPostAction(
+          clientId,
+          target,
+          post.platform,
+          captions[post.id] ?? post.caption,
+          media[post.id] ?? [],
+          pillar.id,
+          post.linkedIdeaId,
+          post.linkedIdeaKind,
+          times[post.id] ?? post.publishTime,
+          post.publishTargets
+        );
+        setPickFor(null);
+        router.refresh();
+      } finally {
+        setSavingId(null);
+      }
+    });
+  }
 
   const visible = ordered.filter((p) => !deleted.has(p.id));
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
         <span
           aria-hidden
@@ -149,8 +208,7 @@ export default function PillarOrganiser({
             {pillar.name}
           </h1>
           <div style={{ fontSize: 13, color: "#71717a", marginTop: 2 }}>
-            {visible.length} post{visible.length === 1 ? "" : "s"} · all time · this
-            month first
+            {visible.length} post{visible.length === 1 ? "" : "s"} · all time · this month first
           </div>
         </div>
       </div>
@@ -169,13 +227,22 @@ export default function PillarOrganiser({
           No posts in this pillar yet.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
           {visible.map((post) => {
             const saving = savingId === post.id && isPending;
             const urls = media[post.id] ?? [];
             const platformLabel =
-              PROOFER_PLATFORM_LABELS[post.platform as ProoferPlatform] ??
-              post.platform;
+              PROOFER_PLATFORM_LABELS[post.platform as ProoferPlatform] ?? post.platform;
+            const occupied = occupiedByPlatform.get(post.platform) ?? new Set<string>();
+            const timeChanged = (times[post.id] ?? "") !== post.publishTime;
+            const captionChanged = (captions[post.id] ?? "") !== post.caption;
             return (
               <div
                 key={post.id}
@@ -183,15 +250,16 @@ export default function PillarOrganiser({
                   border: "1px solid #e4e4e7",
                   borderRadius: 14,
                   background: "#fff",
-                  padding: 16,
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr)",
-                  gap: 12,
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
                   opacity: saving ? 0.7 : 1,
+                  position: "relative",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{dayLabel(post.postDate)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{dayLabel(post.postDate)}</span>
                   <span
                     style={{
                       fontSize: 11,
@@ -199,45 +267,43 @@ export default function PillarOrganiser({
                       color: "#3f3f46",
                       background: "#f4f4f5",
                       borderRadius: 999,
-                      padding: "2px 9px",
+                      padding: "2px 8px",
                     }}
                   >
                     {platformLabel}
                   </span>
-                  {saving && (
-                    <span style={{ fontSize: 12, color: "#a1a1aa" }}>Saving…</span>
-                  )}
                   <button
                     type="button"
                     onClick={() => deletePost(post)}
                     disabled={saving}
+                    aria-label="Delete from library"
                     style={{
                       marginLeft: "auto",
                       border: "1px solid #fca5a5",
                       background: "#fff",
                       color: "#b3261e",
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 700,
                       borderRadius: 8,
-                      padding: "6px 11px",
+                      padding: "5px 9px",
                       cursor: saving ? "wait" : "pointer",
                     }}
                   >
-                    Delete from library
+                    Delete
                   </button>
                 </div>
 
                 {/* Media */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {urls.map((url) => (
-                    <div key={url} style={{ position: "relative", width: 92, height: 92 }}>
+                    <div key={url} style={{ position: "relative", width: 72, height: 72 }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={url}
                         alt=""
                         style={{
-                          width: 92,
-                          height: 92,
+                          width: 72,
+                          height: 72,
                           objectFit: "cover",
                           borderRadius: 10,
                           border: "1px solid #e4e4e7",
@@ -252,15 +318,15 @@ export default function PillarOrganiser({
                         aria-label="Remove image"
                         style={{
                           position: "absolute",
-                          top: 4,
-                          right: 4,
-                          width: 22,
-                          height: 22,
+                          top: 3,
+                          right: 3,
+                          width: 20,
+                          height: 20,
                           borderRadius: "50%",
                           border: "none",
                           background: "rgba(0,0,0,0.6)",
                           color: "#fff",
-                          fontSize: 13,
+                          fontSize: 12,
                           lineHeight: 1,
                           cursor: saving ? "wait" : "pointer",
                         }}
@@ -273,56 +339,125 @@ export default function PillarOrganiser({
                     bucket="postimages"
                     folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
                     onUploaded={(url) => addImage(post, url)}
-                    label="＋ Add image"
+                    label="＋ Add"
                     accept="image/*,video/*"
                   />
                 </div>
 
                 {/* Caption */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <textarea
-                    value={captions[post.id] ?? ""}
-                    onChange={(e) =>
-                      setCaptions((c) => ({ ...c, [post.id]: e.target.value }))
-                    }
-                    rows={3}
-                    placeholder="Write a caption…"
+                <textarea
+                  value={captions[post.id] ?? ""}
+                  onChange={(e) => setCaptions((c) => ({ ...c, [post.id]: e.target.value }))}
+                  rows={3}
+                  placeholder="Write a caption…"
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    border: "1px solid #e4e4e7",
+                    borderRadius: 10,
+                    padding: "9px 11px",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: "#18181b",
+                    fontFamily: "inherit",
+                    minHeight: 66,
+                  }}
+                />
+                {captionChanged && (
+                  <button type="button" onClick={() => saveCaption(post)} disabled={saving} style={darkBtn}>
+                    Save text
+                  </button>
+                )}
+
+                {/* Reschedule + add-to-a-day */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
+                  <input
+                    type="time"
+                    value={times[post.id] ?? ""}
+                    onChange={(e) => setTimes((t) => ({ ...t, [post.id]: e.target.value }))}
+                    aria-label="Publish time"
                     style={{
-                      width: "100%",
-                      resize: "vertical",
                       border: "1px solid #e4e4e7",
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      fontSize: 14,
-                      lineHeight: 1.5,
+                      borderRadius: 8,
+                      padding: "6px 8px",
+                      fontSize: 12,
+                      fontWeight: 600,
                       color: "#18181b",
                       fontFamily: "inherit",
-                      minHeight: 72,
                     }}
                   />
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => reschedule(post)}
+                    disabled={saving || !timeChanged}
+                    style={{ ...ghostBtn, opacity: timeChanged ? 1 : 0.5 }}
+                  >
+                    Reschedule
+                  </button>
+                  <div style={{ position: "relative", marginLeft: "auto" }}>
                     <button
                       type="button"
-                      onClick={() => saveCaption(post)}
-                      disabled={saving || (captions[post.id] ?? "") === post.caption}
-                      style={{
-                        border: "1px solid #18181b",
-                        background: "#18181b",
-                        color: "#fff",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        borderRadius: 8,
-                        padding: "8px 14px",
-                        cursor:
-                          saving || (captions[post.id] ?? "") === post.caption
-                            ? "default"
-                            : "pointer",
-                        opacity:
-                          (captions[post.id] ?? "") === post.caption ? 0.5 : 1,
-                      }}
+                      onClick={() => setPickFor(pickFor === post.id ? null : post.id)}
+                      disabled={saving}
+                      style={accentBtn}
                     >
-                      Save text
+                      📅 Add to a day
                     </button>
+                    {pickFor === post.id && (
+                      <>
+                        <div
+                          aria-hidden
+                          onClick={() => setPickFor(null)}
+                          style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                        />
+                        <div style={calPopup} role="dialog" aria-label="Choose an empty day">
+                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: "#18181b" }}>
+                            Add to an empty day
+                          </div>
+                          <div style={calGrid}>
+                            {WEEKDAYS.map((w, i) => (
+                              <div key={`w${i}`} style={{ fontSize: 10, fontWeight: 700, color: "#a1a1aa", textAlign: "center" }}>
+                                {w}
+                              </div>
+                            ))}
+                            {monthCells.map((d, i) =>
+                              d === null ? (
+                                <div key={`b${i}`} />
+                              ) : (
+                                (() => {
+                                  const taken = occupied.has(dateStr(d));
+                                  return (
+                                    <button
+                                      key={d}
+                                      type="button"
+                                      disabled={taken || saving}
+                                      onClick={() => addToDay(post, d)}
+                                      title={taken ? "Already has a post" : "Add here"}
+                                      style={{
+                                        height: 30,
+                                        borderRadius: 7,
+                                        border: "1px solid",
+                                        borderColor: taken ? "transparent" : "#c3edd0",
+                                        background: taken ? "#f4f4f5" : "#effaf6",
+                                        color: taken ? "#c4c4cc" : "#1f6b5c",
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        cursor: taken ? "default" : "pointer",
+                                      }}
+                                    >
+                                      {d}
+                                    </button>
+                                  );
+                                })()
+                              )
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 8 }}>
+                            Green days are empty ({month}). Copies this post there.
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -333,3 +468,53 @@ export default function PillarOrganiser({
     </div>
   );
 }
+
+const darkBtn: React.CSSProperties = {
+  alignSelf: "flex-start",
+  border: "1px solid #18181b",
+  background: "#18181b",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 700,
+  borderRadius: 8,
+  padding: "7px 12px",
+  cursor: "pointer",
+};
+const ghostBtn: React.CSSProperties = {
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  color: "#3f3f46",
+  fontSize: 12,
+  fontWeight: 700,
+  borderRadius: 8,
+  padding: "7px 11px",
+  cursor: "pointer",
+};
+const accentBtn: React.CSSProperties = {
+  border: "1px solid #99e2d0",
+  background: "#effaf6",
+  color: "#1f6b5c",
+  fontSize: 12,
+  fontWeight: 700,
+  borderRadius: 8,
+  padding: "7px 11px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+const calPopup: React.CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 6px)",
+  right: 0,
+  zIndex: 41,
+  width: 250,
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 12,
+  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+  padding: 12,
+};
+const calGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(7, 1fr)",
+  gap: 4,
+};

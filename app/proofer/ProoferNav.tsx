@@ -195,9 +195,26 @@ export default function ProoferNav({
           <button type="button" aria-label="Previous month" onClick={() => go(clientId, shiftMonth(month, -1))} style={monthBtn}>
             ‹
           </button>
-          <span style={{ fontSize: 13, fontWeight: 700, padding: "0 8px", minWidth: 96, textAlign: "center" }}>
+          {/* Clicking the month label returns to the board's month view (handy
+              from the pillar Organise page). */}
+          <button
+            type="button"
+            onClick={() => go(clientId, month)}
+            title="Back to the month board"
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              padding: "0 8px",
+              minWidth: 96,
+              textAlign: "center",
+              cursor: "pointer",
+            }}
+          >
             {monthLabel(month)}
-          </span>
+          </button>
           <button type="button" aria-label="Next month" onClick={() => go(clientId, shiftMonth(month, 1))} style={monthBtn}>
             ›
           </button>
@@ -233,7 +250,8 @@ export default function ProoferNav({
                   {p.name}
                 </button>
                 {open && (
-                  <div style={pillarPopup} role="dialog" aria-label={`${p.name} posts`}>
+                  <div style={pillarPopupOuter}>
+                    <div style={pillarPopupCard} role="dialog" aria-label={`${p.name} posts`}>
                     <div style={popupHeader}>
                       <span
                         aria-hidden
@@ -313,6 +331,7 @@ export default function ProoferNav({
                         ))}
                       </div>
                     )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -388,12 +407,18 @@ const pillarChip: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const pillarPopup: React.CSSProperties = {
+const pillarPopupOuter: React.CSSProperties = {
   position: "absolute",
-  top: "calc(100% + 6px)",
+  top: "100%",
   left: 0,
   zIndex: 50,
   width: 300,
+  // Transparent bridge so moving the mouse from the chip into the popup never
+  // crosses a dead gap that would close it.
+  paddingTop: 8,
+};
+
+const pillarPopupCard: React.CSSProperties = {
   background: "#fff",
   color: "#18181b",
   border: "1px solid #e4e4e7",

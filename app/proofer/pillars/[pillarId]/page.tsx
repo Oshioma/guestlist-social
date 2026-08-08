@@ -46,8 +46,12 @@ export default async function PillarOrganisePage({
     }
 
     // Pass clientId so pillars come back (getProoferData returns none without a
-    // selected client).
-    const { clients, pillars } = await getProoferData(clientId, month);
+    // selected client). Its posts are this month's — used to work out which
+    // days are still empty for the "add to a day" picker.
+    const { clients, pillars, posts: monthPosts } = await getProoferData(
+      clientId,
+      month
+    );
     const allPillarPosts = await getProoferPillarPosts(clientId);
     const pillar = pillars.find((p) => p.id === pillarId) ?? null;
     const pillarPosts = allPillarPosts.filter((p) => p.pillarId === pillarId);
@@ -69,6 +73,10 @@ export default async function PillarOrganisePage({
                 pillar={{ id: pillar.id, name: pillar.name, color: pillar.color }}
                 month={month}
                 posts={pillarPosts}
+                monthPosts={monthPosts.map((p) => ({
+                  postDate: p.postDate,
+                  platform: p.platform,
+                }))}
               />
             ) : (
               <EmptyState
