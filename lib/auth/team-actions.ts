@@ -419,6 +419,61 @@ export async function removeTeamMember(
   return { success: true, message: "Member removed." };
 }
 
+// ── Create a brand-new account inside a team (self-serve onboarding) ─────────
+
+const createAccountSchema = z.object({
+  teamId: z.string().uuid(),
+  name: z.string().trim().min(1, "Give the account a name.").max(120),
+});
+
+export async function createTeamAccount(
+  _prev: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  const parsed = createAccountSchema.safeParse({
+    teamId: formData.get("teamId"),
+    name: formData.get("name"),
+  });
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
+
+  const { data: client, error } = await admin
+    .from("clients")
+    .insert({
+      name: parsed.data.name,
+      platform: "Meta",
+      status: "testing",
+      monthly_budget: 0,
+    })
+    .select("id")
+    .single();
+
+  if (error || !client) {
+    return { error: error?.message ?? "Could not create the account." };
+  }
+
+  const { error: linkErr } = await admin
+    .from("team_accounts")
+    .upsert(
+      { team_id: parsed.data.teamId, client_id: client.id },
+      { onConflict: "team_id,client_id" }
+    );
+  if (linkErr) {
+    return { error: `Account created, but couldn't add it to the team: ${linkErr.message}` };
+  }
+
+  revalidateTeams(parsed.data.teamId);
+  return {
+    success: true,
+    message: `"${parsed.data.name}" created. Connect Instagram/Facebook to it below.`,
+  };
+}
+
 // ── Accounts (the client-isolation onboarding) ──────────────────────────────
 
 const accountSchema = z.object({

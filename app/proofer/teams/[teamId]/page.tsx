@@ -8,6 +8,7 @@ import { InviteToTeamForm } from "@/app/admin-panel/settings/teams/[teamId]/Invi
 import { TeamMemberRow } from "@/app/admin-panel/settings/teams/[teamId]/TeamMemberRow";
 import { TeamAccountsManager } from "@/app/admin-panel/settings/teams/[teamId]/TeamAccountsManager";
 import type { Role, TeamMember, AccountOption } from "@/app/admin-panel/settings/teams/[teamId]/types";
+import { CreateAccountForm } from "./CreateAccountForm";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,22 @@ export default async function ProoferTeamDetailPage({
   const plan = (team.plan as "free" | "pro") ?? "free";
   const accountsInTeam = accounts.filter((a) => a.inTeam);
 
+  // Which platforms each in-team account has connected (for the connect UI).
+  const connectedByClient = new Map<number, Set<string>>();
+  if (canManage && accountsInTeam.length > 0) {
+    const { data: connectedRows } = await admin
+      .from("connected_meta_accounts")
+      .select("client_id, platform")
+      .in("client_id", accountsInTeam.map((a) => a.clientId));
+    for (const r of connectedRows ?? []) {
+      const set = connectedByClient.get(Number(r.client_id)) ?? new Set<string>();
+      set.add(r.platform as string);
+      connectedByClient.set(Number(r.client_id), set);
+    }
+  }
+  // Where Meta should send the user back after the OAuth round-trip.
+  const connectReturnTo = `${base}/teams/${teamId}`;
+
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
       <div style={{ maxWidth: 760, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -132,11 +149,48 @@ export default async function ProoferTeamDetailPage({
             </section>
 
             <section style={cardStyle}>
+              <h3 style={sectionTitleStyle}>Add &amp; connect an account</h3>
+              <p style={sectionSubStyle}>
+                Create a brand-new account in this team, then connect its
+                Instagram / Facebook. Connecting opens Meta&rsquo;s secure login —
+                the tokens are stored server-side and no one on the team ever sees
+                them.
+              </p>
+              <CreateAccountForm teamId={teamId} />
+
+              {accountsInTeam.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
+                  {accountsInTeam.map((a) => {
+                    const connected = connectedByClient.get(a.clientId) ?? new Set<string>();
+                    const ig = connected.has("instagram");
+                    const fb = connected.has("facebook");
+                    const anyConnected = ig || fb;
+                    const href = `/api/meta/connect?clientId=${a.clientId}&returnTo=${encodeURIComponent(connectReturnTo)}`;
+                    return (
+                      <div key={a.clientId} style={connectRowStyle}>
+                        <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 140 }}>
+                          {a.name}
+                        </span>
+                        <span style={{ display: "flex", gap: 6 }}>
+                          <StatusPill on={ig} label="Instagram" />
+                          <StatusPill on={fb} label="Facebook" />
+                        </span>
+                        <a href={href} style={connectBtnStyle}>
+                          {anyConnected ? "Reconnect" : "Connect"}
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section style={cardStyle}>
               <h3 style={sectionTitleStyle}>Accounts in this team</h3>
               <p style={sectionSubStyle}>
-                Add a client&rsquo;s account here, then invite them as a client
-                below. They&rsquo;ll see only the accounts in this team. An
-                account can live in more than one team.
+                Move an existing account into this team, or remove one. An
+                account can live in more than one team, so adding it here
+                doesn&rsquo;t remove it elsewhere.
               </p>
               <TeamAccountsManager teamId={teamId} accounts={accounts} />
             </section>
@@ -197,6 +251,48 @@ export default async function ProoferTeamDetailPage({
     </main>
   );
 }
+
+function StatusPill({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: "3px 8px",
+        borderRadius: 999,
+        background: on ? "#e4f1ea" : "#f4f4f5",
+        color: on ? "#2f7d5b" : "#a1a1aa",
+        border: `1px solid ${on ? "#bfe0cd" : "#e4e4e7"}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {on ? "✓ " : ""}
+      {label}
+    </span>
+  );
+}
+
+const connectRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "10px 12px",
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  background: "#fff",
+  flexWrap: "wrap",
+};
+
+const connectBtnStyle: React.CSSProperties = {
+  background: "#18181b",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  borderRadius: 8,
+  padding: "7px 12px",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
 
 const backLinkStyle: React.CSSProperties = {
   display: "inline-block",
