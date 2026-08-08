@@ -3,8 +3,34 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient } from "../../../lib/supabase/admin";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getConsultationDefaultQuestions } from "./consultation-default-questions";
+
+// The team a newly-created account should join so it's visible on the (now
+// team-scoped) board: the creator's own team. Prefer a team they own (for
+// agency staff that's "Guestlist Social"; for a poster it's their personal
+// team), else any team they can post in. null → leave unlinked.
+async function resolvePrimaryTeamId(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+): Promise<string | null> {
+  const { data: owned } = await admin
+    .from("teams")
+    .select("id")
+    .eq("owner_user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (owned && owned[0]) return owned[0].id as string;
+
+  const { data: mem } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin", "member"])
+    .limit(1);
+  return (mem && (mem[0]?.team_id as string)) ?? null;
+}
 
 function normalizeStatus(status: string) {
   if (status === "active" || status === "paused" || status === "onboarding") {
@@ -481,6 +507,29 @@ export async function createClientAction(formData: FormData) {
       }
       throw error;
     }
+  }
+
+  // Link the new account to the creator's team so it appears on the team-scoped
+  // board. Best-effort: a failure here shouldn't block account creation (the
+  // 20260814 backfill also sweeps any orphan into Guestlist Social).
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const admin = createAdminClient();
+      const teamId = await resolvePrimaryTeamId(admin, user.id);
+      if (teamId) {
+        await admin
+          .from("team_accounts")
+          .upsert(
+            { team_id: teamId, client_id: createdClientId },
+            { onConflict: "team_id,client_id" }
+          );
+      }
+    }
+  } catch (linkErr) {
+    console.error("createClientAction: team link failed", linkErr);
   }
 
   revalidatePath("/admin-panel/clients");

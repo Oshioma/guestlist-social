@@ -4,6 +4,7 @@ import { createAdminClient } from "../../../lib/supabase/admin";
 import { getDisplayTimezone } from "../../../lib/app-settings";
 import ProoferBoard from "./ProoferBoard";
 import EmptyState from "../components/EmptyState";
+import { getLastProoferClientId } from "../../proofer/navData";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,11 @@ export default async function ProoferPage({
   const selectedMonth = sp.month ?? defaultMonth;
 
   const cookieStore = await cookies();
-  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  // Prefer the cookie (fast, same-device) but fall back to the server-side
+  // preference so the last account stays in sync across devices and across the
+  // two product surfaces (this admin board and the standalone Proofer).
+  const lastClient =
+    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
 
   try {
     let selectedClientId = sp.client ?? "";

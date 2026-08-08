@@ -837,6 +837,29 @@ export async function getProoferOccupiedDates(
   return Array.from(set);
 }
 
+// Lightweight per-client, per-day status feed for the Publish Queue's
+// at-a-glance day overview. Reads ALL proofer posts (not just the ones already
+// on the publish queue) so a "saved but not yet approved" day still shows —
+// the publish queue itself only ever holds proofed/approved posts, which would
+// hide everything still in progress. Compact select keeps it cheap.
+export async function getProoferOverviewPosts(): Promise<
+  { clientId: string; postDate: string; status: ProoferStatus }[]
+> {
+  const supabase = await createClient();
+  const res = await supabase
+    .from("proofer_posts")
+    .select("client_id, post_date, status");
+  if (res.error) {
+    console.error("getProoferOverviewPosts:", res.error.message);
+    return [];
+  }
+  return (res.data ?? []).map((row) => ({
+    clientId: String(row.client_id),
+    postDate: row.post_date ? String(row.post_date).slice(0, 10) : "",
+    status: (row.status ?? "none") as ProoferStatus,
+  }));
+}
+
 export async function getPostIdeas(
   clientId: string,
   month: string

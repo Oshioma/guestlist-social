@@ -166,6 +166,39 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
+      <SectionCard title="Teams">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <p style={{ fontSize: 14, color: "#52525b", margin: 0 }}>
+            Group accounts into workspaces. Give a client their own team with
+            only their accounts, then invite them to see just their content.
+          </p>
+          <Link
+            href="/proofer/teams"
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #18181b",
+              background: "#18181b",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Manage teams →
+          </Link>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Consultation template">
         <div
           style={{

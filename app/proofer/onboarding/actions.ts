@@ -1,0 +1,570 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getProoferAccess } from "@/lib/auth/permissions";
+import { getOnboardingState } from "@/lib/onboarding";
+import { saveProoferPostAction } from "@/app/admin-panel/lib/proofer-actions";
+
+// ---------------------------------------------------------------------------
+// Server actions backing the guided first-run tour. Everything here writes to
+// the REAL tables through the same helpers the app already uses — the account,
+// the post and the events are all genuine. The one safety rail: the tour only
+// ever saves a post as status "check" (yellow / saved), never "proofed"
+// (green / scheduled), so nothing the user does in onboarding can publish.
+// ---------------------------------------------------------------------------
+
+type Ok<T> = { ok: true } & T;
+type Err = { ok: false; error: string };
+type Result<T> = Ok<T> | Err;
+type VoidResult = { ok: true } | Err;
+
+async function requirePoster() {
+  const access = await getProoferAccess();
+  if (!access) return null;
+  return access;
+}
+
+// Fire-and-forget funnel logging. Never throws into the caller — analytics must
+// not be able to break the flow.
+export async function logOnboardingEvent(
+  event: string,
+  step?: number,
+  meta?: Record<string, unknown>
+): Promise<void> {
+  try {
+    const access = await getProoferAccess();
+    if (!access) return;
+    const admin = createAdminClient();
+    await admin.from("onboarding_events").insert({
+      user_id: access.userId,
+      event,
+      step: typeof step === "number" ? step : null,
+      meta: meta ?? null,
+    });
+  } catch (err) {
+    console.error("logOnboardingEvent failed:", err);
+  }
+}
+
+async function patchState(
+  userId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.from("user_onboarding").upsert(
+    { user_id: userId, ...patch, updated_at: new Date().toISOString() },
+    { onConflict: "user_id" }
+  );
+  if (error) throw new Error(error.message);
+}
+
+// Step 1 — mark the tour started (resumable from here on).
+export async function startOnboardingAction(): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    await patchState(access.userId, {
+      onboarding_started: true,
+      onboarding_skipped: false,
+      // Clear a stale completion so an explicit restart genuinely re-runs
+      // (e.g. a user who finished once but ended up with no account).
+      onboarding_completed: false,
+      onboarding_step: 1,
+    });
+    await logOnboardingEvent("onboarding_started", 1);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not start." };
+  }
+}
+
+// Persist the current step so a refresh / sign-out resumes in place.
+export async function saveOnboardingStepAction(
+  step: number
+): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    await patchState(access.userId, {
+      onboarding_started: true,
+      onboarding_step: Math.max(0, Math.floor(step)),
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not save." };
+  }
+}
+
+export async function skipOnboardingAction(
+  step?: number
+): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    await patchState(access.userId, { onboarding_skipped: true });
+    await logOnboardingEvent("onboarding_skipped", step);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not skip." };
+  }
+}
+
+export async function completeOnboardingAction(): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    await patchState(access.userId, {
+      onboarding_completed: true,
+      onboarding_step: 11,
+    });
+    await logOnboardingEvent("onboarding_completed", 11);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not finish." };
+  }
+}
+
+// Resolve the poster's own team (the personal team created at sign-up). Prefers
+// a team they own, else any team they manage. Returns id + name so we can give
+// their first account a sensible default name without asking.
+async function resolveOwnTeam(
+  userId: string
+): Promise<{ id: string; name: string } | null> {
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin"]);
+  if (!rows || rows.length === 0) return null;
+  const owned = rows.find((r) => r.role === "owner");
+  const teamId = String((owned ?? rows[0]).team_id);
+  const { data: team } = await admin
+    .from("teams")
+    .select("name")
+    .eq("id", teamId)
+    .maybeSingle();
+  return { id: teamId, name: (team?.name as string) ?? "" };
+}
+
+// A friendly default brand name derived from the personal team ("Oshi's Team"
+// → "Oshi"). The user can rename it inline; nothing is blocked on it.
+function defaultAccountName(teamName: string): string {
+  const trimmed = (teamName ?? "").trim();
+  const stripped = trimmed.replace(/['’]s Team$/i, "").replace(/ Team$/i, "").trim();
+  return stripped || trimmed || "My business";
+}
+
+// Step 2 — make sure the user has a real account to post to, WITHOUT asking
+// them to "add a client". Auto-provisions one (named from their team) the first
+// time, links it to their team, and is idempotent thereafter. This is what lets
+// onboarding lead straight into connecting a social platform.
+export async function ensureOnboardingAccountAction(): Promise<
+  Result<{ clientId: string; name: string }>
+> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+
+  try {
+    const admin = createAdminClient();
+    const existing = await getOnboardingState(access.userId);
+    if (existing.accountClientId) {
+      // Reuse only if the account actually still exists AND is still in one of
+      // the user's teams (a prior tour's account could have been deleted or
+      // removed). Otherwise fall through and provision a fresh one.
+      const { data: clientRow } = await admin
+        .from("clients")
+        .select("id, name, archived")
+        .eq("id", existing.accountClientId)
+        .maybeSingle();
+      if (clientRow && !clientRow.archived) {
+        const { data: link } = await admin
+          .from("team_accounts")
+          .select("team_id")
+          .eq("client_id", existing.accountClientId)
+          .limit(1)
+          .maybeSingle();
+        if (link) {
+          return {
+            ok: true,
+            clientId: existing.accountClientId,
+            name: (clientRow.name as string) ?? "",
+          };
+        }
+      }
+    }
+
+    const team = await resolveOwnTeam(access.userId);
+    if (!team) {
+      return {
+        ok: false,
+        error: "We couldn't find your team. Please refresh and try again.",
+      };
+    }
+
+    const name = defaultAccountName(team.name);
+    const { data: client, error } = await admin
+      .from("clients")
+      .insert({ name, platform: "Meta", status: "testing", monthly_budget: 0 })
+      .select("id")
+      .single();
+    if (error || !client) {
+      return { ok: false, error: error?.message ?? "Could not set up your account." };
+    }
+
+    const { error: linkErr } = await admin
+      .from("team_accounts")
+      .upsert(
+        { team_id: team.id, client_id: client.id },
+        { onConflict: "team_id,client_id" }
+      );
+    if (linkErr) {
+      return { ok: false, error: `Account created, but linking failed: ${linkErr.message}` };
+    }
+
+    const clientId = String(client.id);
+    await patchState(access.userId, {
+      onboarding_started: true,
+      account_client_id: client.id,
+      onboarding_step: 2,
+    });
+    await logOnboardingEvent("account_created", 2, { clientId });
+    return { ok: true, clientId, name };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not set up your account." };
+  }
+}
+
+// Optional inline rename of the tour account (so the auto-name isn't final).
+export async function renameOnboardingAccountAction(
+  nameRaw: string
+): Promise<VoidResult> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  const name = (nameRaw ?? "").trim();
+  if (!name) return { ok: false, error: "Please enter a name." };
+  if (name.length > 120) return { ok: false, error: "That name is too long." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (!state.accountClientId) return { ok: false, error: "No account yet." };
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("clients")
+      .update({ name })
+      .eq("id", state.accountClientId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not rename." };
+  }
+}
+
+// The account ids the user may post to (accounts in any team where they hold a
+// posting role). Mirrors the writable_account_ids() RLS helper, computed here
+// with the service role so onboarding actions can trust it.
+async function writableAccountIds(userId: string): Promise<Set<string>> {
+  const admin = createAdminClient();
+  const { data: tm } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin", "member"]);
+  const teamIds = Array.from(new Set((tm ?? []).map((r) => String(r.team_id))));
+  if (teamIds.length === 0) return new Set();
+  const { data: ta } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .in("team_id", teamIds);
+  return new Set((ta ?? []).map((r) => String(r.client_id)));
+}
+
+// The user's existing accounts, so onboarding can offer to post to one instead
+// of always minting a new account (e.g. an invited teammate whose team already
+// has content). Empty for a genuinely new solo user.
+export async function listMyAccountsAction(): Promise<
+  Result<{ accounts: { clientId: string; name: string }[] }>
+> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const ids = Array.from(await writableAccountIds(access.userId));
+    if (ids.length === 0) return { ok: true, accounts: [] };
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("clients")
+      .select("id, name, archived")
+      .in("id", ids)
+      .order("name", { ascending: true });
+    const accounts = (data ?? [])
+      .filter((c) => !c.archived)
+      .map((c) => ({ clientId: String(c.id), name: (c.name as string) ?? `Account ${c.id}` }));
+    return { ok: true, accounts };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load your accounts." };
+  }
+}
+
+// Point onboarding at an EXISTING account the user already owns/manages, rather
+// than creating a new one. Verified against their writable set.
+export async function useExistingOnboardingAccountAction(
+  clientId: string
+): Promise<Result<{ clientId: string; name: string }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  const id = String(clientId ?? "").trim();
+  if (!id) return { ok: false, error: "No account selected." };
+  try {
+    const writable = await writableAccountIds(access.userId);
+    if (!writable.has(id)) return { ok: false, error: "That isn't one of your accounts." };
+    const admin = createAdminClient();
+    const { data } = await admin.from("clients").select("name").eq("id", id).maybeSingle();
+    await patchState(access.userId, {
+      onboarding_started: true,
+      account_client_id: Number(id),
+      onboarding_step: 2,
+    });
+    await logOnboardingEvent("account_selected_existing", 2, { clientId: id });
+    return { ok: true, clientId: id, name: (data?.name as string) ?? "" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not use that account." };
+  }
+}
+
+// Days that already carry a post on the chosen account (any platform), so the
+// tour only ever saves onto a blank day and never overwrites existing content.
+export async function getOnboardingOccupiedDatesAction(
+  clientId: string
+): Promise<Result<{ dates: string[] }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("proofer_posts")
+      .select("post_date")
+      .eq("client_id", clientId);
+    const dates = Array.from(
+      new Set((data ?? []).map((r) => String(r.post_date).slice(0, 10)))
+    );
+    return { ok: true, dates };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not check the calendar." };
+  }
+}
+
+// Which platforms the tour account has connected via Meta OAuth (for the "✓
+// connected" state). Scoped to the user's own account.
+export async function getConnectedPlatformsAction(
+  clientId: string
+): Promise<Result<{ platforms: string[] }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    // Confirm the account really belongs to this user before reading it.
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("connected_meta_accounts")
+      .select("platform")
+      .eq("client_id", clientId);
+    const platforms = Array.from(new Set((data ?? []).map((r) => String(r.platform))));
+    if (platforms.length > 0) {
+      await logOnboardingEvent("social_connected", 2, { platforms });
+    }
+    return { ok: true, platforms };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not check connection." };
+  }
+}
+
+// A Meta login can control a whole portfolio, so the callback attaches every
+// Page + Instagram account it finds to the (undeclared) tour account. For a
+// friendly first run we let the user keep just ONE. Keep the chosen identity
+// and its linked pair (an Instagram account and its parent Facebook Page share
+// the Page's access token), drop the rest, and stamp the account's ig_handle /
+// fb_page so any future reconnect stays scoped to that one brand.
+export async function pickTourConnectionAction(
+  clientId: string,
+  platform: string,
+  accountId: string
+): Promise<Result<{ platforms: string[]; name: string }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+
+    const admin = createAdminClient();
+    const { data: rows } = await admin
+      .from("connected_meta_accounts")
+      .select("platform, account_id, account_name, access_token")
+      .eq("client_id", clientId);
+
+    const all = rows ?? [];
+    const chosen = all.find(
+      (r) => String(r.platform) === platform && String(r.account_id) === accountId
+    );
+    if (!chosen) return { ok: false, error: "That account isn't connected anymore." };
+
+    // The chosen identity and its pair share one Page access token.
+    const keepToken = chosen.access_token as string | null;
+
+    // Drop every other brand's rows. Guard against a null token (keep only the
+    // exact chosen row in that unlikely case).
+    if (keepToken) {
+      await admin
+        .from("connected_meta_accounts")
+        .delete()
+        .eq("client_id", clientId)
+        .neq("access_token", keepToken);
+    } else {
+      await admin
+        .from("connected_meta_accounts")
+        .delete()
+        .eq("client_id", clientId)
+        .or(`platform.neq.${platform},account_id.neq.${accountId}`);
+    }
+
+    const kept = keepToken
+      ? all.filter((r) => r.access_token === keepToken)
+      : [chosen];
+    const igName =
+      (kept.find((r) => r.platform === "instagram")?.account_name as string) ?? null;
+    const fbName =
+      (kept.find((r) => r.platform === "facebook")?.account_name as string) ?? null;
+
+    // Stamp the handle/page so future reconnects only re-attach this brand.
+    const patch: Record<string, string> = {};
+    if (igName) patch.ig_handle = igName;
+    if (fbName) patch.fb_page = fbName;
+    if (Object.keys(patch).length > 0) {
+      await admin.from("clients").update(patch).eq("id", clientId);
+    }
+
+    const keptPlatforms = Array.from(new Set(kept.map((r) => String(r.platform))));
+    await logOnboardingEvent("social_account_picked", 2, {
+      platform,
+      name: chosen.account_name,
+    });
+    return {
+      ok: true,
+      platforms: keptPlatforms,
+      name: (chosen.account_name as string) ?? "",
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not set that account." };
+  }
+}
+
+// Step 9 — save the first post FOR REAL, as status "check" (yellow / saved).
+// Reuses the app's own saveProoferPostAction so the row is byte-for-byte a
+// normal post; then reads its id back to remember it (dedupe on replay).
+export async function saveFirstPostAction(input: {
+  clientId: string;
+  caption: string;
+  mediaUrls: string[];
+  postDate: string; // YYYY-MM-DD
+  publishTime: string; // HH:MM
+}): Promise<Result<{ postId: string }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+
+  const clientId = String(input.clientId ?? "").trim();
+  const caption = String(input.caption ?? "");
+  const postDate = String(input.postDate ?? "").trim();
+  const publishTime = /^\d{2}:\d{2}$/.test(input.publishTime) ? input.publishTime : "18:00";
+  const mediaUrls = Array.isArray(input.mediaUrls)
+    ? input.mediaUrls.filter((u) => typeof u === "string" && u.trim())
+    : [];
+
+  if (!clientId) return { ok: false, error: "No account selected." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(postDate)) return { ok: false, error: "Invalid date." };
+  if (!caption.trim() && mediaUrls.length === 0) {
+    return { ok: false, error: "Add a caption or an image first." };
+  }
+
+  // Guard: only the user's own tour account may be written here.
+  const state = await getOnboardingState(access.userId);
+  if (state.accountClientId !== clientId) {
+    return { ok: false, error: "Unknown account." };
+  }
+
+  // Blank-day guard: saveProoferPostAction upserts on (client, date, platform),
+  // so saving onto a day that already has a post would OVERWRITE real content.
+  // Refuse unless the day is blank — the tour's own post (re-save/retry) aside.
+  {
+    const admin = createAdminClient();
+    const { data: dayPosts } = await admin
+      .from("proofer_posts")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("post_date", postDate);
+    const foreign = (dayPosts ?? []).filter(
+      (p) => String(p.id) !== String(state.firstPostId ?? "")
+    );
+    if (foreign.length > 0) {
+      return {
+        ok: false,
+        error: "That day already has a post. Please pick a free day for your first post.",
+      };
+    }
+  }
+
+  // The real save — ends as status "check" (yellow). Never proofed/green. Only
+  // a genuine failure here should keep the user on the Save step.
+  try {
+    await saveProoferPostAction(
+      clientId,
+      postDate,
+      "instagram_feed",
+      caption,
+      mediaUrls,
+      null,
+      null,
+      null,
+      publishTime,
+      ["instagram"]
+    );
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not save your post." };
+  }
+
+  // The post is now saved. Recording its id + analytics is best-effort
+  // bookkeeping — a hiccup here must NOT strand the user, since their post
+  // already exists.
+  let postId = "";
+  try {
+    const admin = createAdminClient();
+    const { data: post } = await admin
+      .from("proofer_posts")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("post_date", postDate)
+      .eq("platform", "instagram_feed")
+      .maybeSingle();
+
+    postId = post?.id != null ? String(post.id) : "";
+    await patchState(access.userId, {
+      onboarding_started: true,
+      first_post_id: post?.id ?? null,
+      onboarding_step: 9,
+    });
+    await logOnboardingEvent("first_post_saved", 9, { postId });
+  } catch (err) {
+    console.error("saveFirstPostAction bookkeeping failed (post already saved):", err);
+  }
+
+  revalidatePath("/proofer");
+  revalidatePath("/app/proofer");
+  return { ok: true, postId };
+}

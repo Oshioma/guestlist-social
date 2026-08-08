@@ -22,7 +22,13 @@ function isProoferSurfacePath(path: string): boolean {
     path === "/pillars" ||
     path.startsWith("/pillars/") ||
     path === "/clients" ||
-    path.startsWith("/clients/")
+    path.startsWith("/clients/") ||
+    path === "/teams" ||
+    path.startsWith("/teams/") ||
+    path === "/super-admin" ||
+    path.startsWith("/super-admin/") ||
+    path === "/publish" ||
+    path === "/onboarding"
   );
 }
 
@@ -97,6 +103,20 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    // On a Proofer host the domain root is public: a logged-out visitor lands
+    // on the marketing / sign-up home page instead of a bare sign-in bounce.
+    // Deep links still go through sign-in so they return where they asked.
+    if (isProoferHost && path === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/welcome";
+      url.search = "";
+      const rewrite = NextResponse.rewrite(url, { request });
+      response.cookies
+        .getAll()
+        .forEach((cookie) => rewrite.cookies.set(cookie));
+      return rewrite;
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.search = "";
@@ -105,37 +125,69 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Resolve the viewer's client link by reading client_user_links directly.
-  // Middleware can't import the full viewer helper because that file is
-  // server-only and middleware runs in the edge runtime; this lightweight
-  // query is sufficient.
-  const { data: link } = await supabase
-    .from("client_user_links")
-    .select("client_id")
-    .eq("auth_user_id", user.id)
-    .order("id", { ascending: true })
-    .limit(1)
+  // Resolve the viewer team-side, mirroring getViewer() (which middleware
+  // can't import — that file is server-only and this runs in the edge
+  // runtime). Agency staff take precedence: a user_roles row → admin, who
+  // roams. Otherwise the client account comes from team membership; RLS
+  // scopes team_accounts to the caller's own teams, so this only returns
+  // accounts they belong to.
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
     .maybeSingle();
-  const linkedClientId = (link as { client_id: number } | null)?.client_id ?? null;
-  const isClientUser = linkedClientId !== null;
+  const isStaff = roleRow !== null;
 
-  // Admission is deny-by-default. A logged-in account that is neither a
-  // client (client_user_links) nor an invited admin-panel user (user_roles)
-  // is NOT admitted — bounce it to /sign-in instead of letting it roam the
-  // admin panel. This is the gate that stops an account created outside the
-  // invite flow from gaining access. Keep it in sync with getViewer().
-  if (!isClientUser) {
-    const { data: roleRow } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
+  // Non-staff posture comes from team membership. A posting role (owner/admin/
+  // member) in any team makes them a poster (Proofer surface); otherwise a
+  // 'client' membership with an account makes them a portal client. RLS scopes
+  // team_members/team_accounts to the caller's own rows.
+  let isPoster = false;
+  let linkedClientId: number | null = null;
+  if (!isStaff) {
+    const { data: memberships } = await supabase
+      .from("team_members")
+      .select("role")
+      .eq("user_id", user.id);
+    const roles = (memberships as { role: string }[] | null)?.map((m) => m.role) ?? [];
+    isPoster = roles.some((r) => r === "owner" || r === "admin" || r === "member");
+    if (!isPoster) {
+      const { data: acct } = await supabase
+        .from("team_accounts")
+        .select("client_id")
+        .order("client_id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      linkedClientId = (acct as { client_id: number } | null)?.client_id ?? null;
+    }
+  }
+  const isClientUser = !isStaff && !isPoster && linkedClientId !== null;
 
-    if (!roleRow) {
+  // Admission is deny-by-default. A logged-in account that is neither agency
+  // staff (user_roles), a team poster, nor a team client is NOT admitted —
+  // bounce it to /sign-in instead of letting it roam. Keep in sync with
+  // getViewer()/getProoferAccess().
+  if (!isStaff && !isPoster && !isClientUser) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.search = "";
+    url.searchParams.set("error", "not-authorized");
+    return NextResponse.redirect(url);
+  }
+
+  // Team posters: the Proofer board is their only surface. On a Proofer host
+  // the top-of-middleware block already fenced off the other product surfaces
+  // and maps clean paths onto /proofer, so only the normal host needs a nudge
+  // off the admin panel and portal.
+  if (isPoster && !isProoferHost) {
+    if (
+      path.startsWith("/app") ||
+      path.startsWith("/admin-panel") ||
+      path.startsWith("/portal")
+    ) {
       const url = request.nextUrl.clone();
-      url.pathname = "/sign-in";
+      url.pathname = "/proofer";
       url.search = "";
-      url.searchParams.set("error", "not-authorized");
       return NextResponse.redirect(url);
     }
   }
@@ -196,11 +248,28 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Runs on everything except Next internals and static assets. The broad
-  // matcher is needed so the standalone Proofer host's clean root (/, /pillars,
-  // /clients) is seen here; non-Proofer hosts fall through the early exits above
-  // exactly as they did when the matcher only covered the protected prefixes.
+  // Only the routes that need gating. This covers the product surfaces plus the
+  // Proofer host's clean paths ("/", "/pillars", "/clients", "/teams",
+  // "/super-admin", "/publish") so that host rewrites them onto the /proofer
+  // tree — without
+  // running the session refresh + auth queries on every asset, API call, RSC
+  // fetch and server action across the whole app (which the previous catch-all
+  // matcher did, making saves crawl). Keep this in sync with
+  // isProoferSurfacePath above: every clean path it maps must be matched here,
+  // or the middleware never runs for it on the Proofer host and it 404s.
   matcher: [
-    "/((?!_next/static|_next/image|_next/data|favicon.ico|icon.jpg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf)$).*)",
+    "/",
+    "/app/:path*",
+    "/admin-panel/:path*",
+    "/portal/:path*",
+    "/proofer/:path*",
+    "/pillars/:path*",
+    "/clients/:path*",
+    "/teams/:path*",
+    "/teams",
+    "/super-admin/:path*",
+    "/super-admin",
+    "/publish",
+    "/onboarding",
   ],
 };

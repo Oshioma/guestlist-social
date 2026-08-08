@@ -13,6 +13,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth/permissions";
+import { authRedirectOrigin } from "@/lib/auth/request-origin";
 
 export type ActionState = {
   error?: string | null;
@@ -37,9 +38,6 @@ const removeSchema = z.object({
   userId: z.string().uuid(),
 });
 
-function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-}
 
 export async function inviteMember(
   _prevState: ActionState | null,
@@ -68,7 +66,7 @@ export async function inviteMember(
   const admin = createAdminClient();
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteUrl()}/auth/callback?type=invite`,
+    redirectTo: `${await authRedirectOrigin()}/auth/callback?type=invite`,
   });
 
   if (error || !data.user) {

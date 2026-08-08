@@ -48,6 +48,7 @@ import {
   zoneAbbrev,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
+import { setLastProoferClientAction } from "../../proofer/prefs-actions";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -550,6 +551,15 @@ export default function ProoferBoard({
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, ProoferStatus>>({});
 
   const [clientId, setClientId] = useState(initialClientId);
+  // Remember the account being viewed so signing back in resumes on it. The
+  // cookie is the fast same-device path; the server-side preference keeps it in
+  // sync across devices and across the two Proofer surfaces (this admin board
+  // and the standalone Proofer). Fires on the current account and on changes.
+  useEffect(() => {
+    if (!clientId) return;
+    document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
+    setLastProoferClientAction(clientId).catch(() => {});
+  }, [clientId]);
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
   const [postFrequency, setPostFrequency] = useState<"every-day" | "every-other-day">("every-other-day");
@@ -2608,11 +2618,35 @@ export default function ProoferBoard({
       )}
 
       {clients.length === 0 ? (
-        <SectionCard title="No clients">
-          <div style={{ fontSize: 13, color: "#71717a" }}>
-            Add a client first on the Clients page.
-          </div>
-        </SectionCard>
+        standalone ? (
+          <SectionCard title="Let's set up your first post">
+            <div style={{ fontSize: 17, color: "#3f3f46", lineHeight: 1.6, marginBottom: 18, maxWidth: 640 }}>
+              You don&apos;t have an account yet. The 2-minute guided setup connects
+              a social account and walks you through creating your first post.
+            </div>
+            <a
+              href={`${basePath.replace(/\/$/, "")}/onboarding?start=1`}
+              style={{
+                display: "inline-block",
+                background: "#6d28d9",
+                color: "#fff",
+                fontSize: 16,
+                fontWeight: 700,
+                borderRadius: 12,
+                padding: "13px 24px",
+                textDecoration: "none",
+              }}
+            >
+              Start guided setup →
+            </a>
+          </SectionCard>
+        ) : (
+          <SectionCard title="No clients">
+            <div style={{ fontSize: 13, color: "#71717a" }}>
+              Add a client first on the Clients page.
+            </div>
+          </SectionCard>
+        )
       ) : (
         <div
           style={{ display: "flex", flexDirection: "column", gap: 4 }}
@@ -4343,7 +4377,7 @@ export default function ProoferBoard({
                               // lift them up so they sit on the image (the card's
                               // header/caption otherwise pull the centre down).
                               ...(standalone
-                                ? { marginLeft: 14, alignSelf: "center", marginTop: -90 }
+                                ? { marginLeft: 14, alignSelf: "center", marginTop: -140 }
                                 : {}),
                             }),
                       }}

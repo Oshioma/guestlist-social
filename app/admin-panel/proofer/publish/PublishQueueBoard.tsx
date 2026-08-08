@@ -37,6 +37,10 @@ type ClientLite = {
   name: string;
   igHandle?: string | null;
   fbPage?: string | null;
+  // Whether the client's status is "active". The at-a-glance overview lists
+  // only active clients; the Connect Meta picker and publishability checks
+  // still use the full (non-archived) list.
+  active?: boolean;
 };
 
 type ConnectedAccount = {
@@ -181,9 +185,14 @@ type CardIssue = QueueBlock & { connected: string[] };
 function NotPublishedNotice({
   blocks,
   clientId,
+  editBase = "/app/clients",
 }: {
   blocks: CardIssue[];
   clientId: string;
+  // Base path for the "Edit here" link. Differs by surface: "/app/clients" in
+  // the admin panel, "/proofer/clients" (or "/clients" on postproofer.com) in
+  // the standalone Proofer app.
+  editBase?: string;
 }) {
   if (blocks.length === 0) return null;
   return (
@@ -209,7 +218,7 @@ function NotPublishedNotice({
             <>
               {" "}
               <Link
-                href={`/app/clients/${clientId}/edit`}
+                href={`${editBase}/${clientId}/edit`}
                 style={{ color: "#7c3aed", fontWeight: 700, textDecoration: "underline" }}
               >
                 Edit here
@@ -367,6 +376,337 @@ function defaultScheduleForPost(postDate: string): string {
   return local.toISOString().slice(0, 16);
 }
 
+// ── At-a-glance day overview ─────────────────────────────────────────────────
+// A per-client horizontal strip of the month's days, mirroring the proofer's
+// day layout and colours: company name on the left, then one cell per calendar
+// day tinted by that client's post(s) that day — green = approved, yellow =
+// saved (a draft exists but isn't approved yet), grey = empty. Lets an operator
+// scan the whole roster and see at a glance which companies have approved posts
+// for the month and which days are still empty. Fed by ALL proofer posts, not
+// just the publish queue, so in-progress (yellow) days show too.
+
+// Proofer day colours, taken straight from the proofer board's status swatches
+// so the two pages read identically.
+const OVERVIEW_APPROVED = { fill: "#dcfce7", edge: "#86efac", label: "Approved" };
+const OVERVIEW_SAVED = { fill: "#fef9c3", edge: "#fde047", label: "Saved" };
+
+type OverviewPost = { clientId: string; postDate: string; status: ProoferStatus };
+
+// A day's colour from the statuses of the posts filed on it. Approved (or
+// proofed — proofing is what pushes a post past approval into the queue) wins
+// so a single approved post lights the day green; any other saved post is
+// yellow; nothing is grey.
+function overviewDayTone(statuses: Set<ProoferStatus> | undefined) {
+  if (!statuses || statuses.size === 0) return null;
+  if (statuses.has("approved") || statuses.has("proofed")) return OVERVIEW_APPROVED;
+  return OVERVIEW_SAVED;
+}
+
+function ymParts(month: string): { y: number; m: number } | null {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return null;
+  return { y, m };
+}
+
+function shiftMonthValue(month: string, delta: number): string {
+  const p = ymParts(month);
+  if (!p) return month;
+  const d = new Date(p.y, p.m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string): string {
+  const p = ymParts(month);
+  if (!p) return month;
+  return new Date(p.y, p.m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function daysInMonthValue(month: string): number {
+  const p = ymParts(month);
+  if (!p) return 0;
+  return new Date(p.y, p.m, 0).getDate();
+}
+
+// The set of "YYYY-MM" months that actually have posts.
+function monthsWithPosts(posts: OverviewPost[]): Set<string> {
+  const set = new Set<string>();
+  for (const p of posts) {
+    const key = (p.postDate ?? "").slice(0, 7);
+    if (key) set.add(key);
+  }
+  return set;
+}
+
+// Where the strip should open. Prefer the current month; if it's empty, jump
+// forward to the next month that has posts — operators are usually looking at
+// upcoming content, not the past.
+function defaultOverviewMonth(posts: OverviewPost[], currentMonth: string): string {
+  const months = monthsWithPosts(posts);
+  if (currentMonth && months.has(currentMonth)) return currentMonth;
+  if (currentMonth) {
+    const future = [...months].filter((m) => m >= currentMonth).sort();
+    if (future.length) return future[0];
+  }
+  if (currentMonth) return currentMonth;
+  const all = [...months].sort();
+  return all[0] ?? "";
+}
+
+const OVERVIEW_NAME_COL = 168;
+const OVERVIEW_CELL = 22;
+const OVERVIEW_GAP = 3;
+
+function ClientDayOverview({
+  clients,
+  posts,
+  currentMonth,
+}: {
+  clients: ClientLite[];
+  posts: OverviewPost[];
+  currentMonth: string;
+}) {
+  const [month, setMonth] = useState(() =>
+    defaultOverviewMonth(posts, currentMonth)
+  );
+
+  // clientId → (dateKey → set of that day's proofer statuses) for this month.
+  const byClient = useMemo(() => {
+    const m = new Map<string, Map<string, Set<ProoferStatus>>>();
+    for (const post of posts) {
+      const dateKey = (post.postDate ?? "").slice(0, 10);
+      if (!dateKey || dateKey.slice(0, 7) !== month) continue;
+      let days = m.get(post.clientId);
+      if (!days) {
+        days = new Map();
+        m.set(post.clientId, days);
+      }
+      let set = days.get(dateKey);
+      if (!set) {
+        set = new Set();
+        days.set(dateKey, set);
+      }
+      set.add(post.status);
+    }
+    return m;
+  }, [posts, month]);
+
+  // One row per active client, sorted by name — a client with nothing filed
+  // this month still shows, as an all-grey row, so an empty calendar reads as
+  // an obvious gap rather than a missing company. Only clients whose status is
+  // "active" are listed (paused/onboarding clients are left off).
+  const rows = useMemo(
+    () =>
+      clients
+        .filter((c) => c.active)
+        .map((c) => ({ clientId: c.id, name: c.name, days: byClient.get(c.id) }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [byClient, clients]
+  );
+
+  const dayCount = daysInMonthValue(month);
+  const dayNums = useMemo(
+    () => Array.from({ length: dayCount }, (_, i) => i + 1),
+    [dayCount]
+  );
+  const p = ymParts(month);
+
+  const gridTemplate = `${OVERVIEW_NAME_COL}px repeat(${dayCount}, ${OVERVIEW_CELL}px)`;
+
+  return (
+    <section style={{ ...panelStyle, padding: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          padding: "13px 16px 11px",
+          borderBottom: `1px solid ${LINE}`,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>
+          At a glance
+        </div>
+
+        {/* Month stepper — client-side only, all queue data is already loaded. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setMonth((m) => shiftMonthValue(m, -1))}
+            style={{ ...buttonBase, padding: "4px 9px" }}
+          >
+            &lsaquo;
+          </button>
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: INK_2,
+              minWidth: 122,
+              textAlign: "center",
+            }}
+          >
+            {monthLabel(month)}
+          </div>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setMonth((m) => shiftMonthValue(m, 1))}
+            style={{ ...buttonBase, padding: "4px 9px" }}
+          >
+            &rsaquo;
+          </button>
+          {currentMonth && month !== currentMonth && (
+            <button
+              type="button"
+              onClick={() => setMonth(currentMonth)}
+              style={{ ...buttonBase, padding: "4px 9px", background: SUNK }}
+            >
+              This month
+            </button>
+          )}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Legend — matches the proofer's day colours. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {[
+            OVERVIEW_APPROVED,
+            OVERVIEW_SAVED,
+            { fill: SUNK, edge: LINE_2, label: "Empty" },
+          ].map((sw) => (
+            <span
+              key={sw.label}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                color: INK_3,
+              }}
+            >
+              <span
+                style={{
+                  width: 11,
+                  height: 11,
+                  borderRadius: 3,
+                  background: sw.fill,
+                  border: `1px solid ${sw.edge}`,
+                }}
+              />
+              {sw.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: INK_3, padding: "14px 16px" }}>
+          No active clients to show.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", padding: "10px 16px 14px" }}>
+          <div style={{ minWidth: "fit-content" }}>
+            {/* Day-number header */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridTemplate,
+                gap: OVERVIEW_GAP,
+                alignItems: "end",
+                marginBottom: 6,
+              }}
+            >
+              <div />
+              {dayNums.map((day) => {
+                const weekend = p
+                  ? [0, 6].includes(new Date(p.y, p.m - 1, day).getDay())
+                  : false;
+                return (
+                  <div
+                    key={day}
+                    style={{
+                      fontSize: 9.5,
+                      textAlign: "center",
+                      fontWeight: 700,
+                      color: weekend ? INK_2 : INK_3,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {day}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* One row per company */}
+            <div style={{ display: "flex", flexDirection: "column", gap: OVERVIEW_GAP }}>
+              {rows.map((row) => (
+                <div
+                  key={row.clientId}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: gridTemplate,
+                    gap: OVERVIEW_GAP,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    title={row.name}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: INK,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      paddingRight: 8,
+                    }}
+                  >
+                    {row.name}
+                  </div>
+                  {dayNums.map((day) => {
+                    const key = `${month}-${String(day).padStart(2, "0")}`;
+                    const tone = overviewDayTone(row.days?.get(key));
+                    const monthName = monthLabel(month).replace(/ \d{4}$/, "");
+                    return (
+                      <div
+                        key={day}
+                        title={`${row.name} · ${monthName} ${day} · ${
+                          tone ? tone.label : "Empty"
+                        }`}
+                        style={{
+                          height: OVERVIEW_CELL,
+                          borderRadius: 5,
+                          background: tone ? tone.fill : SUNK,
+                          border: `1px solid ${tone ? tone.edge : LINE_2}`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PublishQueueBoard({
   queueItems,
   defaultScheduleValue,
@@ -375,6 +715,13 @@ export default function PublishQueueBoard({
   metaConnectionError = null,
   connectResult = null,
   timeZone = "Etc/GMT",
+  currentMonth = "",
+  overviewPosts = [],
+  backHref = "/app/proofer",
+  settingsHref = "/app/settings",
+  clientEditBase = "/app/clients",
+  showMetaConnection = true,
+  connectOrigin = "",
 }: {
   queueItems: QueueItem[];
   defaultScheduleValue: string;
@@ -389,6 +736,27 @@ export default function PublishQueueBoard({
     igCount?: number;
   } | null;
   timeZone?: string;
+  // Current "YYYY-MM" in the agency's display zone — seeds the at-a-glance
+  // day overview so it opens on this month without a hydration mismatch.
+  currentMonth?: string;
+  // Every proofer post (all statuses) for the at-a-glance day strip.
+  overviewPosts?: OverviewPost[];
+  // Surface-aware links, so the board works both inside the admin panel and
+  // inside the standalone Proofer app (postproofer.com).
+  backHref?: string;
+  settingsHref?: string;
+  clientEditBase?: string;
+  // The Meta connection panel's OAuth callback returns to the admin surface, so
+  // it's hidden on the standalone Proofer app where that redirect can't land.
+  showMetaConnection?: boolean;
+  // Origin to run the Meta OAuth flow on. Empty = same origin (admin surface).
+  // On the standalone Proofer host it must be the admin origin: the OAuth state
+  // cookie is set by /api/meta/connect and read back by the callback, and the
+  // callback always lands on the admin domain (the fixed Meta redirect URI). If
+  // the flow starts on postproofer.com the cookie is set on the wrong domain and
+  // the callback fails with "OAuth state mismatch" — so start it on the admin
+  // origin, where set and read share a domain.
+  connectOrigin?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -726,7 +1094,11 @@ export default function PublishQueueBoard({
       alert("Pick a client first.");
       return;
     }
-    const url = `/api/meta/connect?clientId=${encodeURIComponent(
+    // Run the whole OAuth on the admin origin (connectOrigin) when we're on the
+    // standalone Proofer host, so the state cookie and the callback share a
+    // domain — otherwise Meta returns to the admin domain and the cookie set on
+    // postproofer.com isn't there ("OAuth state mismatch").
+    const url = `${connectOrigin}/api/meta/connect?clientId=${encodeURIComponent(
       connectClientId
     )}`;
     // Open Facebook's login/OAuth flow in a separate window so the publish
@@ -910,7 +1282,7 @@ export default function PublishQueueBoard({
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
         <Link
-          href="/app/proofer"
+          href={backHref}
           style={{
             fontSize: 13,
             color: INK_3,
@@ -933,42 +1305,6 @@ export default function PublishQueueBoard({
         >
           Publish Queue
         </h1>
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: 13,
-            color: INK_2,
-            maxWidth: "62ch",
-            lineHeight: 1.5,
-          }}
-        >
-          Approved posts land here automatically — give each a send time, then
-          track it through to published or failed.{" "}
-          <span style={{ color: INK_3 }}>
-            Times shown in{" "}
-            <span
-              title={`${zone.label} (${timeZone})`}
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: STATUS_TONES.scheduled.ink,
-                background: STATUS_TONES.scheduled.fill,
-                border: `1px solid ${STATUS_TONES.scheduled.edge}`,
-                padding: "1px 7px",
-                borderRadius: 6,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {zone.label} · {zone.abbrev}
-            </span>{" "}
-            <Link
-              href="/app/settings"
-              style={{ color: INK_2, textDecoration: "none", fontWeight: 600 }}
-            >
-              change in Settings &rarr;
-            </Link>
-          </span>
-        </p>
 
         <label
           style={{
@@ -995,6 +1331,18 @@ export default function PublishQueueBoard({
           </span>
         </label>
       </div>
+
+      {/* At-a-glance day overview — one horizontal day strip per active client,
+          tinted with the proofer's colours (green approved, yellow saved, grey
+          empty), so it's obvious which companies have approved posts for the
+          month and which have an empty calendar. */}
+      {clients.length > 0 && (
+        <ClientDayOverview
+          clients={clients}
+          posts={overviewPosts}
+          currentMonth={currentMonth}
+        />
+      )}
 
       {/* Summary tiles double as status filters — click one to show only that
           section, click again (or "Show all") to clear. */}
@@ -1202,7 +1550,7 @@ export default function PublishQueueBoard({
 
                   {/* Warn at queue/schedule time — before the send window — if
                       this post has no valid target account for a destination. */}
-                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                   {/* Thumbnail beside the caption rather than under it — the card is
                       full width and the preview is small. */}
@@ -1334,7 +1682,7 @@ export default function PublishQueueBoard({
                     cron leaves the row scheduled (and keeps retrying) when a
                     pre-flight check fails; this surfaces the reason — per
                     destination — instead of it sitting here silently. */}
-                <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                 {/* Proactively flag a post that has missed its send window,
                     before the cron gets to mark it failed — same message the
@@ -1672,7 +2020,7 @@ export default function PublishQueueBoard({
                     <div style={statusPill(item.status)}>{item.status}</div>
                   </div>
 
-                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} />
+                  <NotPublishedNotice blocks={computeCardBlocks(item)} clientId={item.clientId} editBase={clientEditBase} />
 
                   <CarouselPreview
                     size={170}
@@ -1801,8 +2149,10 @@ export default function PublishQueueBoard({
               </div>
             )}
           </div>
+      {showMetaConnection && (
       <details
         id="meta-connection"
+        open
         style={{
           border: "1px solid #e4e4e7",
           borderRadius: 14,
@@ -2067,6 +2417,7 @@ export default function PublishQueueBoard({
           )}
         </div>
       </details>
+      )}
         </aside>
       </div>
     </div>

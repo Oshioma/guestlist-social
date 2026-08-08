@@ -1,10 +1,24 @@
 import { cookies } from "next/headers";
-import { getProoferData, getProoferPillarPosts } from "../admin-panel/lib/queries";
+import { redirect } from "next/navigation";
+import {
+  getProoferData,
+  getProoferPillarPosts,
+  getProoferOccupiedDates,
+} from "../admin-panel/lib/queries";
+import { shouldRunOnboarding } from "@/lib/onboarding";
+import OnboardingFinishBanner from "./OnboardingFinishBanner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
 import EmptyState from "../admin-panel/components/EmptyState";
 import ProoferNav from "./ProoferNav";
+import {
+  getMyTeams,
+  getTeamClientIds,
+  getMyTeamClientIds,
+  getLastProoferClientId,
+} from "./navData";
+import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +42,19 @@ function getNextSixMonths(): { value: string; label: string }[] {
   return months;
 }
 
+// Human label for the finish banner's saved-post date (e.g. "Saturday, 9 Aug").
+function formatFinishDate(iso?: string): string | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, padding: 24 };
 const centerStyle: React.CSSProperties = {
   maxWidth: 1160,
@@ -38,31 +65,70 @@ const centerStyle: React.CSSProperties = {
 export default async function ProoferStandalonePage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; month?: string }>;
+  searchParams: Promise<{
+    client?: string;
+    month?: string;
+    team?: string;
+    tour?: string;
+    d?: string;
+  }>;
 }) {
   const sp = await searchParams;
+
+  // Divert brand-new posters into the guided first-run tour (resumes if
+  // mid-flow). Must run before the try/catch below so the NEXT_REDIRECT isn't
+  // swallowed. shouldRunOnboarding fails closed for staff / completed / skipped.
+  const { base: obBase } = await getProoferBase();
+  if (await shouldRunOnboarding()) {
+    redirect(`${obBase}/onboarding`);
+  }
+
+  const showFinishBanner = sp.tour === "done";
+  const finishDateLabel = formatFinishDate(sp.d);
+
   const months = getNextSixMonths();
   const defaultMonth = months[0]?.value ?? "";
   const selectedMonth = sp.month ?? defaultMonth;
 
   const cookieStore = await cookies();
-  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  // Prefer the cookie (fast, same-device) but fall back to the server-side
+  // preference so the last account resumes across devices and domains too.
+  const lastClient =
+    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
   const { base, parentOrigin } = await getProoferBase();
+  const myTeams = await getMyTeams();
+  const superAdmin = await isSuperAdmin();
+
+  // Hard tenant boundary: only accounts in teams the viewer belongs to are ever
+  // shown — even for agency staff, so another tenant's account can't leak into
+  // the picker. An optional ?team= filter (clicking a team in the nav) narrows
+  // WITHIN that boundary.
+  const myClientIds = await getMyTeamClientIds();
+  const teamId = sp.team ?? "";
+  const teamClientIds = teamId ? new Set(await getTeamClientIds(teamId)) : null;
+  const inScope = (id: string) =>
+    myClientIds.has(id) && (!teamClientIds || teamClientIds.has(id));
 
   try {
     let selectedClientId = sp.client ?? "";
-    if (!selectedClientId && lastClient) {
+    if (selectedClientId && !inScope(selectedClientId)) selectedClientId = "";
+    if (!selectedClientId && lastClient && inScope(lastClient)) {
       selectedClientId = lastClient;
     }
     if (!selectedClientId) {
       const { clients } = await getProoferData();
-      selectedClientId = clients[0]?.id ?? "";
+      const pool = clients.filter((c) => inScope(String(c.id)));
+      selectedClientId = pool[0]?.id ?? "";
     }
 
-    const data = await getProoferData(
+    const raw = await getProoferData(
       selectedClientId || undefined,
       selectedClientId ? selectedMonth : undefined
     );
+    const data = {
+      ...raw,
+      clients: raw.clients.filter((c) => inScope(String(c.id))),
+    };
 
     let displayTimezone = "Etc/GMT";
     try {
@@ -76,6 +142,9 @@ export default async function ProoferStandalonePage({
     const pillarPosts = selectedClientId
       ? await getProoferPillarPosts(selectedClientId)
       : [];
+    const occupiedDates = selectedClientId
+      ? await getProoferOccupiedDates(selectedClientId)
+      : [];
 
     return (
       <>
@@ -85,11 +154,18 @@ export default async function ProoferStandalonePage({
           month={selectedMonth}
           pillars={data.pillars}
           posts={pillarPosts}
+          teams={myTeams}
+          teamId={teamId}
+          occupiedDates={occupiedDates}
+          isSuperAdmin={superAdmin}
           base={base}
           parentOrigin={parentOrigin}
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
+            {showFinishBanner && (
+              <OnboardingFinishBanner dateLabel={finishDateLabel} />
+            )}
             <ProoferBoard
               // Remount when client/month change (driven from the top nav) so
               // the board's internal state re-seeds cleanly from fresh data.
@@ -104,7 +180,10 @@ export default async function ProoferStandalonePage({
               initialPostIdeas={data.postIdeas}
               timeZone={displayTimezone}
               basePath={base || "/"}
-              publishPath={`${parentOrigin}/app/proofer/publish`}
+              // Publish queue now lives inside the Proofer app itself
+              // ("/publish" on postproofer.com, "/proofer/publish" elsewhere)
+              // rather than bouncing out to the parent Guestlist admin.
+              publishPath={`${base || ""}/publish`}
               standalone
             />
           </div>
@@ -115,7 +194,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} teamId={teamId} isSuperAdmin={superAdmin} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />

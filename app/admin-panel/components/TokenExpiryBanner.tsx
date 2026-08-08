@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import TokenExpiryActions from "./TokenExpiryActions";
 
@@ -13,10 +14,24 @@ const WARN_DAYS = 7;
 export default async function TokenExpiryBanner() {
   let accounts: AccountRow[] = [];
   try {
+    // SECURITY: connected_meta_accounts is read with the service role (RLS has
+    // no policies), so it must be scoped to the viewer's own clients or it
+    // leaks other teams' account names. `clients` is loaded with the session
+    // client (RLS-enforced): staff see all, a team member sees only their
+    // team's clients — filter the token read to exactly those ids.
+    const supabase = await createClient();
+    const { data: clientRows } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("archived", false);
+    const allowedClientIds = (clientRows ?? []).map((c) => c.id);
+    if (allowedClientIds.length === 0) return null;
+
     const admin = createAdminClient();
     const { data } = await admin
       .from("connected_meta_accounts")
       .select("client_id, platform, account_name, token_expires_at")
+      .in("client_id", allowedClientIds)
       .order("token_expires_at", { ascending: true });
     accounts = (data ?? []) as AccountRow[];
   } catch {

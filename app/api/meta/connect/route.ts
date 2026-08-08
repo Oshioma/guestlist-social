@@ -2,6 +2,46 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { metaAuthorizeUrl } from "../../../admin-panel/lib/meta-auth";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+// May the signed-in user connect credentials for this account? Connecting is a
+// management action, so: agency staff, or an owner/admin of a team that
+// contains the account. Anyone else (members, clients, strangers) is refused —
+// this is what makes self-serve connect safe, and it closes the previously
+// unauthenticated hole where any caller could attach tokens to any client.
+async function canConnectClient(clientId: number): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const admin = createAdminClient();
+  const { data: staff } = await admin
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (staff) return true;
+
+  const { data: managed } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", user.id)
+    .in("role", ["owner", "admin"]);
+  const teamIds = (managed ?? []).map((r) => r.team_id);
+  if (teamIds.length === 0) return false;
+
+  const { data: has } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .eq("client_id", clientId)
+    .in("team_id", teamIds)
+    .limit(1)
+    .maybeSingle();
+  return !!has;
+}
 
 // GET /api/meta/connect?clientId=<id>
 //
@@ -24,6 +64,17 @@ export async function GET(req: Request) {
     return NextResponse.json(
       { error: "clientId query param is required" },
       { status: 400 }
+    );
+  }
+
+  const clientIdNum = Number(clientId);
+  if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
+    return NextResponse.json({ error: "Invalid clientId" }, { status: 400 });
+  }
+  if (!(await canConnectClient(clientIdNum))) {
+    return NextResponse.json(
+      { error: "You don't have permission to connect this account." },
+      { status: 403 }
     );
   }
 
