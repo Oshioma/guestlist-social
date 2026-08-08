@@ -91,23 +91,35 @@ async function resolveOrInviteUser(
   admin: ReturnType<typeof createAdminClient>,
   email: string
 ): Promise<{ userId?: string; invited?: boolean; error?: string }> {
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteUrl()}/auth/callback?type=invite`,
-  });
+  try {
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${siteUrl()}/auth/callback?type=invite`,
+    });
 
-  if (!error && data?.user) {
-    return { userId: data.user.id, invited: true };
+    if (!error && data?.user) {
+      return { userId: data.user.id, invited: true };
+    }
+
+    // Invite failed — most commonly because the account already exists. Look it
+    // up and reuse it rather than surfacing an error.
+    const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
+    const existing = list?.users?.find(
+      (u) => (u.email ?? "").toLowerCase() === email.toLowerCase()
+    );
+    if (existing) return { userId: existing.id, invited: false };
+
+    return { error: error?.message ?? "Could not invite that email." };
+  } catch (e) {
+    // Never let a thrown error (bad service key, Supabase Auth email not
+    // configured, network) crash the page — surface it as a readable message.
+    console.error("resolveOrInviteUser threw:", e);
+    return {
+      error:
+        e instanceof Error
+          ? `Invite failed: ${e.message}`
+          : "Invite failed unexpectedly.",
+    };
   }
-
-  // Invite failed — most commonly because the account already exists. Look it
-  // up and reuse it rather than surfacing an error.
-  const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
-  const existing = list?.users?.find(
-    (u) => (u.email ?? "").toLowerCase() === email.toLowerCase()
-  );
-  if (existing) return { userId: existing.id, invited: false };
-
-  return { error: error?.message ?? "Could not invite that email." };
 }
 
 // ── Create / rename / plan / delete ────────────────────────────────────────
@@ -188,32 +200,42 @@ export async function inviteToOwnTeam(
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const admin = createAdminClient();
-  const resolved = await resolveOrInviteUser(admin, parsed.data.email);
-  if (resolved.error || !resolved.userId) {
-    return { error: resolved.error ?? "Could not invite that email." };
+  try {
+    const admin = createAdminClient();
+    const resolved = await resolveOrInviteUser(admin, parsed.data.email);
+    if (resolved.error || !resolved.userId) {
+      return { error: resolved.error ?? "Could not invite that email." };
+    }
+
+    const localPart = parsed.data.email.split("@")[0] || "New";
+    const teamName = parsed.data.teamName?.trim() || `${localPart}'s Team`;
+
+    // ensure_personal_team is idempotent: creates the owned team if they don't
+    // have one, otherwise returns their existing one.
+    const { error } = await admin.rpc("ensure_personal_team", {
+      p_user: resolved.userId,
+      p_name: teamName,
+    });
+    if (error) {
+      return { error: `Invite sent, but their team couldn't be set up: ${error.message}` };
+    }
+
+    revalidatePath("/proofer/teams");
+    return {
+      success: true,
+      message: resolved.invited
+        ? `Invite sent to ${parsed.data.email} — they'll own their own team.`
+        : `${parsed.data.email} already has an account; their own team is set up.`,
+    };
+  } catch (e) {
+    console.error("inviteToOwnTeam threw:", e);
+    return {
+      error:
+        e instanceof Error
+          ? `Couldn't complete the invite: ${e.message}`
+          : "Couldn't complete the invite.",
+    };
   }
-
-  const localPart = parsed.data.email.split("@")[0] || "New";
-  const teamName = parsed.data.teamName?.trim() || `${localPart}'s Team`;
-
-  // ensure_personal_team is idempotent: creates the owned team if they don't
-  // have one, otherwise returns their existing one.
-  const { error } = await admin.rpc("ensure_personal_team", {
-    p_user: resolved.userId,
-    p_name: teamName,
-  });
-  if (error) {
-    return { error: `Invite sent, but their team couldn't be set up: ${error.message}` };
-  }
-
-  revalidatePath("/proofer/teams");
-  return {
-    success: true,
-    message: resolved.invited
-      ? `Invite sent to ${parsed.data.email} — they'll own their own team.`
-      : `${parsed.data.email} already has an account; their own team is set up.`,
-  };
 }
 
 const renameSchema = z.object({
