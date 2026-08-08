@@ -19,7 +19,11 @@ const centerStyle: React.CSSProperties = {
 // Standalone Proofer publish queue at /proofer/publish (served at /publish on
 // postproofer.com). Same board and data as the admin panel's publish page, but
 // wrapped in Proofer's own chrome and with in-app links. The Meta connection
-// panel is hidden here because its OAuth callback returns to the admin surface.
+// panel IS shown here so operators can see their team's connected accounts and
+// connect from this surface. `/api/meta/connect` passes straight through on the
+// Proofer host, so the OAuth popup runs fine; it finishes on the admin domain
+// (the fixed Meta redirect URI) and closes, after which this page refreshes and
+// the newly connected accounts appear.
 export default async function ProoferPublishStandalone({
   searchParams,
 }: {
@@ -70,7 +74,7 @@ export default async function ProoferPublishStandalone({
             backHref={nav.base || "/"}
             settingsHref={`${nav.parentOrigin}/app/settings`}
             clientEditBase={`${nav.base}/clients`}
-            showMetaConnection={false}
+            showMetaConnection={true}
           />
         </div>
       </main>

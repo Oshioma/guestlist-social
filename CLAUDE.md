@@ -7,6 +7,27 @@ existing PR or just edit its description to fold in new work — open a fresh PR
 and share the link. Before finishing any change, check that the work is on a
 new PR, not stacked onto an old one.
 
+### Check the merge state BEFORE writing new code
+
+The repeated failure mode: a PR gets merged, then more commits are pushed to the
+same branch — those commits land **neither on `main` nor in any open PR** and
+are silently lost until someone notices. Prevent it by checking first, every
+time, before starting a new job:
+
+1. `git fetch origin main`
+2. `git log --oneline origin/main..HEAD` — the commits on the branch not yet on
+   `main`.
+   - **Empty** → the branch's work is fully merged. Start the new job from a
+     clean base: `git checkout -B <branch> origin/main`.
+   - **Non-empty but the PR is already merged** → those commits are stranded.
+     `git rebase origin/main` to drop the already-merged ones and replay the
+     rest, then open a **new** PR for them.
+3. Only then implement, verify (`npx tsc --noEmit` && `npm run build`), push, and
+   open a fresh PR against `main`.
+
+Rule of thumb: **one job → one new PR.** Never assume the last PR is still open —
+verify it, because merged PRs cannot absorb new commits.
+
 ## One task = one fresh branch (default)
 
 Do **each task on its own new branch**, created from the latest `origin/main`.
