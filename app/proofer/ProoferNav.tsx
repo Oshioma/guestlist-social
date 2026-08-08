@@ -162,6 +162,15 @@ export default function ProoferNav({
         (teamId ? `&team=${encodeURIComponent(teamId)}` : "")
     );
 
+  // Switch team: go to the board for that team (or all teams when cleared),
+  // keeping the month. The account is dropped so the board picks the first
+  // account on the chosen team.
+  const goTeam = (t: string) =>
+    router.push(
+      `${home}?month=${encodeURIComponent(month)}` +
+        (t ? `&team=${encodeURIComponent(t)}` : "")
+    );
+
   const viewedMonth = Number(month.split("-")[1]) || 0;
   const postsByPillar = useMemo(() => {
     const map = new Map<string, PostLite[]>();
@@ -323,36 +332,11 @@ export default function ProoferNav({
                   <span className="pnav-label">Add pillar</span>
                 </Link>
 
-                <div className="pnav-section">Teams</div>
-                {teams.length === 0 ? (
-                  <span className="pnav-item" style={{ fontWeight: 500 }}>
-                    <Tile text="—" tone="muted" />
-                    <span className="pnav-label" style={{ color: "#a1a1aa" }}>
-                      No teams yet
-                    </span>
-                  </span>
-                ) : (
-                  <div style={{ maxHeight: 232, overflowY: "auto" }}>
-                    {teams.map((t) => (
-                      <Link
-                        key={t.id}
-                        href={`${home}?team=${encodeURIComponent(t.id)}`}
-                        className="pnav-item"
-                        aria-current={teamId === t.id ? "true" : undefined}
-                      >
-                        <Tile text={(t.name.trim()[0] || "T").toUpperCase()} />
-                        <span className="pnav-label">{t.name}</span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-                <Link
-                  href={`${base}/teams`}
-                  className="pnav-item"
-                  style={{ color: "#52525b", fontSize: 13 }}
-                >
-                  <Tile text="→" tone="muted" />
-                  <span className="pnav-label">Manage all teams</span>
+                {/* Team is chosen from the dropdown before the account picker;
+                    the menu only keeps the management entry. */}
+                <Link href={`${base}/teams`} className="pnav-item">
+                  <Tile text="T" />
+                  <span className="pnav-label">Manage teams</span>
                 </Link>
 
                 <hr className="pnav-sep" />
@@ -393,9 +377,38 @@ export default function ProoferNav({
           )}
         </div>
 
-        {/* Client + Month controls */}
+        {/* Team + Client + Month controls */}
         {showBoardControls && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {teams.length > 0 && (
+            <select
+              aria-label="Team"
+              value={teamId}
+              onChange={(e) => goTeam(e.target.value)}
+              style={{
+                appearance: "none",
+                WebkitAppearance: "none",
+                background: ctlBg,
+                border: ctlBorder,
+                borderRadius: 9,
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                padding: "8px 12px",
+                cursor: "pointer",
+                maxWidth: 200,
+              }}
+            >
+              <option value="" style={{ color: "#18181b" }}>
+                All teams
+              </option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id} style={{ color: "#18181b" }}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             aria-label="Client"
             value={clientId}
