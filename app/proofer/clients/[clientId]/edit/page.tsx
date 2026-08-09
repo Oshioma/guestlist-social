@@ -31,6 +31,8 @@ export default async function ProoferEditClientPage({
   const { clientId } = await params;
   const sp = await searchParams;
   const nav = await resolveNavData(sp.client, sp.month);
+  // Clients is an Agency-plan feature — no direct-URL access for free/pro.
+  if (!nav.showClients) redirect(nav.base || "/");
   const clientsPath = `${nav.base}/clients`;
 
   const supabase = await createClient();
@@ -71,6 +73,7 @@ export default async function ProoferEditClientPage({
           teams={nav.teams}
           occupiedDates={nav.occupiedDates}
           isSuperAdmin={nav.superAdmin}
+          showClients={nav.showClients}
           base={nav.base}
           parentOrigin={nav.parentOrigin}
         />
@@ -257,6 +260,7 @@ export default async function ProoferEditClientPage({
         teams={nav.teams}
         occupiedDates={nav.occupiedDates}
         isSuperAdmin={nav.superAdmin}
+        showClients={nav.showClients}
         base={nav.base}
         parentOrigin={nav.parentOrigin}
       />

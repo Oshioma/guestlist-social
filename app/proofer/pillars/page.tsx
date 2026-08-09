@@ -25,6 +25,7 @@ export default async function ProoferPillarsPage({
     parentOrigin,
     teams,
     superAdmin,
+    showClients,
   } = await resolveNavData(sp.client, sp.month);
 
   return (
@@ -38,6 +39,7 @@ export default async function ProoferPillarsPage({
         teams={teams}
         occupiedDates={occupiedDates}
         isSuperAdmin={superAdmin}
+        showClients={showClients}
         base={base}
         parentOrigin={parentOrigin}
       />

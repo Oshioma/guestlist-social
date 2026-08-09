@@ -6,7 +6,7 @@ import {
 } from "../../../admin-panel/lib/queries";
 import EmptyState from "../../../admin-panel/components/EmptyState";
 import ProoferNav from "../../ProoferNav";
-import { getMyTeams } from "../../navData";
+import { getMyTeams, getShowClients } from "../../navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import PillarOrganiser from "./PillarOrganiser";
 import { getProoferBase } from "../../base";
@@ -43,6 +43,7 @@ export default async function PillarOrganisePage({
   const { base, parentOrigin } = await getProoferBase();
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
+  const showClients = await getShowClients();
 
   try {
     let clientId = sp.client ?? "";
@@ -72,6 +73,7 @@ export default async function PillarOrganisePage({
           teams={myTeams}
           occupiedDates={occupiedDates}
           isSuperAdmin={superAdmin}
+          showClients={showClients}
           base={base}
           parentOrigin={parentOrigin}
         />
@@ -100,7 +102,7 @@ export default async function PillarOrganisePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={month} pillars={[]} posts={[]} teams={myTeams} isSuperAdmin={superAdmin} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={month} pillars={[]} posts={[]} teams={myTeams} isSuperAdmin={superAdmin} showClients={showClients} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load pillar" description={message} />

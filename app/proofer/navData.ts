@@ -8,6 +8,7 @@ import { getProoferBase } from "./base";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { viewerHasClientsFeature } from "@/lib/billing/team-billing";
 
 const COOKIE_NAME = "proofer_last_client";
 
@@ -41,6 +42,18 @@ export async function getMyTeams(): Promise<NavTeam[]> {
     .sort((a, b) =>
       a.isOwner === b.isOwner ? a.name.localeCompare(b.name) : a.isOwner ? -1 : 1
     );
+}
+
+// Whether to surface the agency-only "Clients" feature in the nav for the
+// current viewer. Hidden for free/pro posters — they see it only as a bullet on
+// the plan comparison. Agency teams (and agency staff) get the full section.
+export async function getShowClients(): Promise<boolean> {
+  const access = await getProoferAccess();
+  if (!access) return false;
+  return viewerHasClientsFeature(createAdminClient(), {
+    userId: access.userId,
+    isStaff: access.kind === "staff",
+  });
 }
 
 // The account (client) this user last viewed on the Proofer board, persisted
@@ -144,6 +157,7 @@ export async function resolveNavData(
   const { base, parentOrigin } = await getProoferBase();
   const teams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
+  const showClients = await getShowClients();
 
   return {
     clientId,
@@ -157,5 +171,6 @@ export async function resolveNavData(
     parentOrigin,
     teams,
     superAdmin,
+    showClients,
   };
 }

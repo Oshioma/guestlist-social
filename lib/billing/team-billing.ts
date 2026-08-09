@@ -38,6 +38,37 @@ export async function countTeamSocialAccounts(
   return count ?? 0;
 }
 
+/**
+ * Does this viewer get the agency-only "Clients" feature? The Clients section
+ * (and its portal "Client view") is hidden everywhere outside the plan
+ * comparison until a team is on a plan that unlocks it — currently only Agency.
+ *
+ *  - Agency staff always get it (they run the whole agency).
+ *  - Otherwise the user must belong to at least one team whose plan unlocks
+ *    clients (`planConfig(team.plan).clients`).
+ *
+ * Fails closed: no membership, or every team on a lesser plan → false.
+ */
+export async function viewerHasClientsFeature(
+  admin: SupabaseClient,
+  opts: { userId: string; isStaff: boolean }
+): Promise<boolean> {
+  if (opts.isStaff) return true;
+
+  const { data: memberships } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", opts.userId);
+  const ids = [...new Set((memberships ?? []).map((m) => String(m.team_id)))];
+  if (ids.length === 0) return false;
+
+  const { data: teams } = await admin
+    .from("teams")
+    .select("plan")
+    .in("id", ids);
+  return (teams ?? []).some((t) => planConfig(t.plan as string).clients);
+}
+
 export type SocialAccountGate = {
   allowed: boolean;
   /** null when allowed unconditionally (staff, or a reconnect). */

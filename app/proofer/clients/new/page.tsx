@@ -37,6 +37,8 @@ export default async function ProoferNewClientPage({
 }) {
   const sp = await searchParams;
   const nav = await resolveNavData(sp.client, sp.month);
+  // Clients is an Agency-plan feature — no direct-URL access for free/pro.
+  if (!nav.showClients) redirect(nav.base || "/");
   return (
     <>
       <ProoferNav
@@ -48,6 +50,7 @@ export default async function ProoferNewClientPage({
         teams={nav.teams}
         occupiedDates={nav.occupiedDates}
         isSuperAdmin={nav.superAdmin}
+        showClients={nav.showClients}
         base={nav.base}
         parentOrigin={nav.parentOrigin}
       />
