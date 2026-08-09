@@ -3121,12 +3121,15 @@ export default function ProoferBoard({
                       <div
                         style={{
                           display: "flex",
-                          flexWrap: "wrap",
+                          flexDirection: "column",
                           gap: 8,
-                          alignItems: "center",
+                          alignItems: "flex-start",
                           gridColumn: isNarrow ? "1 / -1" : undefined,
                         }}
                       >
+                        {/* Instagram + its format stay on one row (format on the
+                            right of the toggle, never wrapping beneath it). */}
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
                         {/* Instagram: one-click on/off */}
                         <button
                           type="button"
@@ -3251,6 +3254,9 @@ export default function ProoferBoard({
                             )}
                           </div>
                         )}
+                        </div>
+                        {/* Facebook + its format stay on one row too. */}
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
                         {/* Facebook: one-click on/off (the "send to Facebook") */}
                         <button
                           type="button"
@@ -3309,6 +3315,7 @@ export default function ProoferBoard({
                             Feed
                           </span>
                         )}
+                        </div>
                       </div>
                     ) : (
                       <>
