@@ -68,11 +68,11 @@ export async function getOnboardingState(
 //
 // Foolproof for BOTH new and existing users:
 //   - completed or skipped  → never divert.
-//   - mid-flow (started)    → divert to resume, but ONLY once an account
-//     exists. A poster who started and hasn't got past "connect" has an empty
-//     board anyway, and its "Let's create your first post" card is the way back
-//     in — diverting them would trap the browser's Back button in a loop
-//     (board → redirect → tour → back → board → redirect → …).
+//   - mid-flow (started)    → never divert either. Redirecting them made the
+//     browser's Back button a loop (board → redirect → tour → back → board →
+//     …) with no way out. The board shows them a resume banner instead
+//     (getOnboardingResume / OnboardingResumeBanner), so the way back in is
+//     visible rather than forced.
 //   - never started:
 //       * if the poster already has posts (an existing user who predates
 //         onboarding), silently mark them complete so they're never trapped.
@@ -84,7 +84,7 @@ export async function shouldRunOnboarding(): Promise<boolean> {
 
   const state = await getOnboardingState(access.userId);
   if (state.completed || state.skipped) return false;
-  if (state.started) return !!state.accountClientId;
+  if (state.started) return false;
 
   // Never started. Is this actually a brand-new poster? The RLS-scoped session
   // client only returns this user's team posts, so one hit means "not new".
@@ -110,4 +110,22 @@ export async function shouldRunOnboarding(): Promise<boolean> {
   }
 
   return true;
+}
+
+// The other half of the above: a poster who started the tour and neither
+// finished nor skipped it gets a "pick up where you left off" banner on the
+// board. Returns the step to resume at, or null when there's nothing to offer
+// (staff, never started, already finished or skipped).
+export async function getOnboardingResume(): Promise<{
+  step: number;
+  total: number;
+} | null> {
+  const access = await getProoferAccess();
+  if (!access || access.kind !== "poster") return null;
+
+  const state = await getOnboardingState(access.userId);
+  if (!state.started || state.completed || state.skipped) return null;
+
+  const step = Math.min(Math.max(state.step, 1), ONBOARDING_TOTAL_STEPS);
+  return { step, total: ONBOARDING_TOTAL_STEPS };
 }
