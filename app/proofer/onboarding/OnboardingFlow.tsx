@@ -14,6 +14,7 @@ import {
   listMyAccountsAction,
   useExistingOnboardingAccountAction,
   getOnboardingOccupiedDatesAction,
+  getTourConnectionAction,
   saveFirstPostAction,
   logOnboardingEvent,
 } from "./actions";
@@ -89,6 +90,10 @@ type MetaResult =
 
 export type OnboardingFlowProps = {
   base: string; // "" on postproofer.com, else "/proofer"
+  // Origin that owns the Meta OAuth redirect URI + session (the main app). On
+  // the standalone Proofer host this is the parent origin; "" on the main host.
+  // The connect popup runs here so the OAuth cookies + callback share a domain.
+  parentOrigin: string;
   accountClientId: string | null;
   initialStep: number;
   demo: boolean; // replay / tour-again: never creates or saves real data
@@ -130,6 +135,7 @@ function TrafficDot({ color, size = 16 }: { color: string; size?: number }) {
 
 export default function OnboardingFlow({
   base,
+  parentOrigin,
   accountClientId: initialAccountId,
   initialStep,
   demo,
@@ -158,14 +164,19 @@ export default function OnboardingFlow({
   const [busy, setBusy] = useState<string | null>(null); // which async op is running
   const [error, setError] = useState<string | null>(null);
 
-  // Connect step.
+  // Connect step. The OAuth runs in a popup so this page never navigates away
+  // (a cross-domain redirect could otherwise strand the user); these get filled
+  // in by polling once the connection lands.
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>(
     metaResult?.status === "success" ? metaResult.platforms : []
   );
   // A Meta login can return many Pages/IG accounts — collect them so the user
   // can pick just one instead of attaching the whole portfolio.
-  const connectedAccounts: ConnectedAccount[] =
-    metaResult?.status === "success" ? metaResult.accounts : [];
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(
+    metaResult?.status === "success" ? metaResult.accounts : []
+  );
+  const [connecting, setConnecting] = useState(false);
+  const [connectHint, setConnectHint] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [pickedName, setPickedName] = useState<string | null>(null);
   // Whether we still need the user to choose which account to keep.
@@ -471,13 +482,56 @@ export default function OnboardingFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, connectedPlatforms.length, needsPick]);
 
-  const connectHref = useMemo(() => {
-    if (!accountClientId) return "#";
-    const returnTo = `${base}/onboarding?fromconnect=1`;
-    return `/api/meta/connect?clientId=${encodeURIComponent(
-      accountClientId
-    )}&returnTo=${encodeURIComponent(returnTo)}`;
-  }, [accountClientId, base]);
+  // Open the Meta OAuth in a POPUP (matching the publish page). The onboarding
+  // page stays put, so a cross-domain redirect during OAuth can never strand the
+  // user on another surface — whatever happens in the popup, they're still on
+  // the guide. We poll for the connection landing, then advance.
+  const openConnectPopup = useCallback(() => {
+    if (!accountClientId) return;
+    setError(null);
+    setConnectHint(null);
+    // Run the whole flow on the origin that owns the redirect URI + session, so
+    // the state cookie and the callback share a domain.
+    const url = `${parentOrigin}/api/meta/connect?clientId=${encodeURIComponent(accountClientId)}`;
+    const popup = window.open(url, "metaConnect", "width=600,height=760");
+    if (!popup) {
+      setConnectHint("Please allow pop-ups to connect, then try again — or skip for now.");
+      return;
+    }
+    popup.focus();
+    setConnecting(true);
+    let elapsed = 0;
+    const timer = window.setInterval(async () => {
+      elapsed += 1500;
+      const res = await getTourConnectionAction(accountClientId);
+      if (res.ok && res.accounts.length > 0) {
+        window.clearInterval(timer);
+        try { popup.close(); } catch { /* ignore */ }
+        setConnecting(false);
+        setConnectedAccounts(res.accounts);
+        setConnectedPlatforms(res.platforms);
+        if (!demo) void logOnboardingEvent("social_connected", 2, { platforms: res.platforms });
+        return;
+      }
+      if (popup.closed) {
+        window.clearInterval(timer);
+        setConnecting(false);
+        // One last check in case it landed just before they closed it.
+        const done = await getTourConnectionAction(accountClientId);
+        if (done.ok && done.accounts.length > 0) {
+          setConnectedAccounts(done.accounts);
+          setConnectedPlatforms(done.platforms);
+        } else {
+          setConnectHint("Didn't finish connecting. You can try again, or skip for now.");
+        }
+        return;
+      }
+      if (elapsed > 180000) {
+        window.clearInterval(timer);
+        setConnecting(false);
+      }
+    }, 1500);
+  }, [accountClientId, parentOrigin, demo]);
 
   const handleGenerate = useCallback(async () => {
     const seed = idea.trim();
@@ -731,7 +785,9 @@ export default function OnboardingFlow({
               accountName={accountName}
               setAccountName={setAccountName}
               accountClientId={accountClientId}
-              connectHref={connectHref}
+              onConnect={openConnectPopup}
+              connecting={connecting}
+              connectHint={connectHint}
               connectedPlatforms={connectedPlatforms}
               connectedAccounts={connectedAccounts}
               needsPick={needsPick}
@@ -927,7 +983,9 @@ function ConnectPanel({
   accountName,
   setAccountName,
   accountClientId,
-  connectHref,
+  onConnect,
+  connecting,
+  connectHint,
   connectedPlatforms,
   connectedAccounts,
   needsPick,
@@ -946,7 +1004,9 @@ function ConnectPanel({
   accountName: string;
   setAccountName: (v: string) => void;
   accountClientId: string | null;
-  connectHref: string;
+  onConnect: () => void;
+  connecting: boolean;
+  connectHint: string | null;
   connectedPlatforms: string[];
   connectedAccounts: ConnectedAccount[];
   needsPick: boolean;
@@ -1092,13 +1152,16 @@ function ConnectPanel({
         waiting.
       </p>
 
-      {metaError && (
+      {(metaError || connectHint) && (
         <div style={errorBox}>
-          Couldn&apos;t connect: {metaError} — you can try again, or skip and connect later.
+          {metaError
+            ? `Couldn't connect: ${metaError} — you can try again, or skip and connect later.`
+            : connectHint}
         </div>
       )}
 
-      {/* The real connection — leads the step. */}
+      {/* The real connection — opens in a popup so this page never navigates
+          away (and can't strand the user on a cross-domain redirect). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {demo ? (
           <span style={{ ...primaryBtn, opacity: 0.6, borderRadius: 10, textAlign: "center" }}>
@@ -1108,10 +1171,19 @@ function ConnectPanel({
           <span style={{ ...primaryBtn, opacity: 0.7, borderRadius: 10, display: "inline-flex", justifyContent: "center", gap: 8 }}>
             <span className="ob-spinner" /> Setting up your account…
           </span>
+        ) : connecting ? (
+          <span style={{ ...primaryBtn, opacity: 0.85, borderRadius: 10, display: "inline-flex", justifyContent: "center", gap: 8 }}>
+            <span className="ob-spinner" /> Opening Facebook… finish in the pop-up
+          </span>
         ) : (
-          <a href={connectHref} className="ob-btn ob-highlight" style={{ ...primaryBtn, justifyContent: "center", fontSize: 15, padding: "13px 20px" }}>
+          <button
+            type="button"
+            onClick={onConnect}
+            className="ob-btn ob-highlight"
+            style={{ ...primaryBtn, justifyContent: "center", fontSize: 15, padding: "13px 20px" }}
+          >
             🔗 Connect Instagram / Facebook
-          </a>
+          </button>
         )}
 
         <button type="button" onClick={onContinue} style={{ ...skipLinkStyle, alignSelf: "flex-start" }} disabled={provisioning}>
