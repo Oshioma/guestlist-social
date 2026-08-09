@@ -2622,10 +2622,15 @@ export default function ProoferBoard({
 
       {clients.length === 0 ? (
         standalone ? (
-          <SectionCard title="Let's set up your first post">
+          <SectionCard title="👋 Let's create your first post">
+            {/* Kept in step with the standalone board's empty state
+                (app/proofer/page.tsx): this card doubles as the tour's welcome,
+                and ?start=1 below skips onboarding's own welcome step. */}
             <div style={{ fontSize: 17, color: "#3f3f46", lineHeight: 1.6, marginBottom: 18, maxWidth: 640 }}>
-              You don&apos;t have an account yet. The 2-minute guided setup connects
-              a social account and walks you through creating your first post.
+              You don&apos;t have an account yet. We&apos;ll show you how Proofer works by
+              making one together — it connects a social account and walks you through
+              your first post. It takes about 2 minutes, and you stay in control the
+              whole way.
             </div>
             <a
               href={`${basePath.replace(/\/$/, "")}/onboarding?start=1`}
@@ -2640,7 +2645,7 @@ export default function ProoferBoard({
                 textDecoration: "none",
               }}
             >
-              Start guided setup →
+              Let&apos;s go →
             </a>
           </SectionCard>
         ) : (

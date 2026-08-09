@@ -82,8 +82,13 @@ export default async function OnboardingPage({
     <OnboardingFlow
       base={base}
       accountClientId={state.accountClientId}
-      // An explicit restart begins cleanly at the welcome screen.
+      // An explicit restart begins cleanly at the start of the flow.
       initialStep={start ? 0 : state.step}
+      // ?start=1 only ever comes from a board CTA that already showed the
+      // welcome invitation ("Let's create your first post" + Let's go). Showing
+      // onboarding's own welcome screen next would repeat it, so skip straight
+      // to the first real step. Staff previewing the tour (demo) still see it.
+      autoStart={start}
       demo={demo}
       metaResult={metaResult}
       todayISO={todayISO}

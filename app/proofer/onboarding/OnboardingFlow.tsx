@@ -93,6 +93,9 @@ export type OnboardingFlowProps = {
   base: string; // "" on postproofer.com, else "/proofer"
   accountClientId: string | null;
   initialStep: number;
+  // The user already accepted the invitation on the board's empty state, so
+  // begin at the first real step instead of repeating the welcome screen.
+  autoStart?: boolean;
   demo: boolean; // replay / tour-again: never creates or saves real data
   metaResult: MetaResult;
   todayISO: string; // YYYY-MM-DD from the server (avoids hydration drift)
@@ -134,6 +137,7 @@ export default function OnboardingFlow({
   base,
   accountClientId: initialAccountId,
   initialStep,
+  autoStart = false,
   demo,
   metaResult,
   todayISO,
@@ -255,6 +259,17 @@ export default function OnboardingFlow({
     }
 
     if (demo) start = "welcome";
+
+    // Arrived from the board's empty state, which already showed the welcome
+    // invitation and its "Let's go" button. Repeating it here is a dead step, so
+    // open on the first real one and do what pressing "Let's go" would have done
+    // (mark the tour started / clear a stale completion). Staff previewing the
+    // tour still get the welcome screen.
+    if (autoStart && !demo && start === "welcome") {
+      start = "connect";
+      void startOnboardingAction();
+    }
+
     setStep(start);
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
