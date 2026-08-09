@@ -5,8 +5,9 @@ import {
   getProoferPillarPosts,
   getProoferOccupiedDates,
 } from "../admin-panel/lib/queries";
-import { shouldRunOnboarding } from "@/lib/onboarding";
+import { shouldRunOnboarding, getOnboardingResume } from "@/lib/onboarding";
 import OnboardingFinishBanner from "./OnboardingFinishBanner";
+import OnboardingResumeBanner from "./OnboardingResumeBanner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
@@ -103,6 +104,9 @@ export default async function ProoferStandalonePage({
   if (await shouldRunOnboarding()) {
     redirect(`${obBase}/onboarding`);
   }
+  // Started but unfinished: no longer force-diverted (that trapped the Back
+  // button), so offer the way back in on the board instead.
+  const resume = await getOnboardingResume();
 
   const showFinishBanner = sp.tour === "done";
   const finishDateLabel = formatFinishDate(sp.d);
@@ -205,6 +209,15 @@ export default async function ProoferStandalonePage({
           <div style={centerStyle}>
             {showFinishBanner && (
               <OnboardingFinishBanner dateLabel={finishDateLabel} date={finishDateISO} />
+            )}
+            {/* Only alongside a real board — with no account the setup card
+                below is already the invitation, and two CTAs would compete. */}
+            {resume && hasClients && !showFinishBanner && (
+              <OnboardingResumeBanner
+                href={`${base}/onboarding`}
+                step={resume.step}
+                total={resume.total}
+              />
             )}
             {!hasClients ? (
               <div style={setupCardStyle}>
