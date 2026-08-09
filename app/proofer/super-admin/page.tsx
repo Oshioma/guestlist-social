@@ -104,7 +104,7 @@ export default async function SuperAdminPage({
               onboarding progress. Your board only shows your own teams — this is
               where you keep an eye on everyone. Click a row to expand.
             </p>
-            <UsersOverview users={users} />
+            <UsersOverview users={users} base={base} />
           </section>
         )}
       </div>
