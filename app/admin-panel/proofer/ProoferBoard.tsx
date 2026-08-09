@@ -2969,11 +2969,15 @@ export default function ProoferBoard({
                           dateKey,
                           timeZone
                         );
-                        meta.push(
-                          <span key="locked" style={{ color: "#075985", fontWeight: 700 }}>
-                            🔒{when ? ` ${when}` : ""}
-                          </span>
-                        );
+                        // No padlock — approval already implies locked. Keep only
+                        // the useful bit on mobile: when it's scheduled to go out.
+                        if (when) {
+                          meta.push(
+                            <span key="locked" style={{ color: "#0369a1", fontWeight: 600 }}>
+                              Scheduled {when}
+                            </span>
+                          );
+                        }
                       }
                       if (meta.length === 0) return null;
                       return (
@@ -3489,27 +3493,7 @@ export default function ProoferBoard({
                             Approved by{" "}
                             <strong style={{ color: "#15803d" }}>
                               {post.updatedBy.split("@")[0]}
-                            </strong>{" "}
-                            {/* Padlock = the post is locked (frozen from edits).
-                                Approval implies locked, so this replaces the old
-                                "Approved and locked" line. */}
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="#71717a"
-                              strokeWidth={2}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              role="img"
-                              aria-label="Locked"
-                              style={{ verticalAlign: "-2px" }}
-                            >
-                              <title>Locked — approved posts can&apos;t be edited</title>
-                              <rect x="4" y="11" width="16" height="10" rx="2" />
-                              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                            </svg>
+                            </strong>
                           </div>
                         );
                       }
