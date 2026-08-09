@@ -55,6 +55,26 @@ function formatFinishDate(iso?: string): string | null {
   });
 }
 
+const setupCardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 16,
+  padding: "28px 26px",
+  boxShadow: "0 1px 2px rgba(24,24,27,.04), 0 20px 40px -28px rgba(24,24,27,.18)",
+};
+
+const setupCtaStyle: React.CSSProperties = {
+  display: "inline-block",
+  marginTop: 20,
+  background: "#6d28d9",
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: 700,
+  borderRadius: 12,
+  padding: "13px 24px",
+  textDecoration: "none",
+};
+
 const mainStyle: React.CSSProperties = { flex: 1, minWidth: 0, padding: 24 };
 const centerStyle: React.CSSProperties = {
   maxWidth: 1160,
@@ -148,6 +168,13 @@ export default async function ProoferStandalonePage({
       ? await getProoferOccupiedDates(selectedClientId)
       : [];
 
+    // A brand-new user with no accounts shouldn't be dropped into the full
+    // board (frequency toggles, publish queue, month stepper, client picker) —
+    // it's noise before they've made anything. Show a clean "set up your first
+    // post" card and hide the board controls in the nav until they have an
+    // account.
+    const hasClients = data.clients.length > 0;
+
     return (
       <>
         <ProoferNav
@@ -160,6 +187,7 @@ export default async function ProoferStandalonePage({
           teamId={teamId}
           occupiedDates={occupiedDates}
           isSuperAdmin={superAdmin}
+          showBoardControls={hasClients}
           base={base}
           parentOrigin={parentOrigin}
         />
@@ -168,6 +196,20 @@ export default async function ProoferStandalonePage({
             {showFinishBanner && (
               <OnboardingFinishBanner dateLabel={finishDateLabel} date={finishDateISO} />
             )}
+            {!hasClients ? (
+              <div style={setupCardStyle}>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#18181b" }}>
+                  Let&apos;s set up your first post
+                </h2>
+                <p style={{ margin: "10px 0 0", fontSize: 15, color: "#52525b", lineHeight: 1.55, maxWidth: 520 }}>
+                  You don&apos;t have an account yet. The 2-minute guided setup connects a
+                  social account and walks you through creating your first post.
+                </p>
+                <a href={`${base}/onboarding?start=1`} style={setupCtaStyle}>
+                  Start guided setup →
+                </a>
+              </div>
+            ) : (
             <ProoferBoard
               // Remount when client/month change (driven from the top nav) so
               // the board's internal state re-seeds cleanly from fresh data.
@@ -188,6 +230,7 @@ export default async function ProoferStandalonePage({
               publishPath={`${base || ""}/publish`}
               standalone
             />
+            )}
           </div>
         </main>
       </>

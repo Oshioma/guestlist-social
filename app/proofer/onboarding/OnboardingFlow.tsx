@@ -159,6 +159,9 @@ export default function OnboardingFlow({
   const [busy, setBusy] = useState<string | null>(null); // which async op is running
   const [error, setError] = useState<string | null>(null);
 
+  // Brief spotlight on the instruction card each time the step changes.
+  const [coachSpotlight, setCoachSpotlight] = useState(false);
+
   // Connect step. The OAuth runs in a popup so this page never navigates away
   // (a cross-domain redirect could otherwise strand the user); these get filled
   // in by polling once the connection lands.
@@ -298,6 +301,15 @@ export default function OnboardingFlow({
   }, []);
 
   const flashCaption = useCallback(() => setCaptionFlash((n) => n + 1), []);
+
+  // On each guided step, briefly dim the rest of the page so the instruction
+  // card on the left reads clearly, then fade it back.
+  useEffect(() => {
+    if (!hydrated || step === "welcome" || step === "finish") return;
+    setCoachSpotlight(true);
+    const t = window.setTimeout(() => setCoachSpotlight(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [hydrated, step]);
 
   const aiModify = useCallback(
     async (modifier: string, nextStep: StepId, eventName: string) => {
@@ -757,9 +769,12 @@ export default function OnboardingFlow({
         onSkip={handleSkipAll}
       />
 
+      {/* Brief page dim that spotlights the instruction card on each step. */}
+      <div className={"ob-dim-overlay" + (coachSpotlight ? " on" : "")} aria-hidden />
+
       <div className="ob-stage">
         {/* Coach-mark rail */}
-        <div className="ob-coach">
+        <div className={"ob-coach" + (coachSpotlight ? " ob-coach-lift" : "")}>
           <CoachCard
             key={step}
             eyebrow={`Step ${progressNumber} of ${PROGRESS_STEPS.length}`}
@@ -1644,11 +1659,12 @@ function FinishBlock({
       </p>
       <div style={{ display: "flex", gap: 12, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
         <span style={legendYellow}>🟡 Yellow = Saved</span>
-        <span style={legendGreen}>🟢 Green = Ready to go</span>
+        <span style={legendGreen}>🟢 Green = Scheduled</span>
       </div>
       <p style={{ ...cardSub, marginTop: 12 }}>
-        Your post now lives on your board. Tap it any time to reopen and edit — and press
-        green when you&apos;re ready.
+        <strong style={{ color: "#18181b" }}>We did NOT schedule this post.</strong> Mark it green
+        when you&apos;re happy for it to go out. Your post lives on your board — tap it any time to
+        reopen and edit.
       </p>
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <button type="button" className="ob-btn" onClick={onFinish} disabled={!!busy} style={primaryBtn}>
@@ -1720,7 +1736,7 @@ function coachFor(
     case "board":
       return {
         title: "That's your first post 🎉",
-        body: "It's saved on your board. Yellow = Saved, Green = Ready to go. Tap any post to reopen it.",
+        body: "It's saved on your board — we did NOT schedule it. Yellow = Saved, Green = Scheduled. Mark it green when you're happy for it to go out.",
       };
     default:
       return { title: "", body: "" };

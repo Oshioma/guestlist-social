@@ -80,10 +80,10 @@ export default function OnboardingFinishBanner({
           Here&apos;s your first post
         </div>
         <div style={{ fontSize: 13.5, color: "#3f3f46", marginTop: 3, lineHeight: 1.45 }}>
-          It&apos;s saved{dateLabel ? ` for ${dateLabel}` : ""} — right here on your board. Tap it to
-          reopen or edit. <strong style={{ color: "#854d0e" }}>🟡 Yellow = Saved</strong> ·{" "}
-          <strong style={{ color: "#166534" }}>🟢 Green = Ready to go</strong>. Press green whenever
-          you&apos;re ready — nothing posts on its own.
+          It&apos;s saved{dateLabel ? ` for ${dateLabel}` : ""} — right here on your board, and we did
+          NOT schedule it. Tap it to reopen or edit. <strong style={{ color: "#854d0e" }}>🟡 Yellow = Saved</strong> ·{" "}
+          <strong style={{ color: "#166534" }}>🟢 Green = Scheduled</strong>. Mark it green whenever
+          you&apos;re happy for it to go out — nothing posts on its own.
         </div>
         <button type="button" onClick={dismiss} style={gotItStyle}>
           Got it
@@ -110,9 +110,9 @@ export default function OnboardingFinishBanner({
               Here&apos;s your first post
             </div>
             <div style={{ fontSize: 13.5, color: "#3f3f46", marginTop: 3, lineHeight: 1.45 }}>
-              It&apos;s saved{dateLabel ? ` for ${dateLabel}` : ""} on your board below. Tap it to
-              reopen or edit. <strong style={{ color: "#854d0e" }}>🟡 Yellow = Saved</strong> ·{" "}
-              <strong style={{ color: "#166534" }}>🟢 Green = Ready to go</strong>.
+              It&apos;s saved{dateLabel ? ` for ${dateLabel}` : ""} on your board below (we did NOT
+              schedule it). Tap it to reopen or edit. <strong style={{ color: "#854d0e" }}>🟡 Yellow = Saved</strong> ·{" "}
+              <strong style={{ color: "#166534" }}>🟢 Green = Scheduled</strong>.
             </div>
           </div>
           <button type="button" onClick={dismiss} style={dismissStyle} aria-label="Dismiss">

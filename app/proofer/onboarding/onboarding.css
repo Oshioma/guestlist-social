@@ -140,3 +140,23 @@
 }
 .ob-btn:active { transform: translateY(1px); }
 .ob-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Brief spotlight on the instruction card each time the step changes: dim the
+   rest of the page and lift the coach card above the dim so it reads clearly. */
+.ob-dim-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 24, 27, 0.5);
+  z-index: 40;
+  pointer-events: none; /* non-blocking — the user can still act underneath */
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+.ob-dim-overlay.on { opacity: 1; }
+
+.ob-coach-lift {
+  z-index: 50;
+}
+.ob-coach-lift .ob-pop {
+  box-shadow: 0 0 0 1px rgba(109, 40, 217, 0.25), 0 24px 60px -20px rgba(24, 24, 27, 0.55);
+}
