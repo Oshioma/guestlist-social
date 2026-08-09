@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 import { moveProoferPostAction } from "../admin-panel/lib/proofer-actions";
-import { setLastProoferClientAction } from "./prefs-actions";
+import { rememberLastClient } from "./last-client";
 
 type ClientLite = { id: string; name: string };
 type TeamLite = { id: string; name: string; isOwner: boolean };
@@ -149,10 +149,7 @@ export default function ProoferNav({
   // product domains (where a cookie can't follow). The board pages read the
   // cookie (then the preference) when no ?client= is present.
   useEffect(() => {
-    if (clientId) {
-      document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
-      setLastProoferClientAction(clientId).catch(() => {});
-    }
+    if (clientId) rememberLastClient(clientId);
   }, [clientId]);
 
   // The board home — "/" on the standalone domain, "/proofer" otherwise.

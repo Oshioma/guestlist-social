@@ -48,7 +48,7 @@ import {
   zoneAbbrev,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
-import { setLastProoferClientAction } from "../../proofer/prefs-actions";
+import { rememberLastClient } from "../../proofer/last-client";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -556,9 +556,7 @@ export default function ProoferBoard({
   // sync across devices and across the two Proofer surfaces (this admin board
   // and the standalone Proofer). Fires on the current account and on changes.
   useEffect(() => {
-    if (!clientId) return;
-    document.cookie = `proofer_last_client=${clientId};path=/;max-age=${60 * 60 * 24 * 365}`;
-    setLastProoferClientAction(clientId).catch(() => {});
+    if (clientId) rememberLastClient(clientId);
   }, [clientId]);
   const [month, setMonth] = useState(initialMonth);
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -1036,7 +1034,7 @@ export default function ProoferBoard({
 
   function handleSelectClient(id: string) {
     setClientId(id);
-    document.cookie = `proofer_last_client=${id};path=/;max-age=${60 * 60 * 24 * 365}`;
+    rememberLastClient(id);
     navigate(id, month);
   }
 

@@ -36,11 +36,12 @@ export default async function ProoferPage({
   const selectedMonth = sp.month ?? defaultMonth;
 
   const cookieStore = await cookies();
-  // Prefer the cookie (fast, same-device) but fall back to the server-side
-  // preference so the last account stays in sync across devices and across the
-  // two product surfaces (this admin board and the standalone Proofer).
+  // Resolve from the DURABLE server-side preference first (authoritative,
+  // per-user, cross-device/cross-surface); the cookie is only a fast fallback.
+  // Preferring the cookie let a stale or wrong-host value override the account
+  // the user actually left on.
   const lastClient =
-    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
+    (await getLastProoferClientId()) || cookieStore.get(COOKIE_NAME)?.value || "";
 
   try {
     let selectedClientId = sp.client ?? "";

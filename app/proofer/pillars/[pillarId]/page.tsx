@@ -6,7 +6,7 @@ import {
 } from "../../../admin-panel/lib/queries";
 import EmptyState from "../../../admin-panel/components/EmptyState";
 import ProoferNav from "../../ProoferNav";
-import { getMyTeams } from "../../navData";
+import { getMyTeams, getLastProoferClientId } from "../../navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import PillarOrganiser from "./PillarOrganiser";
 import { getProoferBase } from "../../base";
@@ -39,7 +39,9 @@ export default async function PillarOrganisePage({
   const month = sp.month ?? currentMonthValue();
 
   const cookieStore = await cookies();
-  const lastClient = cookieStore.get(COOKIE_NAME)?.value ?? "";
+  // Durable per-user preference first, cookie only as a fast fallback.
+  const lastClient =
+    (await getLastProoferClientId()) || cookieStore.get(COOKIE_NAME)?.value || "";
   const { base, parentOrigin } = await getProoferBase();
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
