@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
-import { metaAuthorizeUrl } from "../../../admin-panel/lib/meta-auth";
+import { metaAuthorizeUrl, metaRedirectUriForHost } from "../../../admin-panel/lib/meta-auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -102,7 +102,11 @@ export async function GET(req: Request) {
   }
 
   try {
-    const authorizeUrl = metaAuthorizeUrl(state);
+    // On a standalone Proofer host, keep the whole OAuth on this host so the
+    // cookies set here are present when Meta redirects back. Falls back to the
+    // configured env redirect URI on the main app.
+    const hostRedirect = metaRedirectUriForHost(new URL(req.url).host);
+    const authorizeUrl = metaAuthorizeUrl(state, hostRedirect);
     // Dump the exact URL we're sending the user to so it's visible in
     // Vercel Runtime Logs when diagnosing OAuth errors ("Feature
     // Unavailable", "Invalid App ID", "URL Blocked", etc.). Nothing in

@@ -48,8 +48,27 @@ export function getMetaConfig(): MetaConfig {
   return { appId, appSecret, redirectUri };
 }
 
-export function metaAuthorizeUrl(state: string): string {
-  const { appId, redirectUri } = getMetaConfig();
+// Hosts that serve the standalone Proofer at their own root (keep in sync with
+// app/proofer/base.ts + middleware.ts). On these hosts the WHOLE OAuth round
+// trip must stay on the same domain, or the state/session cookies set here
+// aren't present when Meta redirects back — which strands the user. So the
+// callback URL is derived from the current host instead of the fixed env value.
+const PROOFER_HOSTS = new Set(["postproofer.com", "www.postproofer.com"]);
+
+// The redirect URI to use for a request arriving on `host`. Returns the
+// host-local callback for a standalone Proofer host, else undefined so the
+// caller falls back to the configured env value (unchanged for the main app).
+// NOTE: any host returned here must be registered in the Meta app's Valid OAuth
+// Redirect URIs, or Meta blocks the login ("URL blocked").
+export function metaRedirectUriForHost(host: string | null | undefined): string | undefined {
+  const h = (host ?? "").toLowerCase().split(":")[0];
+  if (PROOFER_HOSTS.has(h)) return `https://${h}/api/meta/callback`;
+  return undefined;
+}
+
+export function metaAuthorizeUrl(state: string, redirectUriOverride?: string): string {
+  const { appId, redirectUri: envRedirect } = getMetaConfig();
+  const redirectUri = redirectUriOverride || envRedirect;
   const params = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
@@ -94,9 +113,12 @@ type TokenResponse = {
 };
 
 export async function exchangeCodeForUserToken(
-  code: string
+  code: string,
+  redirectUriOverride?: string
 ): Promise<TokenResponse> {
-  const { appId, appSecret, redirectUri } = getMetaConfig();
+  const { appId, appSecret, redirectUri: envRedirect } = getMetaConfig();
+  // Must EXACTLY match the redirect_uri used at the authorize step.
+  const redirectUri = redirectUriOverride || envRedirect;
   const url = new URL(
     `https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token`
   );

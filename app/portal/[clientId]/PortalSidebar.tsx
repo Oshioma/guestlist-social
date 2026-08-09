@@ -131,7 +131,7 @@ export default function PortalSidebar({
         })}
       </nav>
 
-      <div style={{ padding: "16px 20px" }}>
+      <div className="portal-sidebar-foot" style={{ padding: "16px 20px" }}>
         {isAdminPreview ? (
           <Link
             href="/portal"
@@ -149,16 +149,22 @@ export default function PortalSidebar({
             <button
               type="submit"
               style={{
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                fontSize: 12,
-                color: "#94a3b8",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.22)",
+                borderRadius: 10,
+                padding: "9px 16px",
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#fff",
                 cursor: "pointer",
-                textAlign: "left",
+                width: "100%",
+                justifyContent: "center",
               }}
             >
-              Sign out
+              <span aria-hidden style={{ fontSize: 15 }}>↩</span> Sign out
             </button>
           </form>
         )}
