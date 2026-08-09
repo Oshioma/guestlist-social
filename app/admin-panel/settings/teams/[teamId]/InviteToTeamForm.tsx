@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { inviteToTeam, type ActionState } from "@/lib/auth/team-actions";
+import type { Plan } from "@/lib/billing/plans";
 import {
   formStyle,
   labelStyle,
@@ -20,7 +21,7 @@ export function InviteToTeamForm({
 }: {
   teamId: string;
   teamName: string;
-  plan: "free" | "pro";
+  plan: Plan;
   accountNames: string[];
 }) {
   const [state, action, isPending] = useActionState<ActionState | null, FormData>(

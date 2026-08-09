@@ -25,26 +25,21 @@ export function CreateTeamForm() {
         <div style={successBoxStyle}>{state.message}</div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 8 }}>
-        <div>
-          <label style={labelStyle}>Team name</label>
-          <input name="name" required placeholder="e.g. Alsop & Walker" style={inputStyle} />
-          {state?.fieldErrors?.name && (
-            <span style={fieldErrorStyle}>{state.fieldErrors.name[0]}</span>
-          )}
-        </div>
-        <div>
-          <label style={labelStyle}>Plan</label>
-          <select name="plan" defaultValue="free" style={inputStyle}>
-            <option value="free">Free</option>
-            <option value="pro">Pro</option>
-          </select>
-        </div>
+      <div>
+        <label style={labelStyle}>Team name</label>
+        <input name="name" required placeholder="e.g. Alsop & Walker" style={inputStyle} />
+        {state?.fieldErrors?.name && (
+          <span style={fieldErrorStyle}>{state.fieldErrors.name[0]}</span>
+        )}
       </div>
 
       <button type="submit" disabled={isPending} style={primaryButtonStyle(isPending)}>
         {isPending ? "Creating…" : "Create team"}
       </button>
+      <p style={{ fontSize: 12, color: "#a1a1aa", margin: 0 }}>
+        New teams start on the Free plan. Upgrade to Pro or Agency from the
+        team&rsquo;s settings once it&rsquo;s created.
+      </p>
     </form>
   );
 }

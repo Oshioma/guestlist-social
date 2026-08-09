@@ -4,13 +4,14 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
+import { planConfig, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
 type TeamRow = {
   id: string;
   name: string;
-  plan: "free" | "pro";
+  plan: Plan;
   memberCount: number;
   accountCount: number;
 };
@@ -52,7 +53,7 @@ export default async function ProoferTeamsPage() {
     rows = (teams ?? []).map((t) => ({
       id: t.id as string,
       name: t.name as string,
-      plan: (t.plan as "free" | "pro") ?? "free",
+      plan: (t.plan as Plan) ?? "free",
       memberCount: memberCounts.get(t.id as string) ?? 0,
       accountCount: accountCounts.get(t.id as string) ?? 0,
     }));
@@ -115,8 +116,14 @@ export default async function ProoferTeamsPage() {
   );
 }
 
-function PlanBadge({ plan }: { plan: "free" | "pro" }) {
-  const pro = plan === "pro";
+function PlanBadge({ plan }: { plan: Plan }) {
+  // free → grey, pro → plum, agency → indigo.
+  const palette: Record<Plan, { bg: string; border: string; fg: string }> = {
+    free: { bg: "#f4f4f5", border: "#e4e4e7", fg: "#71717a" },
+    pro: { bg: "#faf0f4", border: "#eccdd9", fg: "#9d2b5b" },
+    agency: { bg: "#eef0fb", border: "#cdd3f2", fg: "#3b3f9d" },
+  };
+  const c = palette[plan] ?? palette.free;
   return (
     <span
       style={{
@@ -126,12 +133,12 @@ function PlanBadge({ plan }: { plan: "free" | "pro" }) {
         textTransform: "uppercase",
         padding: "2px 7px",
         borderRadius: 999,
-        background: pro ? "#faf0f4" : "#f4f4f5",
-        border: `1px solid ${pro ? "#eccdd9" : "#e4e4e7"}`,
-        color: pro ? "#9d2b5b" : "#71717a",
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        color: c.fg,
       }}
     >
-      {pro ? "Pro" : "Free"}
+      {planConfig(plan).name}
     </span>
   );
 }
