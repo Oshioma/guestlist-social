@@ -111,7 +111,12 @@ export default async function ProoferStandalonePage({
 
   const months = getNextSixMonths();
   const defaultMonth = months[0]?.value ?? "";
-  const selectedMonth = sp.month ?? defaultMonth;
+  // On the onboarding finish, open on the saved post's month so its day is in
+  // range for the board to render and scroll to (otherwise a rollover could
+  // land us on the wrong month with the post nowhere on screen).
+  const selectedMonth =
+    sp.month ??
+    (showFinishBanner && finishDateISO ? finishDateISO.slice(0, 7) : defaultMonth);
 
   const cookieStore = await cookies();
   // Resolve the last account from the DURABLE server-side preference first — it's
@@ -244,6 +249,9 @@ export default async function ProoferStandalonePage({
               // rather than bouncing out to the parent Guestlist admin.
               publishPath={`${base || ""}/publish`}
               standalone
+              // Onboarding finish: force-render and scroll to the just-saved
+              // post's day so it's always visible and centred.
+              focusDateKey={showFinishBanner ? (finishDateISO ?? undefined) : undefined}
             />
             )}
           </div>

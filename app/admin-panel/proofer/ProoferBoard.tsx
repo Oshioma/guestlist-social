@@ -523,6 +523,10 @@ export default function ProoferBoard({
   // used. Only the control's presentation changes — the publishTargets it
   // writes, and every other behaviour, are identical.
   standalone = false,
+  // A day (YYYY-MM-DD) to force-show and scroll to on mount — used by the
+  // onboarding finish so the just-created post is always visible and centred,
+  // even if it would otherwise be filtered out (past day, alternate-day view).
+  focusDateKey,
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -536,6 +540,7 @@ export default function ProoferBoard({
   basePath?: string;
   publishPath?: string;
   standalone?: boolean;
+  focusDateKey?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1668,8 +1673,23 @@ export default function ProoferBoard({
         });
       });
     }
+    // Onboarding finish: always render the tour's just-saved day, even if the
+    // frequency/past/empty filters would drop it, so the finish spotlight can
+    // find and scroll to it. (Its date can slip into "past" across a timezone
+    // day-rollover, which would otherwise hide it.)
+    if (focusDateKey) {
+      const already = filtered.some((d) => toDateKey(d) === focusDateKey);
+      if (!already) {
+        const match = days.find((d) => toDateKey(d) === focusDateKey);
+        if (match) {
+          filtered = [...filtered, match].sort(
+            (a, b) => new Date(a).getTime() - new Date(b).getTime()
+          );
+        }
+      }
+    }
     return filtered;
-  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, showPast]);
+  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, showPast, focusDateKey]);
 
   // ── Mobile: one day per screen ─────────────────────────────────────────────
   // Scrolling past a month of full-size editors is hopeless on a phone, so the
@@ -1733,15 +1753,28 @@ export default function ProoferBoard({
 
   const scrolledRef = useRef(false);
   useEffect(() => {
-    // On mobile the focused day *is* the view — there is nothing to scroll to.
-    if (!mounted || isNarrow || scrolledRef.current) return;
-    scrolledRef.current = true;
-    const todayKey = toDateKey(new Date());
-    const el = document.getElementById(`day-${todayKey}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "instant", block: "start" });
+    if (!mounted || scrolledRef.current) return;
+    // The onboarding finish points us at the just-saved day; otherwise land on
+    // today. The focus day is force-rendered by visibleDays even if it would be
+    // filtered out, so #day-<key> is guaranteed to exist here.
+    const targetKey = focusDateKey ?? toDateKey(new Date());
+    // On mobile the focused day *is* the view — page to it instead of scrolling.
+    if (isNarrow) {
+      if (focusDateKey && visibleKeys.includes(focusDateKey)) {
+        scrolledRef.current = true;
+        setFocusedKey(focusDateKey);
+      }
+      return;
     }
-  }, [mounted, isNarrow]);
+    scrolledRef.current = true;
+    const el = document.getElementById(`day-${targetKey}`);
+    if (el) {
+      el.scrollIntoView({
+        behavior: focusDateKey ? "smooth" : "instant",
+        block: focusDateKey ? "center" : "start",
+      });
+    }
+  }, [mounted, isNarrow, focusDateKey, visibleKeys]);
 
   // Remember the view toggles across visits. Load once after mount (so the
   // first client render matches the server and we don't fight hydration),
