@@ -194,7 +194,16 @@ export default async function ProoferTeamsPage() {
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {rows.map((t) => (
+              {rows.map((t) => {
+                const canManage =
+                  isStaff ||
+                  myRoleByTeam.get(t.id) === "owner" ||
+                  myRoleByTeam.get(t.id) === "admin";
+                const connectHref = (clientId: number) =>
+                  `/api/meta/connect?clientId=${clientId}&returnTo=${encodeURIComponent(
+                    `${base}/teams`
+                  )}`;
+                return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
@@ -217,27 +226,43 @@ export default async function ProoferTeamsPage() {
                     </p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                      {t.accounts.map((a) => (
+                      {t.accounts.map((a) => {
+                        const connected = a.ig || a.fb;
+                        return (
                         <div key={a.id} style={accountRow}>
                           <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 120 }}>
                             {a.name}
                           </span>
-                          <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {a.ig || a.fb ? (
+                          <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            {connected ? (
                               <>
                                 {a.ig && <Badge kind="on">✓ Instagram</Badge>}
                                 {a.fb && <Badge kind="on">✓ Facebook</Badge>}
+                                {canManage && (
+                                  <a href={connectHref(a.id)} style={reconnectLink}>
+                                    Reconnect
+                                  </a>
+                                )}
                               </>
                             ) : (
-                              <Badge kind="off">⚠ Not connected</Badge>
+                              <>
+                                <Badge kind="off">⚠ Not connected</Badge>
+                                {canManage && (
+                                  <a href={connectHref(a.id)} style={connectNowLink}>
+                                    Connect now →
+                                  </a>
+                                )}
+                              </>
                             )}
                           </span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -342,6 +367,25 @@ const teamCard: React.CSSProperties = {
   borderRadius: 12,
   padding: 14,
   background: "#fff",
+};
+
+const connectNowLink: React.CSSProperties = {
+  background: "#18181b",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  borderRadius: 8,
+  padding: "6px 11px",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const reconnectLink: React.CSSProperties = {
+  color: "#71717a",
+  fontSize: 12,
+  fontWeight: 600,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const accountRow: React.CSSProperties = {
