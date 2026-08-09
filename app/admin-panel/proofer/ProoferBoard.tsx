@@ -3487,13 +3487,23 @@ export default function ProoferBoard({
                             {/* Padlock = the post is locked (frozen from edits).
                                 Approval implies locked, so this replaces the old
                                 "Approved and locked" line. */}
-                            <span
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#15803d"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              role="img"
                               aria-label="Locked"
-                              title="Locked — approved posts can't be edited"
-                              style={{ fontSize: 15, lineHeight: 1, verticalAlign: "-2px" }}
+                              style={{ verticalAlign: "-2px" }}
                             >
-                              🔒
-                            </span>
+                              <title>Locked — approved posts can&apos;t be edited</title>
+                              <rect x="4" y="11" width="16" height="10" rx="2" />
+                              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                            </svg>
                           </div>
                         );
                       }
