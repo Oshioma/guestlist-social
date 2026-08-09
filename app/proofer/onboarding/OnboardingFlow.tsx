@@ -307,7 +307,7 @@ export default function OnboardingFlow({
   useEffect(() => {
     if (!hydrated || step === "welcome" || step === "finish") return;
     setCoachSpotlight(true);
-    const t = window.setTimeout(() => setCoachSpotlight(false), 1500);
+    const t = window.setTimeout(() => setCoachSpotlight(false), 4500);
     return () => window.clearTimeout(t);
   }, [hydrated, step]);
 
