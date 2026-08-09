@@ -4,10 +4,9 @@
 // while every board behaviour (media, Instagram/Facebook publishing, statuses,
 // comments, ideas) stays byte-for-byte the same code as /app/proofer. The top
 // nav is rendered by the page (it needs the client/month selection); this
-// layout provides the shell, auth and the footer link back to the dashboard.
+// layout provides the shell and auth.
 import type { Metadata } from "next";
 import "../admin-panel/admin.css";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
 import { getProoferAccess } from "@/lib/auth/permissions";
@@ -31,7 +30,7 @@ export default async function ProoferStandaloneLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { base, parentOrigin } = await getProoferBase();
+  const { base } = await getProoferBase();
   const access = await getProoferAccess();
   if (!access) {
     redirect(`/sign-in?next=${encodeURIComponent(base || "/")}`);
@@ -45,29 +44,6 @@ export default async function ProoferStandaloneLayout({
         style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
       >
         {children}
-        <footer
-          style={{
-            flexShrink: 0,
-            borderTop: "1px solid #e4e4e7",
-            padding: "16px 24px",
-            display: "flex",
-            justifyContent: "center",
-          }}
-        >
-          <Link
-            href={`${parentOrigin}/app/dashboard`}
-            target="_blank"
-            rel="noopener"
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#52525b",
-              textDecoration: "none",
-            }}
-          >
-            ← Guestlist Dashboard ↗
-          </Link>
-        </footer>
       </div>
     </>
   );
