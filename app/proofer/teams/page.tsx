@@ -26,7 +26,9 @@ export default async function ProoferTeamsPage() {
   const { base } = await getProoferBase();
   const isStaff = access.kind === "staff";
 
-  // Which teams are visible: staff see all; everyone else only their own.
+  // This is "your teams" for EVERYONE, including the super admin — only the
+  // teams you actually belong to. The platform-wide view of every user's teams
+  // lives on the Super admin → Users tab, not here.
   const { data: myMemberships } = await admin
     .from("team_members")
     .select("team_id, role")
@@ -34,17 +36,15 @@ export default async function ProoferTeamsPage() {
   const myRoleByTeam = new Map(
     (myMemberships ?? []).map((r) => [r.team_id as string, r.role as string])
   );
-  const visibleTeamIds: string[] | null = isStaff
-    ? null
-    : Array.from(myRoleByTeam.keys());
+  const visibleTeamIds: string[] = Array.from(myRoleByTeam.keys());
 
   let rows: TeamRow[] = [];
-  if (visibleTeamIds === null || visibleTeamIds.length > 0) {
-    let teamsQuery = admin
+  if (visibleTeamIds.length > 0) {
+    const teamsQuery = admin
       .from("teams")
       .select("id, name, plan")
+      .in("id", visibleTeamIds)
       .order("name", { ascending: true });
-    if (visibleTeamIds !== null) teamsQuery = teamsQuery.in("id", visibleTeamIds);
 
     const [{ data: teams, error }, { data: memberRows }, { data: accountRows }] =
       await Promise.all([
@@ -182,11 +182,11 @@ export default async function ProoferTeamsPage() {
         {/* The map: each team and the accounts inside it */}
         <section style={cardStyle}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
-            {isStaff ? "All teams" : "Your teams"} ({rows.length})
+            Your teams ({rows.length})
           </h3>
           <p style={sectionSubStyle}>
-            Each team and the accounts inside it. A badge shows whether each
-            account is connected to Instagram and Facebook.
+            The teams you belong to and the accounts inside them. A badge shows
+            whether each account is connected to Instagram and Facebook.
           </p>
           {rows.length === 0 ? (
             <p style={{ fontSize: 13, color: "#71717a", margin: 0 }}>
@@ -194,10 +194,20 @@ export default async function ProoferTeamsPage() {
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {rows.map((t) => (
+              {rows.map((t) => {
+                const canManage =
+                  isStaff ||
+                  myRoleByTeam.get(t.id) === "owner" ||
+                  myRoleByTeam.get(t.id) === "admin";
+                const connectHref = (clientId: number) =>
+                  `/api/meta/connect?clientId=${clientId}&returnTo=${encodeURIComponent(
+                    `${base}/teams`
+                  )}`;
+                return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
+                    {myRoleByTeam.get(t.id) && <RoleBadge role={myRoleByTeam.get(t.id)!} />}
                     <PlanBadge plan={t.plan} />
                     <span style={{ fontSize: 12, color: "#a1a1aa" }}>
                       {t.memberCount} {t.memberCount === 1 ? "person" : "people"}
@@ -216,27 +226,43 @@ export default async function ProoferTeamsPage() {
                     </p>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                      {t.accounts.map((a) => (
+                      {t.accounts.map((a) => {
+                        const connected = a.ig || a.fb;
+                        return (
                         <div key={a.id} style={accountRow}>
                           <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 120 }}>
                             {a.name}
                           </span>
-                          <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {a.ig || a.fb ? (
+                          <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            {connected ? (
                               <>
                                 {a.ig && <Badge kind="on">✓ Instagram</Badge>}
                                 {a.fb && <Badge kind="on">✓ Facebook</Badge>}
+                                {canManage && (
+                                  <a href={connectHref(a.id)} style={reconnectLink}>
+                                    Reconnect
+                                  </a>
+                                )}
                               </>
                             ) : (
-                              <Badge kind="off">⚠ Not connected</Badge>
+                              <>
+                                <Badge kind="off">⚠ Not connected</Badge>
+                                {canManage && (
+                                  <a href={connectHref(a.id)} style={connectNowLink}>
+                                    Connect now →
+                                  </a>
+                                )}
+                              </>
                             )}
                           </span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -271,6 +297,26 @@ function Badge({ kind, children }: { kind: "on" | "off"; children: React.ReactNo
       }}
     >
       {children}
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        padding: "2px 7px",
+        borderRadius: 999,
+        background: "#eef2ff",
+        border: "1px solid #dbe2fb",
+        color: "#4451b8",
+      }}
+    >
+      {role === "owner" ? "You own this" : `You: ${role}`}
     </span>
   );
 }
@@ -321,6 +367,25 @@ const teamCard: React.CSSProperties = {
   borderRadius: 12,
   padding: 14,
   background: "#fff",
+};
+
+const connectNowLink: React.CSSProperties = {
+  background: "#18181b",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  borderRadius: 8,
+  padding: "6px 11px",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const reconnectLink: React.CSSProperties = {
+  color: "#71717a",
+  fontSize: 12,
+  fontWeight: 600,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const accountRow: React.CSSProperties = {
