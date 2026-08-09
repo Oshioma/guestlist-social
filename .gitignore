@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Dev preview harness screenshots (scripts/preview-shots.mjs)
+.preview-shots/

@@ -31,7 +31,7 @@ type MyAccount = { clientId: string; name: string };
 // green. Nothing here can publish.
 // ---------------------------------------------------------------------------
 
-type StepId =
+export type StepId =
   | "welcome"
   | "connect"
   | "idea"
@@ -98,6 +98,10 @@ export type OnboardingFlowProps = {
   // begin at the first real step instead of repeating the welcome screen.
   autoStart?: boolean;
   demo: boolean; // replay / tour-again: never creates or saves real data
+  // Dev preview harness only, and only honoured in demo mode: open directly on
+  // one step so each screen can be rendered and screenshotted without walking
+  // the whole tour. Real users never pass this.
+  previewStep?: StepId;
   metaResult: MetaResult;
   todayISO: string; // YYYY-MM-DD from the server (avoids hydration drift)
 };
@@ -140,6 +144,7 @@ export default function OnboardingFlow({
   initialStep,
   autoStart = false,
   demo,
+  previewStep,
   metaResult,
   todayISO,
 }: OnboardingFlowProps) {
@@ -264,6 +269,10 @@ export default function OnboardingFlow({
     }
 
     if (demo) start = "welcome";
+
+    // Dev preview harness: jump straight to the requested step. Gated on demo
+    // so it can never divert a real run, and demo mode writes nothing.
+    if (demo && previewStep) start = previewStep;
 
     // Arrived from the board's empty state, which already showed the welcome
     // invitation and its "Let's go" button. Repeating it here is a dead step, so
