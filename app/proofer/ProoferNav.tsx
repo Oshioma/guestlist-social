@@ -80,6 +80,10 @@ export default function ProoferNav({
   occupiedDates = [],
   // Only the platform owner sees the Super admin link.
   isSuperAdmin = false,
+  // The agency-only "Clients" feature. Free/pro posters never see it in the
+  // nav (or the portal "Client view") — only as a bullet on the plan
+  // comparison — so it stays hidden until a team is on the Agency plan.
+  showClients = false,
   // Whether to show the board-context controls (client picker, month stepper
   // and pillar chips). Off on non-board pages like Clients and Progress, where
   // there's no single client/month in focus. The brand menu stays either way.
@@ -101,6 +105,7 @@ export default function ProoferNav({
   occupiedDates?: string[];
   isSuperAdmin?: boolean;
   showBoardControls?: boolean;
+  showClients?: boolean;
   base?: string;
   parentOrigin?: string;
 }) {
@@ -343,13 +348,15 @@ export default function ProoferNav({
                   <span className="pnav-label">Take the Proofer tour</span>
                 </Link>
 
-                <hr className="pnav-sep" />
+                {(showClients || isSuperAdmin) && <hr className="pnav-sep" />}
 
-                <Link href={`${base}/clients?${qs}`} className="pnav-item">
-                  <Tile text="C" />
-                  <span className="pnav-label">Clients</span>
-                </Link>
-                {clientId && (
+                {showClients && (
+                  <Link href={`${base}/clients?${qs}`} className="pnav-item">
+                    <Tile text="C" />
+                    <span className="pnav-label">Clients</span>
+                  </Link>
+                )}
+                {showClients && clientId && (
                   <Link
                     href={`${parentOrigin}/portal/${encodeURIComponent(clientId)}`}
                     target="_blank"
@@ -414,7 +421,7 @@ export default function ProoferNav({
             </select>
           )}
           <select
-            aria-label="Client"
+            aria-label={showClients ? "Client" : "Account"}
             value={clientId}
             onChange={(e) => go(e.target.value, month)}
             disabled={clients.length === 0}
@@ -432,7 +439,9 @@ export default function ProoferNav({
               maxWidth: 220,
             }}
           >
-            {clients.length === 0 && <option value="">No clients</option>}
+            {clients.length === 0 && (
+              <option value="">{showClients ? "No clients" : "No accounts"}</option>
+            )}
             {clients.map((c) => (
               <option key={c.id} value={c.id} style={{ color: "#18181b" }}>
                 {c.name}

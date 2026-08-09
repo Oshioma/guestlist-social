@@ -7,26 +7,35 @@ import { TeamSettingsForm } from "@/app/admin-panel/settings/teams/[teamId]/Team
 import { InviteToTeamForm } from "@/app/admin-panel/settings/teams/[teamId]/InviteToTeamForm";
 import { TeamMemberRow } from "@/app/admin-panel/settings/teams/[teamId]/TeamMemberRow";
 import { TeamAccountsManager } from "@/app/admin-panel/settings/teams/[teamId]/TeamAccountsManager";
+import { BillingPanel } from "@/app/admin-panel/settings/teams/[teamId]/BillingPanel";
 import type { Role, TeamMember, AccountOption } from "@/app/admin-panel/settings/teams/[teamId]/types";
+import { planConfig, type Plan } from "@/lib/billing/plans";
+import { countTeamSocialAccounts } from "@/lib/billing/team-billing";
+import { stripeConfigured } from "@/lib/stripe";
 import { CreateAccountForm } from "./CreateAccountForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProoferTeamDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ teamId: string }>;
+  searchParams: Promise<{ connect_error?: string; billing?: string }>;
 }) {
   const access = await getProoferAccess();
   if (!access) redirect("/sign-in");
   const { teamId } = await params;
+  const { connect_error: connectError, billing } = await searchParams;
 
   const admin = createAdminClient();
   const { base } = await getProoferBase();
 
   const { data: team, error: teamErr } = await admin
     .from("teams")
-    .select("id, name, plan, owner_user_id")
+    .select(
+      "id, name, plan, owner_user_id, stripe_customer_id, subscription_status, trial_ends_at, current_period_end"
+    )
     .eq("id", teamId)
     .maybeSingle();
   if (teamErr) throw new Error(`Could not load team: ${teamErr.message}`);
@@ -107,8 +116,13 @@ export default async function ProoferTeamDetailPage({
       inTeam: inTeam.has(Number(c.id)),
     }));
 
-  const plan = (team.plan as "free" | "pro") ?? "free";
+  const plan = (team.plan as Plan) ?? "free";
   const accountsInTeam = accounts.filter((a) => a.inTeam);
+
+  // Billing context for the panel: current usage + subscription state. Only the
+  // owner (or staff) may act on billing; everyone else sees it read-only.
+  const isOwner = myMembership?.role === "owner";
+  const usedSocialAccounts = await countTeamSocialAccounts(admin, teamId);
 
   // Which platforms each in-team account has connected (for the connect UI).
   const connectedByClient = new Map<number, Set<string>>();
@@ -135,17 +149,54 @@ export default async function ProoferTeamDetailPage({
           </Link>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{team.name as string}</h2>
           <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0" }}>
-            {plan === "pro" ? "Pro team" : "Free team"} · {accountsInTeam.length} account(s) ·{" "}
+            {planConfig(plan).name} team · {accountsInTeam.length} account(s) ·{" "}
             {members.length} {members.length === 1 ? "person" : "people"}
             {!canManage && " · you have view access"}
           </p>
         </div>
 
+        {connectError && (
+          <div style={bannerStyle("#fef2f2", "#fecaca", "#b91c1c")}>{connectError}</div>
+        )}
+        {billing === "success" && (
+          <div style={bannerStyle("#ecfdf5", "#bbf7d0", "#166534")}>
+            Subscription started — your new plan is active. Your 30-day free trial
+            has begun.
+          </div>
+        )}
+        {billing === "cancelled" && (
+          <div style={bannerStyle("#f9fafb", "#e5e7eb", "#4b5563")}>
+            Checkout cancelled — your plan is unchanged.
+          </div>
+        )}
+
         {canManage ? (
           <>
             <section style={cardStyle}>
               <h3 style={sectionTitleStyle}>Team settings</h3>
-              <TeamSettingsForm teamId={teamId} name={team.name as string} plan={plan} />
+              <TeamSettingsForm teamId={teamId} name={team.name as string} />
+            </section>
+
+            <section style={cardStyle}>
+              <h3 style={sectionTitleStyle}>Plan &amp; billing</h3>
+              <p style={sectionSubStyle}>
+                Every paid plan starts with a 30-day free trial. Upgrade to lift
+                the social-account limit and unlock team collaborators.
+              </p>
+              <BillingPanel
+                teamId={teamId}
+                info={{
+                  plan,
+                  used: usedSocialAccounts,
+                  subscriptionStatus: (team.subscription_status as string | null) ?? null,
+                  trialEndsAt: (team.trial_ends_at as string | null) ?? null,
+                  currentPeriodEnd: (team.current_period_end as string | null) ?? null,
+                  hasCustomer: Boolean(team.stripe_customer_id),
+                  canManageBilling: isStaff || isOwner,
+                  isStaff,
+                  stripeConfigured: stripeConfigured(),
+                }}
+              />
             </section>
 
             <section style={cardStyle}>
@@ -306,6 +357,17 @@ const backLinkStyle: React.CSSProperties = {
   textDecoration: "none",
   marginBottom: 8,
 };
+
+function bannerStyle(bg: string, border: string, fg: string): React.CSSProperties {
+  return {
+    padding: "10px 14px",
+    borderRadius: 10,
+    background: bg,
+    border: `1px solid ${border}`,
+    color: fg,
+    fontSize: 13,
+  };
+}
 
 const cardStyle: React.CSSProperties = {
   background: "#fff",

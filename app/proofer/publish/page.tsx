@@ -63,6 +63,7 @@ export default async function ProoferPublishStandalone({
         teams={nav.teams}
         occupiedDates={nav.occupiedDates}
         isSuperAdmin={nav.superAdmin}
+        showClients={nav.showClients}
         showBoardControls={false}
         base={nav.base}
         parentOrigin={nav.parentOrigin}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess } from "@/lib/auth/permissions";
@@ -31,6 +32,8 @@ export default async function ProoferClientsPage({
 }) {
   const sp = await searchParams;
   const nav = await resolveNavData(sp.client, sp.month);
+  // Clients is an Agency-plan feature — no direct-URL access for free/pro.
+  if (!nav.showClients) redirect(nav.base || "/");
 
   // Active / inactive / all filter. "Active" means status === "active";
   // "inactive" is every other non-archived client (paused, onboarding, …);
@@ -220,6 +223,7 @@ export default async function ProoferClientsPage({
         teams={nav.teams}
         occupiedDates={nav.occupiedDates}
         isSuperAdmin={nav.superAdmin}
+        showClients={nav.showClients}
         showBoardControls={false}
         base={nav.base}
         parentOrigin={nav.parentOrigin}

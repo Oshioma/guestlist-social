@@ -17,6 +17,7 @@ import {
   getTeamClientIds,
   getMyTeamClientIds,
   getLastProoferClientId,
+  getShowClients,
 } from "./navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
@@ -122,6 +123,7 @@ export default async function ProoferStandalonePage({
   const { base, parentOrigin } = await getProoferBase();
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
+  const showClients = await getShowClients();
 
   // Hard tenant boundary: only accounts in teams the viewer belongs to are ever
   // shown — even for agency staff, so another tenant's account can't leak into
@@ -189,6 +191,7 @@ export default async function ProoferStandalonePage({
           teamId={teamId}
           occupiedDates={occupiedDates}
           isSuperAdmin={superAdmin}
+          showClients={showClients}
           showBoardControls={hasClients}
           base={base}
           parentOrigin={parentOrigin}
@@ -241,7 +244,7 @@ export default async function ProoferStandalonePage({
     const message = err instanceof Error ? err.message : "Unknown error";
     return (
       <>
-        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} teamId={teamId} isSuperAdmin={superAdmin} base={base} parentOrigin={parentOrigin} />
+        <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} teamId={teamId} isSuperAdmin={superAdmin} showClients={showClients} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
             <EmptyState title="Unable to load proofer" description={message} />

@@ -168,7 +168,7 @@ async function resolveOrInviteUser(
 
 const createSchema = z.object({
   name: z.string().trim().min(1, "Give the team a name.").max(120),
-  plan: z.enum(["free", "pro"]).default("free"),
+  plan: z.enum(["free", "pro", "agency"]).default("free"),
 });
 
 export async function createTeam(
@@ -191,11 +191,16 @@ export async function createTeam(
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
+  // New teams always start on Free — a paid plan is earned through Stripe
+  // checkout, not chosen for free at creation. Only agency staff may seed a
+  // team on a paid plan directly (e.g. comping an account).
+  const plan = access.kind === "staff" ? parsed.data.plan : "free";
+
   const admin = createAdminClient();
 
   const { data: team, error } = await admin
     .from("teams")
-    .insert({ name: parsed.data.name, owner_user_id: actorUserId, plan: parsed.data.plan })
+    .insert({ name: parsed.data.name, owner_user_id: actorUserId, plan })
     .select("id")
     .single();
 
@@ -320,9 +325,13 @@ export async function renameTeam(
 
 const planSchema = z.object({
   teamId: z.string().uuid(),
-  plan: z.enum(["free", "pro"]),
+  plan: z.enum(["free", "pro", "agency"]),
 });
 
+// Manual plan override — agency-staff only. Real customers change plan through
+// Stripe checkout / the billing portal (which drives teams.plan via the
+// webhook); this exists so staff can comp an account or fix up a plan without a
+// live subscription. Owners/admins can no longer flip their own plan for free.
 export async function setTeamPlan(
   _prev: ActionState | null,
   formData: FormData
@@ -336,6 +345,9 @@ export async function setTeamPlan(
   const admin = createAdminClient();
   const gate = await requireTeamManager(admin, parsed.data.teamId);
   if (gate.error) return { error: gate.error };
+  if (!gate.isStaff) {
+    return { error: "Plan changes go through billing. Use the upgrade buttons below." };
+  }
 
   const { error } = await admin
     .from("teams")
@@ -345,10 +357,9 @@ export async function setTeamPlan(
   if (error) return { error: error.message };
 
   revalidateTeams(parsed.data.teamId);
-  return {
-    success: true,
-    message: parsed.data.plan === "pro" ? "Upgraded to Pro." : "Switched to Free.",
-  };
+  const label =
+    parsed.data.plan === "agency" ? "Agency" : parsed.data.plan === "pro" ? "Pro" : "Free";
+  return { success: true, message: `Plan set to ${label} (staff override).` };
 }
 
 const deleteSchema = z.object({ teamId: z.string().uuid() });
@@ -419,12 +430,12 @@ export async function inviteToTeam(
     .eq("id", teamId)
     .maybeSingle();
 
-  // Pro gate: collaborators (member/admin) need a Pro team — "pro members can
-  // invite people to their teams". Clients are always allowed, since giving a
-  // client sight of their own content is core, not an upsell.
+  // Paid gate: collaborators (member/admin) need a paid team (Pro or Agency) —
+  // inviting people is a "Teams" feature. Clients are always allowed, since
+  // giving a client sight of their own content is core, not an upsell.
   if (role === "admin" || role === "member") {
-    if ((team?.plan ?? "free") !== "pro") {
-      return { error: "Upgrade this team to Pro to invite admins or members." };
+    if ((team?.plan ?? "free") === "free") {
+      return { error: "Upgrade this team to Pro or Agency to invite admins or members." };
     }
   }
 
@@ -491,13 +502,13 @@ export async function updateTeamMemberRole(
     return { error: "The team owner's role can't be changed here." };
   }
 
-  // Same Pro gate as invites: promoting someone to a collaborator role needs
-  // a Pro team.
+  // Same paid gate as invites: promoting someone to a collaborator role needs
+  // a paid team (Pro or Agency).
   if (
     (parsed.data.role === "admin" || parsed.data.role === "member") &&
-    (team?.plan ?? "free") !== "pro"
+    (team?.plan ?? "free") === "free"
   ) {
-    return { error: "Upgrade this team to Pro to assign admin or member roles." };
+    return { error: "Upgrade this team to Pro or Agency to assign admin or member roles." };
   }
 
   const { error } = await admin

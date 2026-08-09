@@ -7,6 +7,7 @@ import {
   type ActionState,
 } from "@/lib/auth/team-actions";
 import type { TeamMember } from "./types";
+import type { Plan } from "@/lib/billing/plans";
 import { inputStyle, secondaryButtonStyle, errorBoxStyle } from "../form-styles";
 
 export function TeamMemberRow({
@@ -16,7 +17,7 @@ export function TeamMemberRow({
 }: {
   teamId: string;
   member: TeamMember;
-  plan: "free" | "pro";
+  plan: Plan;
 }) {
   const [roleState, roleAction, rolePending] = useActionState<ActionState | null, FormData>(
     updateTeamMemberRole,

@@ -4,18 +4,24 @@ import { cookies } from "next/headers";
 import { metaAuthorizeUrl, metaRedirectUriForHost } from "../../../admin-panel/lib/meta-auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { socialAccountConnectGate } from "@/lib/billing/team-billing";
+
+type Actor = { userId: string; isStaff: boolean };
 
 // May the signed-in user connect credentials for this account? Connecting is a
 // management action, so: agency staff, or an owner/admin of a team that
 // contains the account. Anyone else (members, clients, strangers) is refused —
 // this is what makes self-serve connect safe, and it closes the previously
 // unauthenticated hole where any caller could attach tokens to any client.
-async function canConnectClient(clientId: number): Promise<boolean> {
+//
+// Returns the resolved actor on success (so the caller can then apply the plan
+// limit) or null when the user may not connect this account.
+async function canConnectClient(clientId: number): Promise<Actor | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return false;
+  if (!user) return null;
 
   const admin = createAdminClient();
   const { data: staff } = await admin
@@ -23,7 +29,7 @@ async function canConnectClient(clientId: number): Promise<boolean> {
     .select("user_id")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (staff) return true;
+  if (staff) return { userId: user.id, isStaff: true };
 
   const { data: managed } = await admin
     .from("team_members")
@@ -31,7 +37,7 @@ async function canConnectClient(clientId: number): Promise<boolean> {
     .eq("user_id", user.id)
     .in("role", ["owner", "admin"]);
   const teamIds = (managed ?? []).map((r) => r.team_id);
-  if (teamIds.length === 0) return false;
+  if (teamIds.length === 0) return null;
 
   const { data: has } = await admin
     .from("team_accounts")
@@ -40,7 +46,7 @@ async function canConnectClient(clientId: number): Promise<boolean> {
     .in("team_id", teamIds)
     .limit(1)
     .maybeSingle();
-  return !!has;
+  return has ? { userId: user.id, isStaff: false } : null;
 }
 
 // GET /api/meta/connect?clientId=<id>
@@ -71,11 +77,36 @@ export async function GET(req: Request) {
   if (!Number.isInteger(clientIdNum) || clientIdNum <= 0) {
     return NextResponse.json({ error: "Invalid clientId" }, { status: 400 });
   }
-  if (!(await canConnectClient(clientIdNum))) {
+  const actor = await canConnectClient(clientIdNum);
+  if (!actor) {
     return NextResponse.json(
       { error: "You don't have permission to connect this account." },
       { status: 403 }
     );
+  }
+
+  // Plan limit: block new connections once the team is at its social-account
+  // cap (a reconnect of an already-connected account is always allowed, and
+  // staff bypass the limit). Sending the user to Meta only to reject the tokens
+  // in the callback would be a confusing dead end, so gate before OAuth.
+  const gate = await socialAccountConnectGate(createAdminClient(), {
+    userId: actor.userId,
+    isStaff: actor.isStaff,
+    clientId: clientIdNum,
+  });
+  if (!gate.allowed) {
+    const reason = gate.reason ?? "Plan limit reached.";
+    const returnTo = searchParams.get("returnTo");
+    if (returnTo) {
+      try {
+        const url = new URL(returnTo, new URL(req.url).origin);
+        url.searchParams.set("connect_error", reason);
+        return NextResponse.redirect(url.toString());
+      } catch {
+        // Fall through to the JSON response if returnTo isn't a usable URL.
+      }
+    }
+    return NextResponse.json({ error: reason }, { status: 402 });
   }
 
   const nonce = randomBytes(16).toString("hex");
