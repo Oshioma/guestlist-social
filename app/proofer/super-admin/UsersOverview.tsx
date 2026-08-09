@@ -1,11 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { UserOverviewRow } from "@/lib/admin/users-overview";
+import { deleteUserFullyAction } from "./user-actions";
 
 export default function UsersOverview({ users }: { users: UserOverviewRow[] }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [result, setResult] = useState<{ id: string; text: string; ok: boolean } | null>(null);
+  const [, startTransition] = useTransition();
+
+  function handleDelete(id: string) {
+    setBusyId(id);
+    setResult(null);
+    startTransition(async () => {
+      const res = await deleteUserFullyAction(id);
+      setBusyId(null);
+      setConfirmId(null);
+      if (res.ok) {
+        setResult({ id, text: res.message, ok: true });
+        router.refresh();
+      } else {
+        setResult({ id, text: res.error, ok: false });
+      }
+    });
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -123,6 +146,49 @@ export default function UsersOverview({ users }: { users: UserOverviewRow[] }) {
                   <p style={{ fontSize: 11, color: "#c4c4cc", margin: "10px 0 0" }}>
                     User ID: {u.id}
                   </p>
+
+                  <div style={{ marginTop: 12, borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
+                    {confirmId === u.id ? (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12.5, color: "#b91c1c", fontWeight: 600, flex: "1 1 260px" }}>
+                          Permanently delete <strong>{u.email}</strong> and all their teams,
+                          accounts and posts? This can&apos;t be undone.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(u.id)}
+                          disabled={busyId === u.id}
+                          style={dangerBtn}
+                        >
+                          {busyId === u.id ? "Deleting…" : "Delete permanently"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmId(null)}
+                          disabled={busyId === u.id}
+                          style={cancelBtn}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmId(u.id);
+                          setResult(null);
+                        }}
+                        style={deleteLinkBtn}
+                      >
+                        Delete user…
+                      </button>
+                    )}
+                    {result && result.id === u.id && (
+                      <p style={{ fontSize: 12, margin: "8px 0 0", color: result.ok ? "#166534" : "#b91c1c" }}>
+                        {result.text}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -261,4 +327,37 @@ const accountChip: React.CSSProperties = {
   border: "1px solid #e4e4e7",
   borderRadius: 8,
   padding: "4px 9px",
+};
+
+const deleteLinkBtn: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "#b91c1c",
+  cursor: "pointer",
+  textDecoration: "underline",
+};
+
+const dangerBtn: React.CSSProperties = {
+  background: "#b91c1c",
+  color: "#fff",
+  border: "1px solid #b91c1c",
+  borderRadius: 8,
+  padding: "7px 14px",
+  fontSize: 12.5,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const cancelBtn: React.CSSProperties = {
+  background: "#fff",
+  color: "#3f3f46",
+  border: "1px solid #d4d4d8",
+  borderRadius: 8,
+  padding: "7px 14px",
+  fontSize: 12.5,
+  fontWeight: 700,
+  cursor: "pointer",
 };
