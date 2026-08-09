@@ -1322,8 +1322,7 @@ function Composer(props: ComposerProps) {
         <div style={cardStyle} className="ob-fade-up">
           <label style={cardTitle}>What would you like to post about?</label>
           <p style={cardSub}>
-            Just tell Proofer the idea. Don&apos;t worry about writing the perfect
-            caption — we&apos;ll do that next.
+            Just write a few words about what you offer or what you want to say.
           </p>
           <textarea
             className="ob-highlight"
