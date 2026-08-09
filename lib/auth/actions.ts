@@ -24,6 +24,7 @@ import { verifyTurnstile } from "@/lib/auth/turnstile";
 import { publicSignupEnabled } from "@/lib/auth/public-signup";
 import { looksLikeBot } from "@/lib/auth/bot-guard";
 import { getClientIp, checkRateLimits } from "@/lib/auth/rate-limit";
+import { authRedirectOrigin } from "@/lib/auth/request-origin";
 
 // Shown whenever a bot signal (honeypot / timing) or a rate limit trips. Kept
 // deliberately generic so it doesn't tell an attacker which layer caught them.
@@ -61,10 +62,6 @@ const signUpSchema = z.object({
   email: z.string().email("Enter a valid email address."),
   password: z.string().min(8, "Password must be at least 8 characters."),
 });
-
-function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-}
 
 // Public self-serve sign-up. OFF unless ENABLE_PUBLIC_SIGNUP=true (see
 // public-signup.ts) — this re-checks the flag server-side even if a client
@@ -131,7 +128,11 @@ export async function signUpWithPassword(
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${siteUrl()}/auth/callback?type=signup`,
+      // Point the confirmation link back at the domain the user signed up on
+      // (e.g. postproofer.com), not the default site URL — otherwise clicking
+      // it lands them on guestlistsocial.com. Must be in Supabase's Redirect
+      // URLs allowlist or Supabase falls back to the Site URL.
+      emailRedirectTo: `${await authRedirectOrigin()}/auth/callback?type=signup`,
     },
   });
 
@@ -256,7 +257,9 @@ export async function sendPasswordReset(
     };
   }
 
-  const callbackUrl = new URL(`${siteUrl()}/auth/callback`);
+  // Keep the reset link on the domain the request came from (e.g.
+  // postproofer.com) so the whole recovery flow stays on one host.
+  const callbackUrl = new URL(`${await authRedirectOrigin()}/auth/callback`);
   callbackUrl.searchParams.set("type", "recovery");
 
   const supabase = await createClient();
