@@ -424,6 +424,61 @@ export async function getTourConnectionAction(
   }
 }
 
+// Replay (tour-again) connect state: the real connection status of the user's
+// existing onboarding account, so the replay can honestly show "already
+// connected" — or offer a working Connect — instead of a dead disabled button.
+// Read-only: never provisions or writes anything (a replay saves nothing).
+export async function getReplayConnectionAction(): Promise<
+  Result<{
+    clientId: string | null;
+    accountName: string | null;
+    platforms: string[];
+    accounts: { platform: string; accountId: string; accountName: string }[];
+  }>
+> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  const empty = { clientId: null, accountName: null, platforms: [], accounts: [] };
+  try {
+    const state = await getOnboardingState(access.userId);
+    const clientId = state.accountClientId ? String(state.accountClientId) : null;
+    // Only use the account the tour already knows about, and only if it's still
+    // one the user may write to — so the connect popup's own guards (which key
+    // off state.accountClientId) line up and can never touch another tenant.
+    if (!clientId) return { ok: true, ...empty };
+    const writable = await writableAccountIds(access.userId);
+    if (!writable.has(clientId)) return { ok: true, ...empty };
+
+    const admin = createAdminClient();
+    const { data: client } = await admin
+      .from("clients")
+      .select("name, archived")
+      .eq("id", clientId)
+      .maybeSingle();
+    if (!client || client.archived) return { ok: true, ...empty };
+
+    const { data } = await admin
+      .from("connected_meta_accounts")
+      .select("platform, account_id, account_name")
+      .eq("client_id", clientId);
+    const accounts = (data ?? []).map((r) => ({
+      platform: String(r.platform),
+      accountId: String(r.account_id),
+      accountName: String(r.account_name ?? r.account_id),
+    }));
+    const platforms = Array.from(new Set(accounts.map((a) => a.platform)));
+    return {
+      ok: true,
+      clientId,
+      accountName: (client.name as string) ?? null,
+      platforms,
+      accounts,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not check connection." };
+  }
+}
+
 // A Meta login can control a whole portfolio, so the callback attaches every
 // Page + Instagram account it finds to the (undeclared) tour account. For a
 // friendly first run we let the user keep just ONE. Keep the chosen identity
