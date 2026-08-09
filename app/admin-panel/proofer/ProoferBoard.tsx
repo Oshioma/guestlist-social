@@ -3170,130 +3170,147 @@ export default function ProoferBoard({
                         {/* Instagram + its format stay on one row (format on the
                             right of the toggle, never wrapping beneath it). */}
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                        {/* Instagram: one-click on/off */}
-                        <button
-                          type="button"
-                          disabled={isLocked}
-                          onClick={() => {
-                            const on = draft.publishTargets.includes("instagram");
-                            updateDraft(dateKey, activePlatform, {
-                              publishTargets: on
-                                ? draft.publishTargets.filter((t) => t !== "instagram")
-                                : [...draft.publishTargets, "instagram"],
-                            });
-                          }}
-                          style={platToggleStyle(
-                            draft.publishTargets.includes("instagram"),
-                            "ig",
-                            isLocked
-                          )}
-                        >
-                          <span
-                            aria-hidden
-                            style={{
-                              width: 17,
-                              height: 17,
-                              borderRadius: 5,
-                              display: "grid",
-                              placeItems: "center",
-                              fontSize: 10,
-                              fontWeight: 800,
-                              color: "#fff",
-                              background: "linear-gradient(45deg,#f58529,#dd2a7b,#8134af)",
-                            }}
+                        {/* Instagram: ONE button showing the chosen format
+                            (Instagram Feed / Story / Reel). Tap it to switch
+                            format or turn Instagram off — there's no separate
+                            format button. */}
+                        <div style={{ position: "relative", display: "inline-flex" }}>
+                          <button
+                            type="button"
+                            disabled={isLocked}
+                            aria-haspopup="menu"
+                            aria-expanded={openFmtKey === key}
+                            onClick={() =>
+                              setOpenFmtKey(openFmtKey === key ? null : key)
+                            }
+                            style={platToggleStyle(
+                              draft.publishTargets.includes("instagram"),
+                              "ig",
+                              isLocked
+                            )}
                           >
-                            ◎
-                          </span>
-                          Instagram
-                        </button>
-                        {/* Format picker — only while Instagram is on. A fixed
-                            trigger showing the chosen format opens an absolutely
-                            positioned menu, so nothing in the row shifts. Works
-                            the same on desktop (click) and touch (tap). */}
-                        {draft.publishTargets.includes("instagram") && (
-                          <div style={{ position: "relative", display: "inline-flex" }}>
-                            <button
-                              type="button"
-                              disabled={isLocked}
-                              aria-haspopup="menu"
-                              aria-expanded={openFmtKey === key}
-                              onClick={() =>
-                                setOpenFmtKey(openFmtKey === key ? null : key)
-                              }
+                            <span
+                              aria-hidden
                               style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                                border: "1px solid #e4e4e7",
-                                borderRadius: 9,
-                                background: "#fff",
-                                color: "#3f3f46",
-                                fontSize: 12,
-                                fontWeight: 700,
-                                padding: "8px 12px",
-                                cursor: isLocked ? "not-allowed" : "pointer",
+                                width: 17,
+                                height: 17,
+                                borderRadius: 5,
+                                display: "grid",
+                                placeItems: "center",
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "#fff",
+                                background: "linear-gradient(45deg,#f58529,#dd2a7b,#8134af)",
                               }}
                             >
-                              {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
-                              <span style={{ color: "#a1a1aa", fontSize: 10 }}>▾</span>
-                            </button>
-                            {openFmtKey === key && !isLocked && (
-                              <>
-                                {/* click-away catcher */}
-                                <div
-                                  aria-hidden
-                                  onClick={() => setOpenFmtKey(null)}
-                                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
-                                />
-                                <div
-                                  role="menu"
-                                  style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 4px)",
-                                    left: 0,
-                                    zIndex: 41,
-                                    background: "#fff",
-                                    border: "1px solid #e4e4e7",
-                                    borderRadius: 10,
-                                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                                    overflow: "hidden",
-                                    minWidth: 132,
-                                  }}
-                                >
-                                  {INSTAGRAM_FORMATS.map((p) => {
-                                    const active = activePlatform === p;
-                                    return (
-                                      <button
-                                        key={p}
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => {
-                                          if (p !== activePlatform)
-                                            handlePlatformChange(dateKey, p);
-                                          setOpenFmtKey(null);
-                                        }}
-                                        style={{
-                                          display: "block",
-                                          width: "100%",
-                                          textAlign: "left",
-                                          border: "none",
-                                          background: active ? "#f4f4f5" : "#fff",
-                                          color: "#18181b",
-                                          fontSize: 13,
-                                          fontWeight: active ? 700 : 500,
-                                          padding: "10px 14px",
-                                          cursor: "pointer",
-                                        }}
-                                      >
-                                        {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
+                              ◎
+                            </span>
+                            Instagram {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
+                            <span style={{ color: "#a1a1aa", fontSize: 10, marginLeft: 2 }}>▾</span>
+                          </button>
+                          {openFmtKey === key && !isLocked && (
+                            <>
+                              {/* click-away catcher */}
+                              <div
+                                aria-hidden
+                                onClick={() => setOpenFmtKey(null)}
+                                style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                              />
+                              <div
+                                role="menu"
+                                style={{
+                                  position: "absolute",
+                                  top: "calc(100% + 4px)",
+                                  left: 0,
+                                  zIndex: 41,
+                                  background: "#fff",
+                                  border: "1px solid #e4e4e7",
+                                  borderRadius: 10,
+                                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                                  overflow: "hidden",
+                                  minWidth: 180,
+                                }}
+                              >
+                                {INSTAGRAM_FORMATS.map((p) => {
+                                  const on =
+                                    draft.publishTargets.includes("instagram");
+                                  const active = on && activePlatform === p;
+                                  return (
+                                    <button
+                                      key={p}
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => {
+                                        // Switch format, and picking one implies
+                                        // publishing to Instagram (turns it on).
+                                        if (p !== activePlatform)
+                                          handlePlatformChange(dateKey, p);
+                                        if (
+                                          !getDraftFor(
+                                            dateKey,
+                                            p
+                                          ).publishTargets.includes("instagram")
+                                        ) {
+                                          updateDraft(dateKey, p, {
+                                            publishTargets: [
+                                              ...getDraftFor(dateKey, p)
+                                                .publishTargets,
+                                              "instagram",
+                                            ],
+                                          });
+                                        }
+                                        setOpenFmtKey(null);
+                                      }}
+                                      style={{
+                                        display: "block",
+                                        width: "100%",
+                                        textAlign: "left",
+                                        border: "none",
+                                        background: active ? "#f4f4f5" : "#fff",
+                                        color: "#18181b",
+                                        fontSize: 13,
+                                        fontWeight: active ? 700 : 500,
+                                        padding: "10px 14px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Instagram {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                                    </button>
+                                  );
+                                })}
+                                {draft.publishTargets.includes("instagram") && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      updateDraft(dateKey, activePlatform, {
+                                        publishTargets: draft.publishTargets.filter(
+                                          (t) => t !== "instagram"
+                                        ),
+                                      });
+                                      setOpenFmtKey(null);
+                                    }}
+                                    style={{
+                                      display: "block",
+                                      width: "100%",
+                                      textAlign: "left",
+                                      border: "none",
+                                      borderTop: "1px solid #f4f4f5",
+                                      background: "#fff",
+                                      color: "#b91c1c",
+                                      fontSize: 13,
+                                      fontWeight: 600,
+                                      padding: "10px 14px",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Don&apos;t post to Instagram
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                         </div>
                         {/* Facebook + its format stay on one row too. */}
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
@@ -3332,29 +3349,10 @@ export default function ProoferBoard({
                           >
                             f
                           </span>
-                          Facebook
+                          {/* Facebook only posts to the feed, so the format is
+                              baked into the label — no separate Feed button. */}
+                          Facebook Feed
                         </button>
-                        {/* Facebook only ever posts to the feed, but show a
-                            matching "Feed" chip beside it so both platform rows
-                            line up with Instagram's format picker. Static (no
-                            menu) since there are no other Facebook formats. */}
-                        {draft.publishTargets.includes("facebook") && (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              border: "1px solid #e4e4e7",
-                              borderRadius: 9,
-                              background: "#fff",
-                              color: "#3f3f46",
-                              fontSize: 12,
-                              fontWeight: 700,
-                              padding: "8px 12px",
-                            }}
-                          >
-                            Feed
-                          </span>
-                        )}
                         </div>
                       </div>
                     ) : (
