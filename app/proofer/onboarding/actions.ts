@@ -206,7 +206,15 @@ export async function ensureOnboardingAccountAction(): Promise<
     const name = defaultAccountName(team.name);
     const { data: client, error } = await admin
       .from("clients")
-      .insert({ name, platform: "Meta", status: "testing", monthly_budget: 0 })
+      .insert({
+        name,
+        platform: "Meta",
+        status: "testing",
+        monthly_budget: 0,
+        // Seed a light brand persona so the AI's first drafts are grounded in
+        // who this account is, even before any consultation/brand context.
+        ai_instructions: `You write social media captions for "${name}". Keep them authentic, warm and on-brand for this business.`,
+      })
       .select("id")
       .single();
     if (error || !client) {

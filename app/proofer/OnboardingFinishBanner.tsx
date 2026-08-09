@@ -18,13 +18,21 @@ export default function OnboardingFinishBanner({
   const [open, setOpen] = useState(true);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [located, setLocated] = useState(false);
+  // Let the board sit normally for a few seconds before the highlight kicks in.
+  const [armed, setArmed] = useState(false);
 
   const targetId = date ? `day-${date}` : null;
 
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => setArmed(true), 5000);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
   // Find the post's day card, scroll it into view, and measure it.
   useEffect(() => {
-    if (!open || !targetId) {
-      setLocated(true);
+    if (!open || !armed || !targetId) {
+      if (armed) setLocated(true);
       return;
     }
     let raf = 0;
@@ -51,7 +59,7 @@ export default function OnboardingFinishBanner({
       cancelAnimationFrame(raf);
       window.clearTimeout(settleTimer);
     };
-  }, [open, targetId]);
+  }, [open, armed, targetId]);
 
   // Keep the hole aligned while the user scrolls or resizes.
   useEffect(() => {
@@ -71,6 +79,8 @@ export default function OnboardingFinishBanner({
   const dismiss = useCallback(() => setOpen(false), []);
 
   if (!open) return null;
+  // Hold off for the first few seconds so the board is seen normally first.
+  if (!armed) return null;
 
   const banner = (
     <div style={cardStyle} className="ob-fb-pop">

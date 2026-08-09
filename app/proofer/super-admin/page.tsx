@@ -7,6 +7,8 @@ import EmailTemplatesEditor from "./EmailTemplatesEditor";
 import { loadEmailTemplatesForEditor } from "@/lib/email/template-actions";
 import UsersOverview from "./UsersOverview";
 import { loadUsersOverview } from "@/lib/admin/users-overview";
+import OnboardingFunnel from "./OnboardingFunnel";
+import { loadOnboardingFunnel } from "@/lib/admin/onboarding-funnel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,7 @@ export default async function SuperAdminPage({
 
   const templates = tab === "emails" ? await loadEmailTemplatesForEditor() : [];
   const users = tab === "users" ? await loadUsersOverview() : [];
+  const funnel = tab === "users" ? await loadOnboardingFunnel() : null;
 
   const maxWidth = tab === "emails" ? 1080 : tab === "users" ? 1000 : 760;
 
@@ -78,6 +81,18 @@ export default async function SuperAdminPage({
               on the next email sent.
             </p>
             <EmailTemplatesEditor templates={templates} />
+          </section>
+        )}
+
+        {tab === "users" && funnel && (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>Onboarding funnel</h3>
+            <p style={sectionSubStyle}>
+              How far new users get in the guided first-run tour. The right-hand
+              percentage is how many carried over from the previous step — watch
+              for the big drops.
+            </p>
+            <OnboardingFunnel data={funnel} />
           </section>
         )}
 

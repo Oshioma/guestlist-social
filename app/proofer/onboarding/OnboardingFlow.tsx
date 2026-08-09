@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { uploadToStorage } from "@/app/admin-panel/lib/uploadToStorage";
 import "./onboarding.css";
 import {
   startOnboardingAction,
@@ -300,6 +301,18 @@ export default function OnboardingFlow({
     }
   }, []);
 
+  // Let the user step back to revisit an earlier instruction. Composer steps
+  // only; the caption/media/date all persist in state, so it's safe.
+  const backOrder: StepId[] = useMemo(
+    () => ["idea", "hook", "fun", "shorter", "image", "time", "save", "green", "board"],
+    []
+  );
+  const canGoBack = backOrder.indexOf(step) > 0;
+  const goBack = useCallback(() => {
+    const i = backOrder.indexOf(step);
+    if (i > 0) goto(backOrder[i - 1]);
+  }, [backOrder, step, goto]);
+
   const flashCaption = useCallback(() => setCaptionFlash((n) => n + 1), []);
 
   // On each guided step, briefly dim the rest of the page so the instruction
@@ -504,7 +517,10 @@ export default function OnboardingFlow({
     const url = `/api/meta/connect?clientId=${encodeURIComponent(accountClientId)}`;
     const popup = window.open(url, "metaConnect", "width=600,height=760");
     if (!popup) {
-      setConnectHint("Please allow pop-ups to connect, then try again — or skip for now.");
+      // Pop-up blocked (common on mobile) — the connect is now host-aware, so a
+      // same-tab round trip returns cleanly to onboarding via ?fromconnect=1.
+      const returnTo = `${base}/onboarding?fromconnect=1`;
+      window.location.href = `${url}&returnTo=${encodeURIComponent(returnTo)}`;
       return;
     }
     popup.focus();
@@ -540,7 +556,7 @@ export default function OnboardingFlow({
         setConnecting(false);
       }
     }, 1500);
-  }, [accountClientId, demo]);
+  }, [accountClientId, demo, base]);
 
   const handleGenerate = useCallback(async () => {
     const seed = idea.trim();
@@ -624,6 +640,46 @@ export default function OnboardingFlow({
     (p: Photo) => {
       setMediaUrls([p.full]);
       if (!demo) void logOnboardingEvent("stock_image_selected", STEP_NUMBER.image);
+      goto("time");
+    },
+    [demo, goto]
+  );
+
+  // Upload the user's own photo (so the first post can be genuinely theirs, not
+  // only stock). Uses the same direct-to-storage helper the board uses.
+  const [uploading, setUploading] = useState(false);
+  const handleUploadPhoto = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+      setUploading(true);
+      setError(null);
+      try {
+        const folder = `proofer/${accountClientId ?? "onboarding"}/onboarding`;
+        const url = await uploadToStorage(file, folder, { bucket: "postimages" });
+        setMediaUrls([url]);
+        if (!demo)
+          void logOnboardingEvent("stock_image_selected", STEP_NUMBER.image, { source: "upload" });
+        goto("time");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't upload that image — try another.");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [accountClientId, demo, goto]
+  );
+
+  // Attach an image by pasting a direct link.
+  const handleAddLink = useCallback(
+    (url: string) => {
+      const u = (url ?? "").trim();
+      if (!/^https?:\/\//i.test(u)) {
+        setError("Paste a valid image link (starting with http).");
+        return;
+      }
+      setError(null);
+      setMediaUrls([u]);
+      if (!demo) void logOnboardingEvent("stock_image_selected", STEP_NUMBER.image, { source: "link" });
       goto("time");
     },
     [demo, goto]
@@ -781,6 +837,11 @@ export default function OnboardingFlow({
         onSkip={handleSkipAll}
       />
 
+      {/* Announce each step's instruction to screen readers. */}
+      <div className="ob-sr-only" role="status" aria-live="polite">
+        {`Step ${progressNumber} of ${PROGRESS_STEPS.length}. ${coach.title}. ${coach.body}`}
+      </div>
+
       {/* Brief page dim that spotlights the instruction card on each step. */}
       <div className={"ob-dim-overlay" + (coachSpotlight ? " on" : "")} aria-hidden />
 
@@ -799,6 +860,11 @@ export default function OnboardingFlow({
             <div style={errorBox} role="alert">
               {error}
             </div>
+          )}
+          {canGoBack && (
+            <button type="button" onClick={goBack} style={backLinkStyle}>
+              ← Back
+            </button>
           )}
         </div>
 
@@ -855,6 +921,9 @@ export default function OnboardingFlow({
               onSearch={() => runImageSearch(imgQuery)}
               onSelectPhoto={selectPhoto}
               onSkipImage={() => goto("time")}
+              onUploadPhoto={handleUploadPhoto}
+              onAddLink={handleAddLink}
+              uploading={uploading}
               // time
               presets={presets}
               postDate={postDate}
@@ -867,6 +936,7 @@ export default function OnboardingFlow({
               onTimeChosen={handleTimeChosen}
               scheduleLabel={scheduleLabel}
               // save / green / board
+              hasConnection={connectedPlatforms.length > 0}
               onSave={handleSave}
               onGreenAck={handleGreenAck}
               onFinish={finish}
@@ -1289,6 +1359,9 @@ type ComposerProps = {
   onSearch: () => void;
   onSelectPhoto: (p: Photo) => void;
   onSkipImage: () => void;
+  onUploadPhoto: (file: File | undefined) => void;
+  onAddLink: (url: string) => void;
+  uploading: boolean;
   presets: { label: string; date: string; time: string }[];
   postDate: string;
   publishTime: string;
@@ -1299,6 +1372,7 @@ type ComposerProps = {
   setPublishTime: (v: string) => void;
   onTimeChosen: () => void;
   scheduleLabel: string;
+  hasConnection: boolean;
   onSave: () => void;
   onGreenAck: () => void;
   onFinish: () => void;
@@ -1310,6 +1384,8 @@ function Composer(props: ComposerProps) {
   const hasCaption = props.caption.trim().length > 0;
   const aiStep = step === "hook" || step === "fun" || step === "shorter";
   const showImage = step === "image";
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState("");
   const showTime = step === "time";
   const showSave = step === "save";
   const showGreen = step === "green";
@@ -1322,8 +1398,7 @@ function Composer(props: ComposerProps) {
         <div style={cardStyle} className="ob-fade-up">
           <label style={cardTitle}>What would you like to post about?</label>
           <p style={cardSub}>
-            Just tell Proofer the idea. Don&apos;t worry about writing the perfect
-            caption — we&apos;ll do that next.
+            Just write a few words about what you offer or what you want to say.
           </p>
           <textarea
             className="ob-highlight"
@@ -1415,7 +1490,9 @@ function Composer(props: ComposerProps) {
       {showImage && (
         <div style={cardStyle} className="ob-fade-up">
           <span style={cardTitle}>Let&apos;s give your post an image</span>
-          <p style={cardSub}>Search free stock photos and pick one you like.</p>
+          <p style={cardSub}>
+            Search free stock photos, or add your own — from your computer, take a photo, or paste a link.
+          </p>
           <div className="ob-highlight" style={{ display: "flex", gap: 8, padding: 6, borderRadius: 12 }}>
             <input
               value={props.imgQuery}
@@ -1438,10 +1515,64 @@ function Composer(props: ComposerProps) {
             ))}
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <button type="button" onClick={props.onSkipImage} style={undoBtn}>
-              Skip image for now →
-            </button>
+          <div style={{ marginTop: 14, borderTop: "1px solid #f0f0f2", paddingTop: 12 }}>
+            <span style={{ fontSize: 12, color: "#a1a1aa", fontWeight: 600 }}>Or add your own:</span>
+            <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {/* From computer */}
+              <label style={imgOptBtn}>
+                {props.uploading ? (
+                  <>
+                    <span className="ob-spinner ob-spinner-dark" /> Uploading…
+                  </>
+                ) : (
+                  "💻 From computer"
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={props.uploading}
+                  onChange={(e) => props.onUploadPhoto(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                />
+              </label>
+
+              {/* Take a photo now (opens the camera on mobile) */}
+              <label style={imgOptBtn}>
+                📷 Take a photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={props.uploading}
+                  onChange={(e) => props.onUploadPhoto(e.target.files?.[0])}
+                  style={{ display: "none" }}
+                />
+              </label>
+
+              {/* Paste a link */}
+              <button type="button" onClick={() => setLinkOpen((v) => !v)} style={imgOptBtn}>
+                🔗 Paste a link
+              </button>
+
+              <button type="button" onClick={props.onSkipImage} style={undoBtn}>
+                Skip image for now →
+              </button>
+            </div>
+
+            {linkOpen && (
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  value={linkValue}
+                  onChange={(e) => setLinkValue(e.target.value)}
+                  placeholder="Paste an image URL (https://…)"
+                  style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+                  onKeyDown={(e) => e.key === "Enter" && props.onAddLink(linkValue)}
+                />
+                <button type="button" className="ob-btn" onClick={() => props.onAddLink(linkValue)} style={primaryBtn}>
+                  Add
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1526,6 +1657,15 @@ function Composer(props: ComposerProps) {
                 with a post, press green and Proofer schedules it for the time you chose —{" "}
                 <em>{props.scheduleLabel}</em>. We&apos;re leaving your first post <strong>saved</strong> for
                 now. Press green whenever you&apos;re ready.
+                {!props.hasConnection && (
+                  <>
+                    {" "}
+                    <span style={{ color: "#a16207" }}>
+                      You&apos;ll just need to connect a social account first — you can do that any
+                      time from your board.
+                    </span>
+                  </>
+                )}
               </p>
             )}
 
@@ -1853,6 +1993,17 @@ const skipLinkStyle: React.CSSProperties = {
   padding: 0,
 };
 
+const backLinkStyle: React.CSSProperties = {
+  marginTop: 12,
+  background: "none",
+  border: "none",
+  color: "#a1a1aa",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+  padding: 0,
+};
+
 const coachCardStyle: React.CSSProperties = {
   background: "#fff",
   border: "1px solid #e4e4e7",
@@ -2042,6 +2193,20 @@ const photoGrid: React.CSSProperties = {
   gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
   gap: 8,
   marginTop: 12,
+};
+
+const imgOptBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "#fff",
+  color: "#3f3f46",
+  border: "1px solid #d4d4d8",
+  borderRadius: 9,
+  padding: "8px 12px",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 const photoBtn: React.CSSProperties = {

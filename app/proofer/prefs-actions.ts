@@ -15,12 +15,19 @@ export async function setLastProoferClientAction(clientId: string) {
     const access = await getProoferAccess();
     if (!access) return;
 
+    const clientId = Number(trimmed);
+    if (!Number.isFinite(clientId)) return;
+
     const supabase = await createClient();
-    await supabase.from("user_proofer_prefs").upsert({
-      user_id: access.userId,
-      last_client_id: Number(trimmed),
-      updated_at: new Date().toISOString(),
-    });
+    const { error } = await supabase.from("user_proofer_prefs").upsert(
+      {
+        user_id: access.userId,
+        last_client_id: clientId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+    if (error) console.error("setLastProoferClientAction upsert:", error.message);
   } catch (err) {
     console.error("setLastProoferClientAction error:", err);
   }
