@@ -714,6 +714,18 @@ export default function OnboardingFlow({
   }, [demo, base, postDate, accountClientId, router, clearDraft]);
 
   // ---- derived display ----------------------------------------------------
+  // The name shown on the post preview: the CONNECTED social account's real
+  // name/handle when there is one (the account they picked / linked), not a
+  // slug of the brand name. Falls back to the brand name if not connected.
+  const previewName = useMemo(() => {
+    const connected =
+      pickedName ||
+      (connectedAccounts.length === 1 ? connectedAccounts[0]?.accountName : "") ||
+      connectedAccounts.find((a) => a.platform === "instagram")?.accountName ||
+      "";
+    return (connected || accountName || "").trim() || "your account";
+  }, [pickedName, connectedAccounts, accountName]);
+
   const scheduleLabel = useMemo(() => formatSchedule(postDate, publishTime), [
     postDate,
     publishTime,
@@ -835,6 +847,7 @@ export default function OnboardingFlow({
               onShorter={() => aiModify("shorter", "image", "shorter_used")}
               // image
               accountName={accountName}
+              previewName={previewName}
               mediaUrls={mediaUrls}
               imgQuery={imgQuery}
               setImgQuery={setImgQuery}
@@ -1268,6 +1281,7 @@ type ComposerProps = {
   onFun: () => void;
   onShorter: () => void;
   accountName: string;
+  previewName: string;
   mediaUrls: string[];
   imgQuery: string;
   setImgQuery: (v: string) => void;
@@ -1434,7 +1448,7 @@ function Composer(props: ComposerProps) {
 
       {/* LIVE PREVIEW (from image step onward) */}
       {(showImage || showTime || showSave || showGreen || showBoard) && hasCaption && (
-        <PostPreview accountName={props.accountName} caption={props.caption} mediaUrls={props.mediaUrls} />
+        <PostPreview displayName={props.previewName} caption={props.caption} mediaUrls={props.mediaUrls} />
       )}
 
       {/* TIME */}
@@ -1607,21 +1621,22 @@ function AiChip({
 }
 
 function PostPreview({
-  accountName,
+  displayName,
   caption,
   mediaUrls,
 }: {
-  accountName: string;
+  displayName: string;
   caption: string;
   mediaUrls: string[];
 }) {
-  const handle = (accountName || "yourbrand").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 24) || "yourbrand";
+  // The real connected social account name — shown as-is, not slugified.
+  const name = (displayName || "your account").trim();
   return (
     <div className="ob-fade-up" style={previewCard}>
       <div style={previewHeader}>
-        <div style={previewAvatar}>{(accountName || "Y").slice(0, 1).toUpperCase()}</div>
+        <div style={previewAvatar}>{name.slice(0, 1).toUpperCase()}</div>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>{handle}</span>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{name}</span>
           <span style={{ fontSize: 11, color: "#a1a1aa" }}>Instagram · preview</span>
         </div>
       </div>
@@ -1633,7 +1648,7 @@ function PostPreview({
       )}
       <div style={{ padding: "12px 14px" }}>
         <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", color: "#27272a" }}>
-          <strong>{handle}</strong> {caption}
+          <strong>{name}</strong> {caption}
         </p>
       </div>
     </div>
