@@ -3477,7 +3477,7 @@ export default function ProoferBoard({
                       }
                       if (post?.status === "approved" && post.updatedBy) {
                         rows.push(
-                          <div key="a" style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                          <div key="a" style={{ fontSize: 11, color: "#71717a" }}>
                             Approved by{" "}
                             <strong style={{ color: "#15803d" }}>
                               {post.updatedBy.split("@")[0]}
