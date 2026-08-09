@@ -1034,8 +1034,10 @@ function TopBar({
         </span>
         {demo && <span style={demoPill}>Tour replay · nothing is saved</span>}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ display: "flex", gap: 4 }} aria-hidden>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+        {/* ~240px of unshrinkable dashes. Hidden on phones (see onboarding.css),
+            where the "X of Y" label carries the same information. */}
+        <div className="ob-progress-dots" style={{ display: "flex", gap: 4 }} aria-hidden>
           {Array.from({ length: total }).map((_, i) => (
             <span
               key={i}
@@ -1048,7 +1050,14 @@ function TopBar({
             />
           ))}
         </div>
-        <span style={{ fontSize: 12, color: "#71717a", fontWeight: 600 }}>
+        <span
+          style={{
+            fontSize: 12,
+            color: "#71717a",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
           Getting started · {progressNumber} of {total}
         </span>
         <button type="button" onClick={onSkip} style={skipLinkStyle}>
@@ -2039,7 +2048,9 @@ const topBarStyle: React.CSSProperties = {
   gap: 12,
   padding: "12px 20px",
   borderBottom: "1px solid #ececef",
-  background: "rgba(255,255,255,0.8)",
+  // Opaque on phones (onboarding.css) — translucent, the composer scrolling
+  // underneath showed through the bar as a jumble of overlapping text.
+  background: "var(--ob-bar-bg, rgba(255,255,255,0.8))",
   backdropFilter: "blur(6px)",
   position: "sticky",
   top: 0,
@@ -2067,18 +2078,26 @@ const skipLinkStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: "pointer",
   textDecoration: "underline",
-  padding: 0,
+  // Never break "Skip for now" across three lines when the bar gets tight.
+  whiteSpace: "nowrap",
+  padding: "6px 2px",
 };
 
+// A pill, not a bare link: it sits in the gap between the coach card and the
+// composer, so with no background of its own it was grey-on-dark during the
+// spotlight dim (looked disabled) and ghosted over whatever image was beneath
+// it. The padding also gets it to a real tap target.
 const backLinkStyle: React.CSSProperties = {
   marginTop: 12,
-  background: "none",
-  border: "none",
-  color: "#a1a1aa",
+  background: "#fff",
+  border: "1px solid #e4e4e7",
+  borderRadius: 10,
+  color: "#52525b",
   fontSize: 13,
-  fontWeight: 600,
+  fontWeight: 700,
   cursor: "pointer",
-  padding: 0,
+  padding: "10px 16px",
+  boxShadow: "0 1px 2px rgba(24,24,27,.06)",
 };
 
 const coachCardStyle: React.CSSProperties = {
