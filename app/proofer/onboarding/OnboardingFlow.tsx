@@ -321,10 +321,23 @@ export default function OnboardingFlow({
     }
   }, []);
 
-  // Let the user step back to revisit an earlier instruction. Composer steps
-  // only; the caption/media/date all persist in state, so it's safe.
+  // Let the user step back to revisit an earlier instruction — all the way to
+  // the welcome screen, so "back to the start" is always reachable in-app (the
+  // caption/media/date all persist in state, so revisiting is safe).
   const backOrder: StepId[] = useMemo(
-    () => ["idea", "hook", "fun", "shorter", "image", "time", "save", "green", "board"],
+    () => [
+      "welcome",
+      "connect",
+      "idea",
+      "hook",
+      "fun",
+      "shorter",
+      "image",
+      "time",
+      "save",
+      "green",
+      "board",
+    ],
     []
   );
   const canGoBack = backOrder.indexOf(step) > 0;

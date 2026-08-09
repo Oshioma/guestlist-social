@@ -68,7 +68,11 @@ export async function getOnboardingState(
 //
 // Foolproof for BOTH new and existing users:
 //   - completed or skipped  → never divert.
-//   - mid-flow (started)    → divert to resume.
+//   - mid-flow (started)    → divert to resume, but ONLY once an account
+//     exists. A poster who started and hasn't got past "connect" has an empty
+//     board anyway, and its "Let's create your first post" card is the way back
+//     in — diverting them would trap the browser's Back button in a loop
+//     (board → redirect → tour → back → board → redirect → …).
 //   - never started:
 //       * if the poster already has posts (an existing user who predates
 //         onboarding), silently mark them complete so they're never trapped.
@@ -80,7 +84,7 @@ export async function shouldRunOnboarding(): Promise<boolean> {
 
   const state = await getOnboardingState(access.userId);
   if (state.completed || state.skipped) return false;
-  if (state.started) return true;
+  if (state.started) return !!state.accountClientId;
 
   // Never started. Is this actually a brand-new poster? The RLS-scoped session
   // client only returns this user's team posts, so one hit means "not new".
