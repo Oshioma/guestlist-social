@@ -385,6 +385,37 @@ export async function getConnectedPlatformsAction(
   }
 }
 
+// Poll target for the connect popup: the connected platforms + accounts for the
+// tour account. The onboarding page stays put while a popup runs the OAuth (so a
+// cross-domain redirect can never strand the user); this tells it when the
+// connection has landed so it can advance.
+export async function getTourConnectionAction(
+  clientId: string
+): Promise<Result<{ platforms: string[]; accounts: { platform: string; accountId: string; accountName: string }[] }>> {
+  const access = await requirePoster();
+  if (!access) return { ok: false, error: "Not signed in." };
+  try {
+    const state = await getOnboardingState(access.userId);
+    if (state.accountClientId !== String(clientId)) {
+      return { ok: false, error: "Unknown account." };
+    }
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("connected_meta_accounts")
+      .select("platform, account_id, account_name")
+      .eq("client_id", clientId);
+    const accounts = (data ?? []).map((r) => ({
+      platform: String(r.platform),
+      accountId: String(r.account_id),
+      accountName: String(r.account_name ?? r.account_id),
+    }));
+    const platforms = Array.from(new Set(accounts.map((a) => a.platform)));
+    return { ok: true, platforms, accounts };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not check connection." };
+  }
+}
+
 // A Meta login can control a whole portfolio, so the callback attaches every
 // Page + Instagram account it finds to the (undeclared) tour account. For a
 // friendly first run we let the user keep just ONE. Keep the chosen identity
