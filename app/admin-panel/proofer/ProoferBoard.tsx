@@ -2963,7 +2963,7 @@ export default function ProoferBoard({
                         );
                         meta.push(
                           <span key="locked" style={{ color: "#075985", fontWeight: 700 }}>
-                            🔒 Approved &amp; locked{when ? ` · ${when}` : ""}
+                            🔒{when ? ` ${when}` : ""}
                           </span>
                         );
                       }
@@ -3016,7 +3016,9 @@ export default function ProoferBoard({
                             fontWeight: 700,
                           }}
                         >
-                          Approved and locked
+                          {/* "Approved and locked" text removed — approval is
+                              shown by the padlock next to the approver's name in
+                              the footer; "locked" is redundant beside it. */}
                           {/* Surface the scheduled time here ONLY when there's no
                               editable time + Reschedule row below (i.e. nothing is
                               queued yet) — otherwise the time would show twice.
@@ -3481,7 +3483,13 @@ export default function ProoferBoard({
                             Approved by{" "}
                             <strong style={{ color: "#15803d" }}>
                               {post.updatedBy.split("@")[0]}
-                            </strong>
+                            </strong>{" "}
+                            {/* Padlock = the post is locked (frozen from edits).
+                                Approval implies locked, so this replaces the old
+                                "Approved and locked" line. */}
+                            <span aria-label="Locked" title="Locked — approved posts can't be edited">
+                              🔒
+                            </span>
                           </div>
                         );
                       }
