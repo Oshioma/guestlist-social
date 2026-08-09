@@ -2963,7 +2963,7 @@ export default function ProoferBoard({
                         );
                         meta.push(
                           <span key="locked" style={{ color: "#075985", fontWeight: 700 }}>
-                            🔒 Approved &amp; locked{when ? ` · ${when}` : ""}
+                            🔒{when ? ` ${when}` : ""}
                           </span>
                         );
                       }
@@ -3016,7 +3016,9 @@ export default function ProoferBoard({
                             fontWeight: 700,
                           }}
                         >
-                          Approved and locked
+                          {/* "Approved and locked" text removed — approval is
+                              shown by the padlock next to the approver's name in
+                              the footer; "locked" is redundant beside it. */}
                           {/* Surface the scheduled time here ONLY when there's no
                               editable time + Reschedule row below (i.e. nothing is
                               queued yet) — otherwise the time would show twice.
@@ -3477,11 +3479,31 @@ export default function ProoferBoard({
                       }
                       if (post?.status === "approved" && post.updatedBy) {
                         rows.push(
-                          <div key="a" style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                          <div key="a" style={{ fontSize: 11, color: "#71717a" }}>
                             Approved by{" "}
                             <strong style={{ color: "#15803d" }}>
                               {post.updatedBy.split("@")[0]}
-                            </strong>
+                            </strong>{" "}
+                            {/* Padlock = the post is locked (frozen from edits).
+                                Approval implies locked, so this replaces the old
+                                "Approved and locked" line. */}
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#71717a"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              role="img"
+                              aria-label="Locked"
+                              style={{ verticalAlign: "-2px" }}
+                            >
+                              <title>Locked — approved posts can&apos;t be edited</title>
+                              <rect x="4" y="11" width="16" height="10" rx="2" />
+                              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                            </svg>
                           </div>
                         );
                       }
