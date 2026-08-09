@@ -156,7 +156,9 @@ export default function OnboardingFlow({
   const [caption, setCaption] = useState("");
   const [prevCaption, setPrevCaption] = useState<string | null>(null); // for Undo
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
-  const [postDate, setPostDate] = useState(todayISO);
+  // Default to tomorrow — the onboarding post must always be in the future so
+  // it can't roll into a past (hidden) day before the finish screen shows it.
+  const [postDate, setPostDate] = useState(() => addDaysISO(todayISO, 1));
   const [publishTime, setPublishTime] = useState("18:30");
   const [captionFlash, setCaptionFlash] = useState(0); // bump to replay flash
 
@@ -221,7 +223,9 @@ export default function OnboardingFlow({
     if (restored.idea) setIdea(restored.idea);
     if (restored.caption) setCaption(restored.caption);
     if (Array.isArray(restored.mediaUrls)) setMediaUrls(restored.mediaUrls);
-    if (restored.postDate) setPostDate(restored.postDate);
+    // Only restore a saved date that's still in the future; a draft from a
+    // previous day could hold a now-past date, and the post must stay future.
+    if (restored.postDate && restored.postDate > todayISO) setPostDate(restored.postDate);
     if (restored.publishTime) setPublishTime(restored.publishTime);
     if (restored.accountName) setAccountName(restored.accountName);
 
@@ -1624,7 +1628,8 @@ function Composer(props: ComposerProps) {
               <input
                 type="date"
                 value={props.postDate}
-                min={props.todayISO}
+                // Tomorrow is the earliest — the onboarding post is always future.
+                min={addDaysISO(props.todayISO, 1)}
                 onChange={(e) => props.onDatePick(e.target.value)}
                 style={inputStyle}
               />
@@ -1923,7 +1928,10 @@ function buildPresets(
 ): { label: string; date: string; time: string }[] {
   const times = ["18:30", "09:00", "11:00"];
   const out: { label: string; date: string; time: string }[] = [];
-  for (let i = 0; i < 60 && out.length < 3; i++) {
+  // Start at i = 1 (tomorrow): the onboarding post must always land in the
+  // future. A "today" post can slip into the past across a timezone rollover,
+  // which then hides it behind the board's past-day filter on the finish screen.
+  for (let i = 1; i < 60 && out.length < 3; i++) {
     const date = addDaysISO(todayISO, i);
     if (occupied.has(date)) continue;
     const time = times[out.length] ?? "18:30";
