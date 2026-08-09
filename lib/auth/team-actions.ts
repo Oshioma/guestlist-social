@@ -620,6 +620,51 @@ export async function createTeamAccount(
   };
 }
 
+// Wizard variant: create an account in a chosen team and return its new id so
+// the caller can lead straight into the "connect Instagram/Facebook" step. Same
+// gate as createTeamAccount (staff, or the team's owner/admin).
+export async function createAccountInTeam(
+  teamId: string,
+  name: string
+): Promise<{ clientId?: number; error?: string; fieldError?: string }> {
+  const parsed = createAccountSchema.safeParse({ teamId, name });
+  if (!parsed.success) {
+    const fe = parsed.error.flatten().fieldErrors;
+    return { fieldError: fe.name?.[0] ?? fe.teamId?.[0] ?? "Invalid input." };
+  }
+
+  const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, parsed.data.teamId);
+  if (gate.error) return { error: gate.error };
+
+  const { data: client, error } = await admin
+    .from("clients")
+    .insert({
+      name: parsed.data.name,
+      platform: "Meta",
+      status: "testing",
+      monthly_budget: 0,
+    })
+    .select("id")
+    .single();
+  if (error || !client) {
+    return { error: error?.message ?? "Could not create the account." };
+  }
+
+  const { error: linkErr } = await admin
+    .from("team_accounts")
+    .upsert(
+      { team_id: parsed.data.teamId, client_id: client.id },
+      { onConflict: "team_id,client_id" }
+    );
+  if (linkErr) {
+    return { error: `Account created, but couldn't add it to the team: ${linkErr.message}` };
+  }
+
+  revalidateTeams(parsed.data.teamId);
+  return { clientId: Number(client.id) };
+}
+
 // ── Accounts (the client-isolation onboarding) ──────────────────────────────
 
 const accountSchema = z.object({
