@@ -1,9 +1,14 @@
 import { notFound } from "next/navigation";
+// The same stylesheet app/proofer/layout.tsx pulls in. Without it the board's
+// class-based rules (.mobile-strip and friends) are missing and the harness
+// lies to you — rows that scroll in production stack vertically here.
+import "../../admin-panel/admin.css";
 import OnboardingFlow, {
   type StepId,
 } from "@/app/proofer/onboarding/OnboardingFlow";
 import OnboardingResumeBanner from "@/app/proofer/OnboardingResumeBanner";
 import EmptyBoardCard from "@/app/proofer/EmptyBoardCard";
+import ProoferBoard from "@/app/admin-panel/proofer/ProoferBoard";
 
 // ---------------------------------------------------------------------------
 // Dev-only rendering harness.
@@ -39,7 +44,7 @@ const STEPS: StepId[] = [
   "board",
 ];
 
-const VIEWS = ["index", "tour", "empty", "resume"] as const;
+const VIEWS = ["index", "tour", "empty", "resume", "board"] as const;
 type View = (typeof VIEWS)[number];
 
 export default async function DevPreviewPage({
@@ -81,6 +86,32 @@ export default async function DevPreviewPage({
     );
   }
 
+  if (view === "board") {
+    // The board itself, empty of posts — enough to render its chrome: the
+    // mobile toolbar (client · month · Ideas · Queue), the date strip and the
+    // day view. This is the surface a poster spends all their time on.
+    return (
+      <Frame title="Board — one account, no posts">
+        <ProoferBoard
+          clients={[{ id: "preview", name: "OSHI" }]}
+          months={[
+            { value: "2026-08", label: "August 2026" },
+            { value: "2026-09", label: "September 2026" },
+          ]}
+          initialClientId="preview"
+          initialMonth="2026-08"
+          initialPosts={[]}
+          initialPillars={[]}
+          initialIdeas={[]}
+          initialPostIdeas={[]}
+          basePath="/proofer"
+          publishPath="/proofer/publish"
+          standalone
+        />
+      </Frame>
+    );
+  }
+
   if (view === "resume") {
     return (
       <Frame title="Board — unfinished tour">
@@ -102,6 +133,9 @@ export default async function DevPreviewPage({
         </li>
         <li>
           <a href="/dev/preview?view=resume">?view=resume</a> — the resume banner
+        </li>
+        <li>
+          <a href="/dev/preview?view=board">?view=board</a> — the board itself
         </li>
         <li>
           <a href="/dev/preview?view=tour&step=welcome">?view=tour&amp;step=…</a>{" "}
