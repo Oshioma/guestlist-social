@@ -16,6 +16,7 @@ import {
   useExistingOnboardingAccountAction,
   getOnboardingOccupiedDatesAction,
   getTourConnectionAction,
+  getReplayConnectionAction,
   saveFirstPostAction,
   logOnboardingEvent,
 } from "./actions";
@@ -405,6 +406,31 @@ export default function OnboardingFlow({
   // (no accounts) gets one auto-created; a user whose team already has accounts
   // is asked to reuse one or create a new one — so invited teammates don't get
   // a duplicate account.
+  // Replay: reflect the user's REAL connection on the connect step, so it shows
+  // "already connected" (they finished the tour once) or a working Connect —
+  // never a dead "disabled in tour replay" button. Read-only; saves nothing.
+  const replayConnRef = useRef(false);
+  const [replayResolved, setReplayResolved] = useState(false);
+  useEffect(() => {
+    if (!demo || step !== "connect" || replayConnRef.current) return;
+    replayConnRef.current = true;
+    void (async () => {
+      try {
+        const res = await getReplayConnectionAction();
+        if (res.ok && res.clientId) {
+          setAccountClientId(res.clientId);
+          if (res.accountName) setAccountName(res.accountName);
+          if (res.platforms.length > 0) {
+            setConnectedAccounts(res.accounts);
+            setConnectedPlatforms(res.platforms);
+          }
+        }
+      } finally {
+        setReplayResolved(true); // stop the "checking…" spinner either way
+      }
+    })();
+  }, [demo, step]);
+
   const accountInitRef = useRef(false);
   useEffect(() => {
     if (step !== "connect" || demo) return;
@@ -516,10 +542,13 @@ export default function OnboardingFlow({
     if (step !== "connect") return;
     if (connectedPlatforms.length === 0) return;
     if (needsPick) return; // wait for the user to choose
+    // In replay the "already connected" state is informational — let the user
+    // read it and click Continue rather than whisking them onward.
+    if (demo) return;
     const t = window.setTimeout(() => goto("idea"), 1400);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, connectedPlatforms.length, needsPick]);
+  }, [step, connectedPlatforms.length, needsPick, demo]);
 
   // Open the Meta OAuth in a POPUP (matching the publish page). The onboarding
   // page stays put, so a cross-domain redirect during OAuth can never strand the
@@ -909,6 +938,7 @@ export default function OnboardingFlow({
               onCreateNew={createNewAccount}
               busy={busy}
               demo={demo}
+              replayResolved={replayResolved}
               metaError={metaResult?.status === "error" ? metaResult.message : null}
               onRename={handleRename}
               onContinue={() => goto("idea")}
@@ -1112,6 +1142,7 @@ function ConnectPanel({
   onCreateNew,
   busy,
   demo,
+  replayResolved,
   metaError,
   onRename,
   onContinue,
@@ -1133,6 +1164,7 @@ function ConnectPanel({
   onCreateNew: () => void;
   busy: string | null;
   demo: boolean;
+  replayResolved: boolean;
   metaError: string | null;
   onRename: (name: string) => void;
   onContinue: () => void;
@@ -1244,7 +1276,9 @@ function ConnectPanel({
           {fbOn ? "Facebook" : ""} connected
         </div>
         <p style={{ ...cardSub, marginTop: 14, marginBottom: 0 }}>
-          Nice — that&apos;s your posting account linked. Taking you to your first post…
+          {demo
+            ? "You’re already connected — nothing to do here. Press Continue to carry on."
+            : "Nice — that’s your posting account linked. Taking you to your first post…"}
         </p>
         <div style={{ marginTop: 14 }}>
           <button type="button" className="ob-btn" onClick={onContinue} style={primaryBtn}>
@@ -1278,10 +1312,16 @@ function ConnectPanel({
       {/* The real connection — opens in a popup so this page never navigates
           away (and can't strand the user on a cross-domain redirect). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {demo ? (
-          <span style={{ ...primaryBtn, opacity: 0.6, borderRadius: 10, textAlign: "center" }}>
-            🔗 Connect (disabled in tour replay)
-          </span>
+        {demo && !accountClientId ? (
+          replayResolved ? (
+            <span style={{ fontSize: 13.5, color: "#71717a", textAlign: "center", padding: "6px 0" }}>
+              Connecting isn’t available here — press Continue to carry on.
+            </span>
+          ) : (
+            <span style={{ ...primaryBtn, opacity: 0.7, borderRadius: 10, display: "inline-flex", justifyContent: "center", gap: 8 }}>
+              <span className="ob-spinner" /> Checking your connection…
+            </span>
+          )
         ) : provisioning || !ready ? (
           <span style={{ ...primaryBtn, opacity: 0.7, borderRadius: 10, display: "inline-flex", justifyContent: "center", gap: 8 }}>
             <span className="ob-spinner" /> Setting up your account…
@@ -1302,7 +1342,7 @@ function ConnectPanel({
         )}
 
         <button type="button" onClick={onContinue} style={{ ...skipLinkStyle, alignSelf: "flex-start" }} disabled={provisioning}>
-          Skip for now — I&apos;ll connect later →
+          {demo ? "Continue →" : "Skip for now — I’ll connect later →"}
         </button>
       </div>
 
