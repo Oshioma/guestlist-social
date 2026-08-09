@@ -2901,33 +2901,9 @@ export default function ProoferBoard({
                     // says the same thing in a single line.
                     (() => {
                       const meta: React.ReactNode[] = [];
-                      if (post?.createdBy) {
-                        meta.push(
-                          <span key="by" style={{ color: "#71717a" }}>
-                            by{" "}
-                            <strong style={{ color: "#52525b" }}>
-                              {post.createdBy.split("@")[0]}
-                            </strong>
-                          </span>
-                        );
-                      }
-                      if (post?.updatedBy && post.updatedBy !== post.createdBy) {
-                        meta.push(
-                          <span key="edit" style={{ color: "#71717a" }}>
-                            edited by{" "}
-                            <strong style={{ color: "#52525b" }}>
-                              {post.updatedBy.split("@")[0]}
-                            </strong>
-                          </span>
-                        );
-                      }
-                      if (post?.status === "approved" && post.updatedBy) {
-                        meta.push(
-                          <span key="appr" style={{ color: "#15803d", fontWeight: 600 }}>
-                            approved by {post.updatedBy.split("@")[0]}
-                          </span>
-                        );
-                      }
+                      // Created / edited / approved-by attribution moved to the
+                      // footer above the Pillar (rendered for every viewport), so
+                      // it's no longer duplicated in this compact meta row.
                       if (hasDraft && !isLocked) {
                         meta.push(
                           <span key="unsaved" style={{ color: "#b45309", fontWeight: 700 }}>
@@ -2973,22 +2949,8 @@ export default function ProoferBoard({
                     })()
                   ) : (
                     <>
-                      {post?.createdBy && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: "#71717a" }}>
-                          Created by <strong style={{ color: "#52525b" }}>{post.createdBy.split("@")[0]}</strong>
-                        </div>
-                      )}
-                      {post?.updatedBy && post.updatedBy !== post.createdBy && (
-                        <div style={{ marginTop: 2, fontSize: 11, color: "#71717a" }}>
-                          Edited by <strong style={{ color: "#52525b" }}>{post.updatedBy.split("@")[0]}</strong>
-                        </div>
-                      )}
-                      {post?.status === "approved" && post.updatedBy && (
-                        <div style={{ marginTop: 2, fontSize: 11, color: "#15803d", fontWeight: 600 }}>
-                          Approved by {post.updatedBy.split("@")[0]}
-                        </div>
-                      )}
-
+                      {/* Created / Edited / Approved-by attribution now lives in
+                          a footer block just above the Pillar (see below). */}
                       {hasDraft && !isLocked && (
                         <div
                           style={{
@@ -3012,13 +2974,13 @@ export default function ProoferBoard({
                           }}
                         >
                           Approved and locked
-                          {/* Once a post is locked the editable time input is
-                              hidden, so surface the scheduled publish time here
-                              (in the agency display zone) — otherwise a scheduled
-                              post shows no time at all. Prefers the publish
-                              queue's scheduled_for so re-timing on the Publish
-                              Queue page is reflected here. */}
-                          {(() => {
+                          {/* Surface the scheduled time here ONLY when there's no
+                              editable time + Reschedule row below (i.e. nothing is
+                              queued yet) — otherwise the time would show twice.
+                              The row below shows the same time and lets you edit
+                              it. Prefers the queue's scheduled_for. */}
+                          {!(post && (post.publishQueue?.length ?? 0) > 0) &&
+                          (() => {
                             const when = scheduledLabel(
                               post?.publishQueue,
                               draft.publishTime,
@@ -3316,6 +3278,27 @@ export default function ProoferBoard({
                           </span>
                           Facebook
                         </button>
+                        {/* Facebook only ever posts to the feed, but show a
+                            matching "Feed" chip beside it so both platform rows
+                            line up with Instagram's format picker. Static (no
+                            menu) since there are no other Facebook formats. */}
+                        {draft.publishTargets.includes("facebook") && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              border: "1px solid #e4e4e7",
+                              borderRadius: 9,
+                              background: "#fff",
+                              color: "#3f3f46",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              padding: "8px 12px",
+                            }}
+                          >
+                            Feed
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -3412,6 +3395,58 @@ export default function ProoferBoard({
                     </div>
                       </>
                     )}
+
+                    {/* Attribution footer — who created / edited / approved this
+                        post. Sits just above the Pillar, across the full width. */}
+                    {(() => {
+                      const rows: React.ReactNode[] = [];
+                      if (post?.createdBy) {
+                        rows.push(
+                          <div key="c" style={{ fontSize: 11, color: "#71717a" }}>
+                            Created by{" "}
+                            <strong style={{ color: "#52525b" }}>
+                              {post.createdBy.split("@")[0]}
+                            </strong>
+                          </div>
+                        );
+                      }
+                      if (post?.updatedBy && post.updatedBy !== post.createdBy) {
+                        rows.push(
+                          <div key="e" style={{ fontSize: 11, color: "#71717a" }}>
+                            Edited by{" "}
+                            <strong style={{ color: "#52525b" }}>
+                              {post.updatedBy.split("@")[0]}
+                            </strong>
+                          </div>
+                        );
+                      }
+                      if (post?.status === "approved" && post.updatedBy) {
+                        rows.push(
+                          <div key="a" style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>
+                            Approved by{" "}
+                            <strong style={{ color: "#15803d" }}>
+                              {post.updatedBy.split("@")[0]}
+                            </strong>
+                          </div>
+                        );
+                      }
+                      if (rows.length === 0) return null;
+                      return (
+                        <div
+                          style={{
+                            gridColumn: isNarrow ? "1 / -1" : undefined,
+                            marginTop: 10,
+                            paddingTop: 10,
+                            borderTop: "1px solid #f4f4f5",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 3,
+                          }}
+                        >
+                          {rows}
+                        </div>
+                      );
+                    })()}
 
                     {(() => {
                       const selectedPillar = draft.pillarId

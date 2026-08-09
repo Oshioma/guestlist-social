@@ -94,6 +94,10 @@ export default function NotificationsBell() {
     }
   }
 
+  // No notifications → no bell. The chrome only appears once there's something
+  // to show (comments, approvals); it disappears again when there's nothing.
+  if (items.length === 0) return null;
+
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
       <button
