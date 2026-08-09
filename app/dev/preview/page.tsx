@@ -1,0 +1,143 @@
+import { notFound } from "next/navigation";
+import OnboardingFlow, {
+  type StepId,
+} from "@/app/proofer/onboarding/OnboardingFlow";
+import OnboardingResumeBanner from "@/app/proofer/OnboardingResumeBanner";
+import EmptyBoardCard from "@/app/proofer/EmptyBoardCard";
+
+// ---------------------------------------------------------------------------
+// Dev-only rendering harness.
+//
+// The Proofer surfaces sit behind auth and Supabase, so an agent (or anyone
+// without credentials) can't load them to check how they actually render —
+// which is how a batch of mobile layout bugs shipped: text clipped off-screen,
+// a "Back" control invisible against its backdrop, labels wrapping onto three
+// lines. All of those are pure layout, and pure layout needs no data.
+//
+// This route mounts the REAL components with fixture props so they can be
+// loaded at any viewport and screenshotted. It renders nothing of its own that
+// could drift from production — if a card looks right here, it's because the
+// component is right.
+//
+// 404s outside development, and it isn't in the middleware matcher, so it never
+// touches auth or Supabase.
+// ---------------------------------------------------------------------------
+
+export const dynamic = "force-dynamic";
+
+const STEPS: StepId[] = [
+  "welcome",
+  "connect",
+  "idea",
+  "hook",
+  "fun",
+  "shorter",
+  "image",
+  "time",
+  "save",
+  "green",
+  "board",
+];
+
+const VIEWS = ["index", "tour", "empty", "resume"] as const;
+type View = (typeof VIEWS)[number];
+
+export default async function DevPreviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; step?: string }>;
+}) {
+  if (process.env.NODE_ENV === "production") notFound();
+
+  const sp = await searchParams;
+  const view = (VIEWS as readonly string[]).includes(sp.view ?? "")
+    ? (sp.view as View)
+    : "index";
+  const step = STEPS.includes(sp.step as StepId)
+    ? (sp.step as StepId)
+    : "welcome";
+
+  if (view === "tour") {
+    return (
+      <OnboardingFlow
+        base="/proofer"
+        accountClientId="preview"
+        initialStep={0}
+        // demo: nothing is written, no server action fires, and it's the gate
+        // that lets previewStep take effect.
+        demo
+        previewStep={step}
+        metaResult={null}
+        todayISO="2026-08-09"
+      />
+    );
+  }
+
+  if (view === "empty") {
+    return (
+      <Frame title="Empty board — no account yet">
+        <EmptyBoardCard base="/proofer" />
+      </Frame>
+    );
+  }
+
+  if (view === "resume") {
+    return (
+      <Frame title="Board — unfinished tour">
+        <OnboardingResumeBanner href="/proofer/onboarding" step={4} total={11} />
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame title="Preview harness">
+      <p style={{ fontSize: 14, color: "#52525b", lineHeight: 1.6 }}>
+        Real components, fixture props, no auth. Load any of these at a phone
+        viewport to check layout.
+      </p>
+      <ul style={{ fontSize: 14, lineHeight: 2, paddingLeft: 18 }}>
+        <li>
+          <a href="/dev/preview?view=empty">?view=empty</a> — the board&apos;s
+          empty state
+        </li>
+        <li>
+          <a href="/dev/preview?view=resume">?view=resume</a> — the resume banner
+        </li>
+        <li>
+          <a href="/dev/preview?view=tour&step=welcome">?view=tour&amp;step=…</a>{" "}
+          — any tour step: {STEPS.join(", ")}
+        </li>
+      </ul>
+    </Frame>
+  );
+}
+
+// Stands in for the board's page chrome (padding + max width) so a card is
+// measured in roughly the space it really gets.
+function Frame({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main style={{ padding: 24, background: "#f4f4f5", minHeight: "100dvh" }}>
+      <div style={{ maxWidth: 1160, margin: "0 auto" }}>
+        <h1
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: 0.6,
+            color: "#a1a1aa",
+            margin: "0 0 12px",
+          }}
+        >
+          {title}
+        </h1>
+        {children}
+      </div>
+    </main>
+  );
+}

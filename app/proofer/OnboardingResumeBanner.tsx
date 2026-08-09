@@ -45,7 +45,18 @@ export default function OnboardingResumeBanner({
           You stopped at step {step} of {total}. Pick up where you left off and
           finish your first post — it only takes a minute.
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {/* The top margin lives here, not on the children: on a narrow screen
+            the two actions wrap onto separate lines, and a margin on each one
+            stacked with the row gap to leave them drifting apart. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            marginTop: 10,
+          }}
+        >
           <a href={href} style={resumeCtaStyle}>
             Pick up where I left off →
           </a>
@@ -87,7 +98,6 @@ const cardStyle: React.CSSProperties = {
 
 const resumeCtaStyle: React.CSSProperties = {
   display: "inline-block",
-  marginTop: 10,
   background: "#6d28d9",
   color: "#fff",
   borderRadius: 9,
@@ -98,7 +108,6 @@ const resumeCtaStyle: React.CSSProperties = {
 };
 
 const noThanksStyle: React.CSSProperties = {
-  marginTop: 10,
   background: "none",
   border: "none",
   color: "#71717a",
