@@ -129,11 +129,31 @@ export default function OnboardingFinishBanner({
   const holeLeft = rect.left - pad;
   const holeW = rect.width + pad * 2;
   const holeH = rect.height + pad * 2;
-  const placeBelow = rect.top + rect.height / 2 < window.innerHeight * 0.5;
 
-  const bannerPos: React.CSSProperties = placeBelow
-    ? { top: Math.min(holeTop + holeH + 14, window.innerHeight - 20) }
-    : { bottom: Math.min(window.innerHeight - holeTop + 14, window.innerHeight - 20) };
+  // Prefer placing the card to the RIGHT of the post (there's usually empty
+  // board there); otherwise fall back to above/below, horizontally centred.
+  const gap = 16;
+  const rightRoom = window.innerWidth - (rect.right + gap) - 16;
+  const placeRight = rightRoom >= 300;
+
+  let bannerPos: React.CSSProperties;
+  if (placeRight) {
+    bannerPos = {
+      left: rect.right + gap,
+      top: Math.max(12, Math.min(holeTop, window.innerHeight - 300)),
+      width: Math.min(420, rightRoom),
+    };
+  } else {
+    const placeBelow = rect.top + rect.height / 2 < window.innerHeight * 0.5;
+    bannerPos = {
+      left: "50%",
+      transform: "translateX(-50%)",
+      width: "min(560px, calc(100vw - 24px))",
+      ...(placeBelow
+        ? { top: Math.min(holeTop + holeH + 14, window.innerHeight - 20) }
+        : { bottom: Math.min(window.innerHeight - holeTop + 14, window.innerHeight - 20) }),
+    };
+  }
 
   return (
     <>
@@ -159,13 +179,10 @@ export default function OnboardingFinishBanner({
           transition: "top 120ms ease, left 120ms ease",
         }}
       />
-      {/* The explanation, floating next to the post. */}
+      {/* The explanation, floating beside the post. */}
       <div
         style={{
           position: "fixed",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "min(560px, calc(100vw - 24px))",
           zIndex: 1002,
           ...bannerPos,
         }}
