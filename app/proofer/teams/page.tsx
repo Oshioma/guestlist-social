@@ -4,16 +4,18 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
+import { AddAccountWizard } from "./AddAccountWizard";
 import { planConfig, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
+type AccountLite = { id: number; name: string; ig: boolean; fb: boolean };
 type TeamRow = {
   id: string;
   name: string;
   plan: Plan;
   memberCount: number;
-  accountCount: number;
+  accounts: AccountLite[];
 };
 
 export default async function ProoferTeamsPage() {
@@ -22,102 +24,258 @@ export default async function ProoferTeamsPage() {
 
   const admin = createAdminClient();
   const { base } = await getProoferBase();
+  const isStaff = access.kind === "staff";
 
-  // Staff see every team; everyone else sees only the teams they belong to.
-  let visibleTeamIds: string[] | null = null;
-  if (access.kind !== "staff") {
-    const { data: mine } = await admin
-      .from("team_members")
-      .select("team_id")
-      .eq("user_id", access.userId);
-    visibleTeamIds = Array.from(new Set((mine ?? []).map((r) => r.team_id as string)));
-  }
+  // Which teams are visible: staff see all; everyone else only their own.
+  const { data: myMemberships } = await admin
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", access.userId);
+  const myRoleByTeam = new Map(
+    (myMemberships ?? []).map((r) => [r.team_id as string, r.role as string])
+  );
+  const visibleTeamIds: string[] | null = isStaff
+    ? null
+    : Array.from(myRoleByTeam.keys());
 
   let rows: TeamRow[] = [];
   if (visibleTeamIds === null || visibleTeamIds.length > 0) {
-    let teamsQuery = admin.from("teams").select("id, name, plan").order("name", { ascending: true });
+    let teamsQuery = admin
+      .from("teams")
+      .select("id, name, plan")
+      .order("name", { ascending: true });
     if (visibleTeamIds !== null) teamsQuery = teamsQuery.in("id", visibleTeamIds);
 
-    const [{ data: teams, error }, { data: memberRows }, { data: accountRows }] = await Promise.all([
-      teamsQuery,
-      admin.from("team_members").select("team_id"),
-      admin.from("team_accounts").select("team_id"),
-    ]);
+    const [{ data: teams, error }, { data: memberRows }, { data: accountRows }] =
+      await Promise.all([
+        teamsQuery,
+        admin.from("team_members").select("team_id"),
+        admin.from("team_accounts").select("team_id, client_id"),
+      ]);
     if (error) throw new Error(`Could not load teams: ${error.message}`);
 
-    const memberCounts = new Map<string, number>();
-    for (const r of memberRows ?? []) memberCounts.set(r.team_id, (memberCounts.get(r.team_id) ?? 0) + 1);
-    const accountCounts = new Map<string, number>();
-    for (const r of accountRows ?? []) accountCounts.set(r.team_id, (accountCounts.get(r.team_id) ?? 0) + 1);
+    const teamIdSet = new Set((teams ?? []).map((t) => t.id as string));
 
-    rows = (teams ?? []).map((t) => ({
-      id: t.id as string,
-      name: t.name as string,
-      plan: (t.plan as Plan) ?? "free",
-      memberCount: memberCounts.get(t.id as string) ?? 0,
-      accountCount: accountCounts.get(t.id as string) ?? 0,
-    }));
+    // Member counts per team.
+    const memberCounts = new Map<string, number>();
+    for (const r of memberRows ?? [])
+      memberCounts.set(r.team_id, (memberCounts.get(r.team_id) ?? 0) + 1);
+
+    // Accounts per (visible) team, plus the set of all client ids we need
+    // connection status for.
+    const clientIdsByTeam = new Map<string, number[]>();
+    const allClientIds = new Set<number>();
+    for (const r of accountRows ?? []) {
+      const tid = r.team_id as string;
+      if (!teamIdSet.has(tid)) continue;
+      const cid = Number(r.client_id);
+      const list = clientIdsByTeam.get(tid) ?? [];
+      list.push(cid);
+      clientIdsByTeam.set(tid, list);
+      allClientIds.add(cid);
+    }
+
+    // Names + connection status for those accounts.
+    const nameById = new Map<number, string>();
+    const igByClient = new Set<number>();
+    const fbByClient = new Set<number>();
+    if (allClientIds.size > 0) {
+      const ids = Array.from(allClientIds);
+      const [{ data: clientRows }, { data: connectedRows }] = await Promise.all([
+        admin.from("clients").select("id, name, archived").in("id", ids),
+        admin
+          .from("connected_meta_accounts")
+          .select("client_id, platform")
+          .in("client_id", ids),
+      ]);
+      for (const c of clientRows ?? []) {
+        if (c.archived) continue;
+        nameById.set(Number(c.id), (c.name as string) ?? `Account ${c.id}`);
+      }
+      for (const r of connectedRows ?? []) {
+        const cid = Number(r.client_id);
+        if (r.platform === "instagram") igByClient.add(cid);
+        if (r.platform === "facebook") fbByClient.add(cid);
+      }
+    }
+
+    rows = (teams ?? []).map((t) => {
+      const tid = t.id as string;
+      const accounts: AccountLite[] = (clientIdsByTeam.get(tid) ?? [])
+        .filter((cid) => nameById.has(cid)) // drop archived / missing
+        .map((cid) => ({
+          id: cid,
+          name: nameById.get(cid)!,
+          ig: igByClient.has(cid),
+          fb: fbByClient.has(cid),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        id: tid,
+        name: t.name as string,
+        plan: (t.plan as Plan) ?? "free",
+        memberCount: memberCounts.get(tid) ?? 0,
+        accounts,
+      };
+    });
   }
+
+  // Teams the viewer may add an account to (staff → all visible; otherwise the
+  // ones they own or admin). Drives the wizard's team picker.
+  const manageableTeams = rows
+    .filter(
+      (t) =>
+        isStaff ||
+        myRoleByTeam.get(t.id) === "owner" ||
+        myRoleByTeam.get(t.id) === "admin"
+    )
+    .map((t) => ({ id: t.id, name: t.name }));
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
-      <div style={{ maxWidth: 760, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ maxWidth: 780, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
         <div>
           <Link href={base || "/"} style={backLinkStyle}>
             &larr; Board
           </Link>
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Teams</h2>
-          <p style={{ fontSize: 14, color: "#71717a", margin: "4px 0 0", maxWidth: 640 }}>
-            A team is a workspace: a set of accounts plus the people who can work
-            on them. Put a client&rsquo;s accounts in their own team and invite
-            them as a client to give them a view of only their content.
-          </p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Teams &amp; accounts</h2>
         </div>
 
-        <section style={cardStyle}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Create a team</h3>
-          <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#71717a" }}>
-            Name it now — you can add accounts and invite people next. You&rsquo;ll
-            be its owner.
-          </p>
-          <CreateTeamForm />
+        {/* Plain-language explainer */}
+        <section style={{ ...cardStyle, background: "#fbfbfa" }}>
+          <h3 style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 700 }}>
+            How this works
+          </h3>
+          <ul style={explainerList}>
+            <li>
+              <strong>Account</strong> = one Instagram/Facebook you post to (a
+              brand or business).
+            </li>
+            <li>
+              <strong>Team</strong> = a folder that holds accounts and the people
+              allowed to work on them.
+            </li>
+            <li>
+              <strong>Connect</strong> = link the account to Meta. This is the
+              step that lets posts actually go live. Until it&rsquo;s connected
+              you&rsquo;ll see <Badge kind="off">Not connected</Badge>.
+            </li>
+          </ul>
         </section>
 
+        {/* Add an account */}
         <section style={cardStyle}>
-          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600 }}>
-            {access.kind === "staff" ? "All teams" : "Your teams"} ({rows.length})
+          <h3 style={sectionTitleStyle}>Add an account</h3>
+          <p style={sectionSubStyle}>
+            Create a new Instagram/Facebook account, choose which team it belongs
+            to, then connect it — in three quick steps.
+          </p>
+          {manageableTeams.length > 0 ? (
+            <AddAccountWizard teams={manageableTeams} base={base} />
+          ) : (
+            <p style={{ fontSize: 13, color: "#71717a", margin: 0 }}>
+              Create a team below first — every account lives inside a team.
+            </p>
+          )}
+        </section>
+
+        {/* The map: each team and the accounts inside it */}
+        <section style={cardStyle}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
+            {isStaff ? "All teams" : "Your teams"} ({rows.length})
           </h3>
+          <p style={sectionSubStyle}>
+            Each team and the accounts inside it. A badge shows whether each
+            account is connected to Instagram and Facebook.
+          </p>
           {rows.length === 0 ? (
             <p style={{ fontSize: 13, color: "#71717a", margin: 0 }}>
-              No teams yet. Create one above.
+              No teams yet. Create one below.
             </p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {rows.map((t) => (
-                <Link key={t.id} href={`${base}/teams/${t.id}`} style={teamRowStyle}>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>{t.name}</span>
-                      <PlanBadge plan={t.plan} />
-                    </div>
-                    <div style={{ fontSize: 12, color: "#71717a", marginTop: 2 }}>
-                      {t.accountCount} account{t.accountCount === 1 ? "" : "s"} ·{" "}
+                <div key={t.id} style={teamCard}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
+                    <PlanBadge plan={t.plan} />
+                    <span style={{ fontSize: 12, color: "#a1a1aa" }}>
                       {t.memberCount} {t.memberCount === 1 ? "person" : "people"}
-                    </div>
+                    </span>
+                    <Link
+                      href={`${base}/teams/${t.id}`}
+                      style={{ marginLeft: "auto", fontSize: 13, color: "#3f3f46", fontWeight: 600, textDecoration: "none" }}
+                    >
+                      Manage &rarr;
+                    </Link>
                   </div>
-                  <span style={{ fontSize: 13, color: "#a1a1aa" }}>Open &rarr;</span>
-                </Link>
+
+                  {t.accounts.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "#a1a1aa", margin: "10px 0 0" }}>
+                      No accounts in this team yet.
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                      {t.accounts.map((a) => (
+                        <div key={a.id} style={accountRow}>
+                          <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 120 }}>
+                            {a.name}
+                          </span>
+                          <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {a.ig || a.fb ? (
+                              <>
+                                {a.ig && <Badge kind="on">✓ Instagram</Badge>}
+                                {a.fb && <Badge kind="on">✓ Facebook</Badge>}
+                              </>
+                            ) : (
+                              <Badge kind="off">⚠ Not connected</Badge>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
+        </section>
+
+        {/* Create a team */}
+        <section style={cardStyle}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Create a team</h3>
+          <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#71717a" }}>
+            A team is a folder for a set of accounts and the people who work on
+            them. You&rsquo;ll be its owner. Add accounts to it above.
+          </p>
+          <CreateTeamForm />
         </section>
       </div>
     </main>
   );
 }
 
+function Badge({ kind, children }: { kind: "on" | "off"; children: React.ReactNode }) {
+  const on = kind === "on";
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        padding: "3px 8px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+        background: on ? "#e4f1ea" : "#fef3c7",
+        color: on ? "#2f7d5b" : "#92600a",
+        border: `1px solid ${on ? "#bfe0cd" : "#fde68a"}`,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function PlanBadge({ plan }: { plan: Plan }) {
-  // free → grey, pro → plum, agency → indigo.
   const palette: Record<Plan, { bg: string; border: string; fg: string }> = {
     free: { bg: "#f4f4f5", border: "#e4e4e7", fg: "#71717a" },
     pro: { bg: "#faf0f4", border: "#eccdd9", fg: "#9d2b5b" },
@@ -158,15 +316,45 @@ const cardStyle: React.CSSProperties = {
   padding: 20,
 };
 
-const teamRowStyle: React.CSSProperties = {
+const teamCard: React.CSSProperties = {
+  border: "1px solid #e4e4e7",
+  borderRadius: 12,
+  padding: 14,
+  background: "#fff",
+};
+
+const accountRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "1px solid #e4e4e7",
-  background: "#fff",
-  textDecoration: "none",
-  color: "#18181b",
+  gap: 10,
+  padding: "9px 12px",
+  border: "1px solid #f0f0f2",
+  borderRadius: 9,
+  background: "#fafafa",
   flexWrap: "wrap",
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  margin: "0 0 4px",
+  fontSize: 15,
+  fontWeight: 600,
+};
+
+const sectionSubStyle: React.CSSProperties = {
+  margin: "0 0 16px",
+  fontSize: 13,
+  color: "#71717a",
+  maxWidth: 640,
+  lineHeight: 1.5,
+};
+
+const explainerList: React.CSSProperties = {
+  margin: 0,
+  paddingLeft: 18,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  fontSize: 13.5,
+  color: "#3f3f46",
+  lineHeight: 1.55,
 };
