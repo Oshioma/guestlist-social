@@ -113,10 +113,12 @@ export default async function ProoferStandalonePage({
   const selectedMonth = sp.month ?? defaultMonth;
 
   const cookieStore = await cookies();
-  // Prefer the cookie (fast, same-device) but fall back to the server-side
-  // preference so the last account resumes across devices and domains too.
+  // Resolve the last account from the DURABLE server-side preference first — it's
+  // the authoritative, per-user, cross-device/cross-domain source. The cookie is
+  // only a fast fallback; preferring it caused a stale or wrong-host cookie
+  // (postproofer.com vs www) to override the account you actually left on.
   const lastClient =
-    cookieStore.get(COOKIE_NAME)?.value || (await getLastProoferClientId());
+    (await getLastProoferClientId()) || cookieStore.get(COOKIE_NAME)?.value || "";
   const { base, parentOrigin } = await getProoferBase();
   const myTeams = await getMyTeams();
   const superAdmin = await isSuperAdmin();
