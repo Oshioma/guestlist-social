@@ -90,10 +90,6 @@ type MetaResult =
 
 export type OnboardingFlowProps = {
   base: string; // "" on postproofer.com, else "/proofer"
-  // Origin that owns the Meta OAuth redirect URI + session (the main app). On
-  // the standalone Proofer host this is the parent origin; "" on the main host.
-  // The connect popup runs here so the OAuth cookies + callback share a domain.
-  parentOrigin: string;
   accountClientId: string | null;
   initialStep: number;
   demo: boolean; // replay / tour-again: never creates or saves real data
@@ -135,7 +131,6 @@ function TrafficDot({ color, size = 16 }: { color: string; size?: number }) {
 
 export default function OnboardingFlow({
   base,
-  parentOrigin,
   accountClientId: initialAccountId,
   initialStep,
   demo,
@@ -490,9 +485,11 @@ export default function OnboardingFlow({
     if (!accountClientId) return;
     setError(null);
     setConnectHint(null);
-    // Run the whole flow on the origin that owns the redirect URI + session, so
-    // the state cookie and the callback share a domain.
-    const url = `${parentOrigin}/api/meta/connect?clientId=${encodeURIComponent(accountClientId)}`;
+    // Run the whole flow on THIS origin. The connect route is now host-aware, so
+    // on a standalone Proofer host the OAuth stays on that host — cookies,
+    // callback and session all share the domain, and it can't detour to the
+    // main app's portal.
+    const url = `/api/meta/connect?clientId=${encodeURIComponent(accountClientId)}`;
     const popup = window.open(url, "metaConnect", "width=600,height=760");
     if (!popup) {
       setConnectHint("Please allow pop-ups to connect, then try again — or skip for now.");
@@ -531,7 +528,7 @@ export default function OnboardingFlow({
         setConnecting(false);
       }
     }, 1500);
-  }, [accountClientId, parentOrigin, demo]);
+  }, [accountClientId, demo]);
 
   const handleGenerate = useCallback(async () => {
     const seed = idea.trim();

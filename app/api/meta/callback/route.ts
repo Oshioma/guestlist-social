@@ -6,6 +6,7 @@ import {
   fetchInstagramAccountForPage,
   fetchUserPages,
   metaServiceClient,
+  metaRedirectUriForHost,
 } from "../../../admin-panel/lib/meta-auth";
 import {
   normalizeHandle,
@@ -83,7 +84,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const shortLived = await exchangeCodeForUserToken(code);
+    // Exchange with the SAME redirect_uri the authorize step used — on a
+    // standalone Proofer host that's this host, not the env default.
+    const hostRedirect = metaRedirectUriForHost(new URL(req.url).host);
+    const shortLived = await exchangeCodeForUserToken(code, hostRedirect);
     const longLived = await exchangeForLongLivedUserToken(shortLived.accessToken);
 
     const pages = await fetchUserPages(longLived.accessToken);

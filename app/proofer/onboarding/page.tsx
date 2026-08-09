@@ -24,7 +24,7 @@ export default async function OnboardingPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const access = await getProoferAccess();
-  const { base, parentOrigin } = await getProoferBase();
+  const { base } = await getProoferBase();
   if (!access) {
     redirect(`/sign-in?next=${encodeURIComponent(`${base}/onboarding`)}`);
   }
@@ -81,7 +81,6 @@ export default async function OnboardingPage({
   return (
     <OnboardingFlow
       base={base}
-      parentOrigin={parentOrigin}
       accountClientId={state.accountClientId}
       // An explicit restart begins cleanly at the welcome screen.
       initialStep={start ? 0 : state.step}
