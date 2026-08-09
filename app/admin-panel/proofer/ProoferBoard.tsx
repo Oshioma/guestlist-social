@@ -401,7 +401,9 @@ const monthNavBtnStyle: React.CSSProperties = {
 
 function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
   return {
-    flex: accent ? "0 0 auto" : 1,
+    // Grow into spare room, never shrink — the row is a scroll container, so
+    // tight screens scroll instead of squeezing labels into ellipses.
+    flex: accent ? "0 0 auto" : "1 0 auto",
     minWidth: 0,
     display: "flex",
     alignItems: "center",
@@ -2103,7 +2105,10 @@ export default function ProoferBoard({
       {/* Mobile toolbar: the board settings and the idea generator collapse
           behind these so the composer is reachable without a long scroll. */}
       {isNarrow && clients.length > 0 && (
-        <div style={{ display: "flex", gap: 8 }}>
+        // Scrolls rather than overflowing: "Ideas" and "Queue →" are nowrap and
+        // can't shrink, so on a narrow phone the row used to run off the screen
+        // (taking the rest of the page sideways with it) and clip "Queue →".
+        <div className="mobile-strip" style={{ gap: 8 }}>
           <button
             type="button"
             onClick={() => setMobileSettingsOpen(true)}
