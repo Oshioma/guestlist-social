@@ -157,6 +157,13 @@
 .ob-coach-lift {
   z-index: 50;
 }
+
+/* Lift the working surface above the dim too, so the message the tip refers to
+   stays readable at the same time as the tip. */
+.ob-lift {
+  position: relative;
+  z-index: 50;
+}
 .ob-coach-lift .ob-pop {
   box-shadow: 0 0 0 1px rgba(109, 40, 217, 0.25), 0 24px 60px -20px rgba(24, 24, 27, 0.55);
 }

@@ -868,8 +868,9 @@ export default function OnboardingFlow({
           )}
         </div>
 
-        {/* Working surface */}
-        <div>
+        {/* Working surface — lifted above the dim alongside the tip, so the
+            instruction and the thing it points at can be read together. */}
+        <div className={coachSpotlight ? "ob-lift" : undefined}>
           {step === "connect" ? (
             <ConnectPanel
               accountName={accountName}
