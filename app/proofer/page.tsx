@@ -203,16 +203,26 @@ export default async function ProoferStandalonePage({
             )}
             {!hasClients ? (
               <div style={setupCardStyle}>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#18181b" }}>
-                  Let&apos;s set up your first post
+                {/* This card IS the tour's welcome screen for anyone who lands
+                    back on an empty board — same wave, same promise. The CTA
+                    carries ?start=1, which skips the onboarding welcome step so
+                    the user doesn't read the identical invitation twice. */}
+                <div style={{ fontSize: 40, lineHeight: 1 }}>👋</div>
+                <h2 style={{ margin: "8px 0 0", fontSize: 24, fontWeight: 850, letterSpacing: -0.4, color: "#18181b" }}>
+                  Let&apos;s create your first post
                 </h2>
-                <p style={{ margin: "10px 0 0", fontSize: 15, color: "#52525b", lineHeight: 1.55, maxWidth: 520 }}>
-                  You don&apos;t have an account yet. The 2-minute guided setup connects a
-                  social account and walks you through creating your first post.
+                <p style={{ margin: "12px 0 0", fontSize: 15, color: "#52525b", lineHeight: 1.55, maxWidth: 520 }}>
+                  You don&apos;t have an account yet. We&apos;ll show you how Proofer works by
+                  making one together — it connects a social account and walks you through
+                  your first post. It takes about 2 minutes, and you stay in control the
+                  whole way.
                 </p>
                 <a href={`${base}/onboarding?start=1`} style={setupCtaStyle}>
-                  Start guided setup →
+                  Let&apos;s go →
                 </a>
+                <p style={{ margin: "18px 0 0", fontSize: 12, color: "#a1a1aa" }}>
+                  You can restart this tour any time from the “?” menu.
+                </p>
               </div>
             ) : (
             <ProoferBoard
