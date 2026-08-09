@@ -160,3 +160,30 @@
 .ob-coach-lift .ob-pop {
   box-shadow: 0 0 0 1px rgba(109, 40, 217, 0.25), 0 24px 60px -20px rgba(24, 24, 27, 0.55);
 }
+
+.ob-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Respect reduced-motion: keep the states, drop the decorative motion. The dim
+   still appears (instantly) and spinners still spin, since those convey status. */
+@media (prefers-reduced-motion: reduce) {
+  .ob-fade-up,
+  .ob-pop,
+  .ob-changed,
+  .ob-highlight,
+  .ob-fb-pop {
+    animation: none !important;
+  }
+  .ob-dim-overlay {
+    transition: none !important;
+  }
+}
