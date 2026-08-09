@@ -424,9 +424,11 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
 // One-click platform toggle used on the standalone /proofer surface. `on`
 // reflects whether the message currently publishes to that platform; the kind
 // tints the active state with Instagram's magenta or Facebook's blue.
-// Shared width for the platform toggles (Instagram / Facebook) and the
-// Reschedule button, so they line up as a tidy column of equal-width boxes.
-const PLAT_TOGGLE_WIDTH = 150;
+// Shared FIXED width for the platform toggles (Instagram / Facebook) and the
+// Reschedule button, so they're always the exact same size and line up as a
+// tidy column of equal-width boxes — wide enough for the longest label
+// ("Instagram Story"). A little thinner than before (7px vertical padding).
+const PLAT_TOGGLE_WIDTH = 172;
 
 function platToggleStyle(
   on: boolean,
@@ -437,13 +439,14 @@ function platToggleStyle(
     display: "inline-flex",
     alignItems: "center",
     gap: 7,
-    minWidth: PLAT_TOGGLE_WIDTH,
+    width: PLAT_TOGGLE_WIDTH,
+    whiteSpace: "nowrap",
     border: "1px solid #d4d4d8",
     background: "#fff",
     color: "#52525b",
     fontSize: 13,
     fontWeight: 700,
-    padding: "9px 13px",
+    padding: "7px 13px",
     borderRadius: 10,
     cursor: disabled ? "not-allowed" : "pointer",
   };
@@ -3120,7 +3123,7 @@ export default function ProoferBoard({
                                       // buttons form a tidy aligned column.
                                       width: PLAT_TOGGLE_WIDTH,
                                       textAlign: "center",
-                                      padding: "9px 13px",
+                                      padding: "7px 13px",
                                       borderRadius: 10,
                                       border: "1px solid #d4d4d8",
                                       background: "#fff",
@@ -3211,7 +3214,7 @@ export default function ProoferBoard({
                               ◎
                             </span>
                             Instagram {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
-                            <span style={{ color: "#a1a1aa", fontSize: 10, marginLeft: 2 }}>▾</span>
+                            <span style={{ color: "#a1a1aa", fontSize: 10, marginLeft: "auto" }}>▾</span>
                           </button>
                           {openFmtKey === key && !isLocked && (
                             <>
