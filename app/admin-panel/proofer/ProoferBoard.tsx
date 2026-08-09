@@ -422,6 +422,10 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
 // One-click platform toggle used on the standalone /proofer surface. `on`
 // reflects whether the message currently publishes to that platform; the kind
 // tints the active state with Instagram's magenta or Facebook's blue.
+// Shared width for the platform toggles (Instagram / Facebook) and the
+// Reschedule button, so they line up as a tidy column of equal-width boxes.
+const PLAT_TOGGLE_WIDTH = 150;
+
 function platToggleStyle(
   on: boolean,
   kind: "ig" | "fb",
@@ -431,6 +435,7 @@ function platToggleStyle(
     display: "inline-flex",
     alignItems: "center",
     gap: 7,
+    minWidth: PLAT_TOGGLE_WIDTH,
     border: "1px solid #d4d4d8",
     background: "#fff",
     color: "#52525b",
@@ -3065,12 +3070,17 @@ export default function ProoferBoard({
                                     }
                                     disabled={isPending}
                                     style={{
-                                      padding: "5px 11px",
-                                      borderRadius: 8,
-                                      border: "1px solid #18181b",
-                                      background: "#18181b",
-                                      color: "#fff",
-                                      fontSize: 11,
+                                      // Light "white box" matching the Instagram /
+                                      // Facebook toggles, and the same width so the
+                                      // buttons form a tidy aligned column.
+                                      width: PLAT_TOGGLE_WIDTH,
+                                      textAlign: "center",
+                                      padding: "9px 13px",
+                                      borderRadius: 10,
+                                      border: "1px solid #d4d4d8",
+                                      background: "#fff",
+                                      color: "#52525b",
+                                      fontSize: 13,
                                       fontWeight: 700,
                                       cursor: isPending ? "wait" : "pointer",
                                       opacity:
