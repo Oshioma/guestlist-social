@@ -9,6 +9,10 @@ import OnboardingFlow, {
 import OnboardingResumeBanner from "@/app/proofer/OnboardingResumeBanner";
 import EmptyBoardCard from "@/app/proofer/EmptyBoardCard";
 import ProoferBoard from "@/app/admin-panel/proofer/ProoferBoard";
+import PublishQueueBoard from "@/app/admin-panel/proofer/publish/PublishQueueBoard";
+import ClientContentBoard from "@/app/portal/[clientId]/content/ClientContentBoard";
+import { AddAccountWizard } from "@/app/proofer/teams/AddAccountWizard";
+import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 
 // ---------------------------------------------------------------------------
 // Dev-only rendering harness.
@@ -44,7 +48,16 @@ const STEPS: StepId[] = [
   "board",
 ];
 
-const VIEWS = ["index", "tour", "empty", "resume", "board"] as const;
+const VIEWS = [
+  "index",
+  "tour",
+  "empty",
+  "resume",
+  "board",
+  "publish",
+  "portal",
+  "teams",
+] as const;
 type View = (typeof VIEWS)[number];
 
 export default async function DevPreviewPage({
@@ -112,6 +125,78 @@ export default async function DevPreviewPage({
     );
   }
 
+  if (view === "publish") {
+    // The publish queue with nothing queued — its chrome, empty state and the
+    // Meta connection panel, which is where a poster lands from "Queue →".
+    return (
+      <Frame title="Publish queue — nothing queued">
+        <PublishQueueBoard
+          queueItems={[]}
+          defaultScheduleValue="2026-08-12T09:00"
+          clients={[{ id: "preview", name: "OSHI" }]}
+          currentMonth="2026-08"
+          backHref="/proofer"
+        />
+      </Frame>
+    );
+  }
+
+  if (view === "portal") {
+    // What a CLIENT sees when they open their review link — a different app
+    // from the poster's board, and easy to forget when checking mobile.
+    return (
+      <Frame title="Client portal — content review">
+        <ClientContentBoard
+          clientId={1}
+          month="2026-08"
+          monthLabel="August 2026"
+          prevMonth="2026-07"
+          nextMonth="2026-09"
+          timeZone="Etc/GMT"
+          posts={[
+            {
+              id: "p1",
+              postDate: "2026-08-15",
+              platform: "instagram",
+              caption:
+                "What if your food actually tasted like food? Wild concept. Real flavors, real ingredients, real good times.",
+              mediaUrls: [],
+              publishTime: "18:30",
+              status: "check",
+              published: false,
+              comments: [
+                {
+                  id: "c1",
+                  comment: "Love this — can we try a shorter first line?",
+                  author: "Client",
+                  authorRole: "client",
+                  resolved: false,
+                  createdAt: "2026-08-09T10:00:00Z",
+                },
+              ],
+            },
+          ]}
+        />
+      </Frame>
+    );
+  }
+
+  if (view === "teams") {
+    // The two interactive pieces of the teams page. The page itself is a server
+    // component that reads from Supabase, so only these render here.
+    return (
+      <Frame title="Teams — create team / add account">
+        <div style={{ display: "grid", gap: 20 }}>
+          <AddAccountWizard
+            teams={[{ id: "t1", name: "Guestlist" }]}
+            base="/proofer"
+          />
+          <CreateTeamForm />
+        </div>
+      </Frame>
+    );
+  }
+
   if (view === "resume") {
     return (
       <Frame title="Board — unfinished tour">
@@ -136,6 +221,17 @@ export default async function DevPreviewPage({
         </li>
         <li>
           <a href="/dev/preview?view=board">?view=board</a> — the board itself
+        </li>
+        <li>
+          <a href="/dev/preview?view=publish">?view=publish</a> — the publish
+          queue
+        </li>
+        <li>
+          <a href="/dev/preview?view=portal">?view=portal</a> — the client
+          review portal
+        </li>
+        <li>
+          <a href="/dev/preview?view=teams">?view=teams</a> — teams forms
         </li>
         <li>
           <a href="/dev/preview?view=tour&step=welcome">?view=tour&amp;step=…</a>{" "}
