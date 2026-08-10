@@ -103,6 +103,11 @@ export type OnboardingFlowProps = {
   // the whole tour. Real users never pass this.
   previewStep?: StepId;
   metaResult: MetaResult;
+  // The tour account's current Meta connections + whether the user still has to
+  // narrow a multi-brand login to one. Passed on every load so a pending pick
+  // survives a reload/remount that dropped metaResult (empty for demo).
+  initialConnectedAccounts?: ConnectedAccount[];
+  pendingPick?: boolean;
   todayISO: string; // YYYY-MM-DD from the server (avoids hydration drift)
 };
 
@@ -146,6 +151,8 @@ export default function OnboardingFlow({
   demo,
   previewStep,
   metaResult,
+  initialConnectedAccounts = [],
+  pendingPick = false,
   todayISO,
 }: OnboardingFlowProps) {
   const router = useRouter();
@@ -178,14 +185,20 @@ export default function OnboardingFlow({
   // Connect step. The OAuth runs in a popup so this page never navigates away
   // (a cross-domain redirect could otherwise strand the user); these get filled
   // in by polling once the connection lands.
-  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>(
-    metaResult?.status === "success" ? metaResult.platforms : []
-  );
+  // Seed from the OAuth round-trip result when present, else from the server's
+  // always-loaded snapshot — so a still-pending multi-account pick shows even on
+  // a plain reload that carried no ?fromconnect= result.
+  const seedAccounts =
+    metaResult?.status === "success" ? metaResult.accounts : initialConnectedAccounts;
+  const seedPlatforms =
+    metaResult?.status === "success"
+      ? metaResult.platforms
+      : Array.from(new Set(initialConnectedAccounts.map((a) => a.platform)));
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>(seedPlatforms);
   // A Meta login can return many Pages/IG accounts — collect them so the user
   // can pick just one instead of attaching the whole portfolio.
-  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(
-    metaResult?.status === "success" ? metaResult.accounts : []
-  );
+  const [connectedAccounts, setConnectedAccounts] =
+    useState<ConnectedAccount[]>(seedAccounts);
   const [connecting, setConnecting] = useState(false);
   const [connectHint, setConnectHint] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -241,6 +254,11 @@ export default function OnboardingFlow({
     let start: StepId = "welcome";
     if (metaResult) {
       // Just came back from the Meta OAuth round-trip → land on connect.
+      start = "connect";
+    } else if (pendingPick) {
+      // A multi-brand login is still unresolved — the user must pick one account
+      // before moving on. Force the connect step (which shows the picker) rather
+      // than letting an already-existing account skip us into the composer.
       start = "connect";
     } else if (initialStep >= 1) {
       if (!initialAccountId) {
@@ -445,6 +463,10 @@ export default function OnboardingFlow({
           if (res.platforms.length > 0) {
             setConnectedAccounts(res.accounts);
             setConnectedPlatforms(res.platforms);
+            // Replay only illustrates the connected state — set a picked name so
+            // the destructive "pick one account" step (which deletes the others)
+            // can never trigger here. A replay saves nothing.
+            setPickedName(res.accountName || "your account");
           }
         }
       } finally {

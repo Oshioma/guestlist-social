@@ -51,6 +51,40 @@ export default async function OnboardingPage({
     redirect(base || "/");
   }
 
+  // Load the tour account's current Meta connections ONCE, on every load — not
+  // just on the OAuth round-trip. A Meta login can attach a whole portfolio, and
+  // the user must narrow it to one brand. That "pick one" list previously lived
+  // only in memory (seeded from the ?fromconnect= render), so a mobile same-tab
+  // return that later re-rendered without the query param lost it — and the
+  // resume, seeing an account already exists, skipped straight to the composer
+  // with all the accounts still attached. Reading it here makes the pending pick
+  // survive any reload/remount.
+  let connectedAccounts: ConnectedAccount[] = [];
+  let pendingPick = false;
+  if (state.accountClientId) {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("connected_meta_accounts")
+      .select("platform, account_id, account_name, access_token")
+      .eq("client_id", state.accountClientId);
+    connectedAccounts = (data ?? []).map((r) => ({
+      platform: String(r.platform),
+      accountId: String(r.account_id),
+      accountName: String(r.account_name ?? r.account_id),
+    }));
+    // A pick is still pending when the login attached more than one brand's
+    // worth of accounts. Brands are grouped by their shared Page access token
+    // (an Instagram account and its parent Facebook Page share one), so an
+    // IG+FB pair for a single brand is one brand, not two. Choosing a brand
+    // deletes the other tokens' rows, collapsing this back to a single token.
+    const brands = new Set(
+      (data ?? []).map(
+        (r) => (r.access_token as string) ?? `${r.platform}:${r.account_id}`
+      )
+    );
+    pendingPick = brands.size > 1;
+  }
+
   // Parse the Meta OAuth round-trip outcome (mirrors the publish page).
   let metaResult: MetaResult = null;
   const metaError = first(sp.meta_error);
@@ -58,22 +92,8 @@ export default async function OnboardingPage({
   if (metaError) {
     metaResult = { status: "error", message: metaError };
   } else if (metaFlag === "connected" || first(sp.fromconnect) === "1") {
-    let platforms: string[] = [];
-    let accounts: ConnectedAccount[] = [];
-    if (state.accountClientId) {
-      const admin = createAdminClient();
-      const { data } = await admin
-        .from("connected_meta_accounts")
-        .select("platform, account_id, account_name")
-        .eq("client_id", state.accountClientId);
-      accounts = (data ?? []).map((r) => ({
-        platform: String(r.platform),
-        accountId: String(r.account_id),
-        accountName: String(r.account_name ?? r.account_id),
-      }));
-      platforms = Array.from(new Set(accounts.map((a) => a.platform)));
-    }
-    metaResult = { status: "success", platforms, accounts };
+    const platforms = Array.from(new Set(connectedAccounts.map((a) => a.platform)));
+    metaResult = { status: "success", platforms, accounts: connectedAccounts };
   }
 
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -91,6 +111,9 @@ export default async function OnboardingPage({
       autoStart={start}
       demo={demo}
       metaResult={metaResult}
+      // Re-surface a still-pending multi-account pick on any load (not demo).
+      initialConnectedAccounts={demo ? [] : connectedAccounts}
+      pendingPick={demo ? false : pendingPick}
       todayISO={todayISO}
     />
   );
