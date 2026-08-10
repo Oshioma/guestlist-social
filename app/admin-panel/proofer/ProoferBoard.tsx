@@ -428,7 +428,7 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
 // Reschedule button, so they're always the exact same size and line up as a
 // tidy column of equal-width boxes — wide enough for the longest label
 // ("Instagram Story"). A little thinner than before (7px vertical padding).
-const PLAT_TOGGLE_WIDTH = 172;
+const PLAT_TOGGLE_WIDTH = 132;
 
 function platToggleStyle(
   on: boolean,
@@ -3220,7 +3220,9 @@ export default function ProoferBoard({
                             >
                               ◎
                             </span>
-                            Instagram {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
+                            {/* Logo shows the platform; the word is just the
+                                format (Feed / Story / Reel). */}
+                            {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
                             <span style={{ color: "#a1a1aa", fontSize: 10, marginLeft: "auto" }}>▾</span>
                           </button>
                           {openFmtKey === key && !isLocked && (
@@ -3289,7 +3291,7 @@ export default function ProoferBoard({
                                         cursor: "pointer",
                                       }}
                                     >
-                                      Instagram {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                                      {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
                                     </button>
                                   );
                                 })}
@@ -3364,9 +3366,8 @@ export default function ProoferBoard({
                           >
                             f
                           </span>
-                          {/* Facebook only posts to the feed, so the format is
-                              baked into the label — no separate Feed button. */}
-                          Facebook Feed
+                          {/* Logo shows the platform; Facebook is feed-only. */}
+                          Feed
                         </button>
                         </div>
                       </div>
