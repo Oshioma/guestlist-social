@@ -37,3 +37,23 @@ body {
   max-width: 100%;
   overflow-x: clip;
 }
+
+/* iOS Safari zooms the page in whenever you focus a form control whose
+   font-size is under 16px — and it never zooms back out. The result is a tour
+   (or board, or portal) that stays magnified and panned for the rest of the
+   session: the brand clipped off the left edge, "Skip for now" off the right,
+   the Back button sliced in half. It reads exactly like a layout bug, but the
+   layout is fine — the viewport is.
+   16px on every text-entry control is the fix; it's the threshold Safari
+   checks. `!important` because the styling convention here is inline
+   `style={{ fontSize: 14 }}`, which a plain rule can't beat.
+   Not checkbox/radio/buttons: they don't take text and don't trigger the zoom. */
+@media (max-width: 820px) {
+  textarea,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not(
+      [type="submit"]
+    ):not([type="reset"]) {
+    font-size: 16px !important;
+  }
+}
