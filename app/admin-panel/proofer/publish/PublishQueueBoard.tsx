@@ -722,6 +722,7 @@ export default function PublishQueueBoard({
   clientEditBase = "/app/clients",
   showMetaConnection = true,
   connectOrigin = "",
+  instagramLoginConfigured = false,
 }: {
   queueItems: QueueItem[];
   defaultScheduleValue: string;
@@ -757,6 +758,10 @@ export default function PublishQueueBoard({
   // the callback fails with "OAuth state mismatch" — so start it on the admin
   // origin, where set and read share a domain.
   connectOrigin?: string;
+  // Whether Instagram Business Login (the no-Facebook path) is configured on
+  // the server. When false, the "Connect Instagram only" button is hidden so
+  // it can't be clicked into a "Missing INSTAGRAM_APP_ID" error.
+  instagramLoginConfigured?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -2268,32 +2273,34 @@ export default function PublishQueueBoard({
             >
               {connectOpening ? "Opening Facebook…" : "Connect Meta"}
             </button>
-            <button
-              type="button"
-              onClick={handleConnectInstagram}
-              disabled={!connectClientId || connectIgOpening}
-              title="For clients with an Instagram professional account and no Facebook Page"
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                background: connectClientId ? "#c13584" : "#e4e4e7",
-                color: connectClientId ? "#fff" : "#a1a1aa",
-                border: "none",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: !connectClientId
-                  ? "not-allowed"
-                  : connectIgOpening
-                  ? "wait"
-                  : "pointer",
-                opacity: connectIgOpening ? 0.85 : 1,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              {connectIgOpening ? "Opening Instagram…" : "Connect Instagram only"}
-            </button>
+            {instagramLoginConfigured && (
+              <button
+                type="button"
+                onClick={handleConnectInstagram}
+                disabled={!connectClientId || connectIgOpening}
+                title="For clients with an Instagram professional account and no Facebook Page"
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: connectClientId ? "#c13584" : "#e4e4e7",
+                  color: connectClientId ? "#fff" : "#a1a1aa",
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: !connectClientId
+                    ? "not-allowed"
+                    : connectIgOpening
+                    ? "wait"
+                    : "pointer",
+                  opacity: connectIgOpening ? 0.85 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {connectIgOpening ? "Opening Instagram…" : "Connect Instagram only"}
+              </button>
+            )}
             {(connectOpening || connectIgOpening) && (
               <span style={{ fontSize: 12, color: "#71717a" }}>
                 Continue in the {connectIgOpening ? "Instagram" : "Facebook"} window we just opened.
