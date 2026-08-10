@@ -2863,8 +2863,9 @@ export default function ProoferBoard({
                       <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
                         <div
                           style={{
-                            fontSize: 15,
-                            fontWeight: 700,
+                            fontSize: standalone ? 21 : 15,
+                            fontWeight: 800,
+                            letterSpacing: standalone ? "-0.02em" : undefined,
                             color: "#18181b",
                             lineHeight: 1.2,
                             overflow: "hidden",
@@ -2934,8 +2935,9 @@ export default function ProoferBoard({
                       })()}
                       <div
                         style={{
-                          fontSize: 13,
-                          fontWeight: 700,
+                          fontSize: standalone ? 21 : 13,
+                          fontWeight: 800,
+                          letterSpacing: standalone ? "-0.02em" : undefined,
                           color: "#18181b",
                           lineHeight: 1.2,
                         }}
@@ -3048,8 +3050,8 @@ export default function ProoferBoard({
                               <div
                                 style={{
                                   marginTop: 2,
-                                  fontSize: 11,
-                                  fontWeight: 600,
+                                  fontSize: standalone ? 15 : 11,
+                                  fontWeight: 700,
                                   color: "#0369a1",
                                 }}
                               >
@@ -3097,10 +3099,11 @@ export default function ProoferBoard({
                                     }
                                     aria-label={`New publish time (${zoneAbbr})`}
                                     style={{
-                                      padding: "5px 8px",
+                                      padding: standalone ? "7px 10px" : "5px 8px",
                                       borderRadius: 8,
                                       border: "1px solid #e4e4e7",
-                                      fontSize: 12,
+                                      fontSize: standalone ? 15 : 12,
+                                      fontWeight: standalone ? 700 : undefined,
                                       color: "#18181b",
                                       background: "#fff",
                                       fontFamily: "inherit",
