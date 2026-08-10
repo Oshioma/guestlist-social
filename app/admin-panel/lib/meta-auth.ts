@@ -6,6 +6,7 @@
 // cannot leak to browser code.
 
 import { createClient } from "@supabase/supabase-js";
+import { createHmac, timingSafeEqual } from "crypto";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -217,6 +218,234 @@ export async function fetchInstagramAccountForPage(
   const ig = data.instagram_business_account;
   if (!ig?.id) return null;
   return { id: String(ig.id), username: String(ig.username ?? "") };
+}
+
+// ---------------------------------------------------------------------------
+// Instagram API *with Instagram Login* — a SEPARATE product from the
+// Facebook-Login flow above. This lets a client connect an Instagram
+// professional account directly, with NO Facebook Page. It has its own app
+// credentials (the "Instagram App ID" / "Instagram App Secret" shown on the
+// app's "Set up Instagram business login" screen — these are DIFFERENT from
+// META_SOCIAL_APP_ID even when it's the same Meta app), its own OAuth hosts
+// (www.instagram.com + api.instagram.com), and its own API host
+// (graph.instagram.com). Accounts connected this way are stored in
+// connected_meta_accounts with auth_type='instagram_login', and publishing
+// hits graph.instagram.com with the Instagram *user* token — never a Page
+// token. Do not merge these into the Facebook helpers.
+// ---------------------------------------------------------------------------
+
+// Phase 1 scopes: identity + content publishing only. Add
+// instagram_business_manage_comments here when interaction/comment
+// moderation is extended to Instagram-Login accounts (Phase 2) — it needs
+// its own App Review.
+export const INSTAGRAM_LOGIN_SCOPES = [
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+].join(",");
+
+// Instagram-Login long-lived tokens last 60 days. graph.instagram.com is
+// unversioned for this product (no /vXX.X prefix like graph.facebook.com).
+export const INSTAGRAM_GRAPH_BASE = "https://graph.instagram.com";
+
+type InstagramConfig = {
+  appId: string;
+  appSecret: string;
+  redirectUri: string;
+};
+
+export function getInstagramConfig(): InstagramConfig {
+  const appId = process.env.INSTAGRAM_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET;
+  const redirectUri = process.env.INSTAGRAM_OAUTH_REDIRECT_URI;
+  if (!appId || !appSecret || !redirectUri) {
+    throw new Error(
+      "Missing INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET / INSTAGRAM_OAUTH_REDIRECT_URI env vars"
+    );
+  }
+  return { appId, appSecret, redirectUri };
+}
+
+export function isInstagramLoginConfigured(): boolean {
+  return (
+    !!process.env.INSTAGRAM_APP_ID &&
+    !!process.env.INSTAGRAM_APP_SECRET &&
+    !!process.env.INSTAGRAM_OAUTH_REDIRECT_URI
+  );
+}
+
+export function instagramAuthorizeUrl(state: string): string {
+  const { appId, redirectUri } = getInstagramConfig();
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    scope: INSTAGRAM_LOGIN_SCOPES,
+    response_type: "code",
+    state,
+    // Force the account chooser rather than silently reusing a prior grant,
+    // matching auth_type=rerequest on the Facebook flow.
+    force_authentication: "1",
+  });
+  return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+}
+
+type InstagramShortLivedToken = {
+  accessToken: string;
+  userId: string;
+};
+
+// Exchange the callback `code` for a short-lived Instagram user token + the
+// Instagram-scoped user id. POST to api.instagram.com (form-encoded). The
+// response shape has varied across API versions — some return the fields at
+// the top level, some wrap them in a single-element `data` array — so read
+// both defensively.
+export async function exchangeInstagramCodeForToken(
+  code: string
+): Promise<InstagramShortLivedToken> {
+  const { appId, appSecret, redirectUri } = getInstagramConfig();
+  const body = new URLSearchParams();
+  body.set("client_id", appId);
+  body.set("client_secret", appSecret);
+  body.set("grant_type", "authorization_code");
+  body.set("redirect_uri", redirectUri);
+  body.set("code", code);
+
+  const res = await fetch("https://api.instagram.com/oauth/access_token", {
+    method: "POST",
+    body,
+    cache: "no-store",
+  });
+  const raw = (await res.json()) as {
+    access_token?: string;
+    user_id?: string | number;
+    data?: Array<{ access_token?: string; user_id?: string | number }>;
+    error_message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      `Instagram code exchange failed: ${res.status} ${JSON.stringify(raw)}`
+    );
+  }
+  const first = raw.data?.[0];
+  const accessToken = raw.access_token ?? first?.access_token;
+  const userId = raw.user_id ?? first?.user_id;
+  if (!accessToken || userId == null) {
+    throw new Error(
+      `Instagram code exchange returned no access_token/user_id: ${JSON.stringify(raw)}`
+    );
+  }
+  return { accessToken, userId: String(userId) };
+}
+
+// Upgrade a short-lived Instagram user token to a long-lived one (~60 days).
+export async function exchangeForLongLivedInstagramToken(
+  shortLivedToken: string
+): Promise<TokenResponse> {
+  const { appSecret } = getInstagramConfig();
+  const url = new URL(`${INSTAGRAM_GRAPH_BASE}/access_token`);
+  url.searchParams.set("grant_type", "ig_exchange_token");
+  url.searchParams.set("client_secret", appSecret);
+  url.searchParams.set("access_token", shortLivedToken);
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  const data = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: { message?: string };
+  };
+  if (!res.ok || !data.access_token) {
+    throw new Error(
+      `Instagram long-lived exchange failed: ${res.status} ${JSON.stringify(data)}`
+    );
+  }
+  return { accessToken: data.access_token, expiresIn: data.expires_in ?? null };
+}
+
+// Refresh a long-lived Instagram token for another ~60 days. The token must
+// be at least 24 hours old and not yet expired; once past 60 days there is
+// no refresh and the user must reconnect. Driven by the
+// /api/cron/refresh-instagram-tokens job.
+export async function refreshLongLivedInstagramToken(
+  longLivedToken: string
+): Promise<TokenResponse> {
+  const url = new URL(`${INSTAGRAM_GRAPH_BASE}/refresh_access_token`);
+  url.searchParams.set("grant_type", "ig_refresh_token");
+  url.searchParams.set("access_token", longLivedToken);
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  const data = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: { message?: string };
+  };
+  if (!res.ok || !data.access_token) {
+    throw new Error(
+      `Instagram token refresh failed: ${res.status} ${JSON.stringify(data)}`
+    );
+  }
+  return { accessToken: data.access_token, expiresIn: data.expires_in ?? null };
+}
+
+// Fetch the connected account's Instagram user id + username for display and
+// for the publish-time handle match (account_name).
+export async function fetchInstagramLoginProfile(
+  userToken: string
+): Promise<{ id: string; username: string }> {
+  const url = new URL(`${INSTAGRAM_GRAPH_BASE}/me`);
+  url.searchParams.set("fields", "user_id,username");
+  url.searchParams.set("access_token", userToken);
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  const data = (await res.json()) as {
+    user_id?: string | number;
+    id?: string | number;
+    username?: string;
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    throw new Error(
+      `Instagram /me failed: ${res.status} ${JSON.stringify(data)}`
+    );
+  }
+  const id = data.user_id ?? data.id;
+  if (id == null) {
+    throw new Error(`Instagram /me returned no user_id: ${JSON.stringify(data)}`);
+  }
+  return { id: String(id), username: String(data.username ?? "") };
+}
+
+// Verify and decode a Meta `signed_request` (used by the deauthorize and
+// data-deletion callbacks). Returns the decoded payload, or null if the
+// signature doesn't match our Instagram app secret. Format is
+// `<base64url signature>.<base64url json payload>`, HMAC-SHA256.
+export function parseSignedRequest(
+  signedRequest: string
+): Record<string, unknown> | null {
+  const secret = process.env.INSTAGRAM_APP_SECRET;
+  if (!secret) return null;
+  const [encodedSig, encodedPayload] = signedRequest.split(".", 2);
+  if (!encodedSig || !encodedPayload) return null;
+
+  const toBuf = (s: string) =>
+    Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(toBuf(encodedPayload).toString("utf8"));
+  } catch {
+    return null;
+  }
+
+  const expected = createHmac("sha256", secret)
+    .update(encodedPayload)
+    .digest();
+  const actual = toBuf(encodedSig);
+  if (
+    expected.length !== actual.length ||
+    !timingSafeEqual(expected, actual)
+  ) {
+    return null;
+  }
+  return payload;
 }
 
 // Service-role Supabase client. The connected_meta_accounts table has RLS
