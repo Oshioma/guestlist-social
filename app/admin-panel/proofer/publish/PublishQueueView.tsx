@@ -172,6 +172,7 @@ export default async function PublishQueueView({
         clientEditBase={clientEditBase}
         showMetaConnection={showMetaConnection}
         connectOrigin={connectOrigin}
+        instagramLoginConfigured={!!process.env.INSTAGRAM_APP_ID}
       />
     </>
   );
