@@ -18,6 +18,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getViewer } from "../admin-panel/lib/viewer";
 import { getProoferAccess } from "@/lib/auth/permissions";
+import { isSafeInternalPath } from "@/lib/auth/next";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +28,14 @@ export const dynamic = "force-dynamic";
 // this domain doesn't even expose).
 const PROOFER_HOSTS = new Set(["postproofer.com", "www.postproofer.com"]);
 
+// Resolve the post-login destination. Only an internal, non-auth path is
+// honored (see isSafeInternalPath); anything else — including the
+// self-referential "/post-login" the sign-in form bakes in on a direct visit,
+// or a stale "/sign-in" carried in `next` — falls back to the role default so
+// a successful login lands in the app instead of bouncing back onto an auth
+// page.
 function getSafeNext(next: string | undefined, fallback: string) {
-  if (!next) return fallback;
-
-  // Allow only internal absolute paths, but block protocol-relative and odd cases
-  if (!next.startsWith("/")) return fallback;
-  if (next.startsWith("//")) return fallback;
-  if (next.startsWith("/\\")) return fallback;
-
-  return next;
+  return isSafeInternalPath(next) ? next : fallback;
 }
 
 export default async function PostLoginPage({
@@ -72,5 +72,9 @@ export default async function PostLoginPage({
     redirect(`/portal/${viewer.clientId}`);
   }
 
-  redirect("/sign-in");
+  // Authenticated but admitted to nothing (no user_roles row, no team poster
+  // role, no client account). Send them back to sign-in *with a reason* rather
+  // than a bare bounce that's indistinguishable from a wrong password — this is
+  // the same signal middleware uses for an unadmitted session.
+  redirect("/sign-in?error=not-authorized");
 }
