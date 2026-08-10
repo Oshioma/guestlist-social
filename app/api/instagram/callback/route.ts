@@ -6,6 +6,7 @@ import {
   fetchInstagramLoginProfile,
   metaServiceClient,
 } from "../../../admin-panel/lib/meta-auth";
+import { normalizeHandle } from "../../../admin-panel/lib/account-match";
 
 // GET /api/instagram/callback
 //
@@ -83,6 +84,32 @@ export async function GET(req: Request) {
     const profile = await fetchInstagramLoginProfile(longLived.accessToken);
 
     const admin = metaServiceClient();
+
+    // Guard against connecting the WRONG Instagram. Instagram OAuth silently
+    // reuses whatever account is already logged into the browser, so clicking
+    // "Connect Instagram" for one client can attach the operator's own (or
+    // another client's) Instagram. If the client has a declared handle
+    // (ig_handle), refuse to save a login whose username doesn't match it —
+    // the same pinning the publisher uses to never post to the wrong account.
+    // (defensive select: ig_handle should exist, but never break connect on it.)
+    const { data: clientRow } = await admin
+      .from("clients")
+      .select("ig_handle")
+      .eq("id", clientIdNum)
+      .maybeSingle();
+    const declaredHandle = normalizeHandle(
+      (clientRow?.ig_handle as string | null) ?? null
+    );
+    const connectedHandle = normalizeHandle(profile.username);
+    if (declaredHandle && connectedHandle && declaredHandle !== connectedHandle) {
+      return redirectError(
+        `You connected @${profile.username}, but this account's Instagram handle is ` +
+          `@${declaredHandle}. Nothing was saved. You were probably still logged into a ` +
+          `different Instagram — log out of Instagram (or use a private/incognito window), ` +
+          `then click Connect Instagram again and sign in as @${declaredHandle}.`
+      );
+    }
+
     const now = new Date().toISOString();
     const expiresAt = longLived.expiresIn
       ? new Date(Date.now() + longLived.expiresIn * 1000).toISOString()
