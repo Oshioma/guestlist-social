@@ -11,10 +11,12 @@ import OnboardingFunnel from "./OnboardingFunnel";
 import { loadOnboardingFunnel } from "@/lib/admin/onboarding-funnel";
 import LegalPagesEditor from "./LegalPagesEditor";
 import { loadLegalPagesForEditor } from "@/lib/legal/actions";
+import SystemStatus from "./SystemStatus";
+import { loadSystemStatus } from "@/lib/admin/system-status";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "tools" | "emails" | "users" | "legal";
+type Tab = "tools" | "emails" | "users" | "legal" | "system";
 
 export default async function SuperAdminPage({
   searchParams,
@@ -34,12 +36,15 @@ export default async function SuperAdminPage({
         ? "users"
         : sp.tab === "legal"
           ? "legal"
-          : "tools";
+          : sp.tab === "system"
+            ? "system"
+            : "tools";
 
   const templates = tab === "emails" ? await loadEmailTemplatesForEditor() : [];
   const users = tab === "users" ? await loadUsersOverview() : [];
   const funnel = tab === "users" ? await loadOnboardingFunnel() : null;
   const legalPages = tab === "legal" ? await loadLegalPagesForEditor() : [];
+  const systemGroups = tab === "system" ? await loadSystemStatus() : [];
 
   const maxWidth =
     tab === "emails" || tab === "legal" ? 1080 : tab === "users" ? 1000 : 760;
@@ -70,6 +75,9 @@ export default async function SuperAdminPage({
           </Link>
           <Link href={`${base}/super-admin?tab=legal`} style={tabStyle(tab === "legal")}>
             Legal
+          </Link>
+          <Link href={`${base}/super-admin?tab=system`} style={tabStyle(tab === "system")}>
+            System
           </Link>
         </div>
 
@@ -130,6 +138,17 @@ export default async function SuperAdminPage({
               URLs. Use the toolbar for headings, bold and links.
             </p>
             <LegalPagesEditor pages={legalPages} base={base} />
+          </section>
+        )}
+
+        {tab === "system" && (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>System status</h3>
+            <p style={sectionSubStyle}>
+              Which keys and integrations are live. Secret values are never shown
+              — a secret reads only “Set” or “Not set”. Reload to re-check.
+            </p>
+            <SystemStatus groups={systemGroups} />
           </section>
         )}
       </div>
