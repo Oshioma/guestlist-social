@@ -13,6 +13,7 @@ import { planConfig, type Plan } from "@/lib/billing/plans";
 import { countTeamSocialAccounts } from "@/lib/billing/team-billing";
 import { stripeConfigured } from "@/lib/stripe";
 import { CreateAccountForm } from "./CreateAccountForm";
+import { DisconnectButton } from "./DisconnectButton";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,24 @@ export default async function ProoferTeamDetailPage({
   searchParams,
 }: {
   params: Promise<{ teamId: string }>;
-  searchParams: Promise<{ connect_error?: string; billing?: string }>;
+  searchParams: Promise<{
+    connect_error?: string;
+    meta_error?: string;
+    billing?: string;
+  }>;
 }) {
   const access = await getProoferAccess();
   if (!access) redirect("/sign-in");
   const { teamId } = await params;
-  const { connect_error: connectError, billing } = await searchParams;
+  const {
+    connect_error: connectErrorParam,
+    meta_error: metaError,
+    billing,
+  } = await searchParams;
+  // The Meta/Instagram OAuth callbacks report failures via `meta_error`; older
+  // links use `connect_error`. Accept either so a failed connect (e.g. "no
+  // Facebook Page") actually shows here instead of vanishing.
+  const connectError = connectErrorParam || metaError;
 
   const admin = createAdminClient();
   const { base } = await getProoferBase();
@@ -139,6 +152,9 @@ export default async function ProoferTeamDetailPage({
   }
   // Where Meta should send the user back after the OAuth round-trip.
   const connectReturnTo = `${base}/teams/${teamId}`;
+  // Instagram Business Login (no Facebook Page) is a separate app config, so
+  // only surface its button when it's actually set up.
+  const isInstagramLoginConfigured = !!process.env.INSTAGRAM_APP_ID;
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
@@ -207,6 +223,13 @@ export default async function ProoferTeamDetailPage({
                 the tokens are stored server-side and no one on the team ever sees
                 them.
               </p>
+              {isInstagramLoginConfigured && (
+                <p style={{ ...sectionSubStyle, marginTop: -4 }}>
+                  No Facebook Page? Use <strong>Instagram only</strong> to connect
+                  an Instagram professional account (Business or Creator) on its
+                  own — no Facebook account required.
+                </p>
+              )}
               <CreateAccountForm teamId={teamId} />
 
               {accountsInTeam.length > 0 && (
@@ -215,8 +238,8 @@ export default async function ProoferTeamDetailPage({
                     const connected = connectedByClient.get(a.clientId) ?? new Set<string>();
                     const ig = connected.has("instagram");
                     const fb = connected.has("facebook");
-                    const anyConnected = ig || fb;
                     const href = `/api/meta/connect?clientId=${a.clientId}&returnTo=${encodeURIComponent(connectReturnTo)}`;
+                    const igHref = `/api/instagram/connect?clientId=${a.clientId}&returnTo=${encodeURIComponent(connectReturnTo)}`;
                     return (
                       <div key={a.clientId} style={connectRowStyle}>
                         <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 140 }}>
@@ -226,9 +249,40 @@ export default async function ProoferTeamDetailPage({
                           <StatusPill on={ig} label="Instagram" />
                           <StatusPill on={fb} label="Facebook" />
                         </span>
-                        <a href={href} style={connectBtnStyle}>
-                          {anyConnected ? "Reconnect" : "Connect"}
-                        </a>
+                        <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <a
+                            href={href}
+                            style={connectBtnFacebookStyle}
+                            title="Log in with Facebook (needs a Facebook Page linked to the Instagram account)"
+                          >
+                            {fb ? "Reconnect Facebook" : "Connect Facebook"}
+                          </a>
+                          {isInstagramLoginConfigured && (
+                            <a
+                              href={igHref}
+                              style={connectBtnInstagramStyle}
+                              title="Log in with Instagram directly — no Facebook account needed"
+                            >
+                              {ig ? "Reconnect Instagram" : "Connect Instagram"}
+                            </a>
+                          )}
+                          {fb && (
+                            <DisconnectButton
+                              teamId={teamId}
+                              clientId={a.clientId}
+                              platform="facebook"
+                              label="Facebook"
+                            />
+                          )}
+                          {ig && (
+                            <DisconnectButton
+                              teamId={teamId}
+                              clientId={a.clientId}
+                              platform="instagram"
+                              label="Instagram"
+                            />
+                          )}
+                        </span>
                       </div>
                     );
                   })}
@@ -348,6 +402,16 @@ const connectBtnStyle: React.CSSProperties = {
   padding: "7px 12px",
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const connectBtnFacebookStyle: React.CSSProperties = {
+  ...connectBtnStyle,
+  background: "#1877F2",
+};
+
+const connectBtnInstagramStyle: React.CSSProperties = {
+  ...connectBtnStyle,
+  background: "#c13584",
 };
 
 const backLinkStyle: React.CSSProperties = {
