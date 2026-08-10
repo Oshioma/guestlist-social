@@ -7,7 +7,7 @@
 // person deletes their data). Edit the live copy from Super admin → Legal; these
 // are only the fallback used until an override is saved.
 
-export type LegalPageKey = "privacy" | "data_deletion";
+export type LegalPageKey = "privacy" | "data_deletion" | "terms";
 
 export type LegalPageDef = {
   key: LegalPageKey;
@@ -19,8 +19,10 @@ export type LegalPageDef = {
 };
 
 // Change these to your real details, or edit the live copy in Super admin → Legal.
-const CONTACT_EMAIL = "privacy@postproofer.com";
+const CONTACT_EMAIL = "nelly@guestlistsocial.com";
 const APP_NAME = "Post Proofer";
+// The operating company behind the product.
+const COMPANY = "Guestlist Social";
 
 export const LEGAL_PAGES: LegalPageDef[] = [
   {
@@ -122,6 +124,99 @@ and what gets removed. If you have any trouble, email
 
 <h2>Contact</h2>
 <p><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a> — we respond to deletion requests within 30 days.</p>
+`.trim(),
+  },
+  {
+    key: "terms",
+    slug: "terms",
+    navLabel: "Terms & Conditions",
+    defaultTitle: "Terms & Conditions",
+    defaultBodyHtml: `
+<p><em>Last updated: 9 August 2026</em></p>
+
+<p>These Terms &amp; Conditions ("Terms") govern your use of ${APP_NAME} (the
+"Service"), operated by ${COMPANY} ("we", "us"). By creating an account or using
+the Service, you agree to these Terms. If you don't agree, don't use the Service.
+Questions: <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+
+<h2>1. The Service</h2>
+<p>${APP_NAME} lets businesses and agencies plan, draft, approve and publish
+social-media posts to their own connected Instagram and Facebook accounts, and
+view basic performance insights.</p>
+
+<h2>2. Your account</h2>
+<p>You must give accurate information, keep your login secure, and are responsible
+for all activity under your account. You must be at least 18 and have authority to
+accept these Terms (including on behalf of any business you represent).</p>
+
+<h2>3. Connecting social accounts</h2>
+<p>When you connect a Facebook Page and its linked Instagram account, you authorise
+us to publish the content you create and schedule, and to read insights, on your
+behalf. You confirm you have the right to manage and post to those accounts, and you
+agree to comply with Meta's terms and the Instagram and Facebook platform policies.
+Your use of Meta's services is also governed by Meta's own terms.</p>
+
+<h2>4. Your content</h2>
+<p>You keep ownership of the content you upload and create. You grant us a limited
+licence to store, process and publish that content solely to provide the Service
+(for example, to publish it to the accounts you connect). You are responsible for
+your content and must not post anything unlawful, infringing, deceptive, or that
+violates a third party's rights or a platform's rules.</p>
+
+<h2>5. Acceptable use</h2>
+<p>You agree not to: use the Service for spam or bulk unsolicited content; break the
+law or any platform policy; infringe intellectual-property or privacy rights; attempt
+to disrupt, reverse-engineer, or gain unauthorised access to the Service; or resell
+the Service without our permission.</p>
+
+<h2>6. Plans, trials and billing</h2>
+<p>Some features are offered on paid plans. Paid plans may start with a free trial;
+unless cancelled before the trial ends, they convert to a paid subscription. Fees are
+billed in advance and are non-refundable except where required by law. We may change
+plan pricing on reasonable notice. You can cancel at any time, effective at the end of
+the current billing period.</p>
+
+<h2>7. Third-party services</h2>
+<p>The Service relies on third parties (including Meta, and our hosting, database and
+email providers). We are not responsible for their availability or actions, and your
+use of them may be subject to their own terms.</p>
+
+<h2>8. Availability and changes</h2>
+<p>We aim to keep the Service available but do not guarantee it will be uninterrupted or
+error-free. We may add, change, suspend or discontinue features at any time.</p>
+
+<h2>9. Disclaimers</h2>
+<p>The Service is provided "as is" and "as available", without warranties of any kind to
+the fullest extent permitted by law. We do not warrant that publishing will always
+succeed, as this depends on third-party platforms outside our control.</p>
+
+<h2>10. Limitation of liability</h2>
+<p>To the fullest extent permitted by law, ${COMPANY} will not be liable for any
+indirect, incidental, special or consequential losses, or for lost profits, revenue,
+data or goodwill. Our total liability for any claim relating to the Service will not
+exceed the amount you paid us in the 12 months before the claim.</p>
+
+<h2>11. Indemnity</h2>
+<p>You agree to indemnify ${COMPANY} against claims arising from your content, your use
+of the Service, or your breach of these Terms or of a platform's policies.</p>
+
+<h2>12. Termination</h2>
+<p>You may stop using the Service and delete your account at any time (see
+<a href="/data-deletion">Data Deletion</a>). We may suspend or terminate access if you
+breach these Terms or use the Service in a way that risks harm to others or to the
+platforms we integrate with.</p>
+
+<h2>13. Governing law</h2>
+<p>These Terms are governed by the laws of England and Wales, and the courts of England
+and Wales have exclusive jurisdiction, unless mandatory local law provides otherwise.</p>
+
+<h2>14. Changes to these Terms</h2>
+<p>We may update these Terms from time to time; we'll change the "last updated" date above
+and, for material changes, take reasonable steps to notify you. Continued use after a change
+means you accept the updated Terms.</p>
+
+<h2>15. Contact</h2>
+<p><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
 `.trim(),
   },
 ];

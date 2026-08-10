@@ -60,6 +60,10 @@ export default async function ProoferStandaloneLayout({
             Privacy Policy
           </Link>
           <span style={{ color: "#d4d4d8" }}>·</span>
+          <Link href="/terms" target="_blank" style={footerLinkStyle}>
+            Terms &amp; Conditions
+          </Link>
+          <span style={{ color: "#d4d4d8" }}>·</span>
           <Link href="/data-deletion" target="_blank" style={footerLinkStyle}>
             Data Deletion
           </Link>
