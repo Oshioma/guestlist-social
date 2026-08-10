@@ -9,10 +9,12 @@ import UsersOverview from "./UsersOverview";
 import { loadUsersOverview } from "@/lib/admin/users-overview";
 import OnboardingFunnel from "./OnboardingFunnel";
 import { loadOnboardingFunnel } from "@/lib/admin/onboarding-funnel";
+import LegalPagesEditor from "./LegalPagesEditor";
+import { loadLegalPagesForEditor } from "@/lib/legal/actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "tools" | "emails" | "users";
+type Tab = "tools" | "emails" | "users" | "legal";
 
 export default async function SuperAdminPage({
   searchParams,
@@ -26,13 +28,21 @@ export default async function SuperAdminPage({
   const { base } = await getProoferBase();
   const sp = await searchParams;
   const tab: Tab =
-    sp.tab === "emails" ? "emails" : sp.tab === "users" ? "users" : "tools";
+    sp.tab === "emails"
+      ? "emails"
+      : sp.tab === "users"
+        ? "users"
+        : sp.tab === "legal"
+          ? "legal"
+          : "tools";
 
   const templates = tab === "emails" ? await loadEmailTemplatesForEditor() : [];
   const users = tab === "users" ? await loadUsersOverview() : [];
   const funnel = tab === "users" ? await loadOnboardingFunnel() : null;
+  const legalPages = tab === "legal" ? await loadLegalPagesForEditor() : [];
 
-  const maxWidth = tab === "emails" ? 1080 : tab === "users" ? 1000 : 760;
+  const maxWidth =
+    tab === "emails" || tab === "legal" ? 1080 : tab === "users" ? 1000 : 760;
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
@@ -57,6 +67,9 @@ export default async function SuperAdminPage({
           </Link>
           <Link href={`${base}/super-admin?tab=users`} style={tabStyle(tab === "users")}>
             Users
+          </Link>
+          <Link href={`${base}/super-admin?tab=legal`} style={tabStyle(tab === "legal")}>
+            Legal
           </Link>
         </div>
 
@@ -105,6 +118,18 @@ export default async function SuperAdminPage({
               where you keep an eye on everyone. Click a row to expand.
             </p>
             <UsersOverview users={users} base={base} />
+          </section>
+        )}
+
+        {tab === "legal" && (
+          <section style={cardStyle}>
+            <h3 style={sectionTitleStyle}>Legal pages</h3>
+            <p style={sectionSubStyle}>
+              Edit the public Privacy Policy and Data Deletion pages (the ones
+              Meta App Review checks). Changes publish immediately at their public
+              URLs. Use the toolbar for headings, bold and links.
+            </p>
+            <LegalPagesEditor pages={legalPages} base={base} />
           </section>
         )}
       </div>

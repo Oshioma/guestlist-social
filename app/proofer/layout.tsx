@@ -7,6 +7,7 @@
 // layout provides the shell and auth.
 import type { Metadata } from "next";
 import "../admin-panel/admin.css";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import MetaSdkLoader from "../admin-panel/components/MetaSdkLoader";
 import { getProoferAccess } from "@/lib/auth/permissions";
@@ -44,7 +45,32 @@ export default async function ProoferStandaloneLayout({
         style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
       >
         {children}
+        <footer
+          style={{
+            flexShrink: 0,
+            borderTop: "1px solid #e4e4e7",
+            padding: "16px 24px",
+            display: "flex",
+            justifyContent: "center",
+            gap: 14,
+            fontSize: 12.5,
+          }}
+        >
+          <Link href="/privacy" target="_blank" style={footerLinkStyle}>
+            Privacy Policy
+          </Link>
+          <span style={{ color: "#d4d4d8" }}>·</span>
+          <Link href="/data-deletion" target="_blank" style={footerLinkStyle}>
+            Data Deletion
+          </Link>
+        </footer>
       </div>
     </>
   );
 }
+
+const footerLinkStyle: React.CSSProperties = {
+  color: "#71717a",
+  fontWeight: 600,
+  textDecoration: "none",
+};
