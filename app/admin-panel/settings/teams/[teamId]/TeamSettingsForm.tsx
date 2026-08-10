@@ -19,9 +19,14 @@ import {
 export function TeamSettingsForm({
   teamId,
   name,
+  showDelete = true,
 }: {
   teamId: string;
   name: string;
+  // When false, the delete control is omitted here — the caller shows it
+  // elsewhere (e.g. a consolidated "Danger zone" section) so team deletion
+  // isn't offered in two places.
+  showDelete?: boolean;
 }) {
   const [renameState, renameAction, renaming] = useActionState<ActionState | null, FormData>(
     renameTeam,
@@ -55,7 +60,8 @@ export function TeamSettingsForm({
         </div>
       </form>
 
-      {/* Danger zone */}
+      {/* Danger zone (omitted when the caller renders delete elsewhere) */}
+      {showDelete && (
       <details style={{ borderTop: "1px solid #f4f4f5", paddingTop: 12 }}>
         <summary style={{ fontSize: 13, color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}>
           Delete this team
@@ -88,6 +94,7 @@ export function TeamSettingsForm({
           </button>
         </form>
       </details>
+      )}
     </div>
   );
 }

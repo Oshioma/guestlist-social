@@ -8,17 +8,22 @@ import { secondaryButtonStyle, errorBoxStyle } from "../form-styles";
 export function TeamAccountsManager({
   teamId,
   accounts,
+  teamName,
 }: {
   teamId: string;
   accounts: AccountOption[];
+  teamName?: string;
 }) {
   const inTeam = accounts.filter((a) => a.inTeam);
   const available = accounts.filter((a) => !a.inTeam);
+  const here = teamName ? `In ${teamName}` : "In this team";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
-        <div style={subheadStyle}>In this team ({inTeam.length})</div>
+        <div style={subheadStyle}>
+          {here} ({inTeam.length})
+        </div>
         {inTeam.length === 0 ? (
           <p style={emptyStyle}>No accounts yet. Add one below.</p>
         ) : (

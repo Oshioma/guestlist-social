@@ -14,6 +14,7 @@ import { countTeamSocialAccounts } from "@/lib/billing/team-billing";
 import { stripeConfigured } from "@/lib/stripe";
 import { CreateAccountForm } from "./CreateAccountForm";
 import { DisconnectButton } from "./DisconnectButton";
+import { TeamDangerZone } from "./TeamDangerZone";
 
 export const dynamic = "force-dynamic";
 
@@ -190,7 +191,7 @@ export default async function ProoferTeamDetailPage({
           <>
             <section style={cardStyle}>
               <h3 style={sectionTitleStyle}>Team settings</h3>
-              <TeamSettingsForm teamId={teamId} name={team.name as string} />
+              <TeamSettingsForm teamId={teamId} name={team.name as string} showDelete={false} />
             </section>
 
             <section style={cardStyle}>
@@ -297,7 +298,7 @@ export default async function ProoferTeamDetailPage({
                 account can live in more than one team, so adding it here
                 doesn&rsquo;t remove it elsewhere.
               </p>
-              <TeamAccountsManager teamId={teamId} accounts={accounts} />
+              <TeamAccountsManager teamId={teamId} accounts={accounts} teamName={team.name as string} />
             </section>
 
             <section style={cardStyle}>
@@ -323,6 +324,20 @@ export default async function ProoferTeamDetailPage({
                   <TeamMemberRow key={m.userId} teamId={teamId} member={m} plan={plan} />
                 ))}
               </div>
+            </section>
+
+            <section style={{ ...cardStyle, borderColor: "#fecaca" }}>
+              <h3 style={{ ...sectionTitleStyle, color: "#b91c1c" }}>Danger zone</h3>
+              <p style={sectionSubStyle}>
+                Irreversible actions, grouped here so they&rsquo;re easy to find
+                and hard to hit by accident.
+              </p>
+              <TeamDangerZone
+                teamId={teamId}
+                accounts={accountsInTeam.map((a) => ({ clientId: a.clientId, name: a.name }))}
+                isStaff={isStaff}
+                backTo={connectReturnTo}
+              />
             </section>
           </>
         ) : (
