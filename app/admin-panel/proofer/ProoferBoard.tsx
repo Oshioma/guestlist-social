@@ -428,7 +428,7 @@ function mobileToolbarButtonStyle(accent: boolean): React.CSSProperties {
 // Reschedule button, so they're always the exact same size and line up as a
 // tidy column of equal-width boxes — wide enough for the longest label
 // ("Instagram Story"). A little thinner than before (7px vertical padding).
-const PLAT_TOGGLE_WIDTH = 132;
+const PLAT_TOGGLE_WIDTH = 172;
 
 function platToggleStyle(
   on: boolean,
@@ -3099,11 +3099,14 @@ export default function ProoferBoard({
                                     }
                                     aria-label={`New publish time (${zoneAbbr})`}
                                     style={{
-                                      padding: standalone ? "7px 10px" : "5px 8px",
+                                      padding: standalone ? "6px 10px" : "5px 8px",
                                       borderRadius: 8,
                                       border: "1px solid #e4e4e7",
-                                      fontSize: standalone ? 15 : 12,
-                                      fontWeight: standalone ? 700 : undefined,
+                                      // Match the day heading so the time reads as
+                                      // prominently as the date.
+                                      fontSize: standalone ? 21 : 12,
+                                      fontWeight: standalone ? 800 : undefined,
+                                      letterSpacing: standalone ? "-0.02em" : undefined,
                                       color: "#18181b",
                                       background: "#fff",
                                       fontFamily: "inherit",
@@ -3111,7 +3114,7 @@ export default function ProoferBoard({
                                   />
                                   <span
                                     style={{
-                                      fontSize: 11,
+                                      fontSize: standalone ? 13 : 11,
                                       fontWeight: 700,
                                       color: "#71717a",
                                     }}
@@ -3220,9 +3223,7 @@ export default function ProoferBoard({
                             >
                               ◎
                             </span>
-                            {/* Logo shows the platform; the word is just the
-                                format (Feed / Story / Reel). */}
-                            {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
+                            Instagram {PROOFER_PLATFORM_LABELS[activePlatform].replace("IG ", "")}
                             <span style={{ color: "#a1a1aa", fontSize: 10, marginLeft: "auto" }}>▾</span>
                           </button>
                           {openFmtKey === key && !isLocked && (
@@ -3291,7 +3292,7 @@ export default function ProoferBoard({
                                         cursor: "pointer",
                                       }}
                                     >
-                                      {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
+                                      Instagram {PROOFER_PLATFORM_LABELS[p].replace("IG ", "")}
                                     </button>
                                   );
                                 })}
@@ -3366,8 +3367,8 @@ export default function ProoferBoard({
                           >
                             f
                           </span>
-                          {/* Logo shows the platform; Facebook is feed-only. */}
-                          Feed
+                          {/* Facebook is feed-only, so the format is baked in. */}
+                          Facebook Feed
                         </button>
                         </div>
                       </div>
