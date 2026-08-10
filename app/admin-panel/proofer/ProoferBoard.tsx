@@ -2837,6 +2837,10 @@ export default function ProoferBoard({
                       ? // Dissolve the column so the date header, the composer
                         // and the settings can be ordered independently.
                         { display: "contents" }
+                      : standalone
+                      ? // Standalone: flex column so the platform buttons can be
+                        // ordered above the date/time (see the order below).
+                        { minWidth: 0, display: "flex", flexDirection: "column" }
                       : { minWidth: 0 }
                   }
                 >
@@ -3172,7 +3176,10 @@ export default function ProoferBoard({
                         : undefined,
                       flexDirection: "column",
                       gap: 8,
-                      order: isNarrow ? 3 : undefined,
+                      // Standalone: lift the platform buttons (+ pillar) above the
+                      // date & time. On a phone the whole cell is one ordered
+                      // grid, so keep the phone order.
+                      order: standalone ? -1 : isNarrow ? 3 : undefined,
                     }}
                   >
                     {standalone ? (
