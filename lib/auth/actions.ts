@@ -30,19 +30,6 @@ import { authRedirectOrigin } from "@/lib/auth/request-origin";
 // deliberately generic so it doesn't tell an attacker which layer caught them.
 const THROTTLED = "Too many attempts. Please wait a moment and try again.";
 
-// A captcha / "Attack Protection" rejection from Supabase is NOT a credential
-// problem. It happens when Supabase's dashboard CAPTCHA is enabled but no
-// captcha token reaches it (this app verifies Turnstile itself and does not
-// forward a token to Supabase). Detecting it lets us stop masking it behind
-// "Invalid email or password", which makes a healthy account look like a wrong
-// password and hides the real cause. A captcha failure reveals nothing about
-// whether the account exists, so surfacing it distinctly is safe.
-function isCaptchaError(error: { code?: string | null; message?: string | null }): boolean {
-  const code = (error.code ?? "").toLowerCase();
-  const message = (error.message ?? "").toLowerCase();
-  return code.includes("captcha") || message.includes("captcha");
-}
-
 export type ActionState = {
   error?: string | null;
   fieldErrors?: Partial<Record<string, string[]>>;
@@ -163,8 +150,20 @@ export async function signUpWithPassword(
       p_name: `${firstName}'s Team`,
     });
     if (teamErr) {
-      // Non-fatal — the account exists; the team can be created later.
-      console.error("ensure_personal_team failed:", teamErr.message);
+      // A brand-new account with no team can still authenticate, but it is
+      // admitted to nothing — every later sign-in bounces to
+      // /sign-in?error=not-authorized ("This account isn't authorized"),
+      // which reads exactly like a broken login. Don't leave that orphan
+      // silently: roll the sign-up back (delete the just-created auth user,
+      // which cascades the membership) so the person can retry cleanly, and
+      // surface the failure instead of swallowing it.
+      console.error("ensure_personal_team failed during sign-up:", teamErr.message);
+      await admin.auth.admin.deleteUser(userId).catch((e) => {
+        console.error("sign-up rollback (deleteUser) failed:", e);
+      });
+      return {
+        error: "We couldn't finish setting up your account. Please try again.",
+      };
     }
   }
 
@@ -225,22 +224,6 @@ export async function signInWithPassword(
   });
 
   if (error) {
-    // Don't bury a captcha / Attack-Protection rejection under the generic
-    // credentials message — that's what makes every login look "wrong
-    // password" when Supabase CAPTCHA is enabled server-side. Log the real
-    // cause for the operator (visible in server logs) and tell the user it's a
-    // verification problem, not their password.
-    if (isCaptchaError(error)) {
-      console.error(
-        "Sign-in blocked by captcha/Attack-Protection:",
-        error.code,
-        error.message
-      );
-      return {
-        error:
-          "We couldn't verify this request. Refresh the page and try again — if it keeps happening, contact support.",
-      };
-    }
     return { error: "Invalid email or password." };
   }
 
