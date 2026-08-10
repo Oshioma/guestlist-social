@@ -25,6 +25,10 @@ export default async function LegalPage({ pageKey }: { pageKey: string }) {
             Privacy Policy
           </Link>
           <span style={{ color: "#d4d4d8" }}>·</span>
+          <Link href="/terms" style={footLink}>
+            Terms &amp; Conditions
+          </Link>
+          <span style={{ color: "#d4d4d8" }}>·</span>
           <Link href="/data-deletion" style={footLink}>
             Data Deletion
           </Link>
