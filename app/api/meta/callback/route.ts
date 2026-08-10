@@ -94,11 +94,12 @@ export async function GET(req: Request) {
     if (pages.length === 0) {
       return redirectError(
         "Facebook returned no Pages for this login, so there's nothing to connect. " +
-          "This almost always means your Pages are owned by a Business Portfolio / use " +
-          "the New Pages Experience, which the classic login can't read (you'll see " +
-          '"No Pages to control" on Facebook). Grant this app access to the Page in Meta ' +
-          "Business Settings, or switch on Business Login (set META_SOCIAL_LOGIN_CONFIG_ID), " +
-          "then retry."
+          "If this account only has Instagram and no Facebook Page, use \"Connect " +
+          "Instagram\" instead — it needs no Facebook. Otherwise this usually means your " +
+          "Pages are owned by a Business Portfolio / use the New Pages Experience, which " +
+          'the classic login can\'t read (you\'ll see "No Pages to control" on Facebook). ' +
+          "Grant this app access to the Page in Meta Business Settings, or switch on " +
+          "Business Login (set META_SOCIAL_LOGIN_CONFIG_ID), then retry."
       );
     }
 

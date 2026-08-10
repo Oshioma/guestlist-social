@@ -84,6 +84,51 @@ async function requireTeamManager(
   return { error: "You don't have permission to manage this team." };
 }
 
+// Remove a client's stored Meta connection for ONE platform. Used by the team
+// page to clear a connection that shouldn't be there — e.g. a Facebook Page
+// that isn't really this account's — so the connection status stops claiming
+// the account is connected when it isn't. Authorized per-team, and the account
+// must belong to this team (so a manager can't disconnect an account they
+// don't control by passing a foreign client id). Deletes via the service role
+// because connected_meta_accounts has RLS with no policies.
+export async function disconnectClientPlatform(
+  teamId: string,
+  clientId: string,
+  platform: "facebook" | "instagram"
+): Promise<{ ok: boolean; removed?: number; error?: string }> {
+  if (!teamId || !clientId) return { ok: false, error: "Missing team or account." };
+  if (platform !== "facebook" && platform !== "instagram") {
+    return { ok: false, error: "Invalid platform." };
+  }
+
+  const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, teamId);
+  if (gate.error) return { ok: false, error: gate.error };
+
+  const idNum = Number(clientId);
+  if (Number.isNaN(idNum)) return { ok: false, error: "Invalid account." };
+
+  const { data: link } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .eq("team_id", teamId)
+    .eq("client_id", idNum)
+    .maybeSingle();
+  if (!link) return { ok: false, error: "That account isn't in this team." };
+
+  const { data: deleted, error } = await admin
+    .from("connected_meta_accounts")
+    .delete()
+    .eq("client_id", idNum)
+    .eq("platform", platform)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/proofer/teams/${teamId}`);
+  revalidatePath(`/admin-panel/settings/teams/${teamId}`);
+  return { ok: true, removed: (deleted ?? []).length };
+}
+
 // Find an existing auth user by email, or create + invite a new one. Returns
 // the user id either way so the caller can attach a membership. Handles the
 // "already registered" case so re-inviting or adding an existing client works.
