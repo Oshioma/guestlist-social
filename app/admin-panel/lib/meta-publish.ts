@@ -10,7 +10,11 @@
 // layer. Do not introduce parallel flows.
 
 import { revalidatePath } from "next/cache";
-import { META_GRAPH_VERSION, metaServiceClient } from "./meta-auth";
+import {
+  INSTAGRAM_GRAPH_BASE,
+  META_GRAPH_VERSION,
+  metaServiceClient,
+} from "./meta-auth";
 import { logMetaWrite } from "../../../lib/meta-write-log";
 import { resolveAccountMatch } from "./account-match";
 
@@ -53,15 +57,14 @@ const IG_CONTAINER_POLL_MAX_ATTEMPTS = 24;
 async function waitForContainerReady(
   containerId: string,
   pageToken: string,
-  operation: string
+  operation: string,
+  apiBase: string
 ): Promise<void> {
   for (let attempt = 0; attempt < IG_CONTAINER_POLL_MAX_ATTEMPTS; attempt++) {
     // Check immediately on the first pass, then space subsequent checks out.
     if (attempt > 0) await sleep(IG_CONTAINER_POLL_INTERVAL_MS);
 
-    const statusUrl = new URL(
-      `https://graph.facebook.com/${META_GRAPH_VERSION}/${containerId}`
-    );
+    const statusUrl = new URL(`${apiBase}/${containerId}`);
     statusUrl.searchParams.set("fields", "status_code,status");
     statusUrl.searchParams.set("access_token", pageToken);
 
@@ -109,12 +112,11 @@ async function waitForContainerReady(
 // Look up an Instagram media permalink, best-effort (null on any failure).
 async function lookupInstagramPermalink(
   mediaId: string,
-  pageToken: string
+  pageToken: string,
+  apiBase: string
 ): Promise<string | null> {
   try {
-    const permalinkUrl = new URL(
-      `https://graph.facebook.com/${META_GRAPH_VERSION}/${mediaId}`
-    );
+    const permalinkUrl = new URL(`${apiBase}/${mediaId}`);
     permalinkUrl.searchParams.set("fields", "permalink");
     permalinkUrl.searchParams.set("access_token", pageToken);
     const res = await fetch(permalinkUrl.toString(), { cache: "no-store" });
@@ -253,13 +255,31 @@ export async function publishMetaQueueItem(
     account_id: string;
     access_token: string;
     account_name: string | null;
+    auth_type?: string | null;
   };
-  const { data: accounts, error: accountErr } = await admin
+  // Defensive select: auth_type is a newer column. Fall back to the older
+  // shape if the migration hasn't run yet — publishing must never break on a
+  // missing optional column (same pattern as the clients.fb_page select).
+  let accounts: ConnectedAccount[] | null = null;
+  let accountErr: { message: string } | null = null;
+  const accountsFull = await admin
     .from("connected_meta_accounts")
-    .select("account_id, access_token, account_name")
+    .select("account_id, access_token, account_name, auth_type")
     .eq("client_id", post.client_id)
     .eq("platform", platform)
     .order("updated_at", { ascending: false });
+  if (accountsFull.error) {
+    const fallback = await admin
+      .from("connected_meta_accounts")
+      .select("account_id, access_token, account_name")
+      .eq("client_id", post.client_id)
+      .eq("platform", platform)
+      .order("updated_at", { ascending: false });
+    accounts = (fallback.data ?? null) as ConnectedAccount[] | null;
+    accountErr = fallback.error;
+  } else {
+    accounts = (accountsFull.data ?? null) as ConnectedAccount[] | null;
+  }
 
   if (accountErr) {
     await noteScheduledIssue(admin, queueId, `account lookup: ${accountErr.message}`);
@@ -293,6 +313,16 @@ export async function publishMetaQueueItem(
   // instead of the image ones, which reject video/mp4.
   const isVideo = isVideoUrl(imageUrl);
 
+  // Which Graph host + token the Instagram calls use depends on HOW the
+  // account was connected. Facebook-Login accounts publish to Instagram via
+  // the parent Page token against graph.facebook.com; Instagram-Login accounts
+  // (no Facebook Page) publish with the Instagram user token against
+  // graph.instagram.com. Facebook publishing is always the Page path.
+  const igApiBase =
+    account.auth_type === "instagram_login"
+      ? INSTAGRAM_GRAPH_BASE
+      : `https://graph.facebook.com/${META_GRAPH_VERSION}`;
+
   // 4. Publish
   try {
     let publishUrl: string | null = null;
@@ -317,11 +347,13 @@ export async function publishMetaQueueItem(
             igAccountId: account.account_id,
             pageToken: account.access_token,
             videoUrl: imageUrl,
+            apiBase: igApiBase,
           })
         : await publishInstagramStory({
             igAccountId: account.account_id,
             pageToken: account.access_token,
             imageUrl,
+            apiBase: igApiBase,
           });
     } else {
       publishUrl = isVideo
@@ -330,12 +362,14 @@ export async function publishMetaQueueItem(
             pageToken: account.access_token,
             caption,
             videoUrl: imageUrl,
+            apiBase: igApiBase,
           })
         : await publishInstagramPost({
             igAccountId: account.account_id,
             pageToken: account.access_token,
             caption,
             imageUrl,
+            apiBase: igApiBase,
           });
     }
 
@@ -442,8 +476,9 @@ async function publishInstagramPost(args: {
   pageToken: string;
   caption: string;
   imageUrl: string;
+  apiBase: string;
 }): Promise<string | null> {
-  const { igAccountId, pageToken, caption, imageUrl } = args;
+  const { igAccountId, pageToken, caption, imageUrl, apiBase } = args;
 
   if (!imageUrl) {
     throw new Error("Instagram posts require an image_url.");
@@ -456,7 +491,7 @@ async function publishInstagramPost(args: {
 
   const containerStart = Date.now();
   const containerRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    `${apiBase}/${igAccountId}/media`,
     { method: "POST", body: containerParams, cache: "no-store" }
   );
   const container = (await containerRes.json()) as { id?: string; error?: { message?: string } };
@@ -484,7 +519,7 @@ async function publishInstagramPost(args: {
 
   const publishStart = Date.now();
   const publishRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    `${apiBase}/${igAccountId}/media_publish`,
     { method: "POST", body: publishParams, cache: "no-store" }
   );
   const publishData = (await publishRes.json()) as { id?: string; error?: { message?: string } };
@@ -503,34 +538,16 @@ async function publishInstagramPost(args: {
   }
   if (!publishData.id) return null;
 
-  // Try to look up the permalink; fall back to null silently on failure.
-  try {
-    const permalinkUrl = new URL(
-      `https://graph.facebook.com/${META_GRAPH_VERSION}/${publishData.id}`
-    );
-    permalinkUrl.searchParams.set("fields", "permalink");
-    permalinkUrl.searchParams.set("access_token", pageToken);
-    const permalinkRes = await fetch(permalinkUrl.toString(), {
-      cache: "no-store",
-    });
-    if (permalinkRes.ok) {
-      const permalinkData = (await permalinkRes.json()) as {
-        permalink?: string;
-      };
-      if (permalinkData.permalink) return permalinkData.permalink;
-    }
-  } catch {
-    // fall through
-  }
-  return null;
+  return lookupInstagramPermalink(publishData.id, pageToken, apiBase);
 }
 
 async function publishInstagramStory(args: {
   igAccountId: string;
   pageToken: string;
   imageUrl: string;
+  apiBase: string;
 }): Promise<string | null> {
-  const { igAccountId, pageToken, imageUrl } = args;
+  const { igAccountId, pageToken, imageUrl, apiBase } = args;
 
   if (!imageUrl) {
     throw new Error("Instagram Stories require an image_url.");
@@ -543,7 +560,7 @@ async function publishInstagramStory(args: {
 
   const storyContainerStart = Date.now();
   const storyContainerRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    `${apiBase}/${igAccountId}/media`,
     { method: "POST", body: storyContainerParams, cache: "no-store" }
   );
   const storyContainer = (await storyContainerRes.json()) as { id?: string; error?: { message?: string } };
@@ -571,7 +588,7 @@ async function publishInstagramStory(args: {
 
   const storyPublishStart = Date.now();
   const storyPublishRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    `${apiBase}/${igAccountId}/media_publish`,
     { method: "POST", body: storyPublishParams, cache: "no-store" }
   );
   const publishData = (await storyPublishRes.json()) as { id?: string; error?: { message?: string } };
@@ -649,8 +666,9 @@ async function publishInstagramVideo(args: {
   pageToken: string;
   caption: string;
   videoUrl: string;
+  apiBase: string;
 }): Promise<string | null> {
-  const { igAccountId, pageToken, caption, videoUrl } = args;
+  const { igAccountId, pageToken, caption, videoUrl, apiBase } = args;
   if (!videoUrl) {
     throw new Error("Instagram video posts require a video_url.");
   }
@@ -664,7 +682,7 @@ async function publishInstagramVideo(args: {
 
   const containerStart = Date.now();
   const containerRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    `${apiBase}/${igAccountId}/media`,
     { method: "POST", body: containerParams, cache: "no-store" }
   );
   const container = (await containerRes.json()) as {
@@ -692,7 +710,12 @@ async function publishInstagramVideo(args: {
   }
 
   // 2. Wait for Meta to finish processing the uploaded video.
-  await waitForContainerReady(creationId, pageToken, "publish:instagram_video");
+  await waitForContainerReady(
+    creationId,
+    pageToken,
+    "publish:instagram_video",
+    apiBase
+  );
 
   // 3. Publish the processed container.
   const publishParams = new URLSearchParams();
@@ -701,7 +724,7 @@ async function publishInstagramVideo(args: {
 
   const publishStart = Date.now();
   const publishRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    `${apiBase}/${igAccountId}/media_publish`,
     { method: "POST", body: publishParams, cache: "no-store" }
   );
   const publishData = (await publishRes.json()) as {
@@ -724,15 +747,16 @@ async function publishInstagramVideo(args: {
     );
   }
   if (!publishData.id) return null;
-  return lookupInstagramPermalink(publishData.id, pageToken);
+  return lookupInstagramPermalink(publishData.id, pageToken, apiBase);
 }
 
 async function publishInstagramStoryVideo(args: {
   igAccountId: string;
   pageToken: string;
   videoUrl: string;
+  apiBase: string;
 }): Promise<string | null> {
-  const { igAccountId, pageToken, videoUrl } = args;
+  const { igAccountId, pageToken, videoUrl, apiBase } = args;
   if (!videoUrl) {
     throw new Error("Instagram Stories require a video_url.");
   }
@@ -745,7 +769,7 @@ async function publishInstagramStoryVideo(args: {
 
   const containerStart = Date.now();
   const containerRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media`,
+    `${apiBase}/${igAccountId}/media`,
     { method: "POST", body: containerParams, cache: "no-store" }
   );
   const container = (await containerRes.json()) as {
@@ -776,7 +800,8 @@ async function publishInstagramStoryVideo(args: {
   await waitForContainerReady(
     creationId,
     pageToken,
-    "publish:instagram_story_video"
+    "publish:instagram_story_video",
+    apiBase
   );
 
   // 3. Publish.
@@ -786,7 +811,7 @@ async function publishInstagramStoryVideo(args: {
 
   const publishStart = Date.now();
   const publishRes = await fetch(
-    `https://graph.facebook.com/${META_GRAPH_VERSION}/${igAccountId}/media_publish`,
+    `${apiBase}/${igAccountId}/media_publish`,
     { method: "POST", body: publishParams, cache: "no-store" }
   );
   const publishData = (await publishRes.json()) as {

@@ -771,6 +771,8 @@ export default function PublishQueueBoard({
   // there (it navigated the whole page) with no sign it had been pressed.
   // This drives an "Opening Facebook…" label + note while the popup is open.
   const [connectOpening, setConnectOpening] = useState(false);
+  // Same feedback for the Instagram-only connect (no Facebook) path.
+  const [connectIgOpening, setConnectIgOpening] = useState(false);
 
   // The "missed its window" hint compares against the current clock, so it's
   // client-only — gate it behind mount so the first render matches the server
@@ -1118,6 +1120,33 @@ export default function PublishQueueBoard({
       if (popup.closed) {
         window.clearInterval(timer);
         setConnectOpening(false);
+        router.refresh();
+      }
+    }, 700);
+  }
+
+  // Instagram-only connect (Instagram Business Login) — for clients who have
+  // no Facebook Page. Same new-window + feedback behaviour as handleConnectMeta,
+  // just a different OAuth entry point.
+  function handleConnectInstagram() {
+    if (!connectClientId) {
+      alert("Pick a client first.");
+      return;
+    }
+    const url = `${connectOrigin}/api/instagram/connect?clientId=${encodeURIComponent(
+      connectClientId
+    )}`;
+    const popup = window.open(url, "instagramConnect", "width=600,height=760");
+    if (!popup) {
+      window.location.href = url;
+      return;
+    }
+    setConnectIgOpening(true);
+    popup.focus();
+    const timer = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(timer);
+        setConnectIgOpening(false);
         router.refresh();
       }
     }, 700);
@@ -2239,9 +2268,35 @@ export default function PublishQueueBoard({
             >
               {connectOpening ? "Opening Facebook…" : "Connect Meta"}
             </button>
-            {connectOpening && (
+            <button
+              type="button"
+              onClick={handleConnectInstagram}
+              disabled={!connectClientId || connectIgOpening}
+              title="For clients with an Instagram professional account and no Facebook Page"
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: connectClientId ? "#c13584" : "#e4e4e7",
+                color: connectClientId ? "#fff" : "#a1a1aa",
+                border: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: !connectClientId
+                  ? "not-allowed"
+                  : connectIgOpening
+                  ? "wait"
+                  : "pointer",
+                opacity: connectIgOpening ? 0.85 : 1,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              {connectIgOpening ? "Opening Instagram…" : "Connect Instagram only"}
+            </button>
+            {(connectOpening || connectIgOpening) && (
               <span style={{ fontSize: 12, color: "#71717a" }}>
-                Continue in the Facebook window we just opened.
+                Continue in the {connectIgOpening ? "Instagram" : "Facebook"} window we just opened.
               </span>
             )}
           </div>

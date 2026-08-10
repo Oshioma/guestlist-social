@@ -60,8 +60,12 @@ export default async function PortalConnectPage({
   const fbAccount = connected.find((a) => a.platform === "facebook");
 
   const connectUrl = `/api/meta/connect?clientId=${clientId}&returnTo=portal`;
+  const igConnectUrl = `/api/instagram/connect?clientId=${clientId}&returnTo=portal`;
 
   const isMetaConfigured = !!process.env.META_SOCIAL_APP_ID;
+  // Instagram Business Login is a separate app config (its own App ID/secret),
+  // so it can be available even when the Facebook-Login flow isn't.
+  const isInstagramLoginConfigured = !!process.env.INSTAGRAM_APP_ID;
 
   return (
     <div style={{ maxWidth: 600 }}>
@@ -231,7 +235,7 @@ export default async function PortalConnectPage({
       </div>
 
       {/* Connect / reconnect CTA */}
-      {isMetaConfigured ? (
+      {isMetaConfigured || isInstagramLoginConfigured ? (
         <div
           style={{
             background: "#18181b",
@@ -240,18 +244,48 @@ export default async function PortalConnectPage({
             color: "#fff",
           }}
         >
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-            {connected.length > 0 ? "Reconnect your Meta account" : "Connect with Meta"}
-          </div>
-          <p style={{ fontSize: 13, color: "#a1a1aa", margin: "0 0 20px", lineHeight: 1.6 }}>
-            {connected.length > 0
-              ? "If your token has expired or you switched Facebook Pages, click below to reconnect. You'll be taken to Facebook to approve access and then returned here."
-              : "Click below to log in with Facebook and grant us access to your Page and Instagram account. You'll be returned here once done."}
-          </p>
-          <ConnectMetaButton
-            connectUrl={connectUrl}
-            label={connected.length > 0 ? "Reconnect with Facebook" : "Connect with Facebook"}
-          />
+          {isMetaConfigured && (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                {connected.length > 0 ? "Reconnect your Meta account" : "Connect with Meta"}
+              </div>
+              <p style={{ fontSize: 13, color: "#a1a1aa", margin: "0 0 20px", lineHeight: 1.6 }}>
+                {connected.length > 0
+                  ? "If your token has expired or you switched Facebook Pages, click below to reconnect. You'll be taken to Facebook to approve access and then returned here."
+                  : "Click below to log in with Facebook and grant us access to your Page and Instagram account. You'll be returned here once done."}
+              </p>
+              <ConnectMetaButton
+                connectUrl={connectUrl}
+                label={connected.length > 0 ? "Reconnect with Facebook" : "Connect with Facebook"}
+              />
+            </>
+          )}
+
+          {isInstagramLoginConfigured && (
+            <div
+              style={{
+                marginTop: isMetaConfigured ? 24 : 0,
+                paddingTop: isMetaConfigured ? 24 : 0,
+                borderTop: isMetaConfigured ? "1px solid #3f3f46" : "none",
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                Only have Instagram?
+              </div>
+              <p style={{ fontSize: 13, color: "#a1a1aa", margin: "0 0 20px", lineHeight: 1.6 }}>
+                No Facebook Page? Connect an Instagram professional account
+                (Business or Creator) directly. You&apos;ll log in with Instagram
+                and be returned here once done. If your account is still a
+                personal one, switch it to a professional account in the
+                Instagram app first.
+              </p>
+              <ConnectMetaButton
+                connectUrl={igConnectUrl}
+                label="Connect with Instagram"
+                provider="instagram"
+              />
+            </div>
+          )}
         </div>
       ) : (
         <div
