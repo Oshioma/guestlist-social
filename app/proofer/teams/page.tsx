@@ -9,6 +9,7 @@ import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
+import { ConnectHelp } from "./ConnectHelp";
 import { BillingPanel, type BillingInfo } from "@/app/admin-panel/settings/teams/[teamId]/BillingPanel";
 import { countTeamSocialAccounts } from "@/lib/billing/team-billing";
 import { stripeConfigured } from "@/lib/stripe";
@@ -310,6 +311,8 @@ export default async function ProoferTeamsPage({
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Teams &amp; accounts</h2>
         </div>
 
+        <ConnectHelp igConfigured={igConfigured} />
+
         {billingParam === "success" && (
           <div style={bannerOk}>
             Subscription started — your new plan is active. Your {`30`}-day free
@@ -354,15 +357,15 @@ export default async function ProoferTeamsPage({
                           <div style={acctHeadRow}>
                             <span>Facebook</span>
                             <span>Instagram</span>
+                            <span aria-hidden="true" />
                           </div>
                           {t.accounts.map((a) => (
+                            // No company name: a connected account is identified
+                            // by its handle; an unconnected one just shows Connect
+                            // buttons, and the Meta picker names the company when
+                            // you connect. Facebook + Instagram for one account
+                            // stay grouped in the same row.
                             <div key={a.id} style={acctBlock}>
-                              <div style={acctNameRow}>
-                                <span style={acctNameStyle}>{a.name}</span>
-                                {canManage && (
-                                  <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
-                                )}
-                              </div>
                               <div style={acctConns}>
                                 <ConnCell
                                   platform="facebook"
@@ -382,6 +385,11 @@ export default async function ProoferTeamsPage({
                                   returnTo={returnTo}
                                   igConfigured={igConfigured}
                                 />
+                                {canManage ? (
+                                  <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
+                                ) : (
+                                  <span aria-hidden="true" />
+                                )}
                               </div>
                             </div>
                           ))}
@@ -705,7 +713,7 @@ const colHead: React.CSSProperties = {
 
 const acctHeadRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "1fr 1fr 24px",
   gap: 10,
   padding: "0 0 6px",
   fontSize: 11,
@@ -720,23 +728,9 @@ const acctBlock: React.CSSProperties = {
   borderTop: "1px dashed #ececef",
 };
 
-const acctNameRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  marginBottom: 5,
-};
-
-const acctNameStyle: React.CSSProperties = {
-  fontSize: 13.5,
-  fontWeight: 700,
-  flex: 1,
-  minWidth: 0,
-};
-
 const acctConns: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "1fr 1fr 24px",
   gap: 10,
   alignItems: "center",
 };
