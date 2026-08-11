@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function SignUpPage() {
   // Invite-only unless the flag is set. Bounce to sign-in so there's no
   // dangling public form when self-serve sign-up is off.
-  if (!publicSignupEnabled()) {
+  if (!(await publicSignupEnabled())) {
     redirect("/sign-in");
   }
 

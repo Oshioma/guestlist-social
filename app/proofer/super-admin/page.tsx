@@ -13,6 +13,8 @@ import LegalPagesEditor from "./LegalPagesEditor";
 import { loadLegalPagesForEditor } from "@/lib/legal/actions";
 import SystemStatus from "./SystemStatus";
 import { loadSystemStatus } from "@/lib/admin/system-status";
+import PublicSignupToggle from "./PublicSignupToggle";
+import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +47,7 @@ export default async function SuperAdminPage({
   const funnel = tab === "users" ? await loadOnboardingFunnel() : null;
   const legalPages = tab === "legal" ? await loadLegalPagesForEditor() : [];
   const systemGroups = tab === "system" ? await loadSystemStatus() : [];
+  const signupOpen = tab === "system" ? await publicSignupEnabled() : false;
 
   const maxWidth =
     tab === "emails" || tab === "legal" ? 1080 : tab === "users" ? 1000 : 760;
@@ -148,6 +151,9 @@ export default async function SuperAdminPage({
               Which keys and integrations are live. Secret values are never shown
               — a secret reads only “Set” or “Not set”. Reload to re-check.
             </p>
+            <div style={{ marginBottom: 16 }}>
+              <PublicSignupToggle enabled={signupOpen} />
+            </div>
             <SystemStatus groups={systemGroups} />
           </section>
         )}

@@ -57,8 +57,8 @@ const FEATURES: Feature[] = [
   },
 ];
 
-export default function WelcomePage() {
-  const canSignUp = publicSignupEnabled();
+export default async function WelcomePage() {
+  const canSignUp = await publicSignupEnabled();
 
   return (
     <main className="welcome">
