@@ -315,20 +315,6 @@ export default async function ProoferTeamsPage({
           <div style={bannerNeutral}>Checkout cancelled — your plan is unchanged.</div>
         )}
 
-        {/* Owner-level plan & billing */}
-        {billing && billingTeamId && (
-          <section id="plan-billing" style={cardStyle}>
-            <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
-              Plan &amp; billing
-            </h3>
-            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
-              Your plan covers the teams you own. Every paid plan starts with a
-              30-day free trial.
-            </p>
-            <BillingPanel teamId={billingTeamId} info={billing} />
-          </section>
-        )}
-
         {/* The map: each team and the accounts inside it */}
         <section style={{ background: "transparent" }}>
           {rows.length === 0 ? (
@@ -434,6 +420,20 @@ export default async function ProoferTeamsPage({
             </>
           )}
         </section>
+
+        {/* Owner-level plan & billing, at the foot of the page */}
+        {billing && billingTeamId && (
+          <section id="plan-billing" style={cardStyle}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
+              Plan &amp; billing
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
+              Your plan covers the teams you own. Every paid plan starts with a
+              30-day free trial.
+            </p>
+            <BillingPanel teamId={billingTeamId} info={billing} />
+          </section>
+        )}
       </div>
     </main>
   );
