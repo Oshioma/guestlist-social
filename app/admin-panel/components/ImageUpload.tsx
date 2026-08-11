@@ -14,6 +14,12 @@ type Props = {
    * Pass "image/*,video/*" to accept videos too.
    */
   accept?: string;
+  /**
+   * Optional style override merged over the default button styling (used to
+   * make the button match a surrounding row). The uploading state still wins
+   * so progress feedback is never hidden.
+   */
+  buttonStyle?: React.CSSProperties;
 };
 
 export default function ImageUpload({
@@ -23,6 +29,7 @@ export default function ImageUpload({
   compact,
   bucket,
   accept,
+  buttonStyle,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -75,10 +82,15 @@ export default function ImageUpload({
           fontWeight: 600,
           border: "none",
           borderRadius: 6,
-          background: uploading ? "#e4e4e7" : "#ede9fe",
-          color: uploading ? "#a1a1aa" : "#5b21b6",
-          cursor: uploading ? "wait" : "pointer",
+          background: "#ede9fe",
+          color: "#5b21b6",
+          cursor: "pointer",
           whiteSpace: "nowrap",
+          ...(buttonStyle || {}),
+          // Uploading feedback always wins over any style override.
+          ...(uploading
+            ? { background: "#e4e4e7", color: "#a1a1aa", cursor: "wait" }
+            : {}),
         }}
       >
         {uploading
