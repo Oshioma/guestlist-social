@@ -191,6 +191,22 @@
   padding: 14px 20px 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.app-sidebar-footlink {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e7;
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.app-sidebar-footlink:hover {
+  color: #fff;
 }
 
 .app-sidebar-backlink {
