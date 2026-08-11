@@ -373,10 +373,14 @@ export default async function ProoferTeamsPage({
                           <span style={headCell}>Facebook</span>
                           <span style={headCell}>Instagram</span>
                         </div>
+                        {/* Add affordances sit directly under the column titles:
+                            "+ Add account" beneath Facebook, "+ Instagram only"
+                            beneath Instagram. */}
+                        {canManage && <AddAccount teamId={t.id} igConfigured={igConfigured} />}
                         {t.accounts.length === 0 ? (
-                          <p style={{ fontSize: 13, color: "#a1a1aa", margin: "8px 0 0" }}>
+                          <p style={{ fontSize: 13, color: "#a1a1aa", margin: "10px 0 0" }}>
                             {canManage
-                              ? "No accounts yet — add one below."
+                              ? "No accounts yet — add one above."
                               : "No accounts in this team yet."}
                           </p>
                         ) : (
@@ -424,7 +428,6 @@ export default async function ProoferTeamsPage({
                             );
                           })
                         )}
-                        {canManage && <AddAccount teamId={t.id} igConfigured={igConfigured} />}
                       </div>
                     </div>
                     <div style={colMembers}>

@@ -3,10 +3,14 @@
 import { useState, useTransition } from "react";
 import { startAccountConnect } from "@/lib/auth/team-actions";
 
-// One "Add account" affordance — no "Facebook vs Instagram" choice. It connects
-// via Facebook, which brings the Page AND its linked Instagram (you pick the
-// Page in the Meta picker, and get both). A small "Instagram only" fallback
-// covers accounts that have no Facebook Page at all.
+// The two "add" affordances, aligned under the Facebook and Instagram column
+// titles so each sits in its own platform column. "+ Add account" (Facebook)
+// connects via Facebook, which brings the Page AND its linked Instagram (you
+// pick the Page in the Meta picker, and get both). "+ Instagram only" covers an
+// account that has an Instagram professional account but no Facebook Page.
+//
+// Rendered as a 2-column grid matching `acctHeadRow` / `acctConns` on the Teams
+// page, so the buttons line up directly beneath their column headers.
 export function AddAccount({
   teamId,
   igConfigured,
@@ -30,7 +34,7 @@ export function AddAccount({
   }
 
   return (
-    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+    <div style={grid}>
       <button
         type="button"
         onClick={() => go("facebook")}
@@ -46,16 +50,24 @@ export function AddAccount({
           "+ Add account"
         )}
       </button>
-      {igConfigured && (
+      {igConfigured ? (
         <button
           type="button"
           onClick={() => go("instagram")}
           disabled={pending}
-          style={igOnly}
+          style={addBtn}
           title="For an account that has an Instagram professional account but no Facebook Page"
         >
-          {pending && which === "instagram" ? "Opening…" : "Instagram only"}
+          {pending && which === "instagram" ? (
+            <>
+              <Spinner /> Opening…
+            </>
+          ) : (
+            "+ Instagram only"
+          )}
         </button>
+      ) : (
+        <span />
       )}
     </div>
   );
@@ -79,9 +91,19 @@ function Spinner() {
   );
 }
 
+// Two columns, matching the Facebook | Instagram header/account grid above so
+// each button lines up under its platform title.
+const grid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  marginTop: 8,
+};
+
 const addBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
+  justifyContent: "center",
   gap: 6,
   fontSize: 12,
   fontWeight: 700,
@@ -91,15 +113,5 @@ const addBtn: React.CSSProperties = {
   borderRadius: 8,
   padding: "7px 12px",
   cursor: "pointer",
-};
-
-const igOnly: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "#a1a1aa",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  textDecoration: "underline",
-  padding: 0,
+  width: "100%",
 };
