@@ -9,6 +9,9 @@ import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
+import { BillingPanel, type BillingInfo } from "@/app/admin-panel/settings/teams/[teamId]/BillingPanel";
+import { countTeamSocialAccounts } from "@/lib/billing/team-billing";
+import { stripeConfigured } from "@/lib/stripe";
 import { planConfig, maxOwnedTeams, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +43,15 @@ type TeamRow = {
   isPersonal: boolean;
 };
 
-export default async function ProoferTeamsPage() {
+export default async function ProoferTeamsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ billing?: string }>;
+}) {
   const access = await getProoferAccess();
   if (!access) redirect("/sign-in");
+
+  const { billing: billingParam } = await searchParams;
 
   const admin = createAdminClient();
   const { base } = await getProoferBase();
@@ -64,13 +73,20 @@ export default async function ProoferTeamsPage() {
   // Plan gate for "Create a team": Free includes exactly one team (your own);
   // more needs Pro/Agency. The allowance is the best plan among teams you own.
   let canCreateTeam = true;
-  let upgradeTeamId: string | null = null;
+
+  // Owner-level billing shown at the top of the page, anchored on the "best"
+  // team you own (highest plan, personal on a tie). Billing lives here now that
+  // the per-team detail page is retired.
+  let billing: BillingInfo | null = null;
+  let billingTeamId: string | null = null;
 
   let rows: TeamRow[] = [];
   if (visibleTeamIds.length > 0) {
     const teamsQuery = admin
       .from("teams")
-      .select("id, name, plan, owner_user_id, created_at")
+      .select(
+        "id, name, plan, owner_user_id, created_at, stripe_customer_id, subscription_status, trial_ends_at, current_period_end"
+      )
       .in("id", visibleTeamIds)
       .order("name", { ascending: true });
 
@@ -115,7 +131,33 @@ export default async function ProoferTeamsPage() {
     }, "free");
     const cap = maxOwnedTeams(bestOwnedPlan);
     canCreateTeam = cap === null || ownedTeams.length < cap;
-    upgradeTeamId = personalTeamId ?? ((ownedTeams[0]?.id as string) ?? null);
+
+    // Billing anchor = the team you own with the highest plan; on a tie prefer
+    // your personal team, then the earliest created. This is "your plan".
+    const anchor = [...ownedTeams].sort((a, b) => {
+      const pr = (rank[(b.plan as Plan) ?? "free"] ?? 0) - (rank[(a.plan as Plan) ?? "free"] ?? 0);
+      if (pr !== 0) return pr;
+      const aPersonal = a.id === personalTeamId ? 0 : 1;
+      const bPersonal = b.id === personalTeamId ? 0 : 1;
+      if (aPersonal !== bPersonal) return aPersonal - bPersonal;
+      return new Date((a.created_at as string) ?? 0).getTime() -
+        new Date((b.created_at as string) ?? 0).getTime();
+    })[0];
+    if (anchor) {
+      billingTeamId = anchor.id as string;
+      const used = await countTeamSocialAccounts(admin, anchor.id as string);
+      billing = {
+        plan: (anchor.plan as Plan) ?? "free",
+        used,
+        subscriptionStatus: (anchor.subscription_status as string | null) ?? null,
+        trialEndsAt: (anchor.trial_ends_at as string | null) ?? null,
+        currentPeriodEnd: (anchor.current_period_end as string | null) ?? null,
+        hasCustomer: Boolean(anchor.stripe_customer_id),
+        canManageBilling: true, // you own the anchor team
+        isStaff,
+        stripeConfigured: stripeConfigured(),
+      };
+    }
 
     // Resolve member display names.
     const userById = new Map<string, string>();
@@ -225,6 +267,30 @@ export default async function ProoferTeamsPage() {
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Teams &amp; accounts</h2>
         </div>
 
+        {billingParam === "success" && (
+          <div style={bannerOk}>
+            Subscription started — your new plan is active. Your {`30`}-day free
+            trial has begun.
+          </div>
+        )}
+        {billingParam === "cancelled" && (
+          <div style={bannerNeutral}>Checkout cancelled — your plan is unchanged.</div>
+        )}
+
+        {/* Owner-level plan & billing */}
+        {billing && billingTeamId && (
+          <section id="plan-billing" style={cardStyle}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
+              Plan &amp; billing
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
+              Your plan covers the teams you own. Every paid plan starts with a
+              30-day free trial.
+            </p>
+            <BillingPanel teamId={billingTeamId} info={billing} />
+          </section>
+        )}
+
         {/* The map: each team and the accounts inside it */}
         <section style={{ background: "transparent" }}>
           {rows.length === 0 ? (
@@ -245,12 +311,6 @@ export default async function ProoferTeamsPage() {
                     <TeamHeaderActions teamId={t.id} name={t.name} canManage={canManage} />
                     {t.isPersonal && <span style={personalTag}>Personal</span>}
                     <PlanBadge plan={t.plan} />
-                    <Link
-                      href={`${base}/teams/${t.id}`}
-                      style={{ marginLeft: "auto", fontSize: 13, color: "#3f3f46", fontWeight: 600, textDecoration: "none" }}
-                    >
-                      Settings &rarr;
-                    </Link>
                   </div>
 
                   <div style={teamBody}>
@@ -330,14 +390,7 @@ export default async function ProoferTeamsPage() {
                 create more teams for your clients and projects. Teams
                 you&rsquo;re invited to don&rsquo;t count.
               </p>
-              <Link
-                href={
-                  upgradeTeamId
-                    ? `${base}/teams/${upgradeTeamId}`
-                    : "/pricing"
-                }
-                style={upgradeCta}
-              >
+              <Link href={billing ? "#plan-billing" : "/pricing"} style={upgradeCta}>
                 Upgrade to Pro
               </Link>
             </>
@@ -508,6 +561,24 @@ const upgradeCta: React.CSSProperties = {
   borderRadius: 8,
   padding: "9px 16px",
   textDecoration: "none",
+};
+
+const bannerOk: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #bbf7d0",
+  color: "#166534",
+  fontSize: 13,
+};
+
+const bannerNeutral: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  color: "#4b5563",
+  fontSize: 13,
 };
 
 const teamCard: React.CSSProperties = {
