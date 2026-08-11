@@ -9,7 +9,7 @@ import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
-import { planConfig, type Plan } from "@/lib/billing/plans";
+import { planConfig, maxOwnedTeams, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +61,11 @@ export default async function ProoferTeamsPage() {
   );
   const visibleTeamIds: string[] = Array.from(myRoleByTeam.keys());
 
+  // Plan gate for "Create a team": Free includes exactly one team (your own);
+  // more needs Pro/Agency. The allowance is the best plan among teams you own.
+  let canCreateTeam = true;
+  let upgradeTeamId: string | null = null;
+
   let rows: TeamRow[] = [];
   if (visibleTeamIds.length > 0) {
     const teamsQuery = admin
@@ -97,6 +102,20 @@ export default async function ProoferTeamsPage() {
         }
       }
     }
+
+    // Work out the viewer's team allowance from the teams they OWN (being
+    // invited to a team doesn't count). Free = 1 team; paid = unlimited.
+    const ownedTeams = (teams ?? []).filter(
+      (t) => (t.owner_user_id as string) === access.userId
+    );
+    const rank: Record<string, number> = { free: 0, pro: 1, agency: 2 };
+    const bestOwnedPlan = ownedTeams.reduce<Plan>((acc, t) => {
+      const p = ((t.plan as Plan) ?? "free");
+      return (rank[p] ?? 0) > (rank[acc] ?? 0) ? p : acc;
+    }, "free");
+    const cap = maxOwnedTeams(bestOwnedPlan);
+    canCreateTeam = cap === null || ownedTeams.length < cap;
+    upgradeTeamId = personalTeamId ?? ((ownedTeams[0]?.id as string) ?? null);
 
     // Resolve member display names.
     const userById = new Map<string, string>();
@@ -296,11 +315,33 @@ export default async function ProoferTeamsPage() {
         {/* Create a team */}
         <section style={cardStyle}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Create a team</h3>
-          <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#71717a" }}>
-            A team is a folder for a set of accounts and the people who work on
-            them. You&rsquo;ll be its owner. Add accounts to it above.
-          </p>
-          <CreateTeamForm />
+          {canCreateTeam ? (
+            <>
+              <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#71717a" }}>
+                A team is a folder for a set of accounts and the people who work
+                on them. You&rsquo;ll be its owner. Add accounts to it above.
+              </p>
+              <CreateTeamForm />
+            </>
+          ) : (
+            <>
+              <p style={{ margin: "4px 0 14px", fontSize: 13, color: "#71717a" }}>
+                The Free plan includes one team — this one. Upgrade to Pro to
+                create more teams for your clients and projects. Teams
+                you&rsquo;re invited to don&rsquo;t count.
+              </p>
+              <Link
+                href={
+                  upgradeTeamId
+                    ? `${base}/teams/${upgradeTeamId}`
+                    : "/pricing"
+                }
+                style={upgradeCta}
+              >
+                Upgrade to Pro
+              </Link>
+            </>
+          )}
         </section>
       </div>
     </main>
@@ -456,6 +497,17 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid #e4e4e7",
   borderRadius: 14,
   padding: 20,
+};
+
+const upgradeCta: React.CSSProperties = {
+  display: "inline-block",
+  background: "#4f46e5",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 700,
+  borderRadius: 8,
+  padding: "9px 16px",
+  textDecoration: "none",
 };
 
 const teamCard: React.CSSProperties = {
