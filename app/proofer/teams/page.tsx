@@ -74,7 +74,7 @@ export default async function ProoferTeamsPage({
   // more needs Pro/Agency. The allowance is the best plan among teams you own.
   let canCreateTeam = true;
 
-  // Owner-level billing shown at the top of the page, anchored on the "best"
+  // Owner-level billing shown at the foot of the page, anchored on the "best"
   // team you own (highest plan, personal on a tie). Billing lives here now that
   // the per-team detail page is retired.
   let billing: BillingInfo | null = null;
