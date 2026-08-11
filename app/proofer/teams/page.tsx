@@ -6,7 +6,6 @@ import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 import { PlatformAddButton } from "./PlatformAddButton";
 import { AccountRemoveButton } from "./AccountRemoveButton";
-import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
 import { ConnectHelp } from "./ConnectHelp";
@@ -388,20 +387,8 @@ export default async function ProoferTeamsPage({
                           t.accounts.map((a) => (
                             <div key={a.id} style={acctBlock}>
                               <div style={acctConns}>
-                                <ConnCell
-                                  platform="facebook"
-                                  conn={a.fb}
-                                  teamId={t.id}
-                                  clientId={a.id}
-                                  canManage={canManage}
-                                />
-                                <ConnCell
-                                  platform="instagram"
-                                  conn={a.ig}
-                                  teamId={t.id}
-                                  clientId={a.id}
-                                  canManage={canManage}
-                                />
+                                <ConnCell platform="facebook" conn={a.fb} />
+                                <ConnCell platform="instagram" conn={a.ig} />
                                 {canManage ? (
                                   <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
                                 ) : (
@@ -510,15 +497,9 @@ function RoleBadge({ role }: { role: string }) {
 function ConnCell({
   platform,
   conn,
-  teamId,
-  clientId,
-  canManage,
 }: {
   platform: "facebook" | "instagram";
   conn: Conn;
-  teamId: string;
-  clientId: number;
-  canManage: boolean;
 }) {
   const isFb = platform === "facebook";
   const label = isFb ? "Facebook" : "Instagram";
@@ -551,17 +532,8 @@ function ConnCell({
             · {tag}
           </span>
         )}
-        {canManage && (
-          <span style={{ marginLeft: "auto", flexShrink: 0 }}>
-            <DisconnectButton
-              teamId={teamId}
-              clientId={clientId}
-              platform={platform}
-              label={label}
-              iconOnly
-            />
-          </span>
-        )}
+        {/* No per-platform disconnect ✕ — a Facebook+Instagram account is one
+            unit; the single ✕ at the end of the row removes the whole account. */}
       </div>
     );
   }
