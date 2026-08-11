@@ -27,7 +27,7 @@ async function resolvePrimaryTeamId(
     .from("team_members")
     .select("team_id")
     .eq("user_id", userId)
-    .in("role", ["owner", "admin", "member"])
+    .in("role", ["owner", "admin", "proofer", "member"])
     .limit(1);
   return (mem && (mem[0]?.team_id as string)) ?? null;
 }

@@ -81,7 +81,10 @@ export function TeamMemberRow({
               >
                 <option value="client">Client</option>
                 <option value="member" disabled={isFree}>
-                  Member{isFree ? " · Pro" : ""}
+                  Creator{isFree ? " · Pro" : ""}
+                </option>
+                <option value="proofer" disabled={isFree}>
+                  Proofer{isFree ? " · Pro" : ""}
                 </option>
                 <option value="admin" disabled={isFree}>
                   Admin{isFree ? " · Pro" : ""}

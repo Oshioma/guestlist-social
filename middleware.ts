@@ -150,7 +150,9 @@ export async function middleware(request: NextRequest) {
       .select("role")
       .eq("user_id", user.id);
     const roles = (memberships as { role: string }[] | null)?.map((m) => m.role) ?? [];
-    isPoster = roles.some((r) => r === "owner" || r === "admin" || r === "member");
+    isPoster = roles.some(
+      (r) => r === "owner" || r === "admin" || r === "proofer" || r === "member"
+    );
     if (!isPoster) {
       const { data: acct } = await supabase
         .from("team_accounts")
