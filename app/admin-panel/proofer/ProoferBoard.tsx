@@ -3556,7 +3556,12 @@ export default function ProoferBoard({
                             gridColumn: isNarrow ? "1 / -1" : undefined,
                           }}
                         >
-                          <span style={labelStyle}>Pillar</span>
+                          {/* Standalone: drop the separate "Pillar" title so the
+                              box sits flush under the social buttons. The box
+                              itself carries the word ("Pillar — None") only when
+                              nothing is chosen; once a pillar is picked it shows
+                              just the pillar name. */}
+                          {!standalone && <span style={labelStyle}>Pillar</span>}
                           <button
                             type="button"
                             disabled={isLocked}
@@ -3600,7 +3605,11 @@ export default function ProoferBoard({
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {selectedPillar ? selectedPillar.name : "None"}
+                              {selectedPillar
+                                ? selectedPillar.name
+                                : standalone
+                                ? "Pillar — None"
+                                : "None"}
                             </span>
                             <span
                               style={{ color: "#a1a1aa", fontSize: 10 }}
