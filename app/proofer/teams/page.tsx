@@ -188,7 +188,7 @@ export default async function ProoferTeamsPage() {
     .map((t) => ({ id: t.id, name: t.name }));
 
   return (
-    <main style={{ flex: 1, minWidth: 0, padding: 24 }}>
+    <main style={{ flex: 1, minWidth: 0, padding: 24, background: "#f3f3f5" }}>
       <div style={{ maxWidth: 780, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
         <div>
           <Link href={base || "/"} style={backLinkStyle}>
@@ -236,7 +236,7 @@ export default async function ProoferTeamsPage() {
         </section>
 
         {/* The map: each team and the accounts inside it */}
-        <section style={cardStyle}>
+        <section style={{ background: "transparent" }}>
           <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
             Your teams ({rows.length})
           </h3>
@@ -249,7 +249,7 @@ export default async function ProoferTeamsPage() {
               No teams yet. Create one below.
             </p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {rows.map((t) => {
                 const canManage =
                   isStaff ||
@@ -415,7 +415,13 @@ function ConnCell({
         )}
         {canManage && (
           <span style={{ marginLeft: "auto" }}>
-            <DisconnectButton teamId={teamId} clientId={clientId} platform={platform} label={label} />
+            <DisconnectButton
+              teamId={teamId}
+              clientId={clientId}
+              platform={platform}
+              label={label}
+              iconOnly
+            />
           </span>
         )}
       </div>

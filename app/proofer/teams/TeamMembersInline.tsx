@@ -99,13 +99,13 @@ export function TeamMembersInline({
               <span style={{ ...avatar, background: avColor(m.name) }}>{initials(m.name)}</span>
               <span style={nameStyle}>{m.name}</span>
               {isOwner ? (
-                <span style={ownerTag}>🟢 Owner</span>
+                <span style={roleBoxStatic}>🟢 Owner</span>
               ) : canManage ? (
                 <select
                   value={m.role}
                   disabled={pending}
                   onChange={(e) => changeRole(m.userId, e.target.value)}
-                  style={selectStyle}
+                  style={roleSelect}
                   aria-label={`Role for ${m.name}`}
                 >
                   {ROLE_OPTS.map((o) => (
@@ -114,9 +114,9 @@ export function TeamMembersInline({
                   {m.role === "client" && <option value="client">Client</option>}
                 </select>
               ) : (
-                <span style={roStyle}>{roleLabel(m.role)}</span>
+                <span style={roleBoxStatic}>{roleLabel(m.role)}</span>
               )}
-              {canManage && !isOwner && (
+              {canManage && !isOwner ? (
                 <button
                   type="button"
                   onClick={() => remove(m.userId, m.name)}
@@ -126,6 +126,8 @@ export function TeamMembersInline({
                 >
                   ✕
                 </button>
+              ) : (
+                <span style={xGhost} aria-hidden="true" />
               )}
             </div>
           );
@@ -146,7 +148,7 @@ export function TeamMembersInline({
               style={inputStyle}
             />
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <select name="role" defaultValue="member" style={{ ...selectStyle, flex: 1 }}>
+              <select name="role" defaultValue="member" style={{ ...roleSelect, width: "auto", flex: 1 }}>
                 {ROLE_OPTS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
@@ -195,12 +197,16 @@ const nameStyle: React.CSSProperties = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
-const selectStyle: React.CSSProperties = {
+// Role controls (dropdown, owner tag, read-only) share one fixed width so their
+// leading dot lines up vertically down the members column; the trailing 24px
+// slot (✕ or ghost) is reserved on every row so widths never shift.
+const roleSelect: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 650,
   height: 28,
+  width: 116,
   boxSizing: "border-box",
-  padding: "4px 6px",
+  padding: "4px 8px",
   borderRadius: 7,
   border: "1px solid #d8d8dd",
   background: "#fff",
@@ -208,15 +214,20 @@ const selectStyle: React.CSSProperties = {
   cursor: "pointer",
   flex: "none",
 };
-const roStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#71717a", flex: "none" };
-const ownerTag: React.CSSProperties = {
+const roleBoxStatic: React.CSSProperties = {
   fontSize: 12,
-  fontWeight: 700,
-  color: "#9d2b5b",
-  flex: "none",
+  fontWeight: 650,
+  height: 28,
+  width: 116,
+  boxSizing: "border-box",
+  padding: "4px 8px",
+  borderRadius: 7,
+  border: "1px solid #e4e4e7",
+  background: "#fafafa",
+  color: "#3f3f46",
   display: "inline-flex",
   alignItems: "center",
-  height: 28,
+  flex: "none",
 };
 const xBtn: React.CSSProperties = {
   border: "none",
@@ -229,6 +240,7 @@ const xBtn: React.CSSProperties = {
   fontSize: 13,
   flex: "none",
 };
+const xGhost: React.CSSProperties = { width: 24, height: 24, flex: "none" };
 const errStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#b91c1c",
