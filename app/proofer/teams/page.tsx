@@ -284,6 +284,10 @@ export default async function ProoferTeamsPage({
           ig: igByClient.get(cid) ?? null,
           fb: fbByClient.get(cid) ?? null,
         }))
+        // Only show accounts that are actually connected — unconnected
+        // placeholders are noise; you add a new one via "Add account" (which
+        // goes straight to connecting).
+        .filter((acc) => !!(acc.fb || acc.ig))
         .sort((a, b) => a.name.localeCompare(b.name));
       return {
         id: tid,
@@ -395,7 +399,7 @@ export default async function ProoferTeamsPage({
                           ))}
                         </div>
                       )}
-                      {canManage && <AddAccountInline teamId={t.id} />}
+                      {canManage && <AddAccountInline teamId={t.id} igConfigured={igConfigured} />}
                     </div>
                     <div style={colMembers}>
                       <h4 style={colHead}>Members</h4>

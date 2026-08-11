@@ -1,32 +1,32 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { createAccountInTeam } from "@/lib/auth/team-actions";
+import { startAccountConnect } from "@/lib/auth/team-actions";
 
-// Small inline "add an account" for a team card — creates a named account
-// (client) inside this team. Connecting it to Meta happens afterwards from the
-// account's Facebook/Instagram cells.
-export function AddAccountInline({ teamId }: { teamId: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+// Connect-first "add an account" for a team. There's no naming step: you pick
+// Facebook or Instagram, log in, and the Meta picker adds the account (named
+// after the Page/handle) to this team. So the accounts list only ever shows
+// real, connected accounts.
+export function AddAccountInline({
+  teamId,
+  igConfigured,
+}: {
+  teamId: string;
+  igConfigured: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
-  function submit() {
-    const n = name.trim();
-    if (!n) return;
+  function go(platform: "facebook" | "instagram") {
     setErr(null);
     startTransition(async () => {
-      const res = await createAccountInTeam(teamId, n);
-      if (res?.error || res?.fieldError) {
-        setErr(res.error ?? res.fieldError ?? "Could not add the account.");
+      const res = await startAccountConnect(teamId, platform);
+      if (res?.error || !res?.url) {
+        setErr(res?.error ?? "Could not start connecting.");
         return;
       }
-      setName("");
-      setOpen(false);
-      router.refresh();
+      window.location.href = res.url;
     });
   }
 
@@ -40,29 +40,20 @@ export function AddAccountInline({ teamId }: { teamId: string }) {
 
   return (
     <div style={wrap}>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") submit();
-          if (e.key === "Escape") setOpen(false);
-        }}
-        placeholder="Account / brand name"
-        autoFocus
-        style={input}
-      />
-      <div style={{ display: "flex", gap: 6 }}>
-        <button type="button" onClick={submit} disabled={pending} style={primary}>
-          {pending ? "Adding…" : "Add"}
+      <p style={hint}>
+        Log in and pick the account — we&rsquo;ll add it here. Connecting Facebook
+        brings its linked Instagram too.
+      </p>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => go("facebook")} disabled={pending} style={fbBtn}>
+          {pending ? "…" : "Connect Facebook"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setErr(null);
-          }}
-          style={ghost}
-        >
+        {igConfigured && (
+          <button type="button" onClick={() => go("instagram")} disabled={pending} style={igBtn}>
+            {pending ? "…" : "Connect Instagram"}
+          </button>
+        )}
+        <button type="button" onClick={() => { setOpen(false); setErr(null); }} style={ghost}>
           Cancel
         </button>
       </div>
@@ -92,24 +83,23 @@ const wrap: React.CSSProperties = {
   borderRadius: 10,
   background: "#fff",
 };
-const input: React.CSSProperties = {
-  fontSize: 13,
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid #d8d8dd",
-  background: "#fff",
-  color: "#18181b",
+const hint: React.CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  color: "#71717a",
+  lineHeight: 1.45,
 };
-const primary: React.CSSProperties = {
+const baseBtn: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
-  background: "#18181b",
   color: "#fff",
   border: "none",
   borderRadius: 8,
   padding: "7px 12px",
   cursor: "pointer",
 };
+const fbBtn: React.CSSProperties = { ...baseBtn, background: "#1877F2" };
+const igBtn: React.CSSProperties = { ...baseBtn, background: "#c13584" };
 const ghost: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
