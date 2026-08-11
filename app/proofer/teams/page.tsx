@@ -75,6 +75,11 @@ export default async function ProoferTeamsPage({
   // more needs Pro/Agency. The allowance is the best plan among teams you own.
   let canCreateTeam = true;
 
+  // A paid viewer (Pro/Agency on any team they own) doesn't need the per-team
+  // plan badge cluttering each header — hide it for them. Free viewers still
+  // see it, since it's their nudge toward upgrading.
+  let userIsPaid = false;
+
   // Owner-level billing shown at the foot of the page, anchored on the "best"
   // team you own (highest plan, personal on a tie). Billing lives here now that
   // the per-team detail page is retired.
@@ -175,6 +180,7 @@ export default async function ProoferTeamsPage({
     }, "free");
     const cap = maxOwnedTeams(bestOwnedPlan);
     canCreateTeam = cap === null || ownedTeams.length < cap;
+    userIsPaid = bestOwnedPlan !== "free";
 
     // Billing anchor = the team you own with the highest plan; on a tie prefer
     // your personal team, then the earliest created. This is "your plan".
@@ -350,7 +356,7 @@ export default async function ProoferTeamsPage({
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <TeamHeaderActions teamId={t.id} name={t.name} canManage={canManage} />
                     {t.isPersonal && <span style={personalTag}>Personal</span>}
-                    <PlanBadge plan={t.plan} />
+                    {!userIsPaid && <PlanBadge plan={t.plan} />}
                   </div>
 
                   <div style={teamBody}>
