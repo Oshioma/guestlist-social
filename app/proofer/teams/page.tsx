@@ -74,7 +74,7 @@ export default async function ProoferTeamsPage({
   // more needs Pro/Agency. The allowance is the best plan among teams you own.
   let canCreateTeam = true;
 
-  // Owner-level billing shown at the top of the page, anchored on the "best"
+  // Owner-level billing shown at the foot of the page, anchored on the "best"
   // team you own (highest plan, personal on a tie). Billing lives here now that
   // the per-team detail page is retired.
   let billing: BillingInfo | null = null;
@@ -320,20 +320,6 @@ export default async function ProoferTeamsPage({
           <div style={bannerNeutral}>Checkout cancelled — your plan is unchanged.</div>
         )}
 
-        {/* Owner-level plan & billing */}
-        {billing && billingTeamId && (
-          <section id="plan-billing" style={cardStyle}>
-            <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
-              Plan &amp; billing
-            </h3>
-            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
-              Your plan covers the teams you own. Every paid plan starts with a
-              30-day free trial.
-            </p>
-            <BillingPanel teamId={billingTeamId} info={billing} />
-          </section>
-        )}
-
         {/* The map: each team and the accounts inside it */}
         <section style={{ background: "transparent" }}>
           {rows.length === 0 ? (
@@ -439,6 +425,20 @@ export default async function ProoferTeamsPage({
             </>
           )}
         </section>
+
+        {/* Owner-level plan & billing, at the foot of the page */}
+        {billing && billingTeamId && (
+          <section id="plan-billing" style={cardStyle}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
+              Plan &amp; billing
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
+              Your plan covers the teams you own. Every paid plan starts with a
+              30-day free trial.
+            </p>
+            <BillingPanel teamId={billingTeamId} info={billing} />
+          </section>
+        )}
       </div>
     </main>
   );
@@ -536,12 +536,33 @@ function ConnCell({
     );
   }
 
-  // Instagram connects via its own login when configured; otherwise it comes in
-  // through the Facebook Page flow (which brings the linked Instagram).
-  const href =
-    isFb || !igConfigured
-      ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
-      : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
+  // Guard: don't fall the Instagram button back to Facebook login when
+  // Instagram Business Login isn't wired up. That fallback dead-ends
+  // Instagram-only accounts (they have no Facebook to log into) — which is
+  // exactly where people got stuck. Show a tip instead. An account that DOES
+  // have a Facebook Page still connects its Instagram via the Facebook button
+  // (the linked Instagram comes with it).
+  if (!isFb && !igConfigured) {
+    return (
+      <div style={connCellStyle}>
+        <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
+        {canManage && (
+          <span
+            style={connectDisabled}
+            title="Instagram-only login isn't set up on this deployment yet (INSTAGRAM_APP_ID / SECRET / OAUTH_REDIRECT_URI). If this account has a Facebook Page, use Connect Facebook — its linked Instagram comes with it."
+          >
+            Setup needed
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Facebook uses Facebook login; Instagram uses its own login (Instagram
+  // Business Login) when configured.
+  const href = isFb
+    ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
+    : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
   return (
     <div style={connCellStyle}>
       <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
@@ -739,6 +760,19 @@ const connectMini: React.CSSProperties = {
   padding: "3px 9px",
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const connectDisabled: React.CSSProperties = {
+  marginLeft: "auto",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#a1a1aa",
+  background: "#fafafa",
+  border: "1px dashed #e4e4e7",
+  borderRadius: 7,
+  padding: "3px 9px",
+  whiteSpace: "nowrap",
+  cursor: "help",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
