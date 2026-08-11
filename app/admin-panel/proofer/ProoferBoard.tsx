@@ -3186,10 +3186,10 @@ export default function ProoferBoard({
                         : undefined,
                       flexDirection: "column",
                       gap: 8,
-                      // Standalone: lift the platform buttons (+ pillar) above the
-                      // date & time. On a phone the whole cell is one ordered
-                      // grid, so keep the phone order.
-                      order: standalone ? -1 : isNarrow ? 3 : undefined,
+                      // Platform buttons (+ pillar) sit below the date & time so
+                      // the day/time reads first under the TODAY pill. On a phone
+                      // the whole cell is one ordered grid, so keep the phone order.
+                      order: isNarrow ? 3 : undefined,
                     }}
                   >
                     {standalone ? (
