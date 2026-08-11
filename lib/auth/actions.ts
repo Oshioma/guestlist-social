@@ -72,7 +72,7 @@ export async function signUpWithPassword(
   _prevState: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  if (!publicSignupEnabled()) {
+  if (!(await publicSignupEnabled())) {
     return { error: "Sign-up is invite-only right now." };
   }
 

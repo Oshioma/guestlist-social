@@ -56,7 +56,7 @@ export async function verifyTurnstile(
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
     // Fail closed in a public posture; skip silently only while invite-only.
-    if (publicSignupEnabled()) {
+    if (await publicSignupEnabled()) {
       throw new Error(
         "Human verification isn't configured. Please try again later."
       );

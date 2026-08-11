@@ -13,6 +13,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : null;
   const error = typeof params.error === "string" ? params.error : null;
+  const canSignUp = await publicSignupEnabled();
 
   // A user bounced here with ?error=not-authorized who is ALREADY signed in is
   // authenticated but admitted to nothing (no team membership / account). Showing
@@ -57,7 +58,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
       <Suspense fallback={null}>
         <SignInForm next={next} />
       </Suspense>
-      {publicSignupEnabled() && (
+      {canSignUp && (
         <p className="auth-subtitle" style={{ marginTop: 16, textAlign: "center" }}>
           <Link href="/sign-up">New here? Create an account</Link>
         </p>

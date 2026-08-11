@@ -9,6 +9,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSuperAdmin } from "@/lib/auth/permissions";
+import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
 export type CheckStatus = "ok" | "warn" | "missing";
 export type Check = {
@@ -94,9 +95,9 @@ export async function loadSystemStatus(): Promise<StatusGroup[]> {
 
   const groups: StatusGroup[] = [];
 
-  // Whether anyone can self-register, and whether Turnstile is actually needed.
-  const publicSignupOpen =
-    (process.env.ENABLE_PUBLIC_SIGNUP ?? "").trim().toLowerCase() === "true";
+  // Whether anyone can self-register (live toggle, DB over env), and whether
+  // Turnstile is actually needed.
+  const publicSignupOpen = await publicSignupEnabled();
   const captchaProvider = (process.env.CAPTCHA_PROVIDER ?? "").trim().toLowerCase() || "turnstile";
   const turnstileNeeded = publicSignupOpen && captchaProvider === "turnstile";
   const turnstileKeysSet =
