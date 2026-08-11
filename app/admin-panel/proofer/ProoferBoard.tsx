@@ -3773,6 +3773,33 @@ export default function ProoferBoard({
                     const pillarName = draft.pillarId ? (pillarsById.get(draft.pillarId)?.name ?? "") : "";
                     const captionLines = draft.caption.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ");
                     const autoQuery = [pillarName || clientName, captionLines || (slotIdeas[0]?.title ?? "")].filter(Boolean).join(" ").slice(0, 80);
+                    // Standalone: one uniform "chip" shape for every media picker so
+                    // the row reads as a tidy, evenly-sized set instead of a mix of
+                    // paddings, radii and colours. The emoji carries the colour; the
+                    // frame stays neutral. Active toggles (Library / Stock open) fill dark.
+                    const mediaChip: React.CSSProperties | undefined = standalone
+                      ? {
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          flexShrink: 0,
+                          padding: isNarrow ? "9px 13px" : "7px 12px",
+                          borderRadius: 9,
+                          border: "1px solid #e4e4e7",
+                          background: "#fff",
+                          color: "#3f3f46",
+                          fontSize: isNarrow ? 13 : 12.5,
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }
+                      : undefined;
+                    const mediaChipActive: React.CSSProperties = {
+                      border: "1px solid #18181b",
+                      background: "#18181b",
+                      color: "#fff",
+                    };
                     return (
                     <div
                       style={{
@@ -3801,16 +3828,20 @@ export default function ProoferBoard({
                           onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
                           label="🖼️ Image"
                           accept="image/*"
+                          buttonStyle={mediaChip}
                         />
                         <ImageUpload
                           bucket="postimages"
                           folder={`proofer/${clientId}/${month}`}
                           onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
-                          label="🎬"
+                          label={standalone ? "🎬 Video" : "🎬"}
                           accept="video/*"
+                          buttonStyle={mediaChip}
                         />
                         <PasteLinkInput
                           onSubmit={(url) => addMediaUrl(dateKey, activePlatform, url)}
+                          buttonStyle={mediaChip}
+                          label={standalone ? "🔗 Link" : undefined}
                         />
                         {clientId && (
                           <button
@@ -3824,14 +3855,18 @@ export default function ProoferBoard({
                                 if (clientImagesLoaded !== clientId || clientImages.length === 0) handleLoadClientImages(clientId);
                               }
                             }}
-                            style={{
-                              flexShrink: 0,
-                              padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
-                              border: `1px solid ${libOpen ? "#0369a1" : "#bae6fd"}`,
-                              background: libOpen ? "#0369a1" : "#e0f2fe",
-                              color: libOpen ? "#fff" : "#0369a1",
-                              fontSize: isNarrow ? 13 : 12, fontWeight: 600, cursor: "pointer",
-                            }}
+                            style={
+                              mediaChip
+                                ? { ...mediaChip, ...(libOpen ? mediaChipActive : {}) }
+                                : {
+                                    flexShrink: 0,
+                                    padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
+                                    border: `1px solid ${libOpen ? "#0369a1" : "#bae6fd"}`,
+                                    background: libOpen ? "#0369a1" : "#e0f2fe",
+                                    color: libOpen ? "#fff" : "#0369a1",
+                                    fontSize: isNarrow ? 13 : 12, fontWeight: 600, cursor: "pointer",
+                                  }
+                            }
                           >
                             {libOpen ? "Close library" : "📁 Library"}
                           </button>
@@ -3849,13 +3884,17 @@ export default function ProoferBoard({
                               handlePexelsSearch(q);
                             }
                           }}
-                          style={{
-                            flexShrink: 0,
-                            padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
-                            border: "1px solid #e9d5ff",
-                            background: stockOpen ? "#ede9fe" : "#faf5ff",
-                            color: "#6d28d9", fontSize: isNarrow ? 13 : 11, fontWeight: 600, cursor: "pointer",
-                          }}
+                          style={
+                            mediaChip
+                              ? { ...mediaChip, ...(stockOpen ? mediaChipActive : {}) }
+                              : {
+                                  flexShrink: 0,
+                                  padding: isNarrow ? "9px 14px" : "5px 12px", borderRadius: isNarrow ? 10 : 7,
+                                  border: "1px solid #e9d5ff",
+                                  background: stockOpen ? "#ede9fe" : "#faf5ff",
+                                  color: "#6d28d9", fontSize: isNarrow ? 13 : 11, fontWeight: 600, cursor: "pointer",
+                                }
+                          }
                         >
                           {stockOpen ? "Close stock" : "📷 Stock"}
                         </button>
@@ -4860,7 +4899,15 @@ export default function ProoferBoard({
   );
 }
 
-function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
+function PasteLinkInput({
+  onSubmit,
+  buttonStyle,
+  label,
+}: {
+  onSubmit: (url: string) => void;
+  buttonStyle?: React.CSSProperties;
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
 
@@ -4889,9 +4936,10 @@ function PasteLinkInput({ onSubmit }: { onSubmit: (url: string) => void }) {
           // Keeps the label on one line inside the mobile media strip.
           whiteSpace: "nowrap",
           flexShrink: 0,
+          ...(buttonStyle || {}),
         }}
       >
-        + Paste link
+        {label || "+ Paste link"}
       </button>
     );
   }
