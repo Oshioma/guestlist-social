@@ -516,16 +516,27 @@ function ConnCell({
     return (
       <div style={connCellStyle}>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: handleColor }}>
+        <span
+          style={{
+            fontSize: 13.5,
+            fontWeight: 600,
+            color: handleColor,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={conn.handle ? `@${conn.handle}` : label}
+        >
           {conn.handle ? `@${conn.handle}` : label}
         </span>
         {tag && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: conn.health === "expired" ? "#dc2626" : "#b45309" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: conn.health === "expired" ? "#dc2626" : "#b45309" }}>
             · {tag}
           </span>
         )}
         {canManage && (
-          <span style={{ marginLeft: "auto" }}>
+          <span style={{ marginLeft: "auto", flexShrink: 0 }}>
             <DisconnectButton
               teamId={teamId}
               clientId={clientId}
@@ -709,7 +720,10 @@ const connCellStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 7,
   minHeight: 26,
-  flexWrap: "wrap",
+  minWidth: 0,
+  // No wrap: a long handle ellipsizes instead of pushing the ✕ onto a second
+  // line (which looked like a stray extra ✕ and broke row alignment).
+  flexWrap: "nowrap",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
