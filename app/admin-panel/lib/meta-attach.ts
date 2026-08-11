@@ -67,6 +67,18 @@ export async function attachMetaPage(
     await admin.from("clients").update({ ig_handle: page.ig_username }).eq("id", clientId);
   }
 
+  // Name a freshly-created placeholder account after the Page/handle it just
+  // connected (the connect-first "Add account" flow inserts clients as
+  // "New account"). Only rename placeholders, never a name someone chose.
+  const displayName = page.name || page.ig_username;
+  if (displayName) {
+    await admin
+      .from("clients")
+      .update({ name: displayName })
+      .eq("id", clientId)
+      .eq("name", "New account");
+  }
+
   return { fb: 1, ig };
 }
 

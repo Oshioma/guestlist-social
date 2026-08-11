@@ -750,6 +750,66 @@ export async function createAccountInTeam(
   return { clientId: Number(client.id) };
 }
 
+// Connect-first "add account": there are no named placeholder accounts anymore.
+// This reuses an unconnected account already in the team (so abandoned connects
+// don't pile up), or creates a fresh blank one, then returns the OAuth URL to
+// start connecting. The Meta picker names the account on success. Staff, or the
+// team's owner/admin.
+export async function startAccountConnect(
+  teamId: string,
+  platform: "facebook" | "instagram"
+): Promise<{ url?: string; error?: string }> {
+  const admin = createAdminClient();
+  const gate = await requireTeamManager(admin, teamId);
+  if (gate.error) return { error: gate.error };
+
+  const { data: taRows } = await admin
+    .from("team_accounts")
+    .select("client_id")
+    .eq("team_id", teamId);
+  const teamClientIds = (taRows ?? []).map((r) => Number(r.client_id));
+
+  // Reuse an existing unconnected, non-archived account in this team if there is
+  // one — repeated (or abandoned) connects then reuse it instead of stacking up
+  // empty accounts.
+  let clientId: number | null = null;
+  if (teamClientIds.length > 0) {
+    const [{ data: connRows }, { data: clientRows }] = await Promise.all([
+      admin.from("connected_meta_accounts").select("client_id").in("client_id", teamClientIds),
+      admin.from("clients").select("id, archived").in("id", teamClientIds),
+    ]);
+    const connected = new Set((connRows ?? []).map((r) => Number(r.client_id)));
+    const alive = new Set(
+      (clientRows ?? []).filter((c) => !c.archived).map((c) => Number(c.id))
+    );
+    clientId =
+      teamClientIds
+        .filter((id) => alive.has(id) && !connected.has(id))
+        .sort((a, b) => a - b)[0] ?? null;
+  }
+
+  if (!clientId) {
+    const { data: created, error } = await admin
+      .from("clients")
+      .insert({ name: "New account", platform: "Meta", status: "testing", monthly_budget: 0 })
+      .select("id")
+      .single();
+    if (error || !created) return { error: error?.message ?? "Could not create the account." };
+    clientId = Number(created.id);
+    const { error: linkErr } = await admin
+      .from("team_accounts")
+      .upsert({ team_id: teamId, client_id: clientId }, { onConflict: "team_id,client_id" });
+    if (linkErr) return { error: linkErr.message };
+  }
+
+  const returnTo = encodeURIComponent("/proofer/teams");
+  const url =
+    platform === "instagram"
+      ? `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`
+      : `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`;
+  return { url };
+}
+
 // ── Accounts (the client-isolation onboarding) ──────────────────────────────
 
 const accountSchema = z.object({
