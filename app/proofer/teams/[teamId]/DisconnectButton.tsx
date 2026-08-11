@@ -13,11 +13,15 @@ export function DisconnectButton({
   clientId,
   platform,
   label,
+  iconOnly = false,
 }: {
   teamId: string;
   clientId: number;
   platform: "facebook" | "instagram";
   label: string;
+  // Compact mode: a subtle ✕ (used inline next to a connected handle) instead
+  // of the full red "Disconnect X" button.
+  iconOnly?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -40,6 +44,33 @@ export function DisconnectButton({
       }
       router.refresh();
     });
+  }
+
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={pending}
+        title={err ?? `Disconnect ${label}`}
+        aria-label={`Disconnect ${label}`}
+        style={{
+          background: "transparent",
+          color: err ? "#b91c1c" : "#a1a1aa",
+          border: "none",
+          borderRadius: 6,
+          width: 22,
+          height: 22,
+          display: "grid",
+          placeItems: "center",
+          fontSize: 13,
+          lineHeight: 1,
+          cursor: pending ? "wait" : "pointer",
+        }}
+      >
+        {pending ? "·" : "✕"}
+      </button>
+    );
   }
 
   return (
