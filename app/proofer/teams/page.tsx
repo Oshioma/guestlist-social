@@ -5,7 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 import { AddAccountInline } from "./AddAccountInline";
+import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
+import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
 import { planConfig, type Plan } from "@/lib/billing/plans";
 
@@ -221,7 +223,7 @@ export default async function ProoferTeamsPage() {
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 16, fontWeight: 700 }}>{t.name}</span>
+                    <TeamHeaderActions teamId={t.id} name={t.name} canManage={canManage} />
                     {t.isPersonal && <span style={personalTag}>Personal</span>}
                     <PlanBadge plan={t.plan} />
                     <Link
@@ -247,7 +249,12 @@ export default async function ProoferTeamsPage() {
                           </div>
                           {t.accounts.map((a) => (
                             <div key={a.id} style={acctBlock}>
-                              <div style={acctNameStyle}>{a.name}</div>
+                              <div style={acctNameRow}>
+                                <span style={acctNameStyle}>{a.name}</span>
+                                {canManage && (
+                                  <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
+                                )}
+                              </div>
                               <div style={acctConns}>
                                 <ConnCell
                                   platform="facebook"
@@ -526,10 +533,18 @@ const acctBlock: React.CSSProperties = {
   borderTop: "1px dashed #ececef",
 };
 
+const acctNameRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginBottom: 5,
+};
+
 const acctNameStyle: React.CSSProperties = {
   fontSize: 13.5,
   fontWeight: 700,
-  marginBottom: 5,
+  flex: 1,
+  minWidth: 0,
 };
 
 const acctConns: React.CSSProperties = {
