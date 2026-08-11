@@ -47,12 +47,33 @@ export default async function ConnectSelectPage() {
     redirect("/proofer/teams?meta_error=You+can%27t+manage+this+account.");
   }
 
-  const { data: clientRow } = await svc
-    .from("clients")
-    .select("name")
-    .eq("id", clientId)
+  // Prefer the TEAM this account is being added to. The connect-first "Add
+  // account" flow creates a placeholder client named "New account", so the
+  // client's own name isn't meaningful — the team is what the user recognises.
+  const { data: taRow } = await svc
+    .from("team_accounts")
+    .select("team_id")
+    .eq("client_id", clientId)
+    .limit(1)
     .maybeSingle();
-  const clientName = (clientRow?.name as string | null) ?? null;
+  let targetName: string | null = null;
+  if (taRow?.team_id) {
+    const { data: teamRow } = await svc
+      .from("teams")
+      .select("name")
+      .eq("id", taRow.team_id)
+      .maybeSingle();
+    targetName = (teamRow?.name as string | null) ?? null;
+  }
+  if (!targetName) {
+    const { data: clientRow } = await svc
+      .from("clients")
+      .select("name")
+      .eq("id", clientId)
+      .maybeSingle();
+    const clientName = (clientRow?.name as string | null) ?? null;
+    if (clientName && clientName !== "New account") targetName = clientName;
+  }
 
   // Strip tokens: the browser only needs to see which Page is which.
   const candidates = (pending!.pages ?? []) as PageCandidate[];
@@ -76,16 +97,16 @@ export default async function ConnectSelectPage() {
         Choose a Facebook account
       </h1>
       <p style={{ fontSize: 15, color: "#52525b", margin: "0 0 24px" }}>
-        Your login manages more than one Facebook Page. Pick the one to connect
-        {clientName ? (
+        Your login manages more than one Facebook Page. Pick the one to add
+        {targetName ? (
           <>
             {" "}
-            to <strong>{clientName}</strong>
+            to <strong>{targetName}</strong>
           </>
         ) : null}
-        . Only that Page and its linked Instagram will be added.
+        . Only that Page and its linked Instagram will be connected.
       </p>
-      <PagePicker pages={pages} clientName={clientName} />
+      <PagePicker pages={pages} clientName={targetName} />
     </div>
   );
 }

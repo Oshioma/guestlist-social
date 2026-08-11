@@ -96,7 +96,7 @@ export function PagePicker({
           {submitting
             ? "Connecting…"
             : clientName
-              ? `Connect to ${clientName}`
+              ? `Add to ${clientName}`
               : "Connect selected"}
         </button>
       </div>
