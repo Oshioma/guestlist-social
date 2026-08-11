@@ -6,8 +6,9 @@
 //
 // Invites route through Supabase's admin.inviteUserByEmail — it handles
 // the email template, token generation, and auth.users insertion. We then
-// upsert the user_roles row so the role/can_run_ads flags are set even
-// before the invitee clicks through.
+// upsert the user_roles row so the role is set even before the invitee clicks
+// through. (Ad access is no longer stored here — it follows the person's role;
+// see permissions.adsAllowedForUser.)
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
@@ -25,13 +26,11 @@ export type ActionState = {
 const inviteSchema = z.object({
   email: z.string().email("Enter a valid email address."),
   role: z.enum(["admin", "member"]),
-  canRunAds: z.boolean(),
 });
 
 const updateSchema = z.object({
   userId: z.string().uuid(),
   role: z.enum(["admin", "member"]),
-  canRunAds: z.boolean(),
 });
 
 const removeSchema = z.object({
@@ -48,17 +47,14 @@ export async function inviteMember(
   const parsed = inviteSchema.safeParse({
     email: formData.get("email"),
     role: formData.get("role"),
-    canRunAds: formData.get("canRunAds") === "on",
   });
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const { email, role, canRunAds } = parsed.data;
+  const { email, role } = parsed.data;
 
-  // Guard: an admin cannot give a *member* ads access without escalating
-  // them first. It's allowed — role and ads-flag are independent — but
-  // stop admins from self-revoking their own rights by mistake.
+  // Stop an admin from re-inviting themselves and overwriting their own role.
   if (actor.email && email.toLowerCase() === actor.email.toLowerCase()) {
     return { error: "You're already a member — this would overwrite your own role." };
   }
@@ -104,7 +100,6 @@ export async function inviteMember(
       {
         user_id: userId,
         role,
-        can_run_ads: canRunAds,
       },
       { onConflict: "user_id" }
     );
@@ -114,6 +109,12 @@ export async function inviteMember(
       error: `Could not save the member's role: ${upsert.error.message}`,
     };
   }
+
+  // New staff also get their own personal team by default (idempotent).
+  await admin.rpc("ensure_personal_team", {
+    p_user: userId,
+    p_name: `${(email.split("@")[0] || "My")}'s Team`,
+  });
 
   revalidatePath("/app/settings/members");
   return {
@@ -133,7 +134,6 @@ export async function updateMember(
   const parsed = updateSchema.safeParse({
     userId: formData.get("userId"),
     role: formData.get("role"),
-    canRunAds: formData.get("canRunAds") === "on",
   });
   if (!parsed.success) {
     return { error: "Invalid form data." };
@@ -151,7 +151,6 @@ export async function updateMember(
       {
         user_id: parsed.data.userId,
         role: parsed.data.role,
-        can_run_ads: parsed.data.canRunAds,
       },
       { onConflict: "user_id" }
     );

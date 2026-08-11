@@ -17,6 +17,12 @@ export type PlanConfig = {
   priceLabel: string;
   /** Max connected social accounts (each Instagram/Facebook profile counts as one). */
   socialAccounts: number;
+  /**
+   * Max teams a user may OWN on this plan (null = unlimited). Free includes one
+   * team — your personal workspace; creating more needs a paid plan. Being
+   * invited to someone else's team never counts against this.
+   */
+  maxOwnedTeams: number | null;
   /** May invite admins/members ("Teams"). */
   collaborators: boolean;
   /** May invite client-portal viewers ("Clients"). */
@@ -40,10 +46,11 @@ export const PLANS: Record<Plan, PlanConfig> = {
     priceMonthly: 0,
     priceLabel: "Free",
     socialAccounts: 2,
+    maxOwnedTeams: 1,
     collaborators: false,
     clients: false,
     whiteLabel: false,
-    features: ["2 social media accounts", "Email support"],
+    features: ["Your own workspace", "2 social media accounts", "Email support"],
     priceEnv: null,
   },
   pro: {
@@ -52,10 +59,11 @@ export const PLANS: Record<Plan, PlanConfig> = {
     priceMonthly: 5,
     priceLabel: "$5/mo",
     socialAccounts: 10,
+    maxOwnedTeams: null,
     collaborators: true,
     clients: false,
     whiteLabel: false,
-    features: ["10 social media accounts", "Teams", "Email support"],
+    features: ["Teams for clients & projects", "10 social media accounts", "Invite your team", "Email support"],
     priceEnv: "STRIPE_PRICE_PRO",
   },
   agency: {
@@ -64,13 +72,15 @@ export const PLANS: Record<Plan, PlanConfig> = {
     priceMonthly: 49.99,
     priceLabel: "$49.99/mo",
     socialAccounts: 100,
+    maxOwnedTeams: null,
     collaborators: true,
     clients: true,
     whiteLabel: true,
     features: [
+      "Teams for clients & projects",
       "100 social media accounts",
-      "Teams",
-      "Clients",
+      "Invite your team",
+      "Client access",
       "Custom build",
       "White label",
       "Email, WhatsApp, telephone support",
@@ -94,6 +104,11 @@ export function planConfig(plan: string | null | undefined): PlanConfig {
 
 export function isPaidPlan(plan: string | null | undefined): plan is "pro" | "agency" {
   return plan === "pro" || plan === "agency";
+}
+
+/** Max teams a user may own on this plan; null = unlimited. */
+export function maxOwnedTeams(plan: string | null | undefined): number | null {
+  return planConfig(plan).maxOwnedTeams;
 }
 
 /** The Stripe Price id backing a plan, or null if unconfigured / free. */

@@ -88,7 +88,9 @@ export async function POST(req: Request) {
   }
 
   const origin = await authRedirectOrigin();
-  const returnTo = `${origin}/proofer/teams/${teamId}`;
+  // Billing lives on the Teams list page now (the per-team detail page is
+  // retired), so send the customer back there after checkout.
+  const returnTo = `${origin}/proofer/teams`;
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

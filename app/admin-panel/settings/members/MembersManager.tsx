@@ -9,7 +9,6 @@ export type MemberRecord = {
   email: string;
   fullName: string | null;
   role: "admin" | "member";
-  canRunAds: boolean;
   createdAt: string;
   isSelf: boolean;
 };
@@ -38,15 +37,15 @@ export function MembersManager({ members }: { members: MemberRecord[] }) {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  // Persist a member's role and/or ads flag together — updateMember takes both.
-  function persist(m: MemberRecord, next: { role?: string; canRunAds?: boolean }) {
+  // Persist a member's agency role. Ad access is no longer a stored per-person
+  // flag — it follows the person's role (see permissions.adsAllowedForUser).
+  function setRole(m: MemberRecord, role: string) {
     setErr(null);
     setOk(null);
     startTransition(async () => {
       const fd = new FormData();
       fd.set("userId", m.userId);
-      fd.set("role", next.role ?? m.role);
-      if (next.canRunAds ?? m.canRunAds) fd.set("canRunAds", "on");
+      fd.set("role", role);
       const res = await updateMember(null, fd);
       if (res?.error) setErr(res.error);
       else router.refresh();
@@ -97,16 +96,6 @@ export function MembersManager({ members }: { members: MemberRecord[] }) {
                 {m.fullName && <span style={subStyle}>{m.email}</span>}
               </span>
 
-              <button
-                type="button"
-                onClick={() => persist(m, { canRunAds: !m.canRunAds })}
-                disabled={pending}
-                style={m.canRunAds ? adsOn : adsOff}
-                title={m.canRunAds ? "Can create and edit ads — click to revoke" : "Cannot run ads — click to allow"}
-              >
-                {m.canRunAds ? "Ads ✓" : "Ads"}
-              </button>
-
               {m.isSelf ? (
                 <span style={roleBoxStatic} title="You can't change your own role">
                   {roleLabel(m.role)}
@@ -115,7 +104,7 @@ export function MembersManager({ members }: { members: MemberRecord[] }) {
                 <select
                   value={m.role}
                   disabled={pending}
-                  onChange={(e) => persist(m, { role: e.target.value })}
+                  onChange={(e) => setRole(m, e.target.value)}
                   style={roleSelect}
                   aria-label={`Role for ${name}`}
                 >
@@ -156,10 +145,6 @@ export function MembersManager({ members }: { members: MemberRecord[] }) {
             autoComplete="off"
             style={inputStyle}
           />
-          <label style={adsCheck}>
-            <input type="checkbox" name="canRunAds" />
-            Allow this person to create and edit ads
-          </label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <select name="role" defaultValue="member" style={{ ...roleSelect, width: "auto", flex: 1 }}>
               {ROLE_OPTS.map((o) => (
@@ -264,28 +249,6 @@ const roleBoxStatic: React.CSSProperties = {
   alignItems: "center",
   flex: "none",
 };
-const adsBase: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  height: 28,
-  boxSizing: "border-box",
-  padding: "0 10px",
-  borderRadius: 7,
-  cursor: "pointer",
-  flex: "none",
-};
-const adsOn: React.CSSProperties = {
-  ...adsBase,
-  background: "#e4f1ea",
-  color: "#2f7d5b",
-  border: "1px solid #bfe0cd",
-};
-const adsOff: React.CSSProperties = {
-  ...adsBase,
-  background: "#fff",
-  color: "#a1a1aa",
-  border: "1px solid #e4e4e7",
-};
 const xBtn: React.CSSProperties = {
   border: "none",
   background: "transparent",
@@ -333,14 +296,6 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #d8d8dd",
   background: "#fff",
   color: "#18181b",
-};
-const adsCheck: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  fontSize: 13,
-  color: "#3f3f46",
-  cursor: "pointer",
 };
 const primaryBtn: React.CSSProperties = {
   fontSize: 12,
