@@ -35,6 +35,7 @@ type TeamRow = {
   memberCount: number;
   accounts: AccountLite[];
   members: Member[];
+  isPersonal: boolean;
 };
 
 export default async function ProoferTeamsPage() {
@@ -62,7 +63,7 @@ export default async function ProoferTeamsPage() {
   if (visibleTeamIds.length > 0) {
     const teamsQuery = admin
       .from("teams")
-      .select("id, name, plan, owner_user_id")
+      .select("id, name, plan, owner_user_id, created_at")
       .in("id", visibleTeamIds)
       .order("name", { ascending: true });
 
@@ -80,8 +81,20 @@ export default async function ProoferTeamsPage() {
 
     const teamIdSet = new Set((teams ?? []).map((t) => t.id as string));
     const ownerByTeam = new Map<string, string>();
-    for (const t of teams ?? [])
+    // Personal team = the viewer's earliest-created owned team (matches
+    // ensure_personal_team). It sorts to the top of the list.
+    let personalTeamId: string | null = null;
+    let earliestOwned = Infinity;
+    for (const t of teams ?? []) {
       ownerByTeam.set(t.id as string, (t.owner_user_id as string) ?? "");
+      if ((t.owner_user_id as string) === access.userId) {
+        const c = new Date((t.created_at as string) ?? 0).getTime();
+        if (!Number.isNaN(c) && c < earliestOwned) {
+          earliestOwned = c;
+          personalTeamId = t.id as string;
+        }
+      }
+    }
 
     // Resolve member display names.
     const userById = new Map<string, string>();
@@ -172,8 +185,13 @@ export default async function ProoferTeamsPage() {
         memberCount: memberCounts.get(tid) ?? 0,
         accounts,
         members: membersByTeam.get(tid) ?? [],
+        isPersonal: tid === personalTeamId,
       };
     });
+    // Personal team first, then the rest alphabetically.
+    rows.sort((a, b) =>
+      a.isPersonal ? -1 : b.isPersonal ? 1 : a.name.localeCompare(b.name)
+    );
   }
 
   return (
@@ -211,6 +229,7 @@ export default async function ProoferTeamsPage() {
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 16, fontWeight: 700 }}>{t.name}</span>
+                    {t.isPersonal && <span style={personalTag}>Personal</span>}
                     <PlanBadge plan={t.plan} />
                     <Link
                       href={`${base}/teams/${t.id}`}
@@ -463,6 +482,18 @@ const reconnectLink: React.CSSProperties = {
   fontWeight: 600,
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const personalTag: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  padding: "2px 8px",
+  borderRadius: 999,
+  background: "#eef2ff",
+  border: "1px solid #dbe2fb",
+  color: "#4451b8",
 };
 
 const teamBody: React.CSSProperties = {
