@@ -536,12 +536,33 @@ function ConnCell({
     );
   }
 
-  // Instagram connects via its own login when configured; otherwise it comes in
-  // through the Facebook Page flow (which brings the linked Instagram).
-  const href =
-    isFb || !igConfigured
-      ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
-      : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
+  // Guard: don't fall the Instagram button back to Facebook login when
+  // Instagram Business Login isn't wired up. That fallback dead-ends
+  // Instagram-only accounts (they have no Facebook to log into) — which is
+  // exactly where people got stuck. Show a tip instead. An account that DOES
+  // have a Facebook Page still connects its Instagram via the Facebook button
+  // (the linked Instagram comes with it).
+  if (!isFb && !igConfigured) {
+    return (
+      <div style={connCellStyle}>
+        <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
+        {canManage && (
+          <span
+            style={connectDisabled}
+            title="Instagram-only login isn't set up on this deployment yet (INSTAGRAM_APP_ID / SECRET / OAUTH_REDIRECT_URI). If this account has a Facebook Page, use Connect Facebook — its linked Instagram comes with it."
+          >
+            Setup needed
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Facebook uses Facebook login; Instagram uses its own login (Instagram
+  // Business Login) when configured.
+  const href = isFb
+    ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
+    : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
   return (
     <div style={connCellStyle}>
       <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
@@ -739,6 +760,19 @@ const connectMini: React.CSSProperties = {
   padding: "3px 9px",
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const connectDisabled: React.CSSProperties = {
+  marginLeft: "auto",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#a1a1aa",
+  background: "#fafafa",
+  border: "1px dashed #e4e4e7",
+  borderRadius: 7,
+  padding: "3px 9px",
+  whiteSpace: "nowrap",
+  cursor: "help",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
