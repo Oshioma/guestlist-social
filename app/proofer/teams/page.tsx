@@ -206,13 +206,6 @@ export default async function ProoferTeamsPage() {
 
         {/* The map: each team and the accounts inside it */}
         <section style={{ background: "transparent" }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>
-            Your teams ({rows.length})
-          </h3>
-          <p style={sectionSubStyle}>
-            The teams you belong to and the accounts inside them. A badge shows
-            whether each account is connected to Instagram and Facebook.
-          </p>
           {rows.length === 0 ? (
             <p style={{ fontSize: 13, color: "#71717a", margin: 0 }}>
               No teams yet. Create one below.

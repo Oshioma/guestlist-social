@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import {
   exchangeCodeForUserToken,
@@ -9,6 +10,10 @@ import {
   metaRedirectUriForHost,
 } from "../../../admin-panel/lib/meta-auth";
 import {
+  attachMetaPage,
+  type PageCandidate,
+} from "../../../admin-panel/lib/meta-attach";
+import {
   normalizeHandle,
   facebookPageMatches,
 } from "../../../admin-panel/lib/account-match";
@@ -16,14 +21,17 @@ import {
 // GET /api/meta/callback
 //
 // Step 2 of the Meta OAuth flow. Verifies the state cookie, exchanges the
-// `code` for a short-lived user token, upgrades it to a long-lived token,
-// fetches the user's Pages, and for each Page also fetches the linked
-// Instagram professional account. All access tokens land in
-// `connected_meta_accounts` via the service-role client so they never touch
-// browser code.
+// `code` for a long-lived user token, and reads the Pages the login manages
+// (each with its linked Instagram account).
 //
-// On success redirects to the portal connect page (if returnTo=portal cookie
-// is set) or /admin-panel/proofer/publish (default).
+// From the Teams/admin surface we then attach exactly ONE Page: if the login
+// returns a single Page we attach it directly; if it returns several we stash
+// the candidates in `pending_meta_connections` and send the user to the chooser
+// (/proofer/connect/select) to pick one — no more grab-all. The client's
+// fb_page / ig_handle are pinned to whatever is attached.
+//
+// The portal flow (a client connecting their own account) is unchanged: it
+// attaches whatever matches the client's declared handle/Page.
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -37,10 +45,6 @@ export async function GET(req: Request) {
   const returnCookie = cookieStore.get("meta_oauth_return")?.value ?? "";
   cookieStore.delete("meta_oauth_return");
 
-  // The connect route writes `${returnTo}:${clientId}` into the cookie.
-  // "portal:<clientId>" is the old portal-specific shorthand; anything
-  // starting with "/" is an arbitrary admin-panel path like
-  // "/app/interaction" that we should send the user back to.
   const successBase = (() => {
     if (returnCookie.startsWith("portal:")) {
       return `/portal/${returnCookie.split(":")[1]}/connect`;
@@ -51,16 +55,14 @@ export async function GET(req: Request) {
     }
     return "/admin-panel/proofer/publish";
   })();
-  const errorBase = successBase;
 
   function redirectSuccess(extra: Record<string, string>) {
     const target = new URL(successBase, req.url);
     for (const [k, v] of Object.entries(extra)) target.searchParams.set(k, v);
     return NextResponse.redirect(target);
   }
-
   function redirectError(message: string) {
-    const target = new URL(errorBase, req.url);
+    const target = new URL(successBase, req.url);
     target.searchParams.set("meta_error", message);
     return NextResponse.redirect(target);
   }
@@ -84,8 +86,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Exchange with the SAME redirect_uri the authorize step used — on a
-    // standalone Proofer host that's this host, not the env default.
+    // Exchange with the SAME redirect_uri the authorize step used.
     const hostRedirect = metaRedirectUriForHost(new URL(req.url).host);
     const shortLived = await exchangeCodeForUserToken(code, hostRedirect);
     const longLived = await exchangeForLongLivedUserToken(shortLived.accessToken);
@@ -103,18 +104,59 @@ export async function GET(req: Request) {
       );
     }
 
-    const admin = metaServiceClient();
-    const now = new Date().toISOString();
     const expiresAt = longLived.expiresIn
       ? new Date(Date.now() + longLived.expiresIn * 1000).toISOString()
       : null;
 
-    // Only attach the account(s) this client actually declares. When a login
-    // manages a whole portfolio, attaching every Page under one client is the
-    // pollution that put the wrong accounts everywhere — so if the client has
-    // declared its Instagram handle / Facebook Page, keep only the matching
-    // ones. With nothing declared yet, attach everything so the operator can
-    // still discover and pick, then set the handle/Page.
+    // Build the candidate list once: each Page plus its linked Instagram.
+    const candidates: PageCandidate[] = [];
+    for (const page of pages) {
+      const ig = await fetchInstagramAccountForPage(page.id, page.access_token);
+      candidates.push({
+        id: page.id,
+        name: page.name,
+        access_token: page.access_token,
+        ig_id: ig?.id ?? null,
+        ig_username: ig?.username ?? null,
+      });
+    }
+
+    const isPortal = returnCookie.startsWith("portal:");
+
+    // ── Teams / admin: attach exactly ONE Page (single → direct, many → pick).
+    if (!isPortal) {
+      if (candidates.length === 1) {
+        const res = await attachMetaPage(clientIdNum, candidates[0], expiresAt);
+        if (res.error) return redirectError(`Could not save connection: ${res.error}`);
+        return redirectSuccess({ meta: "connected", fb: String(res.fb), ig: String(res.ig) });
+      }
+
+      const nonce = randomBytes(16).toString("hex");
+      const svc = metaServiceClient();
+      const { error: pendErr } = await svc.from("pending_meta_connections").insert({
+        nonce,
+        client_id: clientIdNum,
+        return_to: successBase,
+        pages: candidates,
+        token_expires_at: expiresAt,
+      });
+      if (pendErr) {
+        return redirectError(`Could not prepare the account picker: ${pendErr.message}`);
+      }
+      cookieStore.set("meta_pick", nonce, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 900,
+      });
+      return NextResponse.redirect(new URL("/proofer/connect/select", req.url));
+    }
+
+    // ── Portal (client connecting their own account): attach what matches the
+    // client's declared handle / Page (unchanged behaviour).
+    const admin = metaServiceClient();
+    const now = new Date().toISOString();
     let handle: string | null = null;
     let fbPage: string | null = null;
     const clientRow = await admin
@@ -134,69 +176,55 @@ export async function GET(req: Request) {
       fbPage = (clientRow.data?.fb_page as string | null) ?? null;
     }
     const wantedHandle = normalizeHandle(handle);
-    const matchesFbPage = (p: { id: string; name: string }) =>
+    const matchesFbPage = (c: PageCandidate) =>
       !normalizeHandle(fbPage) ||
-      facebookPageMatches(fbPage, { account_id: p.id, account_name: p.name });
+      facebookPageMatches(fbPage, { account_id: c.id, account_name: c.name });
     const matchesHandle = (username: string) =>
       !wantedHandle || normalizeHandle(username) === wantedHandle;
 
     let fbCount = 0;
     let igCount = 0;
-    // Diagnostic: exactly what Facebook handed back for this login (the whole
-    // portfolio), so the connect banner can show what was available even when
-    // we only attach the matching one.
     const returnedParts: string[] = [];
-
-    for (const page of pages) {
-      const ig = await fetchInstagramAccountForPage(page.id, page.access_token);
-      returnedParts.push(ig?.username ? `${page.name} → @${ig.username}` : page.name);
-
-      if (matchesFbPage(page)) {
-        const { error: fbErr } = await admin
-          .from("connected_meta_accounts")
-          .upsert(
-            {
-              client_id: clientIdNum,
-              platform: "facebook",
-              account_id: page.id,
-              account_name: page.name,
-              access_token: page.access_token,
-              token_expires_at: expiresAt,
-              updated_at: now,
-            },
-            { onConflict: "client_id,platform,account_id" }
-          );
+    for (const c of candidates) {
+      returnedParts.push(c.ig_username ? `${c.name} → @${c.ig_username}` : c.name);
+      if (matchesFbPage(c)) {
+        const { error: fbErr } = await admin.from("connected_meta_accounts").upsert(
+          {
+            client_id: clientIdNum,
+            platform: "facebook",
+            account_id: c.id,
+            account_name: c.name,
+            access_token: c.access_token,
+            token_expires_at: expiresAt,
+            updated_at: now,
+          },
+          { onConflict: "client_id,platform,account_id" }
+        );
         if (fbErr) console.error("meta/callback fb upsert error:", fbErr);
         else fbCount += 1;
       }
-
-      if (ig && matchesHandle(ig.username)) {
-        const { error: igErr } = await admin
-          .from("connected_meta_accounts")
-          .upsert(
-            {
-              client_id: clientIdNum,
-              platform: "instagram",
-              account_id: ig.id,
-              account_name: ig.username,
-              // Instagram Graph API publishing uses the parent Page's token.
-              access_token: page.access_token,
-              token_expires_at: expiresAt,
-              updated_at: now,
-            },
-            { onConflict: "client_id,platform,account_id" }
-          );
+      if (c.ig_id && c.ig_username && matchesHandle(c.ig_username)) {
+        const { error: igErr } = await admin.from("connected_meta_accounts").upsert(
+          {
+            client_id: clientIdNum,
+            platform: "instagram",
+            account_id: c.ig_id,
+            account_name: c.ig_username,
+            access_token: c.access_token,
+            token_expires_at: expiresAt,
+            updated_at: now,
+          },
+          { onConflict: "client_id,platform,account_id" }
+        );
         if (!igErr) igCount += 1;
       }
     }
-
-    const returned = returnedParts.join("|");
 
     return redirectSuccess({
       meta: "connected",
       fb: String(fbCount),
       ig: String(igCount),
-      pages: returned.slice(0, 1500),
+      pages: returnedParts.join("|").slice(0, 1500),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
