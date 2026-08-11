@@ -340,7 +340,6 @@ export default async function ProoferTeamsPage({
                   isStaff ||
                   myRoleByTeam.get(t.id) === "owner" ||
                   myRoleByTeam.get(t.id) === "admin";
-                const returnTo = encodeURIComponent(`${base}/teams`);
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -377,8 +376,6 @@ export default async function ProoferTeamsPage({
                                   teamId={t.id}
                                   clientId={a.id}
                                   canManage={canManage}
-                                  returnTo={returnTo}
-                                  igConfigured={igConfigured}
                                 />
                                 <ConnCell
                                   platform="instagram"
@@ -386,8 +383,6 @@ export default async function ProoferTeamsPage({
                                   teamId={t.id}
                                   clientId={a.id}
                                   canManage={canManage}
-                                  returnTo={returnTo}
-                                  igConfigured={igConfigured}
                                 />
                                 {canManage ? (
                                   <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
@@ -502,16 +497,12 @@ function ConnCell({
   teamId,
   clientId,
   canManage,
-  returnTo,
-  igConfigured,
 }: {
   platform: "facebook" | "instagram";
   conn: Conn;
   teamId: string;
   clientId: number;
   canManage: boolean;
-  returnTo: string;
-  igConfigured: boolean;
 }) {
   const isFb = platform === "facebook";
   const label = isFb ? "Facebook" : "Instagram";
@@ -548,41 +539,15 @@ function ConnCell({
     );
   }
 
-  // Guard: don't fall the Instagram button back to Facebook login when
-  // Instagram Business Login isn't wired up. That fallback dead-ends
-  // Instagram-only accounts (they have no Facebook to log into) — which is
-  // exactly where people got stuck. Show a tip instead. An account that DOES
-  // have a Facebook Page still connects its Instagram via the Facebook button
-  // (the linked Instagram comes with it).
-  if (!isFb && !igConfigured) {
-    return (
-      <div style={connCellStyle}>
-        <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
-        {canManage && (
-          <span
-            style={connectDisabled}
-            title="Instagram-only login isn't set up on this deployment yet (INSTAGRAM_APP_ID / SECRET / OAUTH_REDIRECT_URI). If this account has a Facebook Page, use Connect Facebook — its linked Instagram comes with it."
-          >
-            Setup needed
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // Facebook uses Facebook login; Instagram uses its own login (Instagram
-  // Business Login) when configured.
-  const href = isFb
-    ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
-    : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
+  // Only connected accounts are listed, so an empty cell just means this
+  // account is connected on the OTHER platform (e.g. an Instagram-only account
+  // has no Facebook). Keep it quiet — no "not connected / Connect" nag. Adding a
+  // brand-new account is done via "Add account", which is connect-first.
   return (
     <div style={connCellStyle}>
-      <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
-      {canManage && (
-        <a href={href} style={connectMini}>
-          Connect
-        </a>
-      )}
+      <span style={{ fontSize: 13, color: "#d4d4d8" }} aria-label="not on this platform">
+        —
+      </span>
     </div>
   );
 }
@@ -745,32 +710,6 @@ const connCellStyle: React.CSSProperties = {
   gap: 7,
   minHeight: 26,
   flexWrap: "wrap",
-};
-
-const connectMini: React.CSSProperties = {
-  marginLeft: "auto",
-  fontSize: 12,
-  fontWeight: 700,
-  color: "#3f3f46",
-  background: "#f4f4f5",
-  border: "1px solid #e4e4e7",
-  borderRadius: 7,
-  padding: "3px 9px",
-  textDecoration: "none",
-  whiteSpace: "nowrap",
-};
-
-const connectDisabled: React.CSSProperties = {
-  marginLeft: "auto",
-  fontSize: 12,
-  fontWeight: 700,
-  color: "#a1a1aa",
-  background: "#fafafa",
-  border: "1px dashed #e4e4e7",
-  borderRadius: 7,
-  padding: "3px 9px",
-  whiteSpace: "nowrap",
-  cursor: "help",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
