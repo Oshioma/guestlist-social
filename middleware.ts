@@ -28,7 +28,12 @@ function isProoferSurfacePath(path: string): boolean {
     path === "/super-admin" ||
     path.startsWith("/super-admin/") ||
     path === "/publish" ||
-    path === "/onboarding"
+    path === "/onboarding" ||
+    // The Meta page-picker (/proofer/connect/select). Without this, the OAuth
+    // callback's redirect to /proofer/connect/select canonicalises to
+    // /connect/select on a Proofer host and 404s.
+    path === "/connect" ||
+    path.startsWith("/connect/")
   );
 }
 
