@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { startAccountConnect } from "@/lib/auth/team-actions";
 
-// One "Add account" affordance — no "Facebook vs Instagram" choice. It connects
-// via Facebook, which brings the Page AND its linked Instagram (you pick the
-// Page in the Meta picker, and get both). A small "Instagram only" fallback
-// covers accounts that have no Facebook Page at all.
+// The add-account actions, laid out to sit right under the Facebook / Instagram
+// column headers: "+ Add account" under Facebook (connects via Facebook and
+// brings the linked Instagram — you pick the Page in the Meta picker and get
+// both), and "Instagram only" under Instagram for accounts with no Facebook
+// Page. There's no "Facebook vs Instagram" decision — Facebook is the default
+// that adds both.
 export function AddAccount({
   teamId,
   igConfigured,
@@ -30,7 +32,7 @@ export function AddAccount({
   }
 
   return (
-    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+    <div style={row}>
       <button
         type="button"
         onClick={() => go("facebook")}
@@ -46,7 +48,7 @@ export function AddAccount({
           "+ Add account"
         )}
       </button>
-      {igConfigured && (
+      {igConfigured ? (
         <button
           type="button"
           onClick={() => go("instagram")}
@@ -56,6 +58,8 @@ export function AddAccount({
         >
           {pending && which === "instagram" ? "Opening…" : "Instagram only"}
         </button>
+      ) : (
+        <span aria-hidden="true" />
       )}
     </div>
   );
@@ -79,9 +83,19 @@ function Spinner() {
   );
 }
 
+// Two columns, aligned with the Facebook / Instagram headers above.
+const row: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  alignItems: "center",
+  padding: "2px 0 8px",
+};
+
 const addBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
+  justifyContent: "center",
   gap: 6,
   fontSize: 12,
   fontWeight: 700,
@@ -89,8 +103,9 @@ const addBtn: React.CSSProperties = {
   background: "transparent",
   border: "1px dashed #d8d8dd",
   borderRadius: 8,
-  padding: "7px 12px",
+  padding: "6px 10px",
   cursor: "pointer",
+  justifySelf: "start",
 };
 
 const igOnly: React.CSSProperties = {
@@ -102,4 +117,5 @@ const igOnly: React.CSSProperties = {
   cursor: "pointer",
   textDecoration: "underline",
   padding: 0,
+  justifySelf: "start",
 };
