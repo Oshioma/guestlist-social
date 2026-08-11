@@ -4,7 +4,7 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
-import { AddAccountInline } from "./AddAccountInline";
+import { PlatformAddButton } from "./PlatformAddButton";
 import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
@@ -351,23 +351,35 @@ export default async function ProoferTeamsPage({
                   <div style={teamBody}>
                     <div style={colAccounts}>
                       <h4 style={colHead}>Accounts</h4>
-                      {t.accounts.length === 0 ? (
-                        <p style={{ fontSize: 13, color: "#a1a1aa", margin: 0 }}>
-                          No accounts in this team yet.
-                        </p>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <div style={acctHeadRow}>
-                            <span>Facebook</span>
-                            <span>Instagram</span>
-                            <span aria-hidden="true" />
-                          </div>
-                          {t.accounts.map((a) => (
-                            // No company name: a connected account is identified
-                            // by its handle; an unconnected one just shows Connect
-                            // buttons, and the Meta picker names the company when
-                            // you connect. Facebook + Instagram for one account
-                            // stay grouped in the same row.
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        {/* Column headers carry the add affordance: a + by
+                            Facebook / Instagram starts that connect directly. */}
+                        <div style={acctHeadRow}>
+                          <span style={headCell}>
+                            Facebook
+                            {canManage && (
+                              <PlatformAddButton teamId={t.id} platform="facebook" />
+                            )}
+                          </span>
+                          <span style={headCell}>
+                            Instagram
+                            {canManage && igConfigured && (
+                              <PlatformAddButton teamId={t.id} platform="instagram" />
+                            )}
+                          </span>
+                          <span aria-hidden="true" />
+                        </div>
+                        {t.accounts.length === 0 ? (
+                          <p style={{ fontSize: 13, color: "#a1a1aa", margin: "8px 0 0" }}>
+                            {canManage
+                              ? "No accounts yet — use + to connect one."
+                              : "No accounts in this team yet."}
+                          </p>
+                        ) : (
+                          // No company name: a connected account is identified by
+                          // its handle. Facebook + Instagram for one account stay
+                          // grouped in the same row.
+                          t.accounts.map((a) => (
                             <div key={a.id} style={acctBlock}>
                               <div style={acctConns}>
                                 <ConnCell
@@ -391,13 +403,11 @@ export default async function ProoferTeamsPage({
                                 )}
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                      {canManage && <AddAccountInline teamId={t.id} igConfigured={igConfigured} />}
+                          ))
+                        )}
+                      </div>
                     </div>
                     <div style={colMembers}>
-                      <h4 style={colHead}>Members</h4>
                       <TeamMembersInline teamId={t.id} members={t.members} canManage={canManage} />
                     </div>
                   </div>
@@ -701,6 +711,13 @@ const acctHeadRow: React.CSSProperties = {
   color: "#a1a1aa",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
+};
+
+const headCell: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  minWidth: 0,
 };
 
 const acctBlock: React.CSSProperties = {
