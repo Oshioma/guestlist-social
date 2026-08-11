@@ -29,6 +29,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authRedirectOrigin } from "@/lib/auth/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess, isSuperAdmin } from "@/lib/auth/permissions";
+import { maxOwnedTeams, type Plan } from "@/lib/billing/plans";
 import { sendEmail } from "@/lib/email";
 import { renderEmailTemplate } from "@/lib/email/templates";
 
@@ -242,6 +243,30 @@ export async function createTeam(
   const plan = access.kind === "staff" ? parsed.data.plan : "free";
 
   const admin = createAdminClient();
+
+  // Plan gate: the Free plan includes exactly ONE team — your personal one.
+  // Creating more needs Pro/Agency. A user's allowance is the best plan among
+  // the teams they OWN; being invited to someone else's team never counts.
+  // Agency staff bypass this.
+  if (access.kind !== "staff") {
+    const { data: owned } = await admin
+      .from("teams")
+      .select("plan")
+      .eq("owner_user_id", actorUserId);
+    const ownedCount = owned?.length ?? 0;
+    const rank: Record<string, number> = { free: 0, pro: 1, agency: 2 };
+    const best = (owned ?? []).reduce<Plan>((acc, t) => {
+      const p = ((t.plan as Plan) ?? "free");
+      return (rank[p] ?? 0) > (rank[acc] ?? 0) ? p : acc;
+    }, "free");
+    const cap = maxOwnedTeams(best); // null = unlimited
+    if (cap !== null && ownedCount >= cap) {
+      return {
+        error:
+          "The Free plan includes one team — your own. Upgrade to Pro to create more teams.",
+      };
+    }
+  }
 
   const { data: team, error } = await admin
     .from("teams")

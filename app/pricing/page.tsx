@@ -13,11 +13,12 @@ export const metadata: Metadata = {
 // here can never drift from what checkout and the limit-enforcement actually
 // charge and allow.
 
-// A couple of extra, human-readable lines per plan that aren't in the feature
-// bullets — the account limit is the headline, so we lead with it.
+// The headline per plan leads with the team allowance — the key difference
+// between tiers. Free includes one team (your personal workspace); paid plans
+// are unlimited. The social-account limit lives in the feature bullets below.
 function planHeadline(plan: Plan): string {
-  const n = PLANS[plan].socialAccounts;
-  return `${n} social account${n === 1 ? "" : "s"}`;
+  const m = PLANS[plan].maxOwnedTeams;
+  return m === null ? "Unlimited teams" : `${m} team${m === 1 ? "" : "s"}`;
 }
 
 const RECOMMENDED: Plan = "pro";

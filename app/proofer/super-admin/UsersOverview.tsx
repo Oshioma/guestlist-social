@@ -132,12 +132,6 @@ export default function UsersOverview({
                             <span style={{ ...badge, background: t.plan === "pro" ? "#ecfccb" : "#f4f4f5", color: t.plan === "pro" ? "#3f6212" : "#71717a" }}>
                               {t.plan}
                             </span>
-                            <Link
-                              href={`${base}/teams/${t.id}`}
-                              style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "#3f3f46", textDecoration: "none", whiteSpace: "nowrap" }}
-                            >
-                              Manage &rarr;
-                            </Link>
                           </div>
                           {t.accounts.length === 0 ? (
                             <p style={{ fontSize: 12, color: "#a1a1aa", margin: "6px 0 0" }}>
