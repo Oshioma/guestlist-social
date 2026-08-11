@@ -145,7 +145,12 @@ export default async function ProoferTeamsPage({
     for (const t of teams ?? []) {
       ownerByTeam.set(t.id as string, (t.owner_user_id as string) ?? "");
       if (hasPersonalFlag) {
-        if ((t as { is_personal?: boolean }).is_personal) {
+        // Only YOUR own personal team counts — you may be a member of someone
+        // else's personal team, which shouldn't steal the tag / top slot.
+        if (
+          (t as { is_personal?: boolean }).is_personal &&
+          (t.owner_user_id as string) === access.userId
+        ) {
           personalTeamId = t.id as string;
         }
       } else if ((t.owner_user_id as string) === access.userId) {
