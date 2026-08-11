@@ -2812,6 +2812,12 @@ export default function ProoferBoard({
 
             const slotIdeas = postIdeasByKey.get(key) ?? [];
 
+            // The media-picker block (photo/video/link/library/stock + panels)
+            // is built once by the left-rail expression below and captured here.
+            // On the standalone surface it's rendered in the composer, just above
+            // Comments, instead of in the rail; /app/proofer keeps it in the rail.
+            let mediaSection: React.ReactNode = null;
+
             return (
               <div
                 key={dateKey}
@@ -3837,7 +3843,10 @@ export default function ProoferBoard({
 
                   </div>
 
-                  {!isLocked && (() => {
+                  {(() => {
+                    mediaSection = isLocked
+                      ? null
+                      : (() => {
                     const slotKey = postKey(dateKey, activePlatform);
                     const libOpen = imgLibraryPostKey === slotKey;
                     const stockOpen = pexelsPostKey === slotKey;
@@ -4250,6 +4259,10 @@ export default function ProoferBoard({
                       )}
                     </div>
                   );
+                      })();
+                    // Rail on /app/proofer; on the standalone surface it's
+                    // rendered in the composer (above Comments) instead.
+                    return standalone ? null : mediaSection;
                   })()}
 
                   {/* Standalone: attribution (Created / Edited / Approved by)
@@ -4715,6 +4728,11 @@ export default function ProoferBoard({
                     </div>
                     );
                   })()}
+
+                  {/* Standalone: the media picker (photo/video/link/library/
+                      stock) lives here in the composer, right above Comments,
+                      next to the image it fills — not in the left rail. */}
+                  {standalone && mediaSection}
 
                   <div
                     style={{
