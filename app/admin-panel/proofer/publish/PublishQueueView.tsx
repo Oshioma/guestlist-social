@@ -28,7 +28,9 @@ export default async function PublishQueueView({
   backHref = "/app/proofer",
   settingsHref = "/app/settings",
   clientEditBase = "/app/clients",
-  showMetaConnection = true,
+  // Connecting/reconnecting Meta accounts now lives on the Teams page, so the
+  // publish queue no longer shows the Meta connection panel by default.
+  showMetaConnection = false,
   connectOrigin = "",
 }: {
   connectResult?: ConnectResult | null;

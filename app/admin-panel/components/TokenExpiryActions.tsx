@@ -5,7 +5,7 @@ import { syncAllClients } from "../lib/meta-sync-action";
 
 // Action buttons for the expired-token banner. Reconnecting is what actually
 // clears expired publish tokens (a Facebook re-login per account, done from
-// the publish page's Meta connection panel). "Sync ad data" pulls the latest
+// the Teams page where each account is connected). "Sync ad data" pulls the latest
 // campaign/insights data — handy, but it does not refresh publish tokens, so
 // it's the secondary action.
 export default function TokenExpiryActions() {
@@ -42,7 +42,7 @@ export default function TokenExpiryActions() {
       }}
     >
       <a
-        href="/app/proofer/publish#meta-connection"
+        href="/proofer/teams"
         style={{
           padding: "7px 13px",
           borderRadius: 8,

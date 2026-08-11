@@ -2951,6 +2951,48 @@ export default function ProoferBoard({
                     </>
                   )}
 
+                  {/* Standalone: the publish time sits directly under the date
+                      (not buried at the foot of the composer), and drops the
+                      BST/local-zone suffix — just the time in the display zone.
+                      Locked posts show their time in the reschedule row instead. */}
+                  {standalone && !isLocked && (
+                    <div
+                      style={{
+                        order: isNarrow ? 0 : undefined,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        marginTop: 8,
+                      }}
+                    >
+                      <input
+                        type="time"
+                        value={draft.publishTime}
+                        onChange={(e) =>
+                          updateDraft(dateKey, activePlatform, {
+                            publishTime: e.target.value,
+                          })
+                        }
+                        aria-label="Publish time (GMT)"
+                        style={{
+                          padding: "5px 9px",
+                          borderRadius: 8,
+                          border: "1px solid #e4e4e7",
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: "#18181b",
+                          background: "#fff",
+                          fontFamily: "inherit",
+                        }}
+                      />
+                      <span
+                        style={{ fontSize: 11, color: "#a1a1aa", fontWeight: 600 }}
+                      >
+                        GMT
+                      </span>
+                    </div>
+                  )}
+
                   {isNarrow ? (
                     // On a phone these five facts each used to claim their own
                     // line — and because the column is dissolved into the card
@@ -4137,6 +4179,10 @@ export default function ProoferBoard({
                         </div>
                       </BottomSheet>
 
+                      {/* Non-standalone keeps the publish time at the foot of the
+                          composer. Standalone lifts it up under the date (above),
+                          so it's hidden here to avoid showing the time twice. */}
+                      {!standalone && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
                           type="time"
@@ -4179,6 +4225,7 @@ export default function ProoferBoard({
                           })()}
                         </span>
                       </div>
+                      )}
                     </div>
                   );
                   })()}
