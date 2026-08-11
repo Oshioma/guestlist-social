@@ -288,7 +288,12 @@ export default async function ProoferTeamsPage({
         // placeholders are noise; you add a new one via "Add account" (which
         // goes straight to connecting).
         .filter((acc) => !!(acc.fb || acc.ig))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        // Fully-connected (both platforms) first, then Facebook-only, then
+        // Instagram-only; alphabetical within each group.
+        .sort((a, b) => {
+          const rank = (x: AccountLite) => (x.fb && x.ig ? 0 : x.fb ? 1 : 2);
+          return rank(a) - rank(b) || a.name.localeCompare(b.name);
+        });
       return {
         id: tid,
         name: t.name as string,
@@ -350,7 +355,8 @@ export default async function ProoferTeamsPage({
 
                   <div style={teamBody}>
                     <div style={colAccounts}>
-                      <h4 style={colHead}>Accounts</h4>
+                      {/* No "Accounts" header — the Facebook / Instagram column
+                          labels below already say what these are. */}
                       <div style={{ display: "flex", flexDirection: "column" }}>
                         {/* Column headers carry the add affordance: a + by
                             Facebook / Instagram starts that connect directly. */}
@@ -691,15 +697,6 @@ const teamBody: React.CSSProperties = {
 
 const colAccounts: React.CSSProperties = { flex: "2 1 300px", minWidth: 0 };
 const colMembers: React.CSSProperties = { flex: "1 1 240px", minWidth: 0 };
-
-const colHead: React.CSSProperties = {
-  fontSize: 11,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "#a1a1aa",
-  fontWeight: 700,
-  margin: "0 0 8px",
-};
 
 const acctHeadRow: React.CSSProperties = {
   display: "grid",
