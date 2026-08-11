@@ -278,5 +278,7 @@ export const config = {
     "/super-admin",
     "/publish",
     "/onboarding",
+    "/connect/:path*",
+    "/connect",
   ],
 };
