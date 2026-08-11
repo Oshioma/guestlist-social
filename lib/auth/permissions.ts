@@ -125,7 +125,7 @@ export async function getProoferAccess(): Promise<ProoferAccess | null> {
   const { data: poster } = await supabase
     .from("team_members")
     .select("role")
-    .in("role", ["owner", "admin", "member"])
+    .in("role", ["owner", "admin", "proofer", "member"])
     .limit(1)
     .maybeSingle();
   if (poster) {

@@ -277,7 +277,7 @@ async function writableAccountIds(userId: string): Promise<Set<string>> {
     .from("team_members")
     .select("team_id")
     .eq("user_id", userId)
-    .in("role", ["owner", "admin", "member"]);
+    .in("role", ["owner", "admin", "proofer", "member"]);
   const teamIds = Array.from(new Set((tm ?? []).map((r) => String(r.team_id))));
   if (teamIds.length === 0) return new Set();
   const { data: ta } = await admin

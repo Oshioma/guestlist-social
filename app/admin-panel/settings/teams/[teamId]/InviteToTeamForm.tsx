@@ -85,7 +85,10 @@ export function InviteToTeamForm({
           <select name="role" defaultValue="client" style={inputStyle}>
             <option value="client">Client (view &amp; approve)</option>
             <option value="member" disabled={isFree}>
-              Member{isFree ? " · Pro" : ""}
+              Creator{isFree ? " · Pro" : ""}
+            </option>
+            <option value="proofer" disabled={isFree}>
+              Proofer{isFree ? " · Pro" : ""}
             </option>
             <option value="admin" disabled={isFree}>
               Admin{isFree ? " · Pro" : ""}
@@ -95,11 +98,12 @@ export function InviteToTeamForm({
       </div>
 
       <p style={{ fontSize: 12, color: "#71717a", margin: 0 }}>
-        A client sees and approves only this team&rsquo;s content. Members and
-        admins can work the board — draft, caption, schedule and proof — but
-        never see stored passwords or tokens.{" "}
+        A client sees and approves only this team&rsquo;s content. Creators,
+        proofers and admins can work the board — draft, caption, schedule and
+        proof (proofers and admins can also approve) — but never see stored
+        passwords or tokens.{" "}
         {isFree
-          ? "Inviting members or admins needs a Pro team; upgrade in Team settings."
+          ? "Inviting creators, proofers or admins needs a Pro team; upgrade in Team settings."
           : "Only agency staff push posts live to Meta."}
       </p>
 

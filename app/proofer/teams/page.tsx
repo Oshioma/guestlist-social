@@ -316,7 +316,7 @@ function RoleBadge({ role }: { role: string }) {
         color: "#4451b8",
       }}
     >
-      {role === "owner" ? "You own this" : `You: ${role}`}
+      {role === "owner" ? "You own this" : `You: ${role === "member" ? "creator" : role}`}
     </span>
   );
 }

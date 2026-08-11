@@ -82,7 +82,7 @@ export default async function ProoferTeamDetailPage({
     ])
   );
 
-  const roleRank: Record<Role, number> = { owner: 0, admin: 1, member: 2, client: 3 };
+  const roleRank: Record<Role, number> = { owner: 0, admin: 1, proofer: 2, member: 3, client: 4 };
   const members: TeamMember[] = (memberRows ?? [])
     .map((m) => {
       const u = userById.get(m.user_id);
@@ -361,7 +361,7 @@ export default async function ProoferTeamDetailPage({
                 {members.map((m) => (
                   <div key={m.userId} style={{ ...readRowStyle, display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <span>{m.fullName || m.email}</span>
-                    <span style={{ color: "#a1a1aa", fontSize: 12, textTransform: "capitalize" }}>{m.role}</span>
+                    <span style={{ color: "#a1a1aa", fontSize: 12, textTransform: "capitalize" }}>{m.role === "member" ? "creator" : m.role}</span>
                   </div>
                 ))}
               </div>

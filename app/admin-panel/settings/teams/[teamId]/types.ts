@@ -1,7 +1,10 @@
 // Shared types for the team detail components, kept separate from the page so
 // the client components don't import a route module.
 
-export type Role = "owner" | "admin" | "member" | "client";
+// 'member' is surfaced in the UI as "Creator" (drafts-only). 'proofer' can
+// approve posts. 'owner' is the backend team-creator marker; 'client' is the
+// portal viewer. Assignable in the UI: admin / proofer / creator(member).
+export type Role = "owner" | "admin" | "proofer" | "member" | "client";
 
 export type TeamMember = {
   userId: string;

@@ -448,7 +448,7 @@ export async function deleteTeam(
 const inviteSchema = z.object({
   teamId: z.string().uuid(),
   email: z.string().email("Enter a valid email address."),
-  role: z.enum(["admin", "member", "client"]),
+  role: z.enum(["admin", "proofer", "member", "client"]),
 });
 
 export async function inviteToTeam(
@@ -478,9 +478,9 @@ export async function inviteToTeam(
   // Paid gate: collaborators (member/admin) need a paid team (Pro or Agency) —
   // inviting people is a "Teams" feature. Clients are always allowed, since
   // giving a client sight of their own content is core, not an upsell.
-  if (role === "admin" || role === "member") {
+  if (role === "admin" || role === "proofer" || role === "member") {
     if ((team?.plan ?? "free") === "free") {
-      return { error: "Upgrade this team to Pro or Agency to invite admins or members." };
+      return { error: "Upgrade this team to Pro or Agency to invite admins, proofers or creators." };
     }
   }
 
@@ -518,7 +518,7 @@ export async function inviteToTeam(
 const roleSchema = z.object({
   teamId: z.string().uuid(),
   userId: z.string().uuid(),
-  role: z.enum(["admin", "member", "client"]),
+  role: z.enum(["admin", "proofer", "member", "client"]),
 });
 
 export async function updateTeamMemberRole(
@@ -550,10 +550,12 @@ export async function updateTeamMemberRole(
   // Same paid gate as invites: promoting someone to a collaborator role needs
   // a paid team (Pro or Agency).
   if (
-    (parsed.data.role === "admin" || parsed.data.role === "member") &&
+    (parsed.data.role === "admin" ||
+      parsed.data.role === "proofer" ||
+      parsed.data.role === "member") &&
     (team?.plan ?? "free") === "free"
   ) {
-    return { error: "Upgrade this team to Pro or Agency to assign admin or member roles." };
+    return { error: "Upgrade this team to Pro or Agency to assign admin, proofer or creator roles." };
   }
 
   const { error } = await admin
