@@ -126,6 +126,9 @@ export default async function WelcomePage() {
 
       <footer className="welcome-footer">
         <span>© {new Date().getFullYear()} PostProofer</span>
+        <Link href="/pricing" className="welcome-link">
+          Pricing
+        </Link>
         <Link href="/privacy" className="welcome-link">
           Privacy
         </Link>

@@ -56,6 +56,10 @@ export default async function ProoferStandaloneLayout({
             fontSize: 12.5,
           }}
         >
+          <Link href="/pricing" target="_blank" style={footerLinkStyle}>
+            Pricing
+          </Link>
+          <span style={{ color: "#d4d4d8" }}>·</span>
           <Link href="/privacy" target="_blank" style={footerLinkStyle}>
             Privacy Policy
           </Link>
