@@ -4,7 +4,7 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
-import { AddAccountWizard } from "./AddAccountWizard";
+import { AddAccountInline } from "./AddAccountInline";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamMembersInline } from "./TeamMembersInline";
 import { planConfig, type Plan } from "@/lib/billing/plans";
@@ -176,17 +176,6 @@ export default async function ProoferTeamsPage() {
     });
   }
 
-  // Teams the viewer may add an account to (staff → all visible; otherwise the
-  // ones they own or admin). Drives the wizard's team picker.
-  const manageableTeams = rows
-    .filter(
-      (t) =>
-        isStaff ||
-        myRoleByTeam.get(t.id) === "owner" ||
-        myRoleByTeam.get(t.id) === "admin"
-    )
-    .map((t) => ({ id: t.id, name: t.name }));
-
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24, background: "#f3f3f5" }}>
       <div style={{ maxWidth: 780, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -196,44 +185,6 @@ export default async function ProoferTeamsPage() {
           </Link>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Teams &amp; accounts</h2>
         </div>
-
-        {/* Plain-language explainer */}
-        <section style={{ ...cardStyle, background: "#fbfbfa" }}>
-          <h3 style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 700 }}>
-            How this works
-          </h3>
-          <ul style={explainerList}>
-            <li>
-              <strong>Account</strong> = one Instagram/Facebook you post to (a
-              brand or business).
-            </li>
-            <li>
-              <strong>Team</strong> = a folder that holds accounts and the people
-              allowed to work on them.
-            </li>
-            <li>
-              <strong>Connect</strong> = link the account to Meta. This is the
-              step that lets posts actually go live. Until it&rsquo;s connected
-              you&rsquo;ll see <Badge kind="off">Not connected</Badge>.
-            </li>
-          </ul>
-        </section>
-
-        {/* Add an account */}
-        <section style={cardStyle}>
-          <h3 style={sectionTitleStyle}>Add an account</h3>
-          <p style={sectionSubStyle}>
-            Create a new Instagram/Facebook account, choose which team it belongs
-            to, then connect it — in three quick steps.
-          </p>
-          {manageableTeams.length > 0 ? (
-            <AddAccountWizard teams={manageableTeams} base={base} />
-          ) : (
-            <p style={{ fontSize: 13, color: "#71717a", margin: 0 }}>
-              Create a team below first — every account lives inside a team.
-            </p>
-          )}
-        </section>
 
         {/* The map: each team and the accounts inside it */}
         <section style={{ background: "transparent" }}>
@@ -309,6 +260,7 @@ export default async function ProoferTeamsPage() {
                           ))}
                         </div>
                       )}
+                      {canManage && <AddAccountInline teamId={t.id} />}
                     </div>
                     <div style={colMembers}>
                       <h4 style={colHead}>Members</h4>
