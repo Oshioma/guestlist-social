@@ -369,18 +369,24 @@ export default async function ProoferTeamsPage({
                   <div style={teamBody}>
                     <div style={colAccounts}>
                       <div style={{ display: "flex", flexDirection: "column" }}>
+                        {/* A "+" sits next to each platform title: click it to add
+                            an account on that platform to this team. */}
                         <div style={acctHeadRow}>
-                          <span style={headCell}>Facebook</span>
-                          <span style={headCell}>Instagram</span>
+                          <span style={headCell}>
+                            Facebook
+                            {canManage && <AddAccount teamId={t.id} platform="facebook" />}
+                          </span>
+                          <span style={headCell}>
+                            Instagram
+                            {canManage && igConfigured && (
+                              <AddAccount teamId={t.id} platform="instagram" />
+                            )}
+                          </span>
                         </div>
-                        {/* Add affordances sit directly under the column titles:
-                            "+ Add account" beneath Facebook, "+ Instagram only"
-                            beneath Instagram. */}
-                        {canManage && <AddAccount teamId={t.id} igConfigured={igConfigured} />}
                         {t.accounts.length === 0 ? (
                           <p style={{ fontSize: 13, color: "#a1a1aa", margin: "10px 0 0" }}>
                             {canManage
-                              ? "No accounts yet — add one above."
+                              ? "No accounts yet — use + above to add one."
                               : "No accounts in this team yet."}
                           </p>
                         ) : (
