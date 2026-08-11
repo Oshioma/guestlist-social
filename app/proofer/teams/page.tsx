@@ -4,8 +4,7 @@ import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
-import { PlatformAddButton } from "./PlatformAddButton";
-import { AccountRemoveButton } from "./AccountRemoveButton";
+import { AddAccount } from "./AddAccount";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
@@ -28,6 +27,14 @@ function tokenHealth(expiresAt: string | null | undefined): Health {
   if (Number.isNaN(t)) return "ok";
   if (t <= now) return "expired";
   if (t <= now + 10 * 24 * 60 * 60 * 1000) return "soon";
+  return "ok";
+}
+
+// Worst health across an account's platforms — drives the account-level
+// "expiring / expired · Reconnect" line.
+function worstHealth(...hs: (Health | undefined)[]): Health {
+  if (hs.includes("expired")) return "expired";
+  if (hs.includes("soon")) return "soon";
   return "ok";
 }
 
@@ -355,62 +362,63 @@ export default async function ProoferTeamsPage({
 
                   <div style={teamBody}>
                     <div style={colAccounts}>
-                      {/* No "Accounts" header — the Facebook / Instagram column
-                          labels below already say what these are. */}
                       <div style={{ display: "flex", flexDirection: "column" }}>
-                        {/* Column headers carry the add affordance: a + by
-                            Facebook / Instagram starts that connect directly. */}
                         <div style={acctHeadRow}>
-                          <span style={headCell}>
-                            Facebook
-                            {canManage && (
-                              <PlatformAddButton teamId={t.id} platform="facebook" />
-                            )}
-                          </span>
-                          <span style={headCell}>
-                            Instagram
-                            {canManage && igConfigured && (
-                              <PlatformAddButton teamId={t.id} platform="instagram" />
-                            )}
-                          </span>
-                          <span aria-hidden="true" />
+                          <span style={headCell}>Facebook</span>
+                          <span style={headCell}>Instagram</span>
                         </div>
                         {t.accounts.length === 0 ? (
                           <p style={{ fontSize: 13, color: "#a1a1aa", margin: "8px 0 0" }}>
                             {canManage
-                              ? "No accounts yet — use + to connect one."
+                              ? "No accounts yet — add one below."
                               : "No accounts in this team yet."}
                           </p>
                         ) : (
                           // No company name: a connected account is identified by
                           // its handle. Facebook + Instagram for one account stay
                           // grouped in the same row.
-                          t.accounts.map((a) => (
-                            <div key={a.id} style={acctBlock}>
-                              <div style={acctConns}>
-                                <ConnCell
-                                  platform="facebook"
-                                  conn={a.fb}
-                                  teamId={t.id}
-                                  clientId={a.id}
-                                  canManage={canManage}
-                                />
-                                <ConnCell
-                                  platform="instagram"
-                                  conn={a.ig}
-                                  teamId={t.id}
-                                  clientId={a.id}
-                                  canManage={canManage}
-                                />
-                                {canManage ? (
-                                  <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
-                                ) : (
-                                  <span aria-hidden="true" />
+                          t.accounts.map((a) => {
+                            const health = worstHealth(a.fb?.health, a.ig?.health);
+                            // Reconnect through whichever platform the account has
+                            // (Facebook refreshes the linked Instagram too).
+                            const reconnectHref = a.fb
+                              ? `/api/meta/connect?clientId=${a.id}&returnTo=${encodeURIComponent(`${base}/teams`)}`
+                              : `/api/instagram/connect?clientId=${a.id}&returnTo=${encodeURIComponent(`${base}/teams`)}`;
+                            return (
+                              <div key={a.id} style={acctBlock}>
+                                <div style={acctConns}>
+                                  <ConnCell
+                                    platform="facebook"
+                                    conn={a.fb}
+                                    teamId={t.id}
+                                    clientId={a.id}
+                                    canManage={canManage}
+                                  />
+                                  <ConnCell
+                                    platform="instagram"
+                                    conn={a.ig}
+                                    teamId={t.id}
+                                    clientId={a.id}
+                                    canManage={canManage}
+                                  />
+                                </div>
+                                {canManage && health !== "ok" && (
+                                  <div style={reconnectRow}>
+                                    <span style={{ color: health === "expired" ? "#dc2626" : "#b45309" }}>
+                                      {health === "expired"
+                                        ? "Connection expired"
+                                        : "Connection expiring soon"}
+                                    </span>
+                                    <a href={reconnectHref} style={reconnectPill}>
+                                      Reconnect
+                                    </a>
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
+                        {canManage && <AddAccount teamId={t.id} igConfigured={igConfigured} />}
                       </div>
                     </div>
                     <div style={colMembers}>
@@ -527,8 +535,6 @@ function ConnCell({
   if (conn) {
     const dot =
       conn.health === "expired" ? "#dc2626" : conn.health === "soon" ? "#d97706" : "#16a34a";
-    const tag =
-      conn.health === "expired" ? "reconnect" : conn.health === "soon" ? "expiring" : "";
     return (
       <div style={connCellStyle}>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
@@ -546,11 +552,9 @@ function ConnCell({
         >
           {conn.handle ? `@${conn.handle}` : label}
         </span>
-        {tag && (
-          <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: conn.health === "expired" ? "#dc2626" : "#b45309" }}>
-            · {tag}
-          </span>
-        )}
+        {/* One ✕ per handle = disconnect just this platform. Disconnecting both
+            drops the account off the list. (Token health shows in the
+            account-level "expiring · Reconnect" line below.) */}
         {canManage && (
           <span style={{ marginLeft: "auto", flexShrink: 0 }}>
             <DisconnectButton
@@ -700,7 +704,7 @@ const colMembers: React.CSSProperties = { flex: "1 1 240px", minWidth: 0 };
 
 const acctHeadRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 24px",
+  gridTemplateColumns: "1fr 1fr",
   gap: 10,
   padding: "0 0 6px",
   fontSize: 11,
@@ -724,9 +728,29 @@ const acctBlock: React.CSSProperties = {
 
 const acctConns: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr 24px",
+  gridTemplateColumns: "1fr 1fr",
   gap: 10,
   alignItems: "center",
+};
+
+const reconnectRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 4,
+  fontSize: 12,
+  fontWeight: 600,
+};
+
+const reconnectPill: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#fff",
+  background: "#4f46e5",
+  borderRadius: 7,
+  padding: "3px 10px",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const connCellStyle: React.CSSProperties = {
