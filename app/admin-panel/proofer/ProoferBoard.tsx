@@ -3095,12 +3095,18 @@ export default function ProoferBoard({
                                     type="time"
                                     value={val}
                                     disabled={isPending}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                      const v = e.target.value;
                                       setRescheduleTimes((prev) => ({
                                         ...prev,
-                                        [p.id]: e.target.value,
-                                      }))
-                                    }
+                                        [p.id]: v,
+                                      }));
+                                      // Standalone: setting a new time saves it —
+                                      // no separate Reschedule button.
+                                      if (standalone && v && v !== val) {
+                                        handleProoferReschedule(dateKey, p, v);
+                                      }
+                                    }}
                                     aria-label={`New publish time (${zoneAbbr})`}
                                     style={{
                                       padding: standalone ? "5px 9px" : "5px 8px",
@@ -3113,38 +3119,54 @@ export default function ProoferBoard({
                                       fontFamily: "inherit",
                                     }}
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleProoferReschedule(dateKey, p, val)
-                                    }
-                                    disabled={isPending}
-                                    style={{
-                                      // Light "white box" matching the Instagram /
-                                      // Facebook toggles, and the same width so the
-                                      // buttons form a tidy aligned column.
-                                      width: PLAT_TOGGLE_WIDTH,
-                                      textAlign: "center",
-                                      padding: "7px 13px",
-                                      borderRadius: 10,
-                                      border: "1px solid #d4d4d8",
-                                      background: "#fff",
-                                      color: "#52525b",
-                                      fontSize: 13,
-                                      fontWeight: 700,
-                                      cursor: isPending ? "wait" : "pointer",
-                                      opacity:
-                                        reschedulingId === p.id
-                                          ? 0.7
-                                          : isPending
-                                          ? 0.5
-                                          : 1,
-                                    }}
-                                  >
-                                    {reschedulingId === p.id
-                                      ? "Rescheduling…"
-                                      : "Reschedule"}
-                                  </button>
+                                  {standalone ? (
+                                    // Standalone: no button — setting the time
+                                    // saves. Show a tiny status while it saves.
+                                    reschedulingId === p.id ? (
+                                      <span
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: "#0369a1",
+                                        }}
+                                      >
+                                        Saving…
+                                      </span>
+                                    ) : null
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleProoferReschedule(dateKey, p, val)
+                                      }
+                                      disabled={isPending}
+                                      style={{
+                                        // Light "white box" matching the Instagram
+                                        // / Facebook toggles, same width so the
+                                        // buttons form a tidy aligned column.
+                                        width: PLAT_TOGGLE_WIDTH,
+                                        textAlign: "center",
+                                        padding: "7px 13px",
+                                        borderRadius: 10,
+                                        border: "1px solid #d4d4d8",
+                                        background: "#fff",
+                                        color: "#52525b",
+                                        fontSize: 13,
+                                        fontWeight: 700,
+                                        cursor: isPending ? "wait" : "pointer",
+                                        opacity:
+                                          reschedulingId === p.id
+                                            ? 0.7
+                                            : isPending
+                                            ? 0.5
+                                            : 1,
+                                      }}
+                                    >
+                                      {reschedulingId === p.id
+                                        ? "Rescheduling…"
+                                        : "Reschedule"}
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })(post)}
