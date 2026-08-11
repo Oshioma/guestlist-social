@@ -469,6 +469,65 @@ function selectStyle(isNarrow: boolean, disabled: boolean): React.CSSProperties 
   };
 }
 
+// Who created / edited / approved a post. Rendered just above the Pillar on
+// /app/proofer, but moved to the very bottom of the card on the standalone
+// surface (via `order` on a phone, natural last position on desktop). Returns
+// null when there's nothing to attribute (e.g. a brand-new unsaved post).
+function PostAttribution({
+  post,
+  isNarrow,
+  atBottom,
+  order,
+}: {
+  post: ProoferPost | null | undefined;
+  isNarrow: boolean;
+  atBottom?: boolean;
+  order?: number;
+}) {
+  const rows: React.ReactNode[] = [];
+  if (post?.createdBy) {
+    rows.push(
+      <div key="c" style={{ fontSize: 11, color: "#71717a" }}>
+        Created by{" "}
+        <strong style={{ color: "#52525b" }}>{post.createdBy.split("@")[0]}</strong>
+      </div>
+    );
+  }
+  if (post?.updatedBy && post.updatedBy !== post.createdBy) {
+    rows.push(
+      <div key="e" style={{ fontSize: 11, color: "#71717a" }}>
+        Edited by{" "}
+        <strong style={{ color: "#52525b" }}>{post.updatedBy.split("@")[0]}</strong>
+      </div>
+    );
+  }
+  if (post?.status === "approved" && post.updatedBy) {
+    rows.push(
+      <div key="a" style={{ fontSize: 11, color: "#71717a" }}>
+        Approved by{" "}
+        <strong style={{ color: "#15803d" }}>{post.updatedBy.split("@")[0]}</strong>
+      </div>
+    );
+  }
+  if (rows.length === 0) return null;
+  return (
+    <div
+      style={{
+        order,
+        gridColumn: isNarrow ? "1 / -1" : undefined,
+        marginTop: atBottom ? 14 : 10,
+        paddingTop: 10,
+        borderTop: "1px solid #f4f4f5",
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+      }}
+    >
+      {rows}
+    </div>
+  );
+}
+
 function dayArrowStyle(disabled: boolean): React.CSSProperties {
   return {
     width: 40,
@@ -3527,57 +3586,10 @@ export default function ProoferBoard({
                       </>
                     )}
 
-                    {/* Attribution footer — who created / edited / approved this
-                        post. Sits just above the Pillar, across the full width. */}
-                    {(() => {
-                      const rows: React.ReactNode[] = [];
-                      if (post?.createdBy) {
-                        rows.push(
-                          <div key="c" style={{ fontSize: 11, color: "#71717a" }}>
-                            Created by{" "}
-                            <strong style={{ color: "#52525b" }}>
-                              {post.createdBy.split("@")[0]}
-                            </strong>
-                          </div>
-                        );
-                      }
-                      if (post?.updatedBy && post.updatedBy !== post.createdBy) {
-                        rows.push(
-                          <div key="e" style={{ fontSize: 11, color: "#71717a" }}>
-                            Edited by{" "}
-                            <strong style={{ color: "#52525b" }}>
-                              {post.updatedBy.split("@")[0]}
-                            </strong>
-                          </div>
-                        );
-                      }
-                      if (post?.status === "approved" && post.updatedBy) {
-                        rows.push(
-                          <div key="a" style={{ fontSize: 11, color: "#71717a" }}>
-                            Approved by{" "}
-                            <strong style={{ color: "#15803d" }}>
-                              {post.updatedBy.split("@")[0]}
-                            </strong>
-                          </div>
-                        );
-                      }
-                      if (rows.length === 0) return null;
-                      return (
-                        <div
-                          style={{
-                            gridColumn: isNarrow ? "1 / -1" : undefined,
-                            marginTop: 10,
-                            paddingTop: 10,
-                            borderTop: "1px solid #f4f4f5",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 3,
-                          }}
-                        >
-                          {rows}
-                        </div>
-                      );
-                    })()}
+                    {/* Attribution — /app/proofer keeps it just above the Pillar.
+                        The standalone card moves it to the very bottom of the card
+                        (rendered after the media section below). */}
+                    {!standalone && <PostAttribution post={post} isNarrow={isNarrow} />}
 
                     {(() => {
                       const selectedPillar = draft.pillarId
@@ -3612,18 +3624,28 @@ export default function ProoferBoard({
                             }
                             style={{
                               ...inputStyle,
-                              padding: isNarrow ? "10px 8px" : "6px 8px",
-                              fontSize: isNarrow ? 14 : 12,
-                              fontWeight: 600,
-                              width: "100%",
+                              // Standalone: match the Instagram / Facebook toggle
+                              // exactly (same width, padding, radius, border) so
+                              // the three buttons form a tidy equal-sized column.
+                              padding: standalone
+                                ? "7px 13px"
+                                : isNarrow
+                                ? "10px 8px"
+                                : "6px 8px",
+                              fontSize: standalone ? 13 : isNarrow ? 14 : 12,
+                              fontWeight: standalone ? 700 : 600,
+                              width: standalone ? PLAT_TOGGLE_WIDTH : "100%",
                               minWidth: 0,
                               display: "flex",
                               alignItems: "center",
-                              gap: 6,
+                              gap: standalone ? 7 : 6,
                               textAlign: "left",
                               cursor: isLocked ? "not-allowed" : "pointer",
                               opacity: isLocked ? 0.7 : 1,
                               background: "#fff",
+                              ...(standalone
+                                ? { border: "1px solid #d4d4d8", borderRadius: 10 }
+                                : {}),
                             }}
                           >
                             <span
@@ -4229,6 +4251,19 @@ export default function ProoferBoard({
                     </div>
                   );
                   })()}
+
+                  {/* Standalone: attribution (Created / Edited / Approved by)
+                      sits at the very bottom of the card, below everything else.
+                      On a phone the column is dissolved, so a high order value
+                      keeps it last. */}
+                  {standalone && (
+                    <PostAttribution
+                      post={post}
+                      isNarrow={isNarrow}
+                      atBottom
+                      order={isNarrow ? 6 : undefined}
+                    />
+                  )}
                 </div>
 
                 <div
