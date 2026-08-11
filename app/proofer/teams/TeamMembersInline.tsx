@@ -91,6 +91,20 @@ export function TeamMembersInline({
 
   return (
     <div>
+      <div style={memberHead}>
+        <h4 style={colHead}>Members</h4>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setAdding((v) => !v)}
+            style={plusBtn}
+            title="Add member"
+            aria-label="Add member"
+          >
+            +
+          </button>
+        )}
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {members.map((m) => {
           const isOwner = m.isOwner || m.role === "owner";
@@ -136,37 +150,32 @@ export function TeamMembersInline({
 
       {err && <div style={errStyle}>{err}</div>}
 
-      {canManage &&
-        (adding ? (
-          <form action={invite} style={inviteForm}>
-            <input
-              name="email"
-              type="email"
-              placeholder="Email to invite"
-              required
-              autoComplete="off"
-              style={inputStyle}
-            />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <select name="role" defaultValue="member" style={{ ...roleSelect, width: "auto", flex: 1 }}>
-                {ROLE_OPTS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-                <option value="client">Client (view &amp; approve)</option>
-              </select>
-              <button type="submit" disabled={pending} style={primaryBtn}>
-                {pending ? "…" : "Invite"}
-              </button>
-              <button type="button" onClick={() => setAdding(false)} style={ghostBtn}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button type="button" onClick={() => setAdding(true)} style={addBtn}>
-            + Add member
-          </button>
-        ))}
+      {canManage && adding && (
+        <form action={invite} style={inviteForm}>
+          <input
+            name="email"
+            type="email"
+            placeholder="Email to invite"
+            required
+            autoComplete="off"
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <select name="role" defaultValue="member" style={{ ...roleSelect, width: "auto", flex: 1 }}>
+              {ROLE_OPTS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+              <option value="client">Client (view &amp; approve)</option>
+            </select>
+            <button type="submit" disabled={pending} style={primaryBtn}>
+              {pending ? "…" : "Invite"}
+            </button>
+            <button type="button" onClick={() => setAdding(false)} style={ghostBtn}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -288,9 +297,34 @@ const ghostBtn: React.CSSProperties = {
   padding: "7px 12px",
   cursor: "pointer",
 };
-const addBtn: React.CSSProperties = {
-  ...ghostBtn,
-  width: "100%",
-  marginTop: 8,
-  color: "#71717a",
+const memberHead: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginBottom: 8,
+};
+const colHead: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  color: "#a1a1aa",
+  fontWeight: 700,
+  margin: 0,
+};
+const plusBtn: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  borderRadius: 5,
+  border: "1px solid #d8d8dd",
+  background: "#fff",
+  color: "#52525b",
+  fontSize: 13,
+  lineHeight: 1,
+  fontWeight: 700,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+  flex: "none",
 };
