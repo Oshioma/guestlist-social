@@ -36,14 +36,6 @@ function buildNavGroups(canRunAds: boolean, isAdmin: boolean): NavGroup[] {
     groups.push({ heading: "Interaction", items: [], headingHref: "/app/interaction" });
   }
 
-  // Sits immediately above Publisher, where it used to live, so it's still
-  // where the eye looks for it. The standalone Proofer opens in a new tab.
-  groups.push({
-    heading: "Proofer",
-    items: [{ label: "Open standalone ↗", href: "/proofer", newTab: true }],
-    headingHref: "/app/proofer",
-  });
-
   groups.push({ heading: "Publisher", items: PUBLISHER_ITEMS, collapsible: true });
 
   if (canRunAds) {
@@ -136,6 +128,14 @@ export default function Sidebar({ isAdmin, canRunAds, open, onClose }: Props) {
       </nav>
 
       <div className="app-sidebar-footer">
+        <a
+          href="https://postproofer.com"
+          target="_blank"
+          rel="noopener"
+          className="app-sidebar-footlink"
+        >
+          PostProofer ↗
+        </a>
         <Link href="/" className="app-sidebar-backlink">
           &larr; Back to site
         </Link>
