@@ -1,81 +1,59 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { startAccountConnect } from "@/lib/auth/team-actions";
 
-// The two "add" affordances, aligned under the Facebook and Instagram column
-// titles so each sits in its own platform column. "+ Add account" (Facebook)
-// connects via Facebook, which brings the Page AND its linked Instagram (you
-// pick the Page in the Meta picker, and get both). "+ Instagram only" covers an
-// account that has an Instagram professional account but no Facebook Page.
-//
-// Rendered as a 2-column grid matching `acctHeadRow` / `acctConns` on the Teams
-// page, so the buttons line up directly beneath their column headers.
+// A single compact "+" button that sits right next to a platform title in the
+// accounts header ("Facebook +" / "Instagram +"). Clicking it starts a connect
+// for that platform into this team:
+//   • facebook  — logs in with Facebook and brings the Page AND its linked
+//                 Instagram (you pick the Page in the Meta picker, get both).
+//   • instagram — an Instagram professional account with no Facebook Page.
 export function AddAccount({
   teamId,
-  igConfigured,
+  platform,
 }: {
   teamId: string;
-  igConfigured: boolean;
+  platform: "facebook" | "instagram";
 }) {
   const [pending, startTransition] = useTransition();
-  const [which, setWhich] = useState<"facebook" | "instagram" | null>(null);
 
-  function go(platform: "facebook" | "instagram") {
-    setWhich(platform);
+  function go() {
     startTransition(async () => {
       const res = await startAccountConnect(teamId, platform);
       if (res?.url) window.location.href = res.url;
       else {
-        setWhich(null);
         window.alert(res?.error ?? "Could not start connecting. Please try again.");
       }
     });
   }
 
+  const title =
+    platform === "facebook"
+      ? "Add a Facebook account — its linked Instagram comes with it"
+      : "Add an Instagram-only account (no Facebook Page)";
+
   return (
-    <div style={grid}>
-      <button
-        type="button"
-        onClick={() => go("facebook")}
-        disabled={pending}
-        style={addBtn}
-        title="Log in with Facebook and pick the account — its Instagram comes with it"
-      >
-        {pending && which === "facebook" ? (
-          <>
-            <Spinner /> Opening…
-          </>
-        ) : (
-          "+ Add account"
-        )}
-      </button>
-      {igConfigured ? (
-        <button
-          type="button"
-          onClick={() => go("instagram")}
-          disabled={pending}
-          style={addBtn}
-          title="For an account that has an Instagram professional account but no Facebook Page"
-        >
-          {pending && which === "instagram" ? (
-            <>
-              <Spinner /> Opening…
-            </>
-          ) : (
-            "+ Instagram only"
-          )}
-        </button>
-      ) : (
-        <span />
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={go}
+      disabled={pending}
+      style={plusBtn}
+      title={title}
+      aria-label={
+        platform === "facebook"
+          ? "Add a Facebook account"
+          : "Add an Instagram-only account"
+      }
+    >
+      {pending ? <Spinner /> : "+"}
+    </button>
   );
 }
 
 function Spinner() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" style={{ flex: "none" }} aria-hidden="true">
+    <svg width="11" height="11" viewBox="0 0 24 24" style={{ flex: "none" }} aria-hidden="true">
       <circle cx="12" cy="12" r="9" fill="none" stroke="#e4e4e7" strokeWidth="3" />
       <path d="M12 3 a9 9 0 0 1 9 9" fill="none" stroke="#52525b" strokeWidth="3" strokeLinecap="round">
         <animateTransform
@@ -91,27 +69,20 @@ function Spinner() {
   );
 }
 
-// Two columns, matching the Facebook | Instagram header/account grid above so
-// each button lines up under its platform title.
-const grid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 10,
-  marginTop: 8,
-};
-
-const addBtn: React.CSSProperties = {
+const plusBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  gap: 6,
-  fontSize: 12,
+  width: 18,
+  height: 18,
+  padding: 0,
+  fontSize: 14,
   fontWeight: 700,
+  lineHeight: 1,
   color: "#71717a",
   background: "transparent",
-  border: "1px dashed #d8d8dd",
-  borderRadius: 8,
-  padding: "7px 12px",
+  border: "1px dashed #cfcfd4",
+  borderRadius: 5,
   cursor: "pointer",
-  width: "100%",
+  flex: "none",
 };
