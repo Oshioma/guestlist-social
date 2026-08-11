@@ -65,19 +65,44 @@ export async function inviteMember(
 
   const admin = createAdminClient();
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${await authRedirectOrigin()}/auth/callback?type=invite`,
-  });
+  // Create + invite a brand-new user, OR recover one that already exists.
+  // inviteUserByEmail ERRORS if the address is already registered — and the old
+  // code bailed there, never reaching the user_roles upsert. That stranded any
+  // account whose role row wasn't saved the first time: they can sign in but
+  // are admitted to nothing (bounced to /sign-in?error=not-authorized), and
+  // re-inviting to fix it just errored again. So on an invite failure we look
+  // the account up and reuse it, then ALWAYS (re)apply the role below — which
+  // makes re-inviting the repair path for a stranded member.
+  let userId: string | undefined;
+  let alreadyExisted = false;
 
-  if (error || !data.user) {
-    return { error: error?.message ?? "Could not send invite." };
+  const { data: invited, error: inviteErr } =
+    await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${await authRedirectOrigin()}/auth/callback?type=invite`,
+    });
+
+  if (!inviteErr && invited?.user) {
+    userId = invited.user.id;
+  } else {
+    // Most likely "already registered" — find the existing account and reuse it
+    // rather than failing. (perPage mirrors resolveOrInviteUser in team-actions.)
+    const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
+    const existing = list?.users?.find(
+      (u) => (u.email ?? "").toLowerCase() === email.toLowerCase()
+    );
+    if (existing) {
+      userId = existing.id;
+      alreadyExisted = true;
+    } else {
+      return { error: inviteErr?.message ?? "Could not send invite." };
+    }
   }
 
   const upsert = await admin
     .from("user_roles")
     .upsert(
       {
-        user_id: data.user.id,
+        user_id: userId,
         role,
         can_run_ads: canRunAds,
       },
@@ -86,14 +111,16 @@ export async function inviteMember(
 
   if (upsert.error) {
     return {
-      error: `Invite sent, but role save failed: ${upsert.error.message}`,
+      error: `Could not save the member's role: ${upsert.error.message}`,
     };
   }
 
   revalidatePath("/app/settings/members");
   return {
     success: true,
-    message: `Invite sent to ${email}.`,
+    message: alreadyExisted
+      ? `${email} already had an account — their access is set. They can sign in now (or reset their password).`
+      : `Invite sent to ${email}.`,
   };
 }
 
