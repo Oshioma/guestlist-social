@@ -6,6 +6,7 @@ import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 import { AddAccountWizard } from "./AddAccountWizard";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
+import { TeamMembersInline } from "./TeamMembersInline";
 import { planConfig, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +27,14 @@ function tokenHealth(expiresAt: string | null | undefined): Health {
 
 type Conn = { handle: string; health: Health } | null;
 type AccountLite = { id: number; name: string; ig: Conn; fb: Conn };
+type Member = { userId: string; name: string; role: string; isOwner: boolean };
 type TeamRow = {
   id: string;
   name: string;
   plan: Plan;
   memberCount: number;
   accounts: AccountLite[];
+  members: Member[];
 };
 
 export default async function ProoferTeamsPage() {
@@ -59,24 +62,55 @@ export default async function ProoferTeamsPage() {
   if (visibleTeamIds.length > 0) {
     const teamsQuery = admin
       .from("teams")
-      .select("id, name, plan")
+      .select("id, name, plan, owner_user_id")
       .in("id", visibleTeamIds)
       .order("name", { ascending: true });
 
-    const [{ data: teams, error }, { data: memberRows }, { data: accountRows }] =
+    const [{ data: teams, error }, { data: memberRows }, { data: accountRows }, usersResp] =
       await Promise.all([
         teamsQuery,
-        admin.from("team_members").select("team_id"),
+        admin
+          .from("team_members")
+          .select("team_id, user_id, role")
+          .in("team_id", visibleTeamIds),
         admin.from("team_accounts").select("team_id, client_id"),
+        admin.auth.admin.listUsers({ perPage: 200 }),
       ]);
     if (error) throw new Error(`Could not load teams: ${error.message}`);
 
     const teamIdSet = new Set((teams ?? []).map((t) => t.id as string));
+    const ownerByTeam = new Map<string, string>();
+    for (const t of teams ?? [])
+      ownerByTeam.set(t.id as string, (t.owner_user_id as string) ?? "");
 
-    // Member counts per team.
+    // Resolve member display names.
+    const userById = new Map<string, string>();
+    for (const u of usersResp?.data?.users ?? []) {
+      const fullName = (u.user_metadata as { full_name?: string } | null)?.full_name ?? null;
+      userById.set(u.id, fullName || u.email || "(unknown)");
+    }
+
+    // Members per team (+ counts), owner first then by name.
+    const membersByTeam = new Map<string, Member[]>();
     const memberCounts = new Map<string, number>();
-    for (const r of memberRows ?? [])
-      memberCounts.set(r.team_id, (memberCounts.get(r.team_id) ?? 0) + 1);
+    for (const r of memberRows ?? []) {
+      const tid = r.team_id as string;
+      const uid = r.user_id as string;
+      memberCounts.set(tid, (memberCounts.get(tid) ?? 0) + 1);
+      const list = membersByTeam.get(tid) ?? [];
+      list.push({
+        userId: uid,
+        name: userById.get(uid) ?? "(unknown)",
+        role: (r.role as string) ?? "member",
+        isOwner: uid === ownerByTeam.get(tid),
+      });
+      membersByTeam.set(tid, list);
+    }
+    for (const [, list] of membersByTeam) {
+      list.sort((a, b) =>
+        a.isOwner ? -1 : b.isOwner ? 1 : a.name.localeCompare(b.name)
+      );
+    }
 
     // Accounts per (visible) team, plus the set of all client ids we need
     // connection status for.
@@ -137,6 +171,7 @@ export default async function ProoferTeamsPage() {
         plan: (t.plan as Plan) ?? "free",
         memberCount: memberCounts.get(tid) ?? 0,
         accounts,
+        members: membersByTeam.get(tid) ?? [],
       };
     });
   }
@@ -224,57 +259,62 @@ export default async function ProoferTeamsPage() {
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</span>
-                    {myRoleByTeam.get(t.id) && <RoleBadge role={myRoleByTeam.get(t.id)!} />}
+                    <span style={{ fontSize: 16, fontWeight: 700 }}>{t.name}</span>
                     <PlanBadge plan={t.plan} />
-                    <span style={{ fontSize: 12, color: "#a1a1aa" }}>
-                      {t.memberCount} {t.memberCount === 1 ? "person" : "people"}
-                    </span>
                     <Link
                       href={`${base}/teams/${t.id}`}
                       style={{ marginLeft: "auto", fontSize: 13, color: "#3f3f46", fontWeight: 600, textDecoration: "none" }}
                     >
-                      Manage &rarr;
+                      Settings &rarr;
                     </Link>
                   </div>
 
-                  {t.accounts.length === 0 ? (
-                    <p style={{ fontSize: 13, color: "#a1a1aa", margin: "10px 0 0" }}>
-                      No accounts in this team yet.
-                    </p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", marginTop: 10 }}>
-                      <div style={acctHeadRow}>
-                        <span>Facebook</span>
-                        <span>Instagram</span>
-                      </div>
-                      {t.accounts.map((a) => (
-                        <div key={a.id} style={acctBlock}>
-                          <div style={acctNameStyle}>{a.name}</div>
-                          <div style={acctConns}>
-                            <ConnCell
-                              platform="facebook"
-                              conn={a.fb}
-                              teamId={t.id}
-                              clientId={a.id}
-                              canManage={canManage}
-                              returnTo={returnTo}
-                              igConfigured={igConfigured}
-                            />
-                            <ConnCell
-                              platform="instagram"
-                              conn={a.ig}
-                              teamId={t.id}
-                              clientId={a.id}
-                              canManage={canManage}
-                              returnTo={returnTo}
-                              igConfigured={igConfigured}
-                            />
+                  <div style={teamBody}>
+                    <div style={colAccounts}>
+                      <h4 style={colHead}>Accounts</h4>
+                      {t.accounts.length === 0 ? (
+                        <p style={{ fontSize: 13, color: "#a1a1aa", margin: 0 }}>
+                          No accounts in this team yet.
+                        </p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <div style={acctHeadRow}>
+                            <span>Facebook</span>
+                            <span>Instagram</span>
                           </div>
+                          {t.accounts.map((a) => (
+                            <div key={a.id} style={acctBlock}>
+                              <div style={acctNameStyle}>{a.name}</div>
+                              <div style={acctConns}>
+                                <ConnCell
+                                  platform="facebook"
+                                  conn={a.fb}
+                                  teamId={t.id}
+                                  clientId={a.id}
+                                  canManage={canManage}
+                                  returnTo={returnTo}
+                                  igConfigured={igConfigured}
+                                />
+                                <ConnCell
+                                  platform="instagram"
+                                  conn={a.ig}
+                                  teamId={t.id}
+                                  clientId={a.id}
+                                  canManage={canManage}
+                                  returnTo={returnTo}
+                                  igConfigured={igConfigured}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
+                    <div style={colMembers}>
+                      <h4 style={colHead}>Members</h4>
+                      <TeamMembersInline teamId={t.id} members={t.members} canManage={canManage} />
+                    </div>
+                  </div>
                 </div>
                 );
               })}
@@ -465,6 +505,26 @@ const reconnectLink: React.CSSProperties = {
   fontWeight: 600,
   textDecoration: "none",
   whiteSpace: "nowrap",
+};
+
+const teamBody: React.CSSProperties = {
+  display: "flex",
+  gap: 20,
+  marginTop: 12,
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+};
+
+const colAccounts: React.CSSProperties = { flex: "2 1 300px", minWidth: 0 };
+const colMembers: React.CSSProperties = { flex: "1 1 240px", minWidth: 0 };
+
+const colHead: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  color: "#a1a1aa",
+  fontWeight: 700,
+  margin: "0 0 8px",
 };
 
 const acctHeadRow: React.CSSProperties = {
