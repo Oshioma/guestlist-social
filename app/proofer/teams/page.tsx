@@ -25,6 +25,9 @@ export default async function ProoferTeamsPage() {
   const admin = createAdminClient();
   const { base } = await getProoferBase();
   const isStaff = access.kind === "staff";
+  // Whether the native "Log in with Instagram" flow is available (its app
+  // credentials are set). When off, only the Facebook connect is offered.
+  const igLoginConfigured = !!process.env.INSTAGRAM_APP_ID;
 
   // This is "your teams" for EVERYONE, including the super admin — only the
   // teams you actually belong to. The platform-wide view of every user's teams
@@ -203,6 +206,10 @@ export default async function ProoferTeamsPage() {
                   `/api/meta/connect?clientId=${clientId}&returnTo=${encodeURIComponent(
                     `${base}/teams`
                   )}`;
+                const igConnectHref = (clientId: number) =>
+                  `/api/instagram/connect?clientId=${clientId}&returnTo=${encodeURIComponent(
+                    `${base}/teams`
+                  )}`;
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -248,8 +255,21 @@ export default async function ProoferTeamsPage() {
                               <>
                                 <Badge kind="off">⚠ Not connected</Badge>
                                 {canManage && (
-                                  <a href={connectHref(a.id)} style={connectNowLink}>
-                                    Connect now →
+                                  <a
+                                    href={connectHref(a.id)}
+                                    style={connectNowLink}
+                                    title="Log in with Facebook (needs a Facebook Page linked to the Instagram account)"
+                                  >
+                                    Connect via Facebook
+                                  </a>
+                                )}
+                                {canManage && igLoginConfigured && (
+                                  <a
+                                    href={igConnectHref(a.id)}
+                                    style={instagramLoginLink}
+                                    title="Log in with Instagram directly — no Facebook account needed"
+                                  >
+                                    Log in with Instagram
                                   </a>
                                 )}
                               </>
@@ -384,6 +404,17 @@ const reconnectLink: React.CSSProperties = {
   color: "#71717a",
   fontSize: 12,
   fontWeight: 600,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
+
+const instagramLoginLink: React.CSSProperties = {
+  background: "linear-gradient(90deg, #f9ce34, #ee2a7b, #6228d7)",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 600,
+  borderRadius: 8,
+  padding: "6px 11px",
   textDecoration: "none",
   whiteSpace: "nowrap",
 };
