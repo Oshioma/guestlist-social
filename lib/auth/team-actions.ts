@@ -525,12 +525,18 @@ export async function inviteToTeam(
 
   if (error) return { error: `Could not add them to the team: ${error.message}` };
 
-  // Everyone who's invited also gets their own personal team by default
-  // (idempotent: a no-op if they already have one).
-  await admin.rpc("ensure_personal_team", {
-    p_user: resolved.userId,
-    p_name: `${(email.split("@")[0] || "My")}'s Team`,
-  });
+  // Invited COLLABORATORS also get their own personal team by default
+  // (idempotent). NOT clients: a client is a read-only portal viewer, and
+  // ensure_personal_team would make them the owner of a new team — which flips
+  // them to a Proofer "poster" (getProoferAccess admits any owner/admin/proofer/
+  // member) and escalates a read-only invite into board access. Clients stay
+  // portal-only.
+  if (role !== "client") {
+    await admin.rpc("ensure_personal_team", {
+      p_user: resolved.userId,
+      p_name: `${(email.split("@")[0] || "My")}'s Team`,
+    });
+  }
 
   revalidateTeams(teamId);
   if (resolved.emailError) {

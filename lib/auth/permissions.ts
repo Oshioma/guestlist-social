@@ -49,17 +49,21 @@ async function adsAllowedForUser(
   const ownedTeamIds = rows.filter((r) => r.role === "owner").map((r) => r.team_id);
   if (ownedTeamIds.length === 0) return false;
 
-  // Owner counts only for a shared team (>1 member). RLS scopes team_members to
-  // teams the caller belongs to, so this only sees their own teams' rows.
+  // Owner counts only for a genuinely shared team — one with a real
+  // COLLABORATOR besides the owner. Read-only clients don't make a team shared,
+  // so a lone client on your personal team must not grant you ads. RLS scopes
+  // team_members to teams the caller belongs to, so this only sees their own.
   const { data: memberRows } = await supabase
     .from("team_members")
-    .select("team_id")
+    .select("team_id, role")
     .in("team_id", ownedTeamIds);
-  const counts = new Map<string, number>();
-  for (const m of (memberRows ?? []) as { team_id: string }[]) {
-    counts.set(m.team_id, (counts.get(m.team_id) ?? 0) + 1);
+  const collaborators = new Map<string, number>();
+  for (const m of (memberRows ?? []) as { team_id: string; role: string }[]) {
+    if (m.role === "client") continue;
+    collaborators.set(m.team_id, (collaborators.get(m.team_id) ?? 0) + 1);
   }
-  return ownedTeamIds.some((id) => (counts.get(id) ?? 0) > 1);
+  // >1 collaborator = the owner plus at least one other collaborator.
+  return ownedTeamIds.some((id) => (collaborators.get(id) ?? 0) > 1);
 }
 
 // Returns null when the viewer is not signed in, is a client-portal user, or
