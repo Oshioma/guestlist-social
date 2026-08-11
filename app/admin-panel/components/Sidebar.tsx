@@ -129,7 +129,7 @@ export default function Sidebar({ isAdmin, canRunAds, open, onClose }: Props) {
 
       <div className="app-sidebar-footer">
         <a
-          href="/proofer"
+          href="https://postproofer.com"
           target="_blank"
           rel="noopener"
           className="app-sidebar-footlink"
