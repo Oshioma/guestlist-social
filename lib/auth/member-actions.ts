@@ -115,6 +115,12 @@ export async function inviteMember(
     };
   }
 
+  // New staff also get their own personal team by default (idempotent).
+  await admin.rpc("ensure_personal_team", {
+    p_user: userId,
+    p_name: `${(email.split("@")[0] || "My")}'s Team`,
+  });
+
   revalidatePath("/app/settings/members");
   return {
     success: true,

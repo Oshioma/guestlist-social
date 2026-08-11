@@ -525,6 +525,13 @@ export async function inviteToTeam(
 
   if (error) return { error: `Could not add them to the team: ${error.message}` };
 
+  // Everyone who's invited also gets their own personal team by default
+  // (idempotent: a no-op if they already have one).
+  await admin.rpc("ensure_personal_team", {
+    p_user: resolved.userId,
+    p_name: `${(email.split("@")[0] || "My")}'s Team`,
+  });
+
   revalidateTeams(teamId);
   if (resolved.emailError) {
     return {

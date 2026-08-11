@@ -82,17 +82,50 @@ export default async function ProoferTeamsPage({
 
   let rows: TeamRow[] = [];
   if (visibleTeamIds.length > 0) {
-    const teamsQuery = admin
-      .from("teams")
-      .select(
-        "id, name, plan, owner_user_id, created_at, stripe_customer_id, subscription_status, trial_ends_at, current_period_end"
-      )
-      .in("id", visibleTeamIds)
-      .order("name", { ascending: true });
+    // `is_personal` is a newer column (see 20260814_personal_team_flag). Read it
+    // when present, and fall back to the old "earliest owned team" guess if the
+    // migration hasn't run yet, so the page never hard-fails on a missing column.
+    // The billing columns are older and always safe to select — the owner
+    // billing card at the top needs them.
+    type TeamQueryRow = {
+      id: string;
+      name: string;
+      plan: Plan;
+      owner_user_id: string;
+      created_at: string;
+      is_personal?: boolean;
+      stripe_customer_id?: string | null;
+      subscription_status?: string | null;
+      trial_ends_at?: string | null;
+      current_period_end?: string | null;
+    };
+    const BILLING_COLS =
+      "stripe_customer_id, subscription_status, trial_ends_at, current_period_end";
+    let teams: TeamQueryRow[] | null = null;
+    let teamsError: { message: string } | null = null;
+    let hasPersonalFlag = true;
+    {
+      const withFlag = await admin
+        .from("teams")
+        .select(`id, name, plan, owner_user_id, created_at, is_personal, ${BILLING_COLS}`)
+        .in("id", visibleTeamIds)
+        .order("name", { ascending: true });
+      if (withFlag.error) {
+        hasPersonalFlag = false;
+        const without = await admin
+          .from("teams")
+          .select(`id, name, plan, owner_user_id, created_at, ${BILLING_COLS}`)
+          .in("id", visibleTeamIds)
+          .order("name", { ascending: true });
+        teams = (without.data as TeamQueryRow[] | null) ?? null;
+        teamsError = without.error;
+      } else {
+        teams = (withFlag.data as TeamQueryRow[] | null) ?? null;
+      }
+    }
 
-    const [{ data: teams, error }, { data: memberRows }, { data: accountRows }, usersResp] =
+    const [{ data: memberRows }, { data: accountRows }, usersResp] =
       await Promise.all([
-        teamsQuery,
         admin
           .from("team_members")
           .select("team_id, user_id, role")
@@ -100,17 +133,22 @@ export default async function ProoferTeamsPage({
         admin.from("team_accounts").select("team_id, client_id"),
         admin.auth.admin.listUsers({ perPage: 200 }),
       ]);
-    if (error) throw new Error(`Could not load teams: ${error.message}`);
+    if (teamsError) throw new Error(`Could not load teams: ${teamsError.message}`);
 
     const teamIdSet = new Set((teams ?? []).map((t) => t.id as string));
     const ownerByTeam = new Map<string, string>();
-    // Personal team = the viewer's earliest-created owned team (matches
-    // ensure_personal_team). It sorts to the top of the list.
+    // Personal team: prefer the explicit is_personal flag. Until the migration
+    // runs we fall back to the viewer's earliest-created owned team. It sorts to
+    // the top of the list either way.
     let personalTeamId: string | null = null;
     let earliestOwned = Infinity;
     for (const t of teams ?? []) {
       ownerByTeam.set(t.id as string, (t.owner_user_id as string) ?? "");
-      if ((t.owner_user_id as string) === access.userId) {
+      if (hasPersonalFlag) {
+        if ((t as { is_personal?: boolean }).is_personal) {
+          personalTeamId = t.id as string;
+        }
+      } else if ((t.owner_user_id as string) === access.userId) {
         const c = new Date((t.created_at as string) ?? 0).getTime();
         if (!Number.isNaN(c) && c < earliestOwned) {
           earliestOwned = c;
