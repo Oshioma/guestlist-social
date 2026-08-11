@@ -94,6 +94,29 @@ export async function loadSystemStatus(): Promise<StatusGroup[]> {
 
   const groups: StatusGroup[] = [];
 
+  // Whether anyone can self-register, and whether Turnstile is actually needed.
+  const publicSignupOpen =
+    (process.env.ENABLE_PUBLIC_SIGNUP ?? "").trim().toLowerCase() === "true";
+  const captchaProvider = (process.env.CAPTCHA_PROVIDER ?? "").trim().toLowerCase() || "turnstile";
+  const turnstileNeeded = publicSignupOpen && captchaProvider === "turnstile";
+  const turnstileKeysSet =
+    present("TURNSTILE_SECRET_KEY") && present("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
+
+  // Access first — the most-glanced-at state (is the front door open?).
+  groups.push(
+    group("Access", "Who's an owner and whether anyone can self-register.", [
+      {
+        label: "Public sign-up",
+        value: publicSignupOpen ? "OPEN — anyone can register" : "Closed (invite-only)",
+        status: publicSignupOpen ? "warn" : "ok",
+        hint: publicSignupOpen
+          ? "Set ENABLE_PUBLIC_SIGNUP=false to close it"
+          : "ENABLE_PUBLIC_SIGNUP is not 'true'",
+      },
+      publicVar("Super-admin emails", "SUPER_ADMIN_EMAILS", false, "oshi@guestlist.net (default)"),
+    ])
+  );
+
   // ── Supabase (with a live connectivity check) ──────────────────────────────
   const supabaseChecks: Check[] = [
     publicVar("Project URL", "NEXT_PUBLIC_SUPABASE_URL", true),
@@ -204,26 +227,36 @@ export async function loadSystemStatus(): Promise<StatusGroup[]> {
   );
 
   // ── Bot protection ─────────────────────────────────────────────────────────
-  groups.push(
-    group("Bot protection (Turnstile)", "CAPTCHA on the auth forms.", [
-      publicVar("Provider", "CAPTCHA_PROVIDER", false, "turnstile (default)"),
-      secret("Turnstile secret key", "TURNSTILE_SECRET_KEY", false),
-      publicVar("Turnstile site key", "NEXT_PUBLIC_TURNSTILE_SITE_KEY", false),
-    ])
-  );
+  // Only a real problem when public sign-up is open AND the provider is
+  // turnstile — otherwise unset keys are fine (invites don't use CAPTCHA, and
+  // the keyless honeypot/timing/rate-limit layers stay on regardless).
+  const turnstileChecks: Check[] = [
+    publicVar("Provider", "CAPTCHA_PROVIDER", false, "turnstile (default)"),
+  ];
+  if (turnstileNeeded) {
+    turnstileChecks.push(secret("Turnstile secret key", "TURNSTILE_SECRET_KEY", true));
+    turnstileChecks.push(publicVar("Turnstile site key", "NEXT_PUBLIC_TURNSTILE_SITE_KEY", true));
+  } else {
+    turnstileChecks.push({
+      label: "Turnstile keys",
+      value: turnstileKeysSet ? "Set" : "Not required",
+      status: "ok",
+      hint: "Only needed when public sign-up is open with the Turnstile provider",
+    });
+  }
+  groups.push({
+    name: "Bot protection (Turnstile)",
+    description: turnstileNeeded
+      ? "Required now — public sign-up is OPEN with the Turnstile provider, so both keys must be set or sign-up fails."
+      : "Not required — public sign-up is closed (or CAPTCHA is off). Keyless protections (honeypot, timing, rate limits) stay on.",
+    status: worst(turnstileChecks),
+    checks: turnstileChecks,
+  });
 
   // ── Cron ───────────────────────────────────────────────────────────────────
   groups.push(
     group("Scheduled jobs (Cron)", "Auto-publish + token refresh run on Vercel Cron.", [
       secret("Cron secret", "CRON_SECRET", false),
-    ])
-  );
-
-  // ── Access ─────────────────────────────────────────────────────────────────
-  groups.push(
-    group("Access", "Who's an owner and whether public sign-up is open.", [
-      publicVar("Super-admin emails", "SUPER_ADMIN_EMAILS", false, "oshi@guestlist.net (default)"),
-      publicVar("Public sign-up", "ENABLE_PUBLIC_SIGNUP", false, "false (default)"),
     ])
   );
 
