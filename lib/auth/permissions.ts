@@ -2,9 +2,13 @@
 //
 // Two gates sit on top of the existing getViewer() role resolution:
 //   - requireAdmin()      — for member-management pages
-//   - requireAdsAccess()  — for create/edit-ad surfaces (can_run_ads flag)
+//   - requireAdsAccess()  — for create/edit-ad surfaces
 //
-// Both redirect rather than throw — server components that call them will
+// Ad access follows ROLE, not a manual toggle: agency admins, and anyone who
+// is an owner / admin / proofer of a real (shared) team, may run ads. Creators
+// (the stored 'member' role) may not. See adsAllowedForUser() below.
+//
+// Both gates redirect rather than throw — server components that call them will
 // bounce the user to /post-login (which role-dispatches) instead of showing
 // a 403. Buttons that merely need to hide should call canRunAds() and gate
 // on the boolean.
@@ -21,6 +25,42 @@ export type MemberAccess = {
   role: MemberRole;
   canRunAds: boolean;
 };
+
+// Whether a user may run ads, derived from their roles rather than a stored
+// flag. True when they are an agency admin, an admin/proofer of any team, or
+// the owner of a *shared* team (one with more than just themselves). Ownership
+// of a solo personal team — which everyone now has — deliberately does NOT
+// grant it, so ads stay limited to trusted roles.
+async function adsAllowedForUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  agencyRole: MemberRole
+): Promise<boolean> {
+  if (agencyRole === "admin") return true;
+
+  const { data: memberships } = await supabase
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", userId);
+  const rows = (memberships ?? []) as { team_id: string; role: string }[];
+
+  if (rows.some((r) => r.role === "admin" || r.role === "proofer")) return true;
+
+  const ownedTeamIds = rows.filter((r) => r.role === "owner").map((r) => r.team_id);
+  if (ownedTeamIds.length === 0) return false;
+
+  // Owner counts only for a shared team (>1 member). RLS scopes team_members to
+  // teams the caller belongs to, so this only sees their own teams' rows.
+  const { data: memberRows } = await supabase
+    .from("team_members")
+    .select("team_id")
+    .in("team_id", ownedTeamIds);
+  const counts = new Map<string, number>();
+  for (const m of (memberRows ?? []) as { team_id: string }[]) {
+    counts.set(m.team_id, (counts.get(m.team_id) ?? 0) + 1);
+  }
+  return ownedTeamIds.some((id) => (counts.get(id) ?? 0) > 1);
+}
 
 // Returns null when the viewer is not signed in, is a client-portal user, or
 // is not admitted. Admission is deny-by-default: an admin-panel user must have
@@ -47,7 +87,7 @@ export async function getMemberAccess(): Promise<MemberAccess | null> {
 
   const { data: row } = await supabase
     .from("user_roles")
-    .select("role, can_run_ads")
+    .select("role")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -55,7 +95,7 @@ export async function getMemberAccess(): Promise<MemberAccess | null> {
   if (!row) return null;
 
   const role: MemberRole = (row.role as MemberRole) === "admin" ? "admin" : "member";
-  const canRunAds = Boolean(row.can_run_ads);
+  const canRunAds = await adsAllowedForUser(supabase, user.id, role);
 
   return {
     userId: user.id,

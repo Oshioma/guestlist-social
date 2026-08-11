@@ -17,7 +17,7 @@ export default async function MembersPage() {
     await Promise.all([
       admin.auth.admin.listUsers({ perPage: 200 }),
       admin.from("client_user_links").select("auth_user_id"),
-      admin.from("user_roles").select("user_id, role, can_run_ads"),
+      admin.from("user_roles").select("user_id, role"),
     ]);
 
   if (usersErr) {
@@ -28,9 +28,9 @@ export default async function MembersPage() {
     (linkRows ?? []).map((r: { auth_user_id: string }) => r.auth_user_id)
   );
   const roleByUser = new Map(
-    (roleRows ?? []).map((r: { user_id: string; role: string; can_run_ads: boolean }) => [
+    (roleRows ?? []).map((r: { user_id: string; role: string }) => [
       r.user_id,
-      { role: r.role as "admin" | "member", canRunAds: r.can_run_ads },
+      { role: r.role as "admin" | "member" },
     ])
   );
 
@@ -45,7 +45,6 @@ export default async function MembersPage() {
         email: u.email ?? "(no email)",
         fullName,
         role: role?.role ?? "member",
-        canRunAds: role?.canRunAds ?? false,
         createdAt: u.created_at ?? "",
         isSelf: u.id === actor.userId,
       };
@@ -76,8 +75,9 @@ export default async function MembersPage() {
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Members</h2>
           <p style={subtitleStyle}>
             The people on your agency team and what they can do. Admins manage
-            everything; members handle day-to-day work. The ads toggle controls
-            who can create and edit ad campaigns. To manage who works on a
+            everything; members handle day-to-day work. Running ads follows a
+            person&rsquo;s role — admins, and owners, admins or proofers of a
+            team, can create and edit ad campaigns. To manage who works on a
             specific client&rsquo;s accounts, use{" "}
             <Link href="/proofer/teams" style={{ color: "#4451b8", fontWeight: 600 }}>
               Teams
