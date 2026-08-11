@@ -5,11 +5,27 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 import { AddAccountWizard } from "./AddAccountWizard";
+import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { planConfig, type Plan } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
-type AccountLite = { id: number; name: string; ig: boolean; fb: boolean };
+// Connection health from a stored Meta token's expiry. Meta tokens last ~60
+// days; surface amber a week or so out and red once lapsed so an operator
+// knows to reconnect before publishing silently breaks.
+type Health = "ok" | "soon" | "expired";
+function tokenHealth(expiresAt: string | null | undefined): Health {
+  if (!expiresAt) return "ok";
+  const t = new Date(expiresAt).getTime();
+  const now = Date.now();
+  if (Number.isNaN(t)) return "ok";
+  if (t <= now) return "expired";
+  if (t <= now + 10 * 24 * 60 * 60 * 1000) return "soon";
+  return "ok";
+}
+
+type Conn = { handle: string; health: Health } | null;
+type AccountLite = { id: number; name: string; ig: Conn; fb: Conn };
 type TeamRow = {
   id: string;
   name: string;
@@ -25,6 +41,7 @@ export default async function ProoferTeamsPage() {
   const admin = createAdminClient();
   const { base } = await getProoferBase();
   const isStaff = access.kind === "staff";
+  const igConfigured = !!process.env.INSTAGRAM_APP_ID;
 
   // This is "your teams" for EVERYONE, including the super admin — only the
   // teams you actually belong to. The platform-wide view of every user's teams
@@ -75,17 +92,17 @@ export default async function ProoferTeamsPage() {
       allClientIds.add(cid);
     }
 
-    // Names + connection status for those accounts.
+    // Names + connection status (with handle + token health) for those accounts.
     const nameById = new Map<number, string>();
-    const igByClient = new Set<number>();
-    const fbByClient = new Set<number>();
+    const igByClient = new Map<number, Conn>();
+    const fbByClient = new Map<number, Conn>();
     if (allClientIds.size > 0) {
       const ids = Array.from(allClientIds);
       const [{ data: clientRows }, { data: connectedRows }] = await Promise.all([
         admin.from("clients").select("id, name, archived").in("id", ids),
         admin
           .from("connected_meta_accounts")
-          .select("client_id, platform")
+          .select("client_id, platform, account_name, token_expires_at")
           .in("client_id", ids),
       ]);
       for (const c of clientRows ?? []) {
@@ -94,8 +111,12 @@ export default async function ProoferTeamsPage() {
       }
       for (const r of connectedRows ?? []) {
         const cid = Number(r.client_id);
-        if (r.platform === "instagram") igByClient.add(cid);
-        if (r.platform === "facebook") fbByClient.add(cid);
+        const conn: Conn = {
+          handle: (r.account_name as string | null) ?? "",
+          health: tokenHealth(r.token_expires_at as string | null),
+        };
+        if (r.platform === "instagram") igByClient.set(cid, conn);
+        if (r.platform === "facebook") fbByClient.set(cid, conn);
       }
     }
 
@@ -106,8 +127,8 @@ export default async function ProoferTeamsPage() {
         .map((cid) => ({
           id: cid,
           name: nameById.get(cid)!,
-          ig: igByClient.has(cid),
-          fb: fbByClient.has(cid),
+          ig: igByClient.get(cid) ?? null,
+          fb: fbByClient.get(cid) ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return {
@@ -199,10 +220,7 @@ export default async function ProoferTeamsPage() {
                   isStaff ||
                   myRoleByTeam.get(t.id) === "owner" ||
                   myRoleByTeam.get(t.id) === "admin";
-                const connectHref = (clientId: number) =>
-                  `/api/meta/connect?clientId=${clientId}&returnTo=${encodeURIComponent(
-                    `${base}/teams`
-                  )}`;
+                const returnTo = encodeURIComponent(`${base}/teams`);
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -225,39 +243,36 @@ export default async function ProoferTeamsPage() {
                       No accounts in this team yet.
                     </p>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                      {t.accounts.map((a) => {
-                        const connected = a.ig || a.fb;
-                        return (
-                        <div key={a.id} style={accountRow}>
-                          <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 120 }}>
-                            {a.name}
-                          </span>
-                          <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            {connected ? (
-                              <>
-                                {a.ig && <Badge kind="on">✓ Instagram</Badge>}
-                                {a.fb && <Badge kind="on">✓ Facebook</Badge>}
-                                {canManage && (
-                                  <a href={connectHref(a.id)} style={reconnectLink}>
-                                    Reconnect
-                                  </a>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <Badge kind="off">⚠ Not connected</Badge>
-                                {canManage && (
-                                  <a href={connectHref(a.id)} style={connectNowLink}>
-                                    Connect now →
-                                  </a>
-                                )}
-                              </>
-                            )}
-                          </span>
+                    <div style={{ display: "flex", flexDirection: "column", marginTop: 10 }}>
+                      <div style={acctHeadRow}>
+                        <span>Facebook</span>
+                        <span>Instagram</span>
+                      </div>
+                      {t.accounts.map((a) => (
+                        <div key={a.id} style={acctBlock}>
+                          <div style={acctNameStyle}>{a.name}</div>
+                          <div style={acctConns}>
+                            <ConnCell
+                              platform="facebook"
+                              conn={a.fb}
+                              teamId={t.id}
+                              clientId={a.id}
+                              canManage={canManage}
+                              returnTo={returnTo}
+                              igConfigured={igConfigured}
+                            />
+                            <ConnCell
+                              platform="instagram"
+                              conn={a.ig}
+                              teamId={t.id}
+                              clientId={a.id}
+                              canManage={canManage}
+                              returnTo={returnTo}
+                              igConfigured={igConfigured}
+                            />
+                          </div>
                         </div>
-                        );
-                      })}
+                      ))}
                     </div>
                   )}
                 </div>
@@ -318,6 +333,70 @@ function RoleBadge({ role }: { role: string }) {
     >
       {role === "owner" ? "You own this" : `You: ${role === "member" ? "creator" : role}`}
     </span>
+  );
+}
+
+function ConnCell({
+  platform,
+  conn,
+  teamId,
+  clientId,
+  canManage,
+  returnTo,
+  igConfigured,
+}: {
+  platform: "facebook" | "instagram";
+  conn: Conn;
+  teamId: string;
+  clientId: number;
+  canManage: boolean;
+  returnTo: string;
+  igConfigured: boolean;
+}) {
+  const isFb = platform === "facebook";
+  const label = isFb ? "Facebook" : "Instagram";
+  const handleColor = isFb ? "#1877F2" : "#c1358a";
+
+  if (conn) {
+    const dot =
+      conn.health === "expired" ? "#dc2626" : conn.health === "soon" ? "#d97706" : "#16a34a";
+    const tag =
+      conn.health === "expired" ? "reconnect" : conn.health === "soon" ? "expiring" : "";
+    return (
+      <div style={connCellStyle}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: handleColor }}>
+          {conn.handle ? `@${conn.handle}` : label}
+        </span>
+        {tag && (
+          <span style={{ fontSize: 11, fontWeight: 600, color: conn.health === "expired" ? "#dc2626" : "#b45309" }}>
+            · {tag}
+          </span>
+        )}
+        {canManage && (
+          <span style={{ marginLeft: "auto" }}>
+            <DisconnectButton teamId={teamId} clientId={clientId} platform={platform} label={label} />
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Instagram connects via its own login when configured; otherwise it comes in
+  // through the Facebook Page flow (which brings the linked Instagram).
+  const href =
+    isFb || !igConfigured
+      ? `/api/meta/connect?clientId=${clientId}&returnTo=${returnTo}`
+      : `/api/instagram/connect?clientId=${clientId}&returnTo=${returnTo}`;
+  return (
+    <div style={connCellStyle}>
+      <span style={{ fontSize: 13, color: "#a1a1aa" }}>— not connected</span>
+      {canManage && (
+        <a href={href} style={connectMini}>
+          Connect
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -388,15 +467,55 @@ const reconnectLink: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const accountRow: React.CSSProperties = {
+const acctHeadRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  padding: "0 0 6px",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#a1a1aa",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
+const acctBlock: React.CSSProperties = {
+  padding: "9px 0",
+  borderTop: "1px dashed #ececef",
+};
+
+const acctNameStyle: React.CSSProperties = {
+  fontSize: 13.5,
+  fontWeight: 700,
+  marginBottom: 5,
+};
+
+const acctConns: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  alignItems: "center",
+};
+
+const connCellStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 10,
-  padding: "9px 12px",
-  border: "1px solid #f0f0f2",
-  borderRadius: 9,
-  background: "#fafafa",
+  gap: 7,
+  minHeight: 26,
   flexWrap: "wrap",
+};
+
+const connectMini: React.CSSProperties = {
+  marginLeft: "auto",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#3f3f46",
+  background: "#f4f4f5",
+  border: "1px solid #e4e4e7",
+  borderRadius: 7,
+  padding: "3px 9px",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
