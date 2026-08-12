@@ -513,6 +513,13 @@ async function publishInstagramPost(args: {
     throw new Error("IG /media returned no creation id");
   }
 
+  // Even an image container isn't publishable the instant it's created — Meta
+  // still has to fetch and process image_url, and media_publish before then
+  // fails with "Media ID is not available / not ready" (code 9007). Images
+  // usually finish near-instantly (the first status check passes with no wait),
+  // but under a slow fetch the race loses the post, so poll like the video paths.
+  await waitForContainerReady(creationId, pageToken, "publish:instagram", apiBase);
+
   const publishParams = new URLSearchParams();
   publishParams.set("creation_id", creationId);
   publishParams.set("access_token", pageToken);
@@ -581,6 +588,16 @@ async function publishInstagramStory(args: {
   if (!creationId) {
     throw new Error("IG Story /media returned no creation id");
   }
+
+  // Same readiness race as the feed image path: wait for Meta to finish
+  // ingesting the image before publishing, or media_publish can 400 with
+  // "Media ID is not available / not ready" (code 9007).
+  await waitForContainerReady(
+    creationId,
+    pageToken,
+    "publish:instagram_story",
+    apiBase
+  );
 
   const storyPublishParams = new URLSearchParams();
   storyPublishParams.set("creation_id", creationId);
