@@ -301,7 +301,11 @@ function publishBadgeParts(
   publishQueue: ProoferPublishQueueItem[] | undefined,
   timeZone: string,
   dateKey: string
-): { publishedText: string | null; failedText: string | null } {
+): {
+  publishedText: string | null;
+  publishedLinks: { label: string; url: string }[];
+  failedText: string | null;
+} {
   const published = (publishQueue ?? []).filter((q) => q.status === "published");
   const failed = (publishQueue ?? []).filter((q) => q.status === "failed");
 
@@ -324,12 +328,77 @@ function publishBadgeParts(
     publishedText = `Published${names}${when ? ` ${when}` : ""}`;
   }
 
+  // A link straight to the live post per published platform that has a URL.
+  const publishedLinks = published
+    .filter((q) => q.publishUrl)
+    .map((q) => ({
+      label: PUBLISH_TARGET_LABELS[q.platform],
+      url: q.publishUrl as string,
+    }));
+
   const failedText =
     failed.length > 0
       ? `Failed: ${failed.map((q) => PUBLISH_TARGET_LABELS[q.platform]).join(" & ")}`
       : null;
 
-  return { publishedText, failedText };
+  return { publishedText, publishedLinks, failedText };
+}
+
+// The "✓ Published …" note, optionally linking to the live post(s). When a
+// single platform published we make the whole note the link; with two we show
+// the note plain and add a small per-platform link so each is reachable.
+function PublishNote({
+  parts,
+  fontSize,
+}: {
+  parts: ReturnType<typeof publishBadgeParts>;
+  fontSize: number;
+}) {
+  const { publishedText, publishedLinks, failedText } = parts;
+  if (!publishedText && !failedText) return null;
+  const linkStyle: React.CSSProperties = {
+    color: "#15803d",
+    textDecoration: "underline",
+  };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "2px 8px",
+        fontSize,
+        fontWeight: 700,
+      }}
+    >
+      {publishedText &&
+        (publishedLinks.length === 1 ? (
+          <a
+            href={publishedLinks[0].url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={linkStyle}
+          >
+            ✓ {publishedText} ↗
+          </a>
+        ) : (
+          <span style={{ color: "#15803d" }}>✓ {publishedText}</span>
+        ))}
+      {publishedLinks.length > 1 &&
+        publishedLinks.map((l) => (
+          <a
+            key={l.label}
+            href={l.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={linkStyle}
+          >
+            {l.label} ↗
+          </a>
+        ))}
+      {failedText && <span style={{ color: "#b91c1c" }}>⚠ {failedText}</span>}
+    </span>
+  );
 }
 
 // The time-of-day ("HH:MM") to seed the reschedule input with, expressed in
@@ -3117,20 +3186,17 @@ export default function ProoferBoard({
                         );
                       }
                       if (isLocked) {
-                        const { publishedText, failedText } = publishBadgeParts(
+                        const parts = publishBadgeParts(
                           post?.publishQueue,
                           timeZone,
                           dateKey
                         );
-                        // Once it's actually gone out, "Published" replaces
-                        // "Scheduled" — that's the at-a-glance signal for a past
-                        // day. Otherwise fall back to when it's due.
-                        if (publishedText) {
-                          meta.push(
-                            <span key="published" style={{ color: "#15803d", fontWeight: 700 }}>
-                              ✓ {publishedText}
-                            </span>
-                          );
+                        // Once it's actually gone out (or failed), the
+                        // Published/Failed note replaces "Scheduled" — that's the
+                        // at-a-glance signal for a past day, and it links to the
+                        // live post. Otherwise fall back to when it's due.
+                        if (parts.publishedText || parts.failedText) {
+                          meta.push(<PublishNote key="publish" parts={parts} fontSize={12} />);
                         } else {
                           const when = scheduledLabel(
                             post?.publishQueue,
@@ -3145,13 +3211,6 @@ export default function ProoferBoard({
                               </span>
                             );
                           }
-                        }
-                        if (failedText) {
-                          meta.push(
-                            <span key="failed" style={{ color: "#b91c1c", fontWeight: 700 }}>
-                              ⚠ {failedText}
-                            </span>
-                          );
                         }
                       }
                       if (meta.length === 0) return null;
@@ -3211,29 +3270,15 @@ export default function ProoferBoard({
                               at-a-glance marker for a locked or past-day post,
                               sitting above the scheduled-time / reschedule row. */}
                           {(() => {
-                            const { publishedText, failedText } = publishBadgeParts(
+                            const parts = publishBadgeParts(
                               post?.publishQueue,
                               timeZone,
                               dateKey
                             );
-                            if (!publishedText && !failedText) return null;
+                            if (!parts.publishedText && !parts.failedText) return null;
                             return (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: "2px 10px",
-                                  marginBottom: 4,
-                                  fontSize: standalone ? 15 : 11,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {publishedText && (
-                                  <span style={{ color: "#15803d" }}>✓ {publishedText}</span>
-                                )}
-                                {failedText && (
-                                  <span style={{ color: "#b91c1c" }}>⚠ {failedText}</span>
-                                )}
+                              <div style={{ marginBottom: 4 }}>
+                                <PublishNote parts={parts} fontSize={standalone ? 15 : 11} />
                               </div>
                             );
                           })()}
@@ -3267,8 +3312,14 @@ export default function ProoferBoard({
                               scheduled_for to THIS post's date (dateKey) at the
                               chosen time — entered in the agency display zone,
                               across every platform it's queued to — so the send
-                              day always matches the slot. */}
-                          {post && (post.publishQueue?.length ?? 0) > 0 &&
+                              day always matches the slot. Hidden once nothing is
+                              pending (everything published/failed): a post that
+                              has already gone out shows only the Published note,
+                              not an editable send time. */}
+                          {post &&
+                            (post.publishQueue ?? []).some(
+                              (q) => q.status === "scheduled" || q.status === "queued"
+                            ) &&
                             ((p: ProoferPost) => {
                               const seed = scheduledSeedHHMM(
                                 p.publishQueue,
