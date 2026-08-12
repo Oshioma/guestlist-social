@@ -40,7 +40,7 @@ function worstHealth(...hs: (Health | undefined)[]): Health {
 
 type Conn = { handle: string; health: Health } | null;
 type AccountLite = { id: number; name: string; ig: Conn; fb: Conn };
-type Member = { userId: string; name: string; role: string; isOwner: boolean };
+type Member = { userId: string; name: string; role: string; isOwner: boolean; pending: boolean };
 type TeamRow = {
   id: string;
   name: string;
@@ -216,11 +216,20 @@ export default async function ProoferTeamsPage({
       };
     }
 
-    // Resolve member display names.
+    // Resolve member display names, and note who hasn't accepted their invite
+    // yet. An invited user gets a team_members row immediately, but their auth
+    // account stays unconfirmed until they click the invite link and sign in —
+    // so an unconfirmed email means "invite pending, membership not accepted".
     const userById = new Map<string, string>();
+    const pendingById = new Map<string, boolean>();
     for (const u of usersResp?.data?.users ?? []) {
       const fullName = (u.user_metadata as { full_name?: string } | null)?.full_name ?? null;
       userById.set(u.id, fullName || u.email || "(unknown)");
+      const confirmed = Boolean(
+        (u as { email_confirmed_at?: string | null }).email_confirmed_at ||
+          (u as { confirmed_at?: string | null }).confirmed_at
+      );
+      pendingById.set(u.id, !confirmed);
     }
 
     // Members per team (+ counts), owner first then by name.
@@ -231,11 +240,15 @@ export default async function ProoferTeamsPage({
       const uid = r.user_id as string;
       memberCounts.set(tid, (memberCounts.get(tid) ?? 0) + 1);
       const list = membersByTeam.get(tid) ?? [];
+      const isOwner = uid === ownerByTeam.get(tid);
       list.push({
         userId: uid,
         name: userById.get(uid) ?? "(unknown)",
         role: (r.role as string) ?? "member",
-        isOwner: uid === ownerByTeam.get(tid),
+        isOwner,
+        // The owner has always accepted (they created the team); everyone else
+        // is pending until their auth account is confirmed.
+        pending: !isOwner && (pendingById.get(uid) ?? false),
       });
       membersByTeam.set(tid, list);
     }
