@@ -701,6 +701,10 @@ export default function ProoferBoard({
   // onboarding finish so the just-created post is always visible and centred,
   // even if it would otherwise be filtered out (past day, alternate-day view).
   focusDateKey,
+  // Platforms the current client has actually connected. A brand-new post
+  // defaults its publish targets to these — so both Instagram AND Facebook are
+  // pre-selected when both are connected — falling back to Instagram-only.
+  connectedTargets = [],
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -715,8 +719,13 @@ export default function ProoferBoard({
   publishPath?: string;
   standalone?: boolean;
   focusDateKey?: string;
+  connectedTargets?: PublishTarget[];
 }) {
   const router = useRouter();
+  // The default publish targets for a new post: every connected platform (both
+  // IG + FB when both are wired up), or Instagram alone when we know of none.
+  const defaultTargets: PublishTarget[] =
+    connectedTargets.length > 0 ? connectedTargets : ["instagram"];
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
@@ -788,7 +797,7 @@ export default function ProoferBoard({
       if (!initial[slotKey]) {
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
-        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] };
+        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] };
       }
     }
     return initial;
@@ -891,7 +900,7 @@ export default function ProoferBoard({
         if (next[slotKey]) continue;
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
-        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] };
+        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] };
       }
       return next;
     });
@@ -1150,9 +1159,10 @@ export default function ProoferBoard({
       linkedIdeaId: existing?.linkedIdeaId ?? null,
       linkedIdeaKind: existing?.linkedIdeaKind ?? null,
       publishTime: existing?.publishTime ?? "18:00",
-      // A brand new slot defaults to Instagram — the overwhelmingly common
-      // case, and it matches what an unmigrated row implies.
-      publishTargets: existing?.publishTargets ?? ["instagram"],
+      // A brand new slot defaults to every connected platform (both IG + FB
+      // when both are connected), falling back to Instagram when we know of
+      // none — which also matches what an unmigrated row implies.
+      publishTargets: existing?.publishTargets ?? [...defaultTargets],
     };
   }
 
@@ -1612,7 +1622,7 @@ export default function ProoferBoard({
                       .filter(Boolean).join("\n\n");
                     return {
                       ...prev,
-                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: ["instagram"] },
+                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] },
                     };
                   });
                   // Fetch a suggested stock photo for this idea in the background
