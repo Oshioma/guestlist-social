@@ -109,6 +109,89 @@ async function waitForContainerReady(
   );
 }
 
+// Even after a container reports FINISHED, Meta can still reject media_publish
+// with a transient "not ready" error (code 9007 / subcode 2207027, "The media
+// is not ready for publishing, please wait for a moment") — ingestion is
+// eventually-consistent, so the publish edge sometimes lags the status edge by
+// a few seconds. It clears on its own, so retry a few times before giving up.
+// Everything else (bad token, policy block, an error not flagged transient) is
+// terminal and throws on the first response without burning the retry budget.
+const IG_PUBLISH_RETRY_MAX_ATTEMPTS = 4;
+const IG_PUBLISH_RETRY_INTERVAL_MS = 3000;
+
+function isMediaNotReadyError(body: {
+  error?: { code?: number; error_subcode?: number; is_transient?: boolean };
+}): boolean {
+  const e = body?.error;
+  if (!e) return false;
+  // 9007 + 2207027 is the canonical "media not ready" pairing; honour an
+  // explicit is_transient flag too, in case Meta reshuffles the codes.
+  return e.code === 9007 || e.error_subcode === 2207027 || e.is_transient === true;
+}
+
+// Publish a prepared IG container, retrying only the transient "media not
+// ready" case. Returns the published media id (or null if Meta returns 200 with
+// no id, matching the previous per-path behaviour); throws with the raw Meta
+// body on a terminal failure or once the retries are exhausted.
+async function publishIgContainer(args: {
+  igAccountId: string;
+  creationId: string;
+  pageToken: string;
+  apiBase: string;
+  operation: string; // logMetaWrite label, e.g. "publish:instagram"
+  label: string; // error-message prefix, e.g. "IG", "IG Story"
+}): Promise<string | null> {
+  const { igAccountId, creationId, pageToken, apiBase, operation, label } = args;
+
+  const params = new URLSearchParams();
+  params.set("creation_id", creationId);
+  params.set("access_token", pageToken);
+
+  let lastStatus = 0;
+  let lastBody: unknown = null;
+  for (let attempt = 0; attempt < IG_PUBLISH_RETRY_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(IG_PUBLISH_RETRY_INTERVAL_MS);
+
+    const start = Date.now();
+    const res = await fetch(`${apiBase}/${igAccountId}/media_publish`, {
+      method: "POST",
+      body: params,
+      cache: "no-store",
+    });
+    const data = (await res.json()) as {
+      id?: string;
+      error?: {
+        message?: string;
+        code?: number;
+        error_subcode?: number;
+        is_transient?: boolean;
+      };
+    };
+    logMetaWrite({
+      operation,
+      metaEndpoint: `/${igAccountId}/media_publish`,
+      requestBody: { creation_id: creationId, attempt: attempt + 1 },
+      responseStatus: res.status,
+      responseBody: data,
+      success: res.ok && !!data.id,
+      errorMessage: data.error?.message ?? null,
+      durationMs: Date.now() - start,
+    });
+
+    if (res.ok) return data.id ?? null;
+
+    lastStatus = res.status;
+    lastBody = data;
+    // Only the transient not-ready case is worth waiting on; anything else is
+    // terminal, so stop now rather than spend the remaining attempts.
+    if (!isMediaNotReadyError(data)) break;
+  }
+
+  throw new Error(
+    `${label} /media_publish failed: ${lastStatus} ${JSON.stringify(lastBody)}`
+  );
+}
+
 // Look up an Instagram media permalink, best-effort (null on any failure).
 async function lookupInstagramPermalink(
   mediaId: string,
@@ -520,32 +603,17 @@ async function publishInstagramPost(args: {
   // but under a slow fetch the race loses the post, so poll like the video paths.
   await waitForContainerReady(creationId, pageToken, "publish:instagram", apiBase);
 
-  const publishParams = new URLSearchParams();
-  publishParams.set("creation_id", creationId);
-  publishParams.set("access_token", pageToken);
-
-  const publishStart = Date.now();
-  const publishRes = await fetch(
-    `${apiBase}/${igAccountId}/media_publish`,
-    { method: "POST", body: publishParams, cache: "no-store" }
-  );
-  const publishData = (await publishRes.json()) as { id?: string; error?: { message?: string } };
-  logMetaWrite({
+  const publishedId = await publishIgContainer({
+    igAccountId,
+    creationId,
+    pageToken,
+    apiBase,
     operation: "publish:instagram",
-    metaEndpoint: `/${igAccountId}/media_publish`,
-    requestBody: { creation_id: creationId },
-    responseStatus: publishRes.status,
-    responseBody: publishData,
-    success: publishRes.ok && !!publishData.id,
-    errorMessage: publishData.error?.message ?? null,
-    durationMs: Date.now() - publishStart,
+    label: "IG",
   });
-  if (!publishRes.ok) {
-    throw new Error(`IG /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`);
-  }
-  if (!publishData.id) return null;
+  if (!publishedId) return null;
 
-  return lookupInstagramPermalink(publishData.id, pageToken, apiBase);
+  return lookupInstagramPermalink(publishedId, pageToken, apiBase);
 }
 
 async function publishInstagramStory(args: {
@@ -599,33 +667,16 @@ async function publishInstagramStory(args: {
     apiBase
   );
 
-  const storyPublishParams = new URLSearchParams();
-  storyPublishParams.set("creation_id", creationId);
-  storyPublishParams.set("access_token", pageToken);
-
-  const storyPublishStart = Date.now();
-  const storyPublishRes = await fetch(
-    `${apiBase}/${igAccountId}/media_publish`,
-    { method: "POST", body: storyPublishParams, cache: "no-store" }
-  );
-  const publishData = (await storyPublishRes.json()) as { id?: string; error?: { message?: string } };
-  logMetaWrite({
+  const publishedId = await publishIgContainer({
+    igAccountId,
+    creationId,
+    pageToken,
+    apiBase,
     operation: "publish:instagram_story",
-    metaEndpoint: `/${igAccountId}/media_publish`,
-    requestBody: { creation_id: creationId },
-    responseStatus: storyPublishRes.status,
-    responseBody: publishData,
-    success: storyPublishRes.ok && !!publishData.id,
-    errorMessage: publishData.error?.message ?? null,
-    durationMs: Date.now() - storyPublishStart,
+    label: "IG Story",
   });
-  if (!storyPublishRes.ok) {
-    throw new Error(
-      `IG Story /media_publish failed: ${storyPublishRes.status} ${JSON.stringify(publishData)}`
-    );
-  }
-  return publishData.id
-    ? `https://www.instagram.com/stories/${igAccountId}/${publishData.id}/`
+  return publishedId
+    ? `https://www.instagram.com/stories/${igAccountId}/${publishedId}/`
     : null;
 }
 
@@ -735,36 +786,16 @@ async function publishInstagramVideo(args: {
   );
 
   // 3. Publish the processed container.
-  const publishParams = new URLSearchParams();
-  publishParams.set("creation_id", creationId);
-  publishParams.set("access_token", pageToken);
-
-  const publishStart = Date.now();
-  const publishRes = await fetch(
-    `${apiBase}/${igAccountId}/media_publish`,
-    { method: "POST", body: publishParams, cache: "no-store" }
-  );
-  const publishData = (await publishRes.json()) as {
-    id?: string;
-    error?: { message?: string };
-  };
-  logMetaWrite({
+  const publishedId = await publishIgContainer({
+    igAccountId,
+    creationId,
+    pageToken,
+    apiBase,
     operation: "publish:instagram_video",
-    metaEndpoint: `/${igAccountId}/media_publish`,
-    requestBody: { creation_id: creationId },
-    responseStatus: publishRes.status,
-    responseBody: publishData,
-    success: publishRes.ok && !!publishData.id,
-    errorMessage: publishData.error?.message ?? null,
-    durationMs: Date.now() - publishStart,
+    label: "IG Reel",
   });
-  if (!publishRes.ok) {
-    throw new Error(
-      `IG Reel /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`
-    );
-  }
-  if (!publishData.id) return null;
-  return lookupInstagramPermalink(publishData.id, pageToken, apiBase);
+  if (!publishedId) return null;
+  return lookupInstagramPermalink(publishedId, pageToken, apiBase);
 }
 
 async function publishInstagramStoryVideo(args: {
@@ -822,35 +853,15 @@ async function publishInstagramStoryVideo(args: {
   );
 
   // 3. Publish.
-  const publishParams = new URLSearchParams();
-  publishParams.set("creation_id", creationId);
-  publishParams.set("access_token", pageToken);
-
-  const publishStart = Date.now();
-  const publishRes = await fetch(
-    `${apiBase}/${igAccountId}/media_publish`,
-    { method: "POST", body: publishParams, cache: "no-store" }
-  );
-  const publishData = (await publishRes.json()) as {
-    id?: string;
-    error?: { message?: string };
-  };
-  logMetaWrite({
+  const publishedId = await publishIgContainer({
+    igAccountId,
+    creationId,
+    pageToken,
+    apiBase,
     operation: "publish:instagram_story_video",
-    metaEndpoint: `/${igAccountId}/media_publish`,
-    requestBody: { creation_id: creationId },
-    responseStatus: publishRes.status,
-    responseBody: publishData,
-    success: publishRes.ok && !!publishData.id,
-    errorMessage: publishData.error?.message ?? null,
-    durationMs: Date.now() - publishStart,
+    label: "IG Story video",
   });
-  if (!publishRes.ok) {
-    throw new Error(
-      `IG Story video /media_publish failed: ${publishRes.status} ${JSON.stringify(publishData)}`
-    );
-  }
-  return publishData.id
-    ? `https://www.instagram.com/stories/${igAccountId}/${publishData.id}/`
+  return publishedId
+    ? `https://www.instagram.com/stories/${igAccountId}/${publishedId}/`
     : null;
 }
