@@ -1337,7 +1337,7 @@ export default function PublishQueueBoard({
             letterSpacing: "-0.03em",
           }}
         >
-          Publish Queue
+          Progress
         </h1>
 
         <label

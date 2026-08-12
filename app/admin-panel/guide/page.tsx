@@ -27,7 +27,7 @@ export default function GuidePage() {
           </Step>
 
           <Step title="Publish">
-            Approved posts appear in <b>Publish queue</b>. Queue to a connected
+            Approved posts appear in <b>Progress</b>. Queue to a connected
             Meta account, set a schedule, and the cron publishes automatically.
             Supports IG Feed, Stories, and Facebook.
           </Step>
