@@ -8,7 +8,15 @@ import {
   inviteToTeam,
 } from "@/lib/auth/team-actions";
 
-type Member = { userId: string; name: string; role: string; isOwner: boolean };
+type Member = {
+  userId: string;
+  name: string;
+  role: string;
+  isOwner: boolean;
+  // True while an invite is outstanding — the person has been added to the team
+  // but hasn't accepted membership (confirmed their account) yet.
+  pending?: boolean;
+};
 
 // Assignable roles, with a colour dot in the dropdown: green = can approve
 // posts (Admin/Proofer), yellow = drafts only (Creator = the stored 'member').
@@ -30,6 +38,9 @@ function roleLabel(role: string): string {
 }
 
 const AV = ["#4f46e5", "#0ea5e9", "#e11d48", "#16a34a", "#d97706", "#7c3aed"];
+// Pending-invite avatar: circle split down the middle, grey on the left
+// (not a member yet) and yellow on the right (invited, awaiting acceptance).
+const PENDING_AV = "linear-gradient(90deg, #a1a1aa 0 50%, #eab308 50% 100%)";
 const avColor = (s: string) =>
   AV[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AV.length];
 const initials = (s: string) =>
@@ -110,7 +121,22 @@ export function TeamMembersInline({
           const isOwner = m.isOwner || m.role === "owner";
           return (
             <div key={m.userId} style={rowStyle}>
-              <span style={{ ...avatar, background: avColor(m.name) }}>{initials(m.name)}</span>
+              <span
+                style={{
+                  ...avatar,
+                  // Accepted members get their solid colour dot. A pending
+                  // invitee shows a half grey / half yellow circle until they
+                  // accept membership — grey = not in yet, yellow = invited.
+                  background: m.pending ? PENDING_AV : avColor(m.name),
+                }}
+                title={
+                  m.pending
+                    ? `${m.name} — invite pending (not accepted yet)`
+                    : undefined
+                }
+              >
+                {initials(m.name)}
+              </span>
               {/* The name is an email that often overflows the column and gets
                   ellipsised — a native title tooltip surfaces the full address
                   on hover so it's always readable. */}

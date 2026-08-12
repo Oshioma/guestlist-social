@@ -4639,20 +4639,12 @@ export default function ProoferBoard({
                       </div>
 
                       {/* Modifier buttons + Clear */}
-                      {(draft.caption.trim() || post || hasDraft) && (
-                        <div
-                          // On a phone the AI actions become a single swipeable
-                          // row of chips instead of a wrap that buries them.
-                          className={isNarrow ? "mobile-strip" : undefined}
-                          style={{
-                            padding: isNarrow ? "2px 12px 12px" : "0 12px 12px",
-                            display: "flex",
-                            gap: isNarrow ? 8 : 6,
-                            flexWrap: isNarrow ? "nowrap" : "wrap",
-                            alignItems: "center",
-                          }}
-                        >
-                          {draft.caption.trim() && (["regenerate", "new_hook", "shorter", "more_playful", "more_premium", "stronger_cta"] as const).map((mod) => {
+                      {(draft.caption.trim() || post || hasDraft) && (() => {
+                        // On a phone the AI actions swipe in their own strip, but
+                        // Clear is kept OUT of that strip so it's always on screen
+                        // — it used to hide off the right edge and the strip
+                        // snapped back before you could tap it.
+                        const chips = draft.caption.trim() && (["regenerate", "new_hook", "shorter", "more_playful", "more_premium", "stronger_cta"] as const).map((mod) => {
                             const labels: Record<string, string> = {
                               regenerate: "↺",
                               new_hook: "Hook",
@@ -4690,8 +4682,9 @@ export default function ProoferBoard({
                                 {isThisOne ? "Rewriting…" : labels[mod]}
                               </button>
                             );
-                          })}
-                          {(post || hasDraft) && !isLocked && (
+                          });
+                        const clear =
+                          (post || hasDraft) && !isLocked ? (
                             standalone && confirmClearKey === key ? (
                               // Inline confirm right next to Clear.
                               <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, flexShrink: 0 }}>
@@ -4757,9 +4750,25 @@ export default function ProoferBoard({
                                 Clear
                               </button>
                             )
-                          )}
-                        </div>
-                      )}
+                          ) : null;
+                        return isNarrow ? (
+                          <div style={{ padding: "2px 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                            {chips && (
+                              <div className="mobile-strip" style={{ display: "flex", gap: 8, flexWrap: "nowrap", alignItems: "center" }}>
+                                {chips}
+                              </div>
+                            )}
+                            {clear && (
+                              <div style={{ display: "flex", justifyContent: "flex-end" }}>{clear}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ padding: "0 12px 12px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            {chips}
+                            {clear}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Status dots — the save action. Vertically beside the card
@@ -5145,6 +5154,60 @@ export default function ProoferBoard({
             </div>
           );
         })}
+        </div>
+      )}
+
+      {/* Always-visible view controls on a phone. The same two switches live in
+          the Board-settings sheet (behind the ⚙), but that's easy to miss — so
+          the most-used ones also sit here at the foot of the board, where they
+          don't need a sheet to reach. */}
+      {isNarrow && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "14px 12px 8px",
+            marginTop: 4,
+            borderTop: "1px solid #e4e4e7",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setHideEmpty((v) => !v)}
+            style={{
+              padding: "9px 16px",
+              borderRadius: 999,
+              border: hideEmpty ? "1px solid #e4e4e7" : "1px solid #4338ca",
+              background: hideEmpty ? "#fff" : "#eef2ff",
+              color: hideEmpty ? "#52525b" : "#4338ca",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {hideEmpty ? "Show empty days" : "Hide empty days"}
+          </button>
+          {isCurrentMonth && (
+            <button
+              type="button"
+              onClick={() => setShowPast((v) => !v)}
+              style={{
+                padding: "9px 16px",
+                borderRadius: 999,
+                border: showPast ? "1px solid #4338ca" : "1px solid #e4e4e7",
+                background: showPast ? "#eef2ff" : "#fff",
+                color: showPast ? "#4338ca" : "#52525b",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {showPast ? "Hide past days" : "View all days"}
+            </button>
+          )}
         </div>
       )}
 
