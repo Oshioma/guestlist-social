@@ -291,6 +291,47 @@ function scheduledLabel(
   return formatUtcClockInZone(dateKey, publishTime, timeZone);
 }
 
+// Terminal publish outcome for the board's "Published" / "Failed" badge. Once
+// the cron sends (or fails) a queued post it stamps the queue row 'published'
+// (with published_at + publish_url) or 'failed'. Surfacing that here lets the
+// board show, at a glance, whether a locked post actually went out — the thing
+// "Scheduled for …" alone can't tell you when scrolling back over past days.
+// A post can target both platforms, so summarise per platform.
+function publishBadgeParts(
+  publishQueue: ProoferPublishQueueItem[] | undefined,
+  timeZone: string,
+  dateKey: string
+): { publishedText: string | null; failedText: string | null } {
+  const published = (publishQueue ?? []).filter((q) => q.status === "published");
+  const failed = (publishQueue ?? []).filter((q) => q.status === "failed");
+
+  let publishedText: string | null = null;
+  if (published.length > 0) {
+    // Prefer a real published_at instant: show the clock time on the same day,
+    // the full date if it actually went out on another day.
+    const at = published.map((q) => q.publishedAt).find(Boolean) ?? null;
+    const when = at
+      ? zonedDateKey(at, timeZone) === dateKey
+        ? formatInstantClockInZone(at, timeZone)
+        : formatDateTimeInZone(at, timeZone)
+      : "";
+    // Name the platforms only when the outcome is split (something also
+    // failed); when everything went out, a bare "Published" is cleaner.
+    const names =
+      failed.length > 0
+        ? `: ${published.map((q) => PUBLISH_TARGET_LABELS[q.platform]).join(" & ")}`
+        : "";
+    publishedText = `Published${names}${when ? ` ${when}` : ""}`;
+  }
+
+  const failedText =
+    failed.length > 0
+      ? `Failed: ${failed.map((q) => PUBLISH_TARGET_LABELS[q.platform]).join(" & ")}`
+      : null;
+
+  return { publishedText, failedText };
+}
+
 // The time-of-day ("HH:MM") to seed the reschedule input with, expressed in
 // the agency display zone (e.g. BST) so the input reads the same timezone as
 // everything else on the card. Uses the post's current scheduled_for if it has
@@ -3076,18 +3117,39 @@ export default function ProoferBoard({
                         );
                       }
                       if (isLocked) {
-                        const when = scheduledLabel(
+                        const { publishedText, failedText } = publishBadgeParts(
                           post?.publishQueue,
-                          draft.publishTime,
-                          dateKey,
-                          timeZone
+                          timeZone,
+                          dateKey
                         );
-                        // No padlock — approval already implies locked. Keep only
-                        // the useful bit on mobile: when it's scheduled to go out.
-                        if (when) {
+                        // Once it's actually gone out, "Published" replaces
+                        // "Scheduled" — that's the at-a-glance signal for a past
+                        // day. Otherwise fall back to when it's due.
+                        if (publishedText) {
                           meta.push(
-                            <span key="locked" style={{ color: "#0369a1", fontWeight: 600 }}>
-                              Scheduled {when}
+                            <span key="published" style={{ color: "#15803d", fontWeight: 700 }}>
+                              ✓ {publishedText}
+                            </span>
+                          );
+                        } else {
+                          const when = scheduledLabel(
+                            post?.publishQueue,
+                            draft.publishTime,
+                            dateKey,
+                            timeZone
+                          );
+                          if (when) {
+                            meta.push(
+                              <span key="locked" style={{ color: "#0369a1", fontWeight: 600 }}>
+                                Scheduled {when}
+                              </span>
+                            );
+                          }
+                        }
+                        if (failedText) {
+                          meta.push(
+                            <span key="failed" style={{ color: "#b91c1c", fontWeight: 700 }}>
+                              ⚠ {failedText}
                             </span>
                           );
                         }
@@ -3144,6 +3206,37 @@ export default function ProoferBoard({
                           {/* "Approved and locked" text removed — approval is
                               shown by the padlock next to the approver's name in
                               the footer; "locked" is redundant beside it. */}
+                          {/* Published / Failed note: once the post has actually
+                              gone out (or failed), say so up front — this is the
+                              at-a-glance marker for a locked or past-day post,
+                              sitting above the scheduled-time / reschedule row. */}
+                          {(() => {
+                            const { publishedText, failedText } = publishBadgeParts(
+                              post?.publishQueue,
+                              timeZone,
+                              dateKey
+                            );
+                            if (!publishedText && !failedText) return null;
+                            return (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "2px 10px",
+                                  marginBottom: 4,
+                                  fontSize: standalone ? 15 : 11,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {publishedText && (
+                                  <span style={{ color: "#15803d" }}>✓ {publishedText}</span>
+                                )}
+                                {failedText && (
+                                  <span style={{ color: "#b91c1c" }}>⚠ {failedText}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {/* Surface the scheduled time here ONLY when there's no
                               editable time + Reschedule row below (i.e. nothing is
                               queued yet) — otherwise the time would show twice.
