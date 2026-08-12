@@ -5,8 +5,8 @@ export default function MissionBanner() {
     <section style={bannerStyle} aria-label="Our mission">
       <div style={eyebrowStyle}>Our mission</div>
       <p style={missionStyle}>
-        Creating great, positive content, connecting clients with their
-        clients, and shaping a beautiful world&nbsp;—&nbsp;together.
+        Creating great, positive content, shaping a beautiful
+        world&nbsp;—&nbsp;together.
       </p>
     </section>
   );
@@ -19,7 +19,6 @@ const bannerStyle: React.CSSProperties = {
   color: "#fff",
   borderRadius: 18,
   padding: "26px 30px",
-  marginBottom: 20,
   boxShadow: "0 10px 30px rgba(15,23,42,.18)",
 };
 
@@ -38,6 +37,6 @@ const missionStyle: React.CSSProperties = {
   fontWeight: 800,
   lineHeight: 1.18,
   letterSpacing: "-0.01em",
-  maxWidth: 900,
+  maxWidth: 820,
   textWrap: "balance",
 };
