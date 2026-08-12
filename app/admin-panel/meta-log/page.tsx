@@ -81,7 +81,7 @@ export default async function MetaPublishLogPage() {
             marginBottom: 6,
           }}
         >
-          &larr; Back to Publish Queue
+          &larr; Back to Progress
         </Link>
         <h1
           style={{

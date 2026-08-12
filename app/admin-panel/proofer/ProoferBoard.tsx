@@ -109,7 +109,7 @@ const STATUS_BUTTONS: {
   },
   {
     value: "proofed",
-    label: "Proofed → Publish Queue",
+    label: "Proofed → Progress",
     bg: "#dcfce7",
     border: "#86efac",
     color: "#166534",
@@ -2270,7 +2270,7 @@ export default function ProoferBoard({
               flexShrink: 0,
             }}
           >
-            Publish Queue →
+            Progress →
           </button>
         )}
 
@@ -2331,7 +2331,7 @@ export default function ProoferBoard({
               color: "#fff",
             }}
           >
-            Queue →
+            Progress →
           </button>
         </div>
       )}

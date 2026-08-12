@@ -21,7 +21,7 @@ const titles: Record<string, string> = {
   "/app/reports": "Reports",
   "/app/memory": "Memory",
   "/app/proofer": "Proofer",
-  "/app/proofer/publish": "Publish Queue",
+  "/app/proofer/publish": "Progress",
   "/app/ideas": "Ideas",
   "/app/tasks": "Tasks",
   "/app/settings": "Settings",
