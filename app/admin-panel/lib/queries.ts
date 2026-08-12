@@ -459,6 +459,7 @@ export async function getProoferData(
   month?: string
 ): Promise<{
   clients: { id: string; name: string }[];
+  connectedTargets: PublishTarget[];
   posts: ProoferPost[];
   pillars: ContentPillar[];
   ideas: ProoferIdeaLite[];
@@ -481,8 +482,27 @@ export async function getProoferData(
       name: row.name ?? "Untitled client",
     }));
 
+  // Which platforms the selected client actually has connected. The board uses
+  // this to default a new post's publish targets — both Instagram AND Facebook
+  // when both are wired up, instead of Instagram-only. connected_meta_accounts
+  // has RLS enabled with no policies, so it's read via the service role; we
+  // gate on clientId being one of the RLS-visible `clients` above so a viewer
+  // can't probe another tenant's connections.
+  let connectedTargets: PublishTarget[] = [];
+  if (clientId && clients.some((c) => c.id === String(clientId))) {
+    const admin = createAdminClient();
+    const { data: connRows } = await admin
+      .from("connected_meta_accounts")
+      .select("platform")
+      .eq("client_id", clientId);
+    const platforms = new Set((connRows ?? []).map((r) => String(r.platform)));
+    connectedTargets = (["instagram", "facebook"] as PublishTarget[]).filter(
+      (p) => platforms.has(p)
+    );
+  }
+
   if (!clientId || !month) {
-    return { clients, posts: [], pillars: [], ideas: [], postIdeas: [] };
+    return { clients, connectedTargets, posts: [], pillars: [], ideas: [], postIdeas: [] };
   }
 
   const [yearStr, monthStr] = month.split("-");
@@ -490,7 +510,7 @@ export async function getProoferData(
   const m = Number(monthStr);
 
   if (!year || !m) {
-    return { clients, posts: [], pillars: [], ideas: [], postIdeas: [] };
+    return { clients, connectedTargets, posts: [], pillars: [], ideas: [], postIdeas: [] };
   }
 
   const [pillarsRes, videoIdeasRes, carouselIdeasRes, storyIdeasRes] =
@@ -743,7 +763,7 @@ export async function getProoferData(
     updatedAt: row.updated_at ?? "",
   }));
 
-  return { clients, posts: postsWithRelations, pillars, ideas, postIdeas };
+  return { clients, connectedTargets, posts: postsWithRelations, pillars, ideas, postIdeas };
 }
 
 export type ProoferPillarPost = {

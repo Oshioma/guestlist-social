@@ -75,6 +75,7 @@ export default async function ProoferPage({
         initialPillars={data.pillars}
         initialIdeas={data.ideas}
         initialPostIdeas={data.postIdeas}
+        connectedTargets={data.connectedTargets}
         timeZone={displayTimezone}
       />
     );

@@ -215,6 +215,7 @@ export default async function ProoferStandalonePage({
               initialPillars={data.pillars}
               initialIdeas={data.ideas}
               initialPostIdeas={data.postIdeas}
+              connectedTargets={data.connectedTargets}
               timeZone={displayTimezone}
               basePath={base || "/"}
               // Publish queue now lives inside the Proofer app itself
