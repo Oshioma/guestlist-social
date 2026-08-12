@@ -217,8 +217,7 @@ export default function Home() {
               Our Mission
             </div>
             <p className="sr mt-7 text-3xl md:text-5xl font-semibold leading-[1.12] tracking-tight text-balance">
-              Creating great, positive content, connecting clients with their
-              clients, and shaping a{" "}
+              Creating great, positive content, shaping a{" "}
               <span className="text-emerald-300/90">beautiful world</span>{" "}
               &mdash; together.
             </p>
