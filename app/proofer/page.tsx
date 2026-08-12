@@ -9,6 +9,7 @@ import { shouldRunOnboarding, getOnboardingResume } from "@/lib/onboarding";
 import OnboardingFinishBanner from "./OnboardingFinishBanner";
 import OnboardingResumeBanner from "./OnboardingResumeBanner";
 import EmptyBoardCard from "./EmptyBoardCard";
+import MissionBanner from "./MissionBanner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import ProoferBoard from "../admin-panel/proofer/ProoferBoard";
@@ -188,6 +189,7 @@ export default async function ProoferStandalonePage({
         />
         <main style={mainStyle}>
           <div style={centerStyle}>
+            <MissionBanner />
             {showFinishBanner && (
               <OnboardingFinishBanner dateLabel={finishDateLabel} date={finishDateISO} />
             )}
@@ -239,6 +241,7 @@ export default async function ProoferStandalonePage({
         <ProoferNav clients={[]} clientId="" month={selectedMonth} pillars={[]} posts={[]} teams={myTeams} teamId={teamId} isSuperAdmin={superAdmin} showClients={showClients} base={base} parentOrigin={parentOrigin} />
         <main style={mainStyle}>
           <div style={centerStyle}>
+            <MissionBanner />
             <EmptyState title="Unable to load proofer" description={message} />
           </div>
         </main>
