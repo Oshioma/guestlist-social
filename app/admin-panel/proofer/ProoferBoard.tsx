@@ -917,6 +917,7 @@ export default function ProoferBoard({
   useEffect(() => {
     if (!clientId) return;
     const supabase = createClient();
+    let cancelled = false;
 
     const channel = supabase
       .channel(`proofer-posts:${clientId}`)
@@ -971,13 +972,53 @@ export default function ProoferBoard({
             });
           }
         }
-      )
-      .subscribe();
+      );
+
+    // Realtime enforces RLS using the socket's own auth token. The browser
+    // client sets it from the session, but the first subscribe can race that,
+    // and the socket then joins as the anon role — for an RLS-protected table
+    // it silently receives nothing, so a teammate's approval never reaches us.
+    // Apply the user's access token BEFORE joining, and keep it fresh on token
+    // refresh, so live updates actually arrive.
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const token = data.session?.access_token;
+      if (token) supabase.realtime.setAuth(token);
+      channel.subscribe();
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+    });
 
     return () => {
+      cancelled = true;
+      authListener.subscription.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [clientId, month]);
+
+  // Safety net for the live board. Realtime can miss a message — a socket that
+  // slept on a backgrounded tab, a brief reconnect — which would leave a
+  // teammate's approval unshown until the next manual reload. So we also pull
+  // the latest from the server whenever the tab is refocused, and on a slow
+  // interval while it's visible. router.refresh() only re-seeds the server data
+  // (posts + their status); it never clobbers an in-progress local draft, which
+  // lives in client state and is preserved across the refresh.
+  useEffect(() => {
+    if (!clientId) return;
+    const reconcile = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    document.addEventListener("visibilitychange", reconcile);
+    window.addEventListener("focus", reconcile);
+    const id = window.setInterval(reconcile, 30000);
+    return () => {
+      document.removeEventListener("visibilitychange", reconcile);
+      window.removeEventListener("focus", reconcile);
+      window.clearInterval(id);
+    };
+  }, [clientId, router]);
 
   function loadRemoteUpdate(key: string) {
     // Discard the local draft so the editor falls back to the (now newer)
