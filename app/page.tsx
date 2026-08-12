@@ -207,6 +207,24 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ── Mission ─────────────────────────────────────────────── */}
+        <section
+          id="mission"
+          className="border-t border-white/10 bg-gradient-to-br from-emerald-950/70 via-black/80 to-teal-950/70 backdrop-blur-[4px] py-20 px-6"
+        >
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="sr inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-xs uppercase tracking-[0.18em] text-emerald-200/90">
+              Our Mission
+            </div>
+            <p className="sr mt-7 text-3xl md:text-5xl font-semibold leading-[1.12] tracking-tight text-balance">
+              Creating great, positive content, connecting clients with their
+              clients, and shaping a{" "}
+              <span className="text-emerald-300/90">beautiful world</span>{" "}
+              &mdash; together.
+            </p>
+          </div>
+        </section>
+
         {/* ── Services ────────────────────────────────────────────── */}
         <section id="services" className="border-t border-white/10 bg-black/80 backdrop-blur-[4px] py-20 px-6">
           <div className="max-w-6xl mx-auto">
