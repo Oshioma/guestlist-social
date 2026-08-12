@@ -22,6 +22,7 @@ import TeamPriorityCard, {
   type TeamPriorityStats,
   type TeamPriorityRow,
 } from "./TeamPriorityCard";
+import MissionBanner from "./MissionBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -440,6 +441,8 @@ export default async function DashboardPage() {
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <MissionBanner />
+
         <TokenExpiryBanner />
 
         <TodayPublishingCard stats={todayPublishing} />
