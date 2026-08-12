@@ -111,7 +111,10 @@ export function TeamMembersInline({
           return (
             <div key={m.userId} style={rowStyle}>
               <span style={{ ...avatar, background: avColor(m.name) }}>{initials(m.name)}</span>
-              <span style={nameStyle}>{m.name}</span>
+              {/* The name is an email that often overflows the column and gets
+                  ellipsised — a native title tooltip surfaces the full address
+                  on hover so it's always readable. */}
+              <span style={nameStyle} title={m.name}>{m.name}</span>
               {isOwner ? (
                 <span style={roleBoxStatic}>🟢 Owner</span>
               ) : canManage ? (
