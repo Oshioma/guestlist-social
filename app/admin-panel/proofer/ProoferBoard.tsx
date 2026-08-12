@@ -5558,7 +5558,10 @@ function DayScrubber({
       style={{
         position: "fixed",
         right: 16,
-        top: 0,
+        // Start below the sticky top nav (the app treats ~80px as the header
+        // clearance — see scrollMarginTop on the day cards) so the back-to-top
+        // arrow at the head of the rail isn't hidden behind it.
+        top: 80,
         bottom: 0,
         display: "flex",
         flexDirection: "column",
