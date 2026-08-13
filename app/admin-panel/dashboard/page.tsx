@@ -440,7 +440,17 @@ export default async function DashboardPage() {
     ];
 
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          // Cap the width so the cards don't stretch edge-to-edge on wide
+          // monitors, which left sparse cards looking mostly empty.
+          maxWidth: 1160,
+          width: "100%",
+        }}
+      >
         <MissionBanner />
 
         <TokenExpiryBanner />

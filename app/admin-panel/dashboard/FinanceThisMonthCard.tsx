@@ -94,13 +94,16 @@ export default function FinanceThisMonthCard({
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 16,
+            display: "flex",
+            flexWrap: "wrap",
+            // Cluster the figures together rather than stretching them across
+            // the whole card (which left big gaps between the numbers). They
+            // wrap onto a second row on a narrow card instead of clipping.
+            gap: "16px 44px",
           }}
         >
           {figures.map((f) => (
-            <div key={f.label}>
+            <div key={f.label} style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#71717a", marginBottom: 6 }}>
                 {f.label}
               </div>
