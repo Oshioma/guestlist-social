@@ -13,6 +13,7 @@ import {
 } from "../lib/story-idea-actions";
 import type { StoryIdea, StoryTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
+import { MAX_VIDEO_BYTES_AGENCY } from "@/lib/billing/plans";
 import PillarManager from "../components/PillarManager";
 
 type Client = { id: string; name: string };
@@ -837,6 +838,7 @@ function IdeaRow({
               compact
               accept="image/*,video/*"
               label="Upload"
+              maxBytes={MAX_VIDEO_BYTES_AGENCY}
               onUploaded={(url) => {
                 setLinkValue(url);
                 startTransition(async () => {

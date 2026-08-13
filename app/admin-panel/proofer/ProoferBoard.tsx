@@ -20,6 +20,7 @@ import {
   haptic,
 } from "../components/mobile";
 import { uploadToStorage, UPLOAD_MAX_FILE_SIZE } from "../lib/uploadToStorage";
+import { MAX_VIDEO_BYTES_DEFAULT } from "@/lib/billing/plans";
 import { createClient } from "../../../lib/supabase/client";
 import type {
   ProoferPost,
@@ -705,6 +706,9 @@ export default function ProoferBoard({
   // defaults its publish targets to these — so both Instagram AND Facebook are
   // pre-selected when both are connected — falling back to Instagram-only.
   connectedTargets = [],
+  // Plan-derived max size (bytes) for a single video upload. Defaults to the
+  // non-agency ceiling; staff/agency surfaces pass the larger limit.
+  videoMaxBytes = MAX_VIDEO_BYTES_DEFAULT,
 }: {
   clients: ClientLite[];
   months: MonthOpt[];
@@ -720,6 +724,7 @@ export default function ProoferBoard({
   standalone?: boolean;
   focusDateKey?: string;
   connectedTargets?: PublishTarget[];
+  videoMaxBytes?: number;
 }) {
   const router = useRouter();
   // The default publish targets for a new post: every connected platform (both
@@ -4113,6 +4118,7 @@ export default function ProoferBoard({
                           onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
                           label={standalone ? "🎬 Video" : "🎬"}
                           accept="video/*"
+                          maxBytes={videoMaxBytes}
                           buttonStyle={mediaChip}
                         />
                         <PasteLinkInput

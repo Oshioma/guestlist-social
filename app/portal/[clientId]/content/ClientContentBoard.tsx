@@ -15,6 +15,7 @@ import ImageUpload from "../../../admin-panel/components/ImageUpload";
 import { AutoGrowTextarea } from "../../../admin-panel/components/mobile";
 import { PROOFER_PLATFORM_LABELS, type ProoferPlatform } from "../../../admin-panel/lib/types";
 import { formatUtcClockInZone } from "@/lib/timezone";
+import { MAX_VIDEO_BYTES_DEFAULT } from "@/lib/billing/plans";
 import {
   addPortalCommentAction,
   savePortalPostAction,
@@ -50,6 +51,8 @@ type Props = {
   nextMonth: string;
   posts: ClientPost[];
   timeZone: string;
+  /** Plan-derived max size (bytes) for a single video upload. */
+  videoMaxBytes?: number;
 };
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -104,6 +107,7 @@ export default function ClientContentBoard({
   nextMonth,
   posts,
   timeZone,
+  videoMaxBytes = MAX_VIDEO_BYTES_DEFAULT,
 }: Props) {
   // Group posts by day, preserving the incoming (date, time) order.
   const byDay = new Map<string, ClientPost[]>();
@@ -179,6 +183,7 @@ export default function ClientContentBoard({
                     clientId={clientId}
                     post={post}
                     timeZone={timeZone}
+                    videoMaxBytes={videoMaxBytes}
                   />
                 ))}
               </div>
@@ -405,10 +410,12 @@ function PostCard({
   clientId,
   post,
   timeZone,
+  videoMaxBytes,
 }: {
   clientId: number;
   post: ClientPost;
   timeZone: string;
+  videoMaxBytes: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -540,6 +547,7 @@ function PostCard({
             accept="video/*"
             label="Add video"
             compact
+            maxBytes={videoMaxBytes}
             onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
           />
         </div>

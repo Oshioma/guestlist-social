@@ -7,6 +7,7 @@ import {
   deleteProoferPostAction,
 } from "../../../admin-panel/lib/proofer-actions";
 import ImageUpload from "../../../admin-panel/components/ImageUpload";
+import { MAX_VIDEO_BYTES_DEFAULT } from "@/lib/billing/plans";
 import { PROOFER_PLATFORM_LABELS } from "../../../admin-panel/lib/types";
 import type { ProoferPlatform } from "../../../admin-panel/lib/types";
 
@@ -79,6 +80,7 @@ export default function PillarOrganiser({
   // Prefix the Proofer routes live under ("" on the standalone domain, where
   // the board sits at the root; "/proofer" otherwise). See app/proofer/base.ts.
   base = "/proofer",
+  videoMaxBytes = MAX_VIDEO_BYTES_DEFAULT,
 }: {
   clientId: string;
   pillar: { id: string; name: string; color: string };
@@ -86,6 +88,8 @@ export default function PillarOrganiser({
   posts: Post[];
   occupiedDates: string[];
   base?: string;
+  /** Plan-derived max size (bytes) for a single video upload. */
+  videoMaxBytes?: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -377,6 +381,7 @@ export default function PillarOrganiser({
                     onUploaded={(url) => addImage(post, url)}
                     label="＋ Add image"
                     accept="image/*,video/*"
+                    maxBytes={videoMaxBytes}
                   />
                 </div>
 
