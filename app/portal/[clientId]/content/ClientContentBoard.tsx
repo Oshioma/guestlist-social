@@ -280,7 +280,8 @@ function SquareMedia({ url }: { url: string }) {
     return <iframe src={driveEmbedUrl(url)} style={{ ...fill, objectFit: undefined }} allow="autoplay" title="Video preview" />;
   }
   if (isVideoUrl(url)) {
-    return <video src={url} controls style={fill} />;
+    // Contain (not cover) so the whole clip is visible, uncropped.
+    return <video src={url} controls style={{ ...fill, objectFit: "contain" }} />;
   }
   if (isDriveUrl(url)) {
     return <iframe src={driveEmbedUrl(url)} style={{ ...fill, objectFit: undefined }} title="Preview" />;
@@ -303,13 +304,17 @@ function MediaCarousel({
   const [idx, setIdx] = useState(0);
   const safeIdx = Math.min(idx, urls.length - 1);
   const activeUrl = urls[safeIdx];
+  const activeIsVideo = !!activeUrl && isVideoUrl(activeUrl);
 
   return (
     <div
       style={{
         width: "100%",
-        aspectRatio: "1 / 1",
-        background: "#f4f4f5",
+        // Video shows in Instagram's tallest feed frame (4:5), contained so
+        // the whole clip is visible; images stay square.
+        aspectRatio: activeIsVideo ? "4 / 5" : "1 / 1",
+        maxHeight: activeIsVideo ? "80vh" : undefined,
+        background: activeIsVideo ? "#000" : "#f4f4f5",
         borderRadius: 10,
         overflow: "hidden",
         position: "relative",
