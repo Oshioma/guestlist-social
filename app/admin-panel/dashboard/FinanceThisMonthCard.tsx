@@ -95,21 +95,27 @@ export default function FinanceThisMonthCard({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 16,
+            // Keep all four figures on one horizontal bar when there's room,
+            // but wrap to a 2×2 grid on a narrower card instead of clipping the
+            // numbers (the card clips its overflow).
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            gap: "16px 14px",
           }}
         >
           {figures.map((f) => (
-            <div key={f.label}>
+            // minWidth:0 lets each cell shrink so a long value can't blow the
+            // grid wider than the card.
+            <div key={f.label} style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#71717a", marginBottom: 6 }}>
                 {f.label}
               </div>
               <div
                 style={{
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: 700,
                   color: f.color ?? "#18181b",
                   letterSpacing: "-0.02em",
+                  whiteSpace: "nowrap",
                 }}
               >
                 {money(f.value)}
