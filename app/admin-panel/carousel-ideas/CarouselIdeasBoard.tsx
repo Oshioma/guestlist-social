@@ -14,6 +14,7 @@ import {
 } from "../lib/carousel-idea-actions";
 import type { CarouselIdea, CarouselTheme, ContentPillar } from "../lib/types";
 import ImageUpload from "../components/ImageUpload";
+import { MAX_VIDEO_BYTES_AGENCY } from "@/lib/billing/plans";
 import PillarManager from "../components/PillarManager";
 
 type Client = { id: string; name: string };
@@ -844,6 +845,7 @@ function IdeaRow({
               compact
               accept="image/*,video/*"
               label="Upload"
+              maxBytes={MAX_VIDEO_BYTES_AGENCY}
               onUploaded={(url) => {
                 setLinkValue(url);
                 startTransition(async () => {
@@ -1028,6 +1030,7 @@ function CaptionsEditor({ ideaId, captions, captionImages }: { ideaId: string; c
                   folder={`carousel/${ideaId}`}
                   compact
                   accept="image/*,video/*"
+                  maxBytes={MAX_VIDEO_BYTES_AGENCY}
                   onUploaded={(url) => updateImageLink(i, url)}
                 />
               </div>

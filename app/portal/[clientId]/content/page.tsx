@@ -14,6 +14,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import { canViewClient, getViewer } from "../../../admin-panel/lib/viewer";
+import { getViewerMaxVideoUploadBytes } from "@/lib/billing/team-billing";
 import ClientContentBoard, {
   type ClientPost,
   type ClientComment,
@@ -183,6 +184,8 @@ export default async function PortalContentPage({
     comments: commentsByPost.get(String(p.id)) ?? [],
   }));
 
+  const videoMaxBytes = await getViewerMaxVideoUploadBytes();
+
   return (
     <ClientContentBoard
       clientId={clientId}
@@ -192,6 +195,7 @@ export default async function PortalContentPage({
       nextMonth={shiftMonth(month, 1)}
       posts={posts}
       timeZone={timeZone}
+      videoMaxBytes={videoMaxBytes}
     />
   );
 }

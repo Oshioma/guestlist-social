@@ -1,6 +1,65 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { planConfig, type Plan } from "./plans";
+import {
+  planConfig,
+  maxVideoUploadBytes,
+  MAX_VIDEO_BYTES_DEFAULT,
+  type Plan,
+} from "./plans";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getViewer } from "@/app/admin-panel/lib/viewer";
+
+const PLAN_RANK: Record<Plan, number> = { free: 0, pro: 1, agency: 2 };
+
+/** The most generous plan across a set of team ids (defaults to free). */
+async function bestPlanForTeamIds(
+  admin: SupabaseClient,
+  teamIds: string[]
+): Promise<Plan> {
+  if (teamIds.length === 0) return "free";
+  const { data: teams } = await admin
+    .from("teams")
+    .select("plan")
+    .in("id", teamIds);
+  let best: Plan = "free";
+  for (const t of teams ?? []) {
+    const raw = (t.plan as string) ?? "free";
+    const p: Plan = raw in PLAN_RANK ? (raw as Plan) : "free";
+    if (PLAN_RANK[p] > PLAN_RANK[best]) best = p;
+  }
+  return best;
+}
+
+/** The most generous plan across every team a user belongs to. */
+export async function bestPlanForUser(
+  admin: SupabaseClient,
+  userId: string
+): Promise<Plan> {
+  const { data: memberships } = await admin
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", userId);
+  const ids = [...new Set((memberships ?? []).map((m) => String(m.team_id)))];
+  return bestPlanForTeamIds(admin, ids);
+}
+
+/**
+ * Max size (bytes) of a single video upload for the CURRENT viewer.
+ *
+ *  - Agency staff always get the Agency ceiling (they run the whole agency).
+ *  - A team member / client gets the most generous plan across their teams.
+ *  - No viewer resolved → the default (non-agency) ceiling.
+ *
+ * Self-contained (resolves the viewer itself) so pages can pass the result
+ * straight into an upload board without threading identity through.
+ */
+export async function getViewerMaxVideoUploadBytes(): Promise<number> {
+  const viewer = await getViewer();
+  if (!viewer) return MAX_VIDEO_BYTES_DEFAULT;
+  if (viewer.role === "admin") return maxVideoUploadBytes("agency");
+  const admin = createAdminClient();
+  return maxVideoUploadBytes(await bestPlanForUser(admin, viewer.userId));
+}
 
 // Server-side billing helpers that touch the database. Kept separate from the
 // pure catalogue in ./plans.ts so client components can import plan data

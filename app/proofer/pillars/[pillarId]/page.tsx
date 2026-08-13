@@ -10,6 +10,7 @@ import { getMyTeams, getShowClients, getLastProoferClientId } from "../../navDat
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import PillarOrganiser from "./PillarOrganiser";
 import { getProoferBase } from "../../base";
+import { getViewerMaxVideoUploadBytes } from "@/lib/billing/team-billing";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ export default async function PillarOrganisePage({
     const occupiedDates = await getProoferOccupiedDates(clientId);
     const pillar = pillars.find((p) => p.id === pillarId) ?? null;
     const pillarPosts = allPillarPosts.filter((p) => p.pillarId === pillarId);
+    const videoMaxBytes = await getViewerMaxVideoUploadBytes();
 
     return (
       <>
@@ -89,6 +91,7 @@ export default async function PillarOrganisePage({
                 posts={pillarPosts}
                 occupiedDates={occupiedDates}
                 base={base}
+                videoMaxBytes={videoMaxBytes}
               />
             ) : (
               <EmptyState

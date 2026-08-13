@@ -5,6 +5,7 @@ import { getDisplayTimezone } from "../../../lib/app-settings";
 import ProoferBoard from "./ProoferBoard";
 import EmptyState from "../components/EmptyState";
 import { getLastProoferClientId } from "../../proofer/navData";
+import { getViewerMaxVideoUploadBytes } from "@/lib/billing/team-billing";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,8 @@ export default async function ProoferPage({
       console.error("Display timezone load error:", err);
     }
 
+    const videoMaxBytes = await getViewerMaxVideoUploadBytes();
+
     return (
       <ProoferBoard
         clients={data.clients}
@@ -77,6 +80,7 @@ export default async function ProoferPage({
         initialPostIdeas={data.postIdeas}
         connectedTargets={data.connectedTargets}
         timeZone={displayTimezone}
+        videoMaxBytes={videoMaxBytes}
       />
     );
   } catch (err) {

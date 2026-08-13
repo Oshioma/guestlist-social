@@ -23,6 +23,7 @@ import {
 } from "./navData";
 import { isSuperAdmin } from "@/lib/auth/permissions";
 import { getProoferBase } from "./base";
+import { getViewerMaxVideoUploadBytes } from "@/lib/billing/team-billing";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +154,8 @@ export default async function ProoferStandalonePage({
       console.error("Display timezone load error:", err);
     }
 
+    const videoMaxBytes = await getViewerMaxVideoUploadBytes();
+
     // All-time pillar posts power the nav's pillar hover popups (the board's
     // own data stays month-scoped).
     const pillarPosts = selectedClientId
@@ -217,6 +220,7 @@ export default async function ProoferStandalonePage({
               initialPostIdeas={data.postIdeas}
               connectedTargets={data.connectedTargets}
               timeZone={displayTimezone}
+              videoMaxBytes={videoMaxBytes}
               basePath={base || "/"}
               // Publish queue now lives inside the Proofer app itself
               // ("/publish" on postproofer.com, "/proofer/publish" elsewhere)

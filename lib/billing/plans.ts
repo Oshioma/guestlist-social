@@ -29,6 +29,12 @@ export type PlanConfig = {
   clients: boolean;
   /** White-label / custom build tier. */
   whiteLabel: boolean;
+  /**
+   * Max size (in bytes) of a single video upload on this plan. Agency gets a
+   * larger ceiling; everyone else shares the default. Enforced in the upload UI
+   * (see maxVideoUploadBytes()).
+   */
+  maxVideoUploadBytes: number;
   /** Marketing bullets shown on the billing panel. */
   features: string[];
   /**
@@ -38,6 +44,11 @@ export type PlanConfig = {
    */
   priceEnv: string | null;
 };
+
+/** Video upload ceiling for non-agency plans. */
+export const MAX_VIDEO_BYTES_DEFAULT = 200 * 1024 * 1024; // 200 MB
+/** Video upload ceiling on the Agency plan. */
+export const MAX_VIDEO_BYTES_AGENCY = 500 * 1024 * 1024; // 500 MB
 
 export const PLANS: Record<Plan, PlanConfig> = {
   free: {
@@ -50,6 +61,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     collaborators: false,
     clients: false,
     whiteLabel: false,
+    maxVideoUploadBytes: MAX_VIDEO_BYTES_DEFAULT,
     features: ["Your own workspace", "2 social media accounts", "Email support"],
     priceEnv: null,
   },
@@ -63,6 +75,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     collaborators: true,
     clients: false,
     whiteLabel: false,
+    maxVideoUploadBytes: MAX_VIDEO_BYTES_DEFAULT,
     features: ["Teams for clients & projects", "10 social media accounts", "Invite your team", "Email support"],
     priceEnv: "STRIPE_PRICE_PRO",
   },
@@ -76,6 +89,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     collaborators: true,
     clients: true,
     whiteLabel: true,
+    maxVideoUploadBytes: MAX_VIDEO_BYTES_AGENCY,
     features: [
       "Teams for clients & projects",
       "100 social media accounts",
@@ -109,6 +123,11 @@ export function isPaidPlan(plan: string | null | undefined): plan is "pro" | "ag
 /** Max teams a user may own on this plan; null = unlimited. */
 export function maxOwnedTeams(plan: string | null | undefined): number | null {
   return planConfig(plan).maxOwnedTeams;
+}
+
+/** Max size (bytes) of a single video upload on this plan. */
+export function maxVideoUploadBytes(plan: string | null | undefined): number {
+  return planConfig(plan).maxVideoUploadBytes;
 }
 
 /** The Stripe Price id backing a plan, or null if unconfigured / free. */

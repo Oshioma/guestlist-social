@@ -20,6 +20,11 @@ type Props = {
    * so progress feedback is never hidden.
    */
   buttonStyle?: React.CSSProperties;
+  /**
+   * Max accepted file size in bytes. Defaults to the shared image limit; video
+   * uploaders pass a larger, plan-derived ceiling (see maxVideoUploadBytes()).
+   */
+  maxBytes?: number;
 };
 
 export default function ImageUpload({
@@ -30,6 +35,7 @@ export default function ImageUpload({
   bucket,
   accept,
   buttonStyle,
+  maxBytes = UPLOAD_MAX_FILE_SIZE,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -39,8 +45,9 @@ export default function ImageUpload({
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > UPLOAD_MAX_FILE_SIZE) {
-      setError("File too large (max 30 MB)");
+    if (file.size > maxBytes) {
+      const mb = Math.round(maxBytes / (1024 * 1024));
+      setError(`File too large (max ${mb} MB)`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
