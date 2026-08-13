@@ -4499,6 +4499,7 @@ export default function ProoferBoard({
                     const previewIdx = previewIdxMap[key] ?? 0;
                     const safeIdx = Math.min(previewIdx, Math.max(0, draft.mediaUrls.length - 1));
                     const activeUrl = draft.mediaUrls[safeIdx] ?? "";
+                    const activeIsVideo = !!activeUrl && (isDriveVideo(activeUrl) || isVideoUrl(activeUrl));
                     const setPreviewIdx = (n: number) => setPreviewIdxMap((prev) => ({ ...prev, [key]: n }));
                     return (
                     <div
@@ -4595,15 +4596,23 @@ export default function ProoferBoard({
                         )}
                       </div>
 
-                      {/* Image */}
+                      {/* Image / video preview */}
                       <div
                         style={{
                           width: "100%",
-                          // An empty square preview eats most of a phone screen,
-                          // so shrink the placeholder until there's media to show.
-                          aspectRatio: isNarrow && !activeUrl ? undefined : "1 / 1",
+                          // Video shows in Instagram's tallest feed frame (4:5)
+                          // and is contained (not cropped) so the whole clip is
+                          // visible; images stay square. An empty square preview
+                          // eats most of a phone screen, so shrink the
+                          // placeholder until there's media to show.
+                          aspectRatio: activeIsVideo
+                            ? "4 / 5"
+                            : isNarrow && !activeUrl
+                            ? undefined
+                            : "1 / 1",
                           height: isNarrow && !activeUrl ? 90 : undefined,
-                          background: "#f4f4f5",
+                          maxHeight: activeIsVideo ? "80vh" : undefined,
+                          background: activeIsVideo ? "#000" : "#f4f4f5",
                           overflow: "hidden",
                           position: "relative",
                         }}
@@ -4617,7 +4626,7 @@ export default function ProoferBoard({
                               title="Video preview"
                             />
                           ) : isVideoUrl(activeUrl) ? (
-                            <video src={activeUrl} controls style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+                            <video src={activeUrl} controls style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} />
                           ) : (
                             <img src={activeUrl} alt="Preview" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                           )
