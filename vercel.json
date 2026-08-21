@@ -1,37 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app/**/*.tsx": {
-      "maxDuration": 30
-    },
-    "app/api/**/*.ts": {
-      "maxDuration": 30
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/monthly-reviews",
-      "schedule": "0 9 1 * *"
-    },
-    {
-      "path": "/api/measure-decision-outcomes",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/retire-stale-patterns",
-      "schedule": "0 3 * * 1"
-    },
-    {
-      "path": "/api/cron/publish-meta-queue",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/fetch-post-insights",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/refresh-instagram-tokens",
-      "schedule": "0 4 * * *"
-    }
-  ]
+  }
 }
