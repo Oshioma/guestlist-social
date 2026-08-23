@@ -19,6 +19,11 @@ import { logMetaWrite } from "./meta-write-log";
 const API_VERSION = "v25.0";
 const BASE = `https://graph.facebook.com/${API_VERSION}`;
 
+// Graph writes happen inside the request that creates a campaign. Without a
+// deadline a slow or unresponsive Meta keeps that invocation open, which is
+// what leaves the "Creating…" button spinning with nothing to show for it.
+const GRAPH_TIMEOUT_MS = 15_000;
+
 function getCredentials() {
   const token = process.env.META_ACCESS_TOKEN;
   let accountId = process.env.META_AD_ACCOUNT_ID;
@@ -131,6 +136,7 @@ export async function createMetaCampaign(
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: campaignParams,
+      signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
     });
     const campaignData = (await campaignRes.json()) as {
       id?: string;
@@ -207,6 +213,7 @@ export async function createMetaCampaign(
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: adSetParams,
+      signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
     });
     const adSetData = (await adSetRes.json()) as {
       id?: string;

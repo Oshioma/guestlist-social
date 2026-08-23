@@ -6,6 +6,9 @@ import { createClient } from "../../../lib/supabase/server";
 import { createMetaCampaign } from "../../../lib/meta-campaign-create";
 
 export async function createCampaignAction(clientId: string, formData: FormData) {
+  // Step timings end up in the server logs. A create that feels stuck is
+  // otherwise indistinguishable from one that never started.
+  const startedAt = Date.now();
   const supabase = await createClient();
 
   const name = String(formData.get("name") ?? "").trim();
@@ -98,6 +101,8 @@ export async function createCampaignAction(clientId: string, formData: FormData)
       });
   }
 
+  const afterInsertMs = Date.now() - startedAt;
+
   revalidatePath(`/admin-panel/clients/${clientId}`);
 
   // If ad fields were included, create the ad too (one-click flow)
@@ -128,7 +133,13 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     }
   }
 
-  redirect(`/app/clients/${clientId}/campaigns/${insertedId}`);
+  console.log(
+    `createCampaignAction: campaign ${insertedId} — insert ${afterInsertMs}ms, total ${
+      Date.now() - startedAt
+    }ms`
+  );
+
+  redirect(`/app/clients/${clientId}/campaigns/${insertedId}?created=1`);
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {
