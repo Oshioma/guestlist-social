@@ -1870,14 +1870,18 @@ export default function ProoferBoard({
     await handleGenerateIdeas();
   }
 
-  const visibleDays = useMemo(() => {
+  // Build the day list for a given history setting. Parameterised (rather than
+  // reading `showPast` directly) so the mobile "previous day" arrow can ask for
+  // the past-inclusive list without turning history on first — see
+  // `previousHistoryKey` below.
+  const buildVisibleDays = useCallback((includePast: boolean) => {
     let filtered = postFrequency === "every-other-day"
       ? days.filter((_, i) => i % 2 === 0)
       : days;
     // In the current month, collapse elapsed days by default so the board
     // opens on today. "View history" (showPast) reveals them. Past/future
     // months are shown in full — they're history or planning by definition.
-    if (isCurrentMonth && !showPast) {
+    if (isCurrentMonth && !includePast) {
       const todayTime = startOfToday().getTime();
       filtered = filtered.filter((d) => {
         const dd = new Date(d);
@@ -1919,7 +1923,12 @@ export default function ProoferBoard({
       }
     }
     return filtered;
-  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, showPast, focusDateKey]);
+  }, [days, drafts, postsByKey, hideEmpty, postIdeasByKey, postFrequency, isCurrentMonth, focusDateKey]);
+
+  const visibleDays = useMemo(
+    () => buildVisibleDays(showPast),
+    [buildVisibleDays, showPast]
+  );
 
   // ── Mobile: one day per screen ─────────────────────────────────────────────
   // Scrolling past a month of full-size editors is hopeless on a phone, so the
@@ -1956,6 +1965,35 @@ export default function ProoferBoard({
     [focusedIndex, visibleKeys]
   );
 
+  // The day just before the focused one *including* elapsed days. In the
+  // current month the board opens on today with history collapsed, so today is
+  // index 0 and "previous day" had nothing to step to — the back arrow sat
+  // greyed out and past posts were only reachable via the "View all days" pill
+  // at the foot of the board. Reveal history and land on that day instead, so
+  // the arrow always means "the day before this one".
+  const previousHistoryKey = useMemo(() => {
+    // Only the phone layout pages day-by-day, so skip the work elsewhere.
+    if (!isNarrow || !focusedKey || showPast || !isCurrentMonth) return null;
+    const keys = buildVisibleDays(true).map((d) => toDateKey(d));
+    const i = keys.indexOf(focusedKey);
+    return i > 0 ? keys[i - 1] : null;
+  }, [isNarrow, focusedKey, showPast, isCurrentMonth, buildVisibleDays]);
+
+  // Step back a day, opening up history when we're sitting on the first
+  // non-elapsed day of the current month.
+  const goPrevDay = useCallback(() => {
+    if (focusedIndex > 0) {
+      stepDay(-1);
+      return;
+    }
+    if (!previousHistoryKey) return;
+    setShowPast(true);
+    setFocusedKey(previousHistoryKey);
+    haptic(8);
+  }, [focusedIndex, stepDay, previousHistoryKey]);
+
+  const canGoPrevDay = focusedIndex > 0 || Boolean(previousHistoryKey);
+
   // On a phone render only the focused day; desktop keeps the full list.
   const renderedDays = useMemo(() => {
     if (!isNarrow) return visibleDays;
@@ -1978,7 +2016,8 @@ export default function ProoferBoard({
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    stepDay(dx < 0 ? 1 : -1);
+    if (dx < 0) stepDay(1);
+    else goPrevDay();
   };
 
   const scrolledRef = useRef(false);
@@ -3088,10 +3127,15 @@ export default function ProoferBoard({
                     >
                       <button
                         type="button"
-                        onClick={() => stepDay(-1)}
-                        disabled={focusedIndex <= 0}
+                        onClick={goPrevDay}
+                        disabled={!canGoPrevDay}
                         aria-label="Previous day"
-                        style={dayArrowStyle(focusedIndex <= 0)}
+                        title={
+                          focusedIndex <= 0 && previousHistoryKey
+                            ? "Show earlier days"
+                            : "Previous day"
+                        }
+                        style={dayArrowStyle(!canGoPrevDay)}
                       >
                         ‹
                       </button>
