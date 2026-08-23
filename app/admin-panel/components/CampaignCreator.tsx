@@ -81,6 +81,7 @@ export default function CampaignCreator({
         submitLabel={submitLabel}
         action={action}
         initialValues={prefill}
+        draftKey={`campaign-draft:${clientId}`}
       />
 
       {hasAny && (

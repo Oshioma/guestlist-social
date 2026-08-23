@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useActionState, useEffect, useState } from "react";
+import React, { useActionState, useEffect, useRef, useState } from "react";
 import AiInlineSuggestion from "./AiInlineSuggestion";
 import ImageUpload from "./ImageUpload";
 import CreativeLibraryPicker from "./CreativeLibraryPicker";
@@ -46,6 +46,13 @@ type Props = {
   submitLabel?: string;
   action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
   initialValues?: CampaignFormValues;
+  /**
+   * When set, the form keeps a local draft under this key so a hard reload
+   * (expired session, a redeploy invalidating the server action id) can't throw
+   * away what was typed. Only the create form passes one — edit forms already
+   * have their values in the database.
+   */
+  draftKey?: string;
 };
 
 function getAudiencePresets(industry?: string): { label: string; value: string }[] {
@@ -121,8 +128,35 @@ export default function CampaignForm({
   submitLabel = "Create campaign",
   action,
   initialValues,
+  draftKey,
 }: Props) {
   const [state, formAction, pending] = useActionState(action, { error: null });
+
+  // Every field below is CONTROLLED on purpose. React 19 auto-resets an
+  // uncontrolled `<form action={fn}>` as soon as the action returns, so when
+  // the server action came back with an error the whole form blanked itself
+  // and the operator lost everything they had typed. Controlled inputs are
+  // never reset, so a failed submit now leaves the form exactly as it was.
+  const [name, setName] = useState(initialValues?.name ?? "");
+  const [objective, setObjective] = useState(initialValues?.objective ?? "engagement");
+  const [budget, setBudget] = useState(
+    initialValues?.budget != null ? String(initialValues.budget) : "0"
+  );
+  const [audience, setAudience] = useState(initialValues?.audience ?? "");
+  const [placement, setPlacement] = useState(initialValues?.placement ?? "automatic");
+  const [status, setStatus] = useState(initialValues?.status ?? "testing");
+  const [startDate, setStartDate] = useState(initialValues?.startDate ?? "");
+  const [endDate, setEndDate] = useState(initialValues?.endDate ?? "");
+  const budgetNumber = Number(budget) || 0;
+
+  // Errors render at the top of a long form — well above the submit button the
+  // operator just clicked — so scroll them into view instead of letting the
+  // submit look like a silent no-op.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!state.error) return;
+    errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [state]);
 
   type Sug = { suggestion: string | null; reasoning: string | null };
   type SugList = Sug[];
@@ -150,7 +184,7 @@ export default function CampaignForm({
     return fetch("/api/ai-suggest-all", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, objective: initialValues?.objective ?? "engagement" }),
+      body: JSON.stringify({ clientId, objective }),
     })
       .then((r) => r.json())
       .then((data) => {
@@ -195,6 +229,117 @@ export default function CampaignForm({
   const [adCtaType, setAdCtaType] = useState("learn_more");
   const [adDestinationUrl, setAdDestinationUrl] = useState(clientWebsite ?? "");
 
+  // ── Draft recovery ─────────────────────────────────────────────────────
+  // Controlled fields survive a failed server action, but a full page reload
+  // (session expiry mid-form, or a deploy that invalidates the server action
+  // id — Next silently refreshes the page in that case) still starts from
+  // blank. Mirror the form into localStorage so nothing is ever lost, and drop
+  // the draft once the campaign has actually been created.
+  const [draftRestored, setDraftRestored] = useState(false);
+  const submittedRef = useRef(false);
+
+  // A suggestion applied in CampaignCreator remounts this form with prefilled
+  // values — don't clobber those with an older draft.
+  const hasPrefill = Boolean(initialValues?.name || initialValues?.audience);
+
+  useEffect(() => {
+    if (!draftKey || hasPrefill) return;
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(draftKey);
+    } catch {
+      return; // storage blocked — drafts are best-effort
+    }
+    if (!raw) return;
+    try {
+      const d = JSON.parse(raw) as Record<string, unknown>;
+      const str = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : null);
+      const apply = (k: string, set: (v: string) => void) => {
+        const v = str(k);
+        if (v !== null && v !== "") set(v);
+      };
+      apply("name", setName);
+      apply("objective", setObjective);
+      apply("budget", setBudget);
+      apply("audience", setAudience);
+      apply("placement", setPlacement);
+      apply("status", setStatus);
+      apply("startDate", setStartDate);
+      apply("endDate", setEndDate);
+      apply("adImageUrl", setAdImageUrl);
+      apply("adHeadline", setAdHeadline);
+      apply("adBody", setAdBody);
+      apply("adCtaType", setAdCtaType);
+      apply("adDestinationUrl", setAdDestinationUrl);
+      setDraftRestored(true);
+    } catch {
+      /* corrupt draft — ignore it */
+    }
+  }, [draftKey, hasPrefill]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const isEmpty = !name && !audience && !adHeadline && !adBody && !adImageUrl;
+    try {
+      if (isEmpty) window.localStorage.removeItem(draftKey);
+      else
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            name,
+            objective,
+            budget,
+            audience,
+            placement,
+            status,
+            startDate,
+            endDate,
+            adImageUrl,
+            adHeadline,
+            adBody,
+            adCtaType,
+            adDestinationUrl,
+          })
+        );
+    } catch {
+      /* storage full or blocked — never break the form over a draft */
+    }
+  }, [
+    draftKey,
+    name,
+    objective,
+    budget,
+    audience,
+    placement,
+    status,
+    startDate,
+    endDate,
+    adImageUrl,
+    adHeadline,
+    adBody,
+    adCtaType,
+    adDestinationUrl,
+  ]);
+
+  // A submit that came back with an error did NOT save anything, so the draft
+  // must stay put.
+  useEffect(() => {
+    if (state.error) submittedRef.current = false;
+  }, [state]);
+
+  // Unmounting while a submit is in flight means the action redirected, i.e.
+  // the campaign was created — the draft has served its purpose.
+  useEffect(() => {
+    return () => {
+      if (!draftKey || !submittedRef.current) return;
+      try {
+        window.localStorage.removeItem(draftKey);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [draftKey]);
+
   // AI ad copy suggestions
   type AdVariation = { headline: string; body: string; cta: string; reasoning: string };
   const [adVariations, setAdVariations] = useState<AdVariation[]>([]);
@@ -216,7 +361,7 @@ export default function CampaignForm({
     return fetch("/api/ai-write-ad-copy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, objective: initialValues?.objective ?? "engagement", campaignName: initialValues?.name ?? "" }),
+      body: JSON.stringify({ clientId, objective, campaignName: name }),
     })
       .then((r) => r.json())
       .then((data) => {
@@ -247,9 +392,67 @@ export default function CampaignForm({
         padding: 24,
       }}
     >
-      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <form
+        action={formAction}
+        onSubmit={() => {
+          submittedRef.current = true;
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 16 }}
+      >
+        {draftRestored && !state.error && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              fontSize: 13,
+              color: "#3f3f46",
+              background: "#fafafa",
+              border: "1px solid #e4e4e7",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            <span>Restored your unsaved draft.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setName("");
+                setObjective("engagement");
+                setBudget("0");
+                setAudience("");
+                setPlacement("automatic");
+                setStatus("testing");
+                setStartDate("");
+                setEndDate("");
+                setAdImageUrl("");
+                setAdHeadline("");
+                setAdBody("");
+                setAdCtaType("learn_more");
+                setAdDestinationUrl(clientWebsite ?? "");
+                setDraftRestored(false);
+              }}
+              style={{
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+                color: "#52525b",
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "5px 10px",
+                borderRadius: 8,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              Start blank
+            </button>
+          </div>
+        )}
+
         {state.error && (
           <div
+            ref={errorRef}
             style={{
               fontSize: 13,
               color: "#b91c1c",
@@ -273,16 +476,14 @@ export default function CampaignForm({
                 loading={aiLoading}
                 onNextIdea={() => handleNextForField("headline")}
                 nextLoading={nextLoadingField === "headline"}
-                onApply={(v) => {
-                  const input = document.querySelector<HTMLInputElement>("input[name='name']");
-                  if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
-                }}
+                onApply={(v) => setName(v)}
               />
             )}
           </div>
           <input
             name="name"
-            defaultValue={initialValues?.name ?? ""}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             style={inputStyle}
             placeholder="Summer sale — image test"
             required
@@ -291,7 +492,12 @@ export default function CampaignForm({
 
         <div>
           <label style={labelStyle}>Objective</label>
-          <select name="objective" defaultValue={initialValues?.objective ?? "engagement"} style={inputStyle}>
+          <select
+            name="objective"
+            value={objective}
+            onChange={(e) => setObjective(e.target.value)}
+            style={inputStyle}
+          >
             <option value="engagement">Engagement</option>
             <option value="conversions">Conversions</option>
             <option value="traffic">Traffic</option>
@@ -313,8 +519,7 @@ export default function CampaignForm({
                 onApply={(v) => {
                   const match = v.match(/(\d+(?:\.\d+)?)/);
                   const num = match ? parseFloat(match[1]) : NaN;
-                  const input = document.querySelector<HTMLInputElement>("input[name='budget']");
-                  if (input && Number.isFinite(num)) { input.value = String(num); input.dispatchEvent(new Event("input", { bubbles: true })); }
+                  if (Number.isFinite(num)) setBudget(String(num));
                 }}
               />
             )}
@@ -324,7 +529,8 @@ export default function CampaignForm({
             type="number"
             min="0"
             step="0.01"
-            defaultValue={initialValues?.budget ?? 0}
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
             style={inputStyle}
           />
         </div>
@@ -339,16 +545,14 @@ export default function CampaignForm({
                 loading={aiLoading}
                 onNextIdea={() => handleNextForField("audience")}
                 nextLoading={nextLoadingField === "audience"}
-                onApply={(v) => {
-                  const input = document.querySelector<HTMLInputElement>("input[name='audience']");
-                  if (input) { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); }
-                }}
+                onApply={(v) => setAudience(v)}
               />
             )}
           </div>
           <input
             name="audience"
-            defaultValue={initialValues?.audience ?? ""}
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
             style={inputStyle}
             placeholder="18-35, London, interests: nightlife"
           />
@@ -357,13 +561,7 @@ export default function CampaignForm({
               <button
                 key={preset.label}
                 type="button"
-                onClick={() => {
-                  const input = document.querySelector<HTMLInputElement>("input[name='audience']");
-                  if (input) {
-                    input.value = preset.value;
-                    input.dispatchEvent(new Event("input", { bubbles: true }));
-                  }
-                }}
+                onClick={() => setAudience(preset.value)}
                 style={{
                   padding: "4px 10px",
                   borderRadius: 999,
@@ -382,14 +580,21 @@ export default function CampaignForm({
         </div>
 
         <DurationPicker
-          budget={initialValues?.budget ?? 0}
-          initialStartDate={initialValues?.startDate}
-          initialEndDate={initialValues?.endDate}
+          budget={budgetNumber}
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
         />
 
         <div>
           <label style={labelStyle}>Placement</label>
-          <select name="placement" defaultValue={initialValues?.placement ?? "automatic"} style={inputStyle}>
+          <select
+            name="placement"
+            value={placement}
+            onChange={(e) => setPlacement(e.target.value)}
+            style={inputStyle}
+          >
             <option value="automatic">Automatic (recommended)</option>
             <option value="feed_only">Feed only</option>
             <option value="stories_only">Stories only</option>
@@ -399,7 +604,12 @@ export default function CampaignForm({
 
         <div>
           <label style={labelStyle}>Status</label>
-          <select name="status" defaultValue={initialValues?.status ?? "testing"} style={inputStyle}>
+          <select
+            name="status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            style={inputStyle}
+          >
             <option value="testing">Draft — paused until ready</option>
             <option value="live">Live — active and spending</option>
             <option value="paused">Paused</option>
@@ -563,6 +773,10 @@ export default function CampaignForm({
           </>
         )}
 
+        {state.error && (
+          <div style={{ fontSize: 13, color: "#b91c1c" }}>{state.error}</div>
+        )}
+
         <button
           type="submit"
           disabled={pending}
@@ -591,16 +805,18 @@ export default function CampaignForm({
 
 function DurationPicker({
   budget,
-  initialStartDate,
-  initialEndDate,
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
 }: {
   budget: number;
-  initialStartDate?: string;
-  initialEndDate?: string;
+  startDate: string;
+  endDate: string;
+  onStartDateChange: (v: string) => void;
+  onEndDateChange: (v: string) => void;
 }) {
   const [showCustom, setShowCustom] = React.useState(false);
-  const [startDate, setStartDate] = React.useState(initialStartDate ?? "");
-  const [endDate, setEndDate] = React.useState(initialEndDate ?? "");
   const [selectedPreset, setSelectedPreset] = React.useState<string | null>(null);
 
   const presets = [
@@ -615,8 +831,8 @@ function DurationPicker({
     start.setDate(start.getDate() + 1);
     const end = new Date(start);
     end.setDate(end.getDate() + days);
-    setStartDate(start.toISOString().split("T")[0]);
-    setEndDate(end.toISOString().split("T")[0]);
+    onStartDateChange(start.toISOString().split("T")[0]);
+    onEndDateChange(end.toISOString().split("T")[0]);
     setSelectedPreset(label);
     setShowCustom(false);
   }
@@ -626,17 +842,7 @@ function DurationPicker({
       ? Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000)))
       : 0;
 
-  // Read current budget from the input (it may have changed since page load)
-  const [liveBudget, setLiveBudget] = React.useState(budget);
-  React.useEffect(() => {
-    const input = document.querySelector<HTMLInputElement>("input[name='budget']");
-    if (!input) return;
-    const handler = () => setLiveBudget(Number(input.value) || 0);
-    input.addEventListener("input", handler);
-    handler();
-    return () => input.removeEventListener("input", handler);
-  }, []);
-  const totalBudget = dayCount * liveBudget;
+  const totalBudget = dayCount * budget;
 
   return (
     <div>
@@ -685,8 +891,8 @@ function DurationPicker({
         {dayCount > 0 && (
           <span style={{ fontSize: 13, color: "#18181b", fontWeight: 600, marginLeft: 4 }}>
             {dayCount} day{dayCount === 1 ? "" : "s"}
-            {liveBudget > 0 && <> · Total: £{totalBudget.toFixed(0)}</>}
-            {liveBudget === 0 && <> · Set budget above</>}
+            {budget > 0 && <> · Total: £{totalBudget.toFixed(0)}</>}
+            {budget === 0 && <> · Set budget above</>}
           </span>
         )}
       </div>
@@ -709,7 +915,7 @@ function DurationPicker({
             <input
               type="date"
               value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setSelectedPreset(null); }}
+              onChange={(e) => { onStartDateChange(e.target.value); setSelectedPreset(null); }}
               style={inputStyle}
             />
           </div>
@@ -718,7 +924,7 @@ function DurationPicker({
             <input
               type="date"
               value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setSelectedPreset(null); }}
+              onChange={(e) => { onEndDateChange(e.target.value); setSelectedPreset(null); }}
               style={inputStyle}
             />
           </div>
