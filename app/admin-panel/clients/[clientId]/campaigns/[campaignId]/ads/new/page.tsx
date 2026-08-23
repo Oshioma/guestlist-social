@@ -96,7 +96,7 @@ export default async function NewAdPage({ params }: Props) {
     }
 
     const supabaseServer = await createClient();
-    await supabaseServer.from("ads").insert({
+    const { error: adError } = await supabaseServer.from("ads").insert({
       client_id: clientId,
       campaign_id: campaignId,
       meta_id: result.adId,
@@ -107,6 +107,15 @@ export default async function NewAdPage({ params }: Props) {
       creative_body: data.body,
       creative_cta: data.ctaType,
     });
+
+    if (adError) {
+      console.error("metaAction ads insert error:", adError);
+      return {
+        error: `The ad was created in Meta but could not be saved here — ${adError.message}${
+          adError.code ? ` (${adError.code})` : ""
+        }`,
+      };
+    }
 
     revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
     revalidatePath(`/admin-panel/clients/${clientId}/ads`);
@@ -167,6 +176,7 @@ export default async function NewAdPage({ params }: Props) {
           objective={(campaign as any).objective ?? "engagement"}
           existingCreatives={creativeSources}
           onSubmit={metaAction}
+          draftKey={`ad-draft:${clientId}:${campaignId}`}
         />
       ) : (
         <AdForm

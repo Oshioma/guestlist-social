@@ -194,7 +194,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
               return { error: `Meta ${result.step}: ${result.error}` };
             }
             const supabaseInner = await createClient();
-            await supabaseInner.from("ads").insert({
+            const { error: adError } = await supabaseInner.from("ads").insert({
               client_id: clientId,
               campaign_id: campaignId,
               meta_id: result.adId,
@@ -205,9 +205,17 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
               creative_body: data.body,
               creative_cta: data.ctaType,
             });
+            if (adError) {
+              console.error("inlineMetaAction ads insert error:", adError);
+              return {
+                error: `The ad was created in Meta but could not be saved here — ${adError.message}${
+                  adError.code ? ` (${adError.code})` : ""
+                }`,
+              };
+            }
           } else {
             const supabaseInner = await createClient();
-            await supabaseInner.from("ads").insert({
+            const { error: adError } = await supabaseInner.from("ads").insert({
               client_id: clientId,
               campaign_id: campaignId,
               name: data.name,
@@ -217,8 +225,17 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
               creative_body: data.body,
               creative_cta: data.ctaType,
             });
+            if (adError) {
+              console.error("inlineMetaAction ads insert error:", adError);
+              return {
+                error: `Could not save the ad — ${adError.message}${
+                  adError.code ? ` (${adError.code})` : ""
+                }`,
+              };
+            }
           }
 
+          revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
           return {};
         }
 
@@ -255,6 +272,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
               objective={(campaign as any).objective ?? "engagement"}
               existingCreatives={creativeSources}
               onSubmit={inlineMetaAction}
+              draftKey={`ad-draft:${clientId}:${campaignId}`}
             />
           </div>
         );

@@ -19,6 +19,14 @@ type Props = {
     ctaType: string;
     destinationUrl: string;
   }) => Promise<{ error?: string }>;
+  /**
+   * When set, the ad in progress is mirrored into localStorage under this key.
+   * Writing an ad is real work — copy, a chosen or generated image — and it
+   * used to live only in component state, so a reload (or the hard refresh
+   * Next does when a deploy invalidates a server action id) threw all of it
+   * away with nothing to recover from.
+   */
+  draftKey?: string;
 };
 
 const CTA_OPTIONS = [
@@ -33,7 +41,7 @@ const CTA_OPTIONS = [
   { value: "get_quote", label: "Get Quote" },
 ];
 
-export default function MetaAdForm({ campaignName, clientId, clientWebsite, objective, existingCreatives, onSubmit }: Props) {
+export default function MetaAdForm({ campaignName, clientId, clientWebsite, objective, existingCreatives, onSubmit, draftKey }: Props) {
   const [name, setName] = useState(`${campaignName} — ad 1`);
   const [imageUrl, setImageUrl] = useState("");
   const [headline, setHeadline] = useState("");
@@ -43,6 +51,59 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // ── Draft recovery ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!draftKey) return;
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(draftKey);
+    } catch {
+      return; // storage blocked — drafts are best-effort
+    }
+    if (!raw) return;
+    try {
+      const d = JSON.parse(raw) as Record<string, unknown>;
+      const apply = (k: string, set: (v: string) => void) => {
+        const v = d[k];
+        if (typeof v === "string" && v !== "") set(v);
+      };
+      apply("name", setName);
+      apply("imageUrl", setImageUrl);
+      apply("headline", setHeadline);
+      apply("body", setBody);
+      apply("ctaType", setCtaType);
+      apply("destinationUrl", setDestinationUrl);
+      setDraftRestored(true);
+    } catch {
+      /* corrupt draft — ignore it */
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || success) return;
+    const isEmpty = !imageUrl && !headline.trim() && !body.trim();
+    try {
+      if (isEmpty) window.localStorage.removeItem(draftKey);
+      else
+        window.localStorage.setItem(
+          draftKey,
+          JSON.stringify({ name, imageUrl, headline, body, ctaType, destinationUrl })
+        );
+    } catch {
+      /* storage full or blocked — never break the form over a draft */
+    }
+  }, [draftKey, success, name, imageUrl, headline, body, ctaType, destinationUrl]);
+
+  function clearDraft() {
+    if (!draftKey) return;
+    try {
+      window.localStorage.removeItem(draftKey);
+    } catch {
+      /* ignore */
+    }
+  }
   type Sug = { suggestion: string | null; reasoning: string | null };
   type Variation = { headline: string; body: string; cta: string; reasoning: string };
   const [variations, setVariations] = useState<Variation[]>([]);
@@ -135,6 +196,7 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       if (result.error) {
         setError(result.error);
       } else {
+        clearDraft();
         setSuccess(true);
       }
     });
@@ -213,6 +275,51 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {draftRestored && !error && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              fontSize: 13,
+              color: "#3f3f46",
+              background: "#fafafa",
+              border: "1px solid #e4e4e7",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            <span>Restored the ad you were writing.</span>
+            <button
+              type="button"
+              onClick={() => {
+                setName(`${campaignName} — ad 1`);
+                setImageUrl("");
+                setHeadline("");
+                setBody("");
+                setCtaType("learn_more");
+                setDestinationUrl(clientWebsite ?? "");
+                clearDraft();
+                setDraftRestored(false);
+              }}
+              style={{
+                border: "1px solid #e4e4e7",
+                background: "#fff",
+                color: "#52525b",
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "5px 10px",
+                borderRadius: 8,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              Start blank
+            </button>
+          </div>
+        )}
+
         {error && (
           <div
             style={{
