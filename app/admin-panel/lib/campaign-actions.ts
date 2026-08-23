@@ -50,7 +50,15 @@ export async function createCampaignAction(clientId: string, formData: FormData)
 
     if (error || !inserted) {
       console.error("createCampaignAction error:", error);
-      throw new Error("Could not create campaign.");
+      // Surface what actually went wrong (RLS denial, missing column, expired
+      // session, …). A bare "Could not create campaign." leaves the operator
+      // with no way to tell a permissions problem from a typo.
+      const detail = [error?.message, error?.code ? `(${error.code})` : null]
+        .filter(Boolean)
+        .join(" ");
+      throw new Error(
+        detail ? `Could not create campaign — ${detail}` : "Could not create campaign."
+      );
     }
     insertedId = String(inserted.id);
   } catch (err) {
