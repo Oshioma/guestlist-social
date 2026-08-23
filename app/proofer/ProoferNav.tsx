@@ -111,6 +111,11 @@ export default function ProoferNav({
 }) {
   const router = useRouter();
   const [hoverPillar, setHoverPillar] = useState<string | null>(null);
+  // Touch has no hover, so a pillar's post list is also openable by tapping its
+  // chip. Kept separate from `hoverPillar` so a tap-opened popup stays put
+  // until it's tapped away (a shared flag would be closed by the synthetic
+  // mouseover/mouseout a tap fires).
+  const [pinnedPillar, setPinnedPillar] = useState<string | null>(null);
   const [brandMenu, setBrandMenu] = useState(false);
   // Reschedule calendar: which post's picker is open, and the month it shows.
   const [pickFor, setPickFor] = useState<string | null>(null);
@@ -231,6 +236,7 @@ export default function ProoferNav({
         );
         setPickFor(null);
         setHoverPillar(null);
+        setPinnedPillar(null);
         router.push(
           `${home}?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
         );
@@ -491,25 +497,62 @@ export default function ProoferNav({
         {/* Push pillars to the right */}
         <div style={{ flex: 1 }} />
 
-        {/* Content pillars — hover a chip to see the posts filed under it */}
+        {/* Content pillars — hover (or tap, on touch) a chip to see the posts
+            filed under it */}
         {showBoardControls && pillars.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              // Above the tap-away catcher below, so tapping a second chip
+              // switches to it rather than only dismissing the first.
+              position: "relative",
+              zIndex: 46,
+            }}
+          >
+            {/* Tap-away catcher for a chip opened by touch (sits under the
+                popup, which is z-index 50). */}
+            {pinnedPillar && (
+              <div
+                aria-hidden
+                onClick={() => setPinnedPillar(null)}
+                style={{ position: "fixed", inset: 0, zIndex: 45 }}
+              />
+            )}
             {pillars.map((p) => {
               const pillarPosts = postsByPillar.get(p.id) ?? [];
               const pickPost = pillarPosts.find((pp) => pp.id === pickFor) ?? null;
               // Keep the popup mounted while one of its posts has the reschedule
               // calendar open, even if the pointer has left the chip.
-              const open = hoverPillar === p.id || pickPost !== null;
+              const open =
+                hoverPillar === p.id || pinnedPillar === p.id || pickPost !== null;
               return (
                 <div
                   key={p.id}
                   style={{ position: "relative" }}
-                  onMouseEnter={() => setHoverPillar(p.id)}
-                  onMouseLeave={() =>
-                    setHoverPillar((cur) => (cur === p.id ? null : cur))
-                  }
+                  // Pointer-type guarded: only a real mouse opens on hover, so
+                  // a tap doesn't open via the synthetic hover and then close
+                  // again on the click that follows it.
+                  onPointerEnter={(e) => {
+                    if (e.pointerType === "mouse") setHoverPillar(p.id);
+                  }}
+                  onPointerLeave={(e) => {
+                    if (e.pointerType !== "mouse") return;
+                    setHoverPillar((cur) => (cur === p.id ? null : cur));
+                  }}
                 >
-                  <button type="button" style={pillarChip}>
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setPinnedPillar((cur) => (cur === p.id ? null : p.id))
+                    }
+                    style={pillarChip}
+                  >
                     <span
                       aria-hidden
                       style={{ width: 10, height: 10, borderRadius: "50%", background: p.color || "#a1a1aa", flexShrink: 0 }}
@@ -767,7 +810,7 @@ const pillarChip: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   padding: "6px 12px",
-  cursor: "default",
+  cursor: "pointer",
   whiteSpace: "nowrap",
 };
 
