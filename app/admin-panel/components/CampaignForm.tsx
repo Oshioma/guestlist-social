@@ -149,6 +149,35 @@ export default function CampaignForm({
   const [endDate, setEndDate] = useState(initialValues?.endDate ?? "");
   const budgetNumber = Number(budget) || 0;
 
+  // React 19 resets the form when a form action settles. Controlled text
+  // inputs are restored from their value prop afterwards, but a controlled
+  // <select> is not: the DOM snaps back to its first option while React still
+  // believes the chosen one is selected, so the form silently shows — and on
+  // the next submit sends — the wrong objective/placement/status. Push our
+  // state back into them whenever an action result lands.
+  const objectiveRef = useRef<HTMLSelectElement | null>(null);
+  const placementRef = useRef<HTMLSelectElement | null>(null);
+  const statusRef = useRef<HTMLSelectElement | null>(null);
+  useEffect(() => {
+    if (objectiveRef.current) objectiveRef.current.value = objective;
+    if (placementRef.current) placementRef.current.value = placement;
+    if (statusRef.current) statusRef.current.value = status;
+  }, [state, objective, placement, status]);
+
+  // `pending` stays true until the whole submit settles — including the
+  // redirect and the render of the page it lands on — so a slow round trip
+  // looks like a button frozen on "Creating…". Say something after a while
+  // rather than leaving the operator staring at it.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!pending) {
+      setSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setSlow(true), 12_000);
+    return () => clearTimeout(t);
+  }, [pending]);
+
   // Errors render at the top of a long form — well above the submit button the
   // operator just clicked — so scroll them into view instead of letting the
   // submit look like a silent no-op.
@@ -236,7 +265,6 @@ export default function CampaignForm({
   // blank. Mirror the form into localStorage so nothing is ever lost, and drop
   // the draft once the campaign has actually been created.
   const [draftRestored, setDraftRestored] = useState(false);
-  const submittedRef = useRef(false);
 
   // A suggestion applied in CampaignCreator remounts this form with prefilled
   // values — don't clobber those with an older draft.
@@ -321,24 +349,10 @@ export default function CampaignForm({
     adDestinationUrl,
   ]);
 
-  // A submit that came back with an error did NOT save anything, so the draft
-  // must stay put.
-  useEffect(() => {
-    if (state.error) submittedRef.current = false;
-  }, [state]);
-
-  // Unmounting while a submit is in flight means the action redirected, i.e.
-  // the campaign was created — the draft has served its purpose.
-  useEffect(() => {
-    return () => {
-      if (!draftKey || !submittedRef.current) return;
-      try {
-        window.localStorage.removeItem(draftKey);
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [draftKey]);
+  // Nothing here deletes the draft. Leaving the page — deliberately, by going
+  // back, or because a submit stalled — must never throw the work away, and
+  // the form can't tell those apart. The campaign page clears the draft once
+  // the campaign actually exists (see ClearCampaignDraft).
 
   // AI ad copy suggestions
   type AdVariation = { headline: string; body: string; cta: string; reasoning: string };
@@ -392,13 +406,7 @@ export default function CampaignForm({
         padding: 24,
       }}
     >
-      <form
-        action={formAction}
-        onSubmit={() => {
-          submittedRef.current = true;
-        }}
-        style={{ display: "flex", flexDirection: "column", gap: 16 }}
-      >
+      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {draftRestored && !state.error && (
           <div
             style={{
@@ -493,6 +501,7 @@ export default function CampaignForm({
         <div>
           <label style={labelStyle}>Objective</label>
           <select
+            ref={objectiveRef}
             name="objective"
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
@@ -590,6 +599,7 @@ export default function CampaignForm({
         <div>
           <label style={labelStyle}>Placement</label>
           <select
+            ref={placementRef}
             name="placement"
             value={placement}
             onChange={(e) => setPlacement(e.target.value)}
@@ -605,6 +615,7 @@ export default function CampaignForm({
         <div>
           <label style={labelStyle}>Status</label>
           <select
+            ref={statusRef}
             name="status"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -798,6 +809,26 @@ export default function CampaignForm({
             ? "Create campaign + ad"
             : submitLabel}
         </button>
+
+        {pending && slow && (
+          <div style={{ fontSize: 12, color: "#71717a", lineHeight: 1.5 }}>
+            Still working — this is taking longer than usual. Everything you
+            typed is saved here, so nothing is lost.{" "}
+            {clientId && (
+              <>
+                If it doesn&rsquo;t finish, check{" "}
+                <a
+                  href={`/app/clients/${clientId}`}
+                  style={{ color: "#18181b", fontWeight: 600 }}
+                >
+                  this client&rsquo;s campaigns
+                </a>{" "}
+                before trying again — the campaign may already have been
+                created.
+              </>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );

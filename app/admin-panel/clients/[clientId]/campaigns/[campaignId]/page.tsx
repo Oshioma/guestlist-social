@@ -20,17 +20,20 @@ import InlineBudgetEdit from "@/app/admin-panel/components/InlineBudgetEdit";
 import EmptyState from "@/app/admin-panel/components/EmptyState";
 import AdPreviewCard from "@/app/admin-panel/components/AdPreviewCard";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
+import ClearCampaignDraft from "@/app/admin-panel/components/ClearCampaignDraft";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
   params: Promise<{ clientId: string; campaignId: string }>;
+  searchParams?: Promise<{ created?: string }>;
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function CampaignDetailPage({ params }: Props) {
+export default async function CampaignDetailPage({ params, searchParams }: Props) {
   try {
   const { clientId, campaignId } = await params;
+  const justCreated = (await searchParams)?.created === "1";
   const supabase = await createClient();
   const adsAllowed = await canRunAds();
 
@@ -134,9 +137,12 @@ export default async function CampaignDetailPage({ params }: Props) {
     try {
       const token = process.env.META_ACCESS_TOKEN;
       if (token) {
+        // Cosmetic label only — never let it hold up the page this redirect
+        // lands on. A slow Meta here reads to the operator as a create that
+        // never finishes.
         const res = await fetch(
           `https://graph.facebook.com/v25.0/${adAccountId}?fields=name&access_token=${token}`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: AbortSignal.timeout(4000) }
         );
         if (res.ok) {
           const data = await res.json();
@@ -148,6 +154,7 @@ export default async function CampaignDetailPage({ params }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {justCreated && <ClearCampaignDraft clientId={clientId} />}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Link
           href={`/app/clients/${clientId}`}
