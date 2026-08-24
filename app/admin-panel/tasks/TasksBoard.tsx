@@ -890,8 +890,8 @@ export default function TasksBoard({
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             <button type="button" onClick={() => setCompletedGrouping("by-person")} style={tabBtn(completedGrouping==="by-person")}>By person</button>
             <button type="button" onClick={() => setCompletedGrouping("by-date")} style={tabBtn(completedGrouping==="by-date")}>By date</button>
-            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center" }} title="Completed tasks per employee, week by week">
-              Weekly report {"→"}
+            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center" }} title="Completed tasks per employee, month by month">
+              Employee report {"→"}
             </Link>
           </div>
         </div>
@@ -1053,8 +1053,8 @@ export default function TasksBoard({
                 </button>
               ))}
             </div>
-            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, padding:"7px 12px" }} title="Completed tasks per employee, week by week">
-              {"📅"} Weekly report
+            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, padding:"7px 12px" }} title="Completed tasks per employee, month by month">
+              {"📅"} Employee report
             </Link>
             {/* Notifications */}
             <div style={{ position:"relative" }}>

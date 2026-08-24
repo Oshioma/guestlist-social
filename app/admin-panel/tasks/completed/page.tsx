@@ -1,5 +1,5 @@
 import { getCompletedTasksReportData } from "../../lib/queries";
-import CompletedWeeklyReport from "./CompletedWeeklyReport";
+import CompletedReport from "./CompletedReport";
 import EmptyState from "../../components/EmptyState";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export default async function CompletedTasksPage() {
   try {
     const { completions, currentUserEmail } = await getCompletedTasksReportData();
     return (
-      <CompletedWeeklyReport
+      <CompletedReport
         completions={completions}
         currentUserEmail={currentUserEmail}
       />
