@@ -150,15 +150,35 @@ export function createTaskActions(
     async updateStatus(id: string, status: string) {
       if (!id) throw new Error("ID is required.");
       const normalizedStatus = normalizeStatus(status);
+      const existing = await adapter.getTask(id);
 
-      // Completing a recurring task rolls it forward rather than closing it.
+      // Log completion events so the weekly report can answer "who finished
+      // what" — essential for recurring tasks, which roll forward to open and
+      // otherwise leave no trace of having been done.
+      async function logCompletion(replaceExisting: boolean) {
+        if (!existing || !adapter.recordCompletion) return;
+        const completedBy = (await adapter.getCurrentUserEmail()) || "";
+        await adapter.recordCompletion(
+          {
+            taskId: existing.id,
+            title: existing.title,
+            category: existing.category,
+            assignee: existing.assignee,
+            completedBy,
+            recurrence: existing.recurrence,
+          },
+          replaceExisting
+        );
+      }
+
       if (normalizedStatus === "completed") {
-        const existing = await adapter.getTask(id);
+        // Completing a recurring task rolls it forward rather than closing it.
         if (
           existing &&
           (existing.recurrence === "weekly" ||
             existing.recurrence === "monthly")
         ) {
+          await logCompletion(false);
           const nextDue = advanceDueDate(
             existing.dueDate || null,
             existing.recurrence
@@ -170,6 +190,19 @@ export function createTaskActions(
           await afterMutate();
           return;
         }
+        // One-off: keep a single row for the latest completion, and don't
+        // duplicate it when the task is already completed.
+        if (existing && existing.status !== "completed") {
+          await logCompletion(true);
+        }
+      } else if (
+        existing &&
+        existing.status === "completed" &&
+        existing.recurrence === "none" &&
+        adapter.clearCompletionsForTask
+      ) {
+        // A one-off task reopened isn't done anymore — drop its log row.
+        await adapter.clearCompletionsForTask(existing.id);
       }
 
       await adapter.updateTask(id, { status: normalizedStatus });

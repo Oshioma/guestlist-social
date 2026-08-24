@@ -9,6 +9,8 @@ import type {
   CreateTaskInput,
   Task,
   TaskCategory,
+  TaskCompletion,
+  TaskCompletionInput,
   TaskPriority,
   TaskRecurrence,
   TaskStatus,
@@ -45,6 +47,30 @@ function rowToTask(row: TaskRow): Task {
     recurrence: (row.recurrence ?? "none") as TaskRecurrence,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
+  };
+}
+
+type CompletionRow = {
+  id: string | number;
+  task_id: string | null;
+  title: string | null;
+  category: string | null;
+  assignee: string | null;
+  completed_by: string | null;
+  recurrence: string | null;
+  completed_at: string | null;
+};
+
+function rowToCompletion(row: CompletionRow): TaskCompletion {
+  return {
+    id: String(row.id),
+    taskId: row.task_id ?? "",
+    title: row.title ?? "",
+    category: (row.category ?? "general") as TaskCategory,
+    assignee: row.assignee ?? "",
+    completedBy: row.completed_by ?? "",
+    recurrence: (row.recurrence ?? "none") as TaskRecurrence,
+    completedAt: row.completed_at ?? "",
   };
 }
 
@@ -130,5 +156,54 @@ export const supabaseTasksAdapter: TasksDataAdapter = {
       data: { user },
     } = await supabase.auth.getUser();
     return user?.email ?? "";
+  },
+
+  // Completion log. Logging is best-effort by design: if the
+  // task_completions migration hasn't been applied yet, completing a task
+  // must still work — so failures are reported, not thrown.
+  async recordCompletion(input: TaskCompletionInput, replaceExisting: boolean) {
+    const supabase = await createClient();
+    if (replaceExisting) {
+      const { error } = await supabase
+        .from("task_completions")
+        .delete()
+        .eq("task_id", input.taskId);
+      if (error) {
+        console.error("supabaseTasksAdapter.recordCompletion delete error:", error);
+        return;
+      }
+    }
+    const { error } = await supabase.from("task_completions").insert({
+      task_id: input.taskId,
+      title: input.title,
+      category: input.category,
+      assignee: input.assignee,
+      completed_by: input.completedBy,
+      recurrence: input.recurrence,
+    });
+    if (error) {
+      console.error("supabaseTasksAdapter.recordCompletion error:", error);
+    }
+  },
+
+  async clearCompletionsForTask(taskId: string) {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("task_completions")
+      .delete()
+      .eq("task_id", taskId);
+    if (error) {
+      console.error("supabaseTasksAdapter.clearCompletionsForTask error:", error);
+    }
+  },
+
+  async listCompletions() {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("task_completions")
+      .select("*")
+      .order("completed_at", { ascending: false });
+    if (error) throw new Error(`task_completions: ${error.message}`);
+    return (data ?? []).map((row: CompletionRow) => rowToCompletion(row));
   },
 };

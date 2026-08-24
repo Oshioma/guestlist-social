@@ -16,6 +16,8 @@ export type {
   LocalSubtask,
   LocalComment,
   ActivityEntry,
+  TaskCompletion,
+  TaskCompletionInput,
   CreateTaskInput,
   UpdateTaskInput,
 } from "./types";

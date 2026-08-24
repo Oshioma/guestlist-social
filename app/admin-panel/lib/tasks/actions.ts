@@ -10,7 +10,10 @@ import { createTaskActions } from "@/features/tasks";
 import { supabaseTasksAdapter } from "./supabase-adapter";
 
 const actions = createTaskActions(supabaseTasksAdapter, {
-  onMutate: () => revalidatePath("/admin-panel/tasks"),
+  onMutate: () => {
+    revalidatePath("/admin-panel/tasks");
+    revalidatePath("/admin-panel/tasks/completed");
+  },
 });
 
 export async function addTaskAction(
