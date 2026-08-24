@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient } from "../../../lib/supabase/admin";
 import { createMetaCampaign } from "../../../lib/meta-campaign-create";
 
 export async function createCampaignAction(clientId: string, formData: FormData) {
@@ -71,7 +73,11 @@ export async function createCampaignAction(clientId: string, formData: FormData)
 
   // Fire-and-forget: push to Meta in the background.
   if (hasMetaCreds && budget > 0) {
-    createMetaCampaign({
+    // after() is the supported way to do work once the response is out. A
+    // bare floating promise can hold the invocation open or be dropped
+    // outright, depending on the runtime.
+    after(() =>
+      createMetaCampaign({
       name,
       objective,
       budgetPounds: budget,
@@ -83,7 +89,8 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     })
       .then(async (result) => {
         if (result.ok) {
-          await supabase
+          // Service role: the request's session no longer exists out here.
+          await createAdminClient()
             .from("campaigns")
             .update({
               meta_id: result.metaCampaignId,
@@ -96,9 +103,10 @@ export async function createCampaignAction(clientId: string, formData: FormData)
           console.error("Background Meta creation failed:", result.error);
         }
       })
-      .catch((err) => {
-        console.error("Background Meta creation exception:", err);
-      });
+        .catch((err) => {
+          console.error("Background Meta creation exception:", err);
+        })
+    );
   }
 
   const afterInsertMs = Date.now() - startedAt;
@@ -114,20 +122,53 @@ export async function createCampaignAction(clientId: string, formData: FormData)
 
   if (adImageUrl || adHeadline || adBody) {
     try {
-      const { persistImageToStorage } = await import("@/lib/persist-image");
-      const persistedUrl = await persistImageToStorage(adImageUrl, `ad-creatives/${clientId}`) ?? adImageUrl;
+      // Save the ad with the image URL exactly as given. Copying the creative
+      // into our own storage used to happen HERE, in front of the redirect:
+      // fetch the source image (up to 10s) and then upload it to Supabase with
+      // no deadline at all. That upload was the only unbounded wait between
+      // clicking "Create campaign" and landing on the campaign — which is what
+      // left the button sitting on "Creating…". The copy still happens, just
+      // after the operator has been sent on their way.
+      const { data: insertedAd, error: adError } = await supabase
+        .from("ads")
+        .insert({
+          client_id: clientId,
+          campaign_id: insertedId,
+          name: `${name} — ad 1`,
+          status: "testing",
+          creative_image_url: adImageUrl || null,
+          creative_headline: adHeadline || null,
+          creative_body: adBody || null,
+          creative_cta: adCtaType || "learn_more",
+          creative_destination_url: adDestinationUrl || null,
+        })
+        .select("id")
+        .single();
 
-      await supabase.from("ads").insert({
-        client_id: clientId,
-        campaign_id: insertedId,
-        name: `${name} — ad 1`,
-        status: "testing",
-        creative_image_url: persistedUrl || null,
-        creative_headline: adHeadline || null,
-        creative_body: adBody || null,
-        creative_cta: adCtaType || "learn_more",
-        creative_destination_url: adDestinationUrl || null,
-      });
+      if (adError) {
+        console.error("Ad creation in one-click flow failed:", adError);
+      } else if (insertedAd && adImageUrl) {
+        const adId = String(insertedAd.id);
+        after(async () => {
+          try {
+            const { persistImageToStorage } = await import("@/lib/persist-image");
+            const persisted = await persistImageToStorage(
+              adImageUrl,
+              `ad-creatives/${clientId}`
+            );
+            if (persisted && persisted !== adImageUrl) {
+              // Service role: this runs after the response, where the request's
+              // session is gone. Scoped to the single row just created.
+              await createAdminClient()
+                .from("ads")
+                .update({ creative_image_url: persisted })
+                .eq("id", adId);
+            }
+          } catch (err) {
+            console.error("Background creative persistence failed:", err);
+          }
+        });
+      }
     } catch (adErr) {
       console.error("Ad creation in one-click flow failed:", adErr);
     }

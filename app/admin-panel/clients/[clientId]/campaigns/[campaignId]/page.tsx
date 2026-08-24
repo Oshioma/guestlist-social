@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { canRunAds } from "@/lib/auth/permissions";
 import { mapDbAdToUiAd } from "@/app/admin-panel/lib/mappers";
 import { persistImageToStorage } from "@/lib/persist-image";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createMetaAd } from "@/lib/meta-ad-create";
 import { getCreativeSourcesForClient } from "@/lib/creative-sources";
 import MetaAdForm from "@/app/admin-panel/components/MetaAdForm";
@@ -181,7 +183,11 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           const startedAt = Date.now();
           const adsetMetaId = (campaign as any).meta_adset_id as string | null;
 
-          const persistedUrl = await persistImageToStorage(data.imageUrl, `ad-creatives/${clientId}`) ?? data.imageUrl;
+          // Meta is handed the original URL either way, so copying the
+          // creative into our storage is bookkeeping — and an unbounded
+          // upload in front of the operator's click is exactly what made
+          // "Creating ad in Meta…" hang. Save the original now, copy after.
+          const persistedUrl = data.imageUrl;
           const imageMs = Date.now() - startedAt;
 
           // Push to Meta when the campaign has an ad set, but never let Meta
@@ -237,6 +243,26 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
                 ? `The ad was created in Meta but could not be saved here — ${detail}`
                 : `Could not save the ad — ${detail}`,
             };
+          }
+
+          if (data.imageUrl) {
+            after(async () => {
+              try {
+                const persisted = await persistImageToStorage(
+                  data.imageUrl,
+                  `ad-creatives/${clientId}`
+                );
+                if (persisted && persisted !== data.imageUrl) {
+                  await createAdminClient()
+                    .from("ads")
+                    .update({ creative_image_url: persisted })
+                    .eq("campaign_id", campaignId)
+                    .eq("creative_image_url", data.imageUrl);
+                }
+              } catch (err) {
+                console.error("Background creative persistence failed:", err);
+              }
+            });
           }
 
           revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
