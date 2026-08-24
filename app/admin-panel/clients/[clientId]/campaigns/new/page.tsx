@@ -50,14 +50,20 @@ export default async function NewCampaignPage({ params }: Props) {
     console.error("new campaign page: creative sources unavailable:", err);
   }
 
-  // Fetch winning ads for "Clone winner" buttons
-  const { data: winnerRows } = await supabase
+  // Fetch winning ads for "Clone winner" buttons. The error was dropped here,
+  // so when this select referenced a column production did not have, the list
+  // just came back empty and looked like "no winners yet" forever.
+  const { data: winnerRows, error: winnerError } = await supabase
     .from("ads")
     .select("name, creative_image_url, creative_headline, creative_body, creative_cta, creative_destination_url, ctr, spend")
     .eq("client_id", clientId)
     .eq("performance_status", "winner")
     .order("ctr", { ascending: false })
     .limit(3);
+
+  if (winnerError) {
+    console.error("new campaign page: winners query failed:", winnerError);
+  }
 
   const winningAds = (winnerRows ?? [])
     .filter((w) => w.creative_headline || w.creative_body || w.creative_image_url)

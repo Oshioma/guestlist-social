@@ -45,8 +45,17 @@ export async function POST(req: Request) {
       headline: ad.creative_headline ?? "",
       body: ad.creative_body ?? "",
       ctaType: ad.creative_cta ?? "learn_more",
+      // A real ad pointed at example.com is worse than an obvious failure, so
+      // make the substitution loud even though it stays permissive for ads
+      // saved before the destination column existed.
       destinationUrl: ad.creative_destination_url ?? "https://example.com",
     });
+
+    if (!ad.creative_destination_url) {
+      console.error(
+        `push-ad-to-meta: ad has no destination URL — pushing to Meta with the example.com placeholder`
+      );
+    }
 
     if (!result.ok) {
       return NextResponse.json(
