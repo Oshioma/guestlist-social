@@ -9,6 +9,10 @@ import ClientMemories from "../../../../components/ClientMemories";
 import { createCampaignAction } from "../../../../lib/campaign-actions";
 import { getCampaignSuggestions } from "../../../../lib/campaign-suggestions";
 
+// The create action writes the campaign, optionally an ad, and can persist
+// a creative image before it redirects.
+export const maxDuration = 60;
+
 type Props = {
   params: Promise<{ clientId: string }>;
 };

@@ -18,7 +18,7 @@ type Props = {
     body: string;
     ctaType: string;
     destinationUrl: string;
-  }) => Promise<{ error?: string }>;
+  }) => Promise<{ error?: string; warning?: string }>;
   /**
    * When set, the ad in progress is mirrored into localStorage under this key.
    * Writing an ad is real work — copy, a chosen or generated image — and it
@@ -51,6 +51,7 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
 
   // ── Draft recovery ─────────────────────────────────────────────────────
@@ -196,6 +197,10 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       if (result.error) {
         setError(result.error);
       } else {
+        // The ad exists — even when Meta refused it, which comes back as a
+        // warning rather than an error so the operator isn't invited to
+        // submit it a second time.
+        setWarning(result.warning ?? null);
         clearDraft();
         setSuccess(true);
       }
@@ -214,22 +219,43 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, color: "#166534" }}>
-          Ad created
+          {warning ? "Ad saved" : "Ad created"}
         </div>
         <p style={{ fontSize: 14, color: "#52525b", margin: "8px 0 16px" }}>
           &ldquo;{name}&rdquo; has been saved. It starts paused — review it
           on the ads page, then switch it to active when ready.
         </p>
+        {warning && (
+          <p
+            style={{
+              fontSize: 13,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 10,
+              padding: "10px 12px",
+              margin: "0 0 16px",
+              textAlign: "left",
+              lineHeight: 1.5,
+            }}
+          >
+            {warning}
+          </p>
+        )}
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
           <button
             type="button"
             onClick={() => {
               setSuccess(false);
+              setWarning(null);
               setName(`${campaignName} — ad ${Date.now() % 100}`);
               setImageUrl("");
               setHeadline("");
               setBody("");
-              setDestinationUrl("");
+              // Back to the client's site, not blank — the next ad almost
+              // always points at the same place, and an empty destination
+              // silently disables "Create ad".
+              setDestinationUrl(clientWebsite ?? "");
             }}
             style={{
               padding: "8px 20px",

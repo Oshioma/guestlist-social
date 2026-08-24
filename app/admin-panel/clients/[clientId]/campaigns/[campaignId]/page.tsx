@@ -29,6 +29,8 @@ type Props = {
 };
 
 export const dynamic = "force-dynamic";
+// The inline ad create runs Meta uploads inside this route's server action.
+export const maxDuration = 90;
 
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
   try {
@@ -174,69 +176,73 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           body: string;
           ctaType: string;
           destinationUrl: string;
-        }): Promise<{ error?: string }> {
+        }): Promise<{ error?: string; warning?: string }> {
           "use server";
+          const startedAt = Date.now();
           const adsetMetaId = (campaign as any).meta_adset_id as string | null;
 
           const persistedUrl = await persistImageToStorage(data.imageUrl, `ad-creatives/${clientId}`) ?? data.imageUrl;
+          const imageMs = Date.now() - startedAt;
 
+          // Push to Meta when the campaign has an ad set, but never let Meta
+          // decide whether the operator keeps their ad: a refusal or a timeout
+          // becomes a warning on an ad that is still saved here.
+          let metaAdId: string | null = null;
+          let metaWarning: string | null = null;
+          const metaStart = Date.now();
           if (adsetMetaId) {
-            const result = await createMetaAd({
-              adsetMetaId,
-              name: data.name,
-              imageUrl: data.imageUrl,
-              headline: data.headline,
-              body: data.body,
-              ctaType: data.ctaType,
-              destinationUrl: data.destinationUrl,
-            });
-            if (!result.ok) {
-              return { error: `Meta ${result.step}: ${result.error}` };
+            try {
+              const result = await createMetaAd({
+                adsetMetaId,
+                name: data.name,
+                imageUrl: data.imageUrl,
+                headline: data.headline,
+                body: data.body,
+                ctaType: data.ctaType,
+                destinationUrl: data.destinationUrl,
+              });
+              if (result.ok) metaAdId = result.adId;
+              else metaWarning = `Meta ${result.step}: ${result.error}`;
+            } catch (err) {
+              metaWarning =
+                err instanceof Error ? err.message : "Meta did not respond in time.";
             }
-            const supabaseInner = await createClient();
-            const { error: adError } = await supabaseInner.from("ads").insert({
-              client_id: clientId,
-              campaign_id: campaignId,
-              meta_id: result.adId,
-              name: data.name,
-              status: "testing",
-              creative_image_url: persistedUrl,
-              creative_headline: data.headline,
-              creative_body: data.body,
-              creative_cta: data.ctaType,
-            });
-            if (adError) {
-              console.error("inlineMetaAction ads insert error:", adError);
-              return {
-                error: `The ad was created in Meta but could not be saved here — ${adError.message}${
-                  adError.code ? ` (${adError.code})` : ""
-                }`,
-              };
-            }
-          } else {
-            const supabaseInner = await createClient();
-            const { error: adError } = await supabaseInner.from("ads").insert({
-              client_id: clientId,
-              campaign_id: campaignId,
-              name: data.name,
-              status: "testing",
-              creative_image_url: persistedUrl,
-              creative_headline: data.headline,
-              creative_body: data.body,
-              creative_cta: data.ctaType,
-            });
-            if (adError) {
-              console.error("inlineMetaAction ads insert error:", adError);
-              return {
-                error: `Could not save the ad — ${adError.message}${
-                  adError.code ? ` (${adError.code})` : ""
-                }`,
-              };
-            }
+          }
+          const metaMs = Date.now() - metaStart;
+
+          const supabaseInner = await createClient();
+          const { error: adError } = await supabaseInner.from("ads").insert({
+            client_id: clientId,
+            campaign_id: campaignId,
+            ...(metaAdId ? { meta_id: metaAdId } : {}),
+            name: data.name,
+            status: "testing",
+            creative_image_url: persistedUrl,
+            creative_headline: data.headline,
+            creative_body: data.body,
+            creative_cta: data.ctaType,
+          });
+
+          console.log(
+            `inlineMetaAction: campaign ${campaignId} — image ${imageMs}ms, meta ${metaMs}ms, total ${
+              Date.now() - startedAt
+            }ms, metaAdId ${metaAdId ?? "none"}`
+          );
+
+          if (adError) {
+            console.error("inlineMetaAction ads insert error:", adError);
+            const detail = `${adError.message}${adError.code ? ` (${adError.code})` : ""}`;
+            return {
+              error: metaAdId
+                ? `The ad was created in Meta but could not be saved here — ${detail}`
+                : `Could not save the ad — ${detail}`,
+            };
           }
 
           revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
-          return {};
+          return metaWarning
+            ? { warning: `Saved here, but not pushed to Meta — ${metaWarning}` }
+            : {};
         }
 
         return (
