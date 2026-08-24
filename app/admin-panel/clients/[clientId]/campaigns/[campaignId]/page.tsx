@@ -204,6 +204,166 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         <span style={{ fontSize: 14, fontWeight: 700, color: "#18181b" }}>{campaign.name}</span>
       </div>
 
+
+      {justCreated && !adFailure && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "#166534",
+            background: "#ecfdf5",
+            border: "1px solid #bbf7d0",
+            borderRadius: 10,
+            padding: "10px 14px",
+          }}
+        >
+          <strong style={{ fontWeight: 700 }}>Campaign created.</strong>{" "}
+          {hasNoAds
+            ? "Add its first ad below whenever you're ready."
+            : "Its first ad is below — it starts paused until you switch it on."}
+        </div>
+      )}
+
+      {/* What was just created, first — the campaign itself. */}
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #e4e4e7",
+          borderRadius: 16,
+          padding: "20px 22px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#18181b", lineHeight: 1.25 }}>
+              {campaign.name}
+            </h1>
+            <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span
+                style={{
+                  ...statusStyle,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "capitalize",
+                }}
+              >
+                {campaignStatus}
+              </span>
+              <span style={{ fontSize: 12, color: "#71717a", textTransform: "capitalize" }}>
+                {String((campaign as any).objective ?? "engagement")}
+              </span>
+              {Number((campaign as any).budget ?? 0) > 0 && (
+                <span style={{ fontSize: 12, color: "#71717a" }}>
+                  {formatCurrency(Number((campaign as any).budget))}/day
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <Link
+              href={`/app/clients/${clientId}/campaigns/${campaignId}/edit`}
+              style={{
+                border: "1px solid #e4e4e7",
+                borderRadius: 10,
+                padding: "7px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#18181b",
+                textDecoration: "none",
+                background: "#fff",
+              }}
+            >
+              Edit campaign
+            </Link>
+            {hasMetaId && (
+              <a
+                href={`https://www.facebook.com/adsmanager/manage/ads?act=${((client as any).meta_ad_account_id ?? (campaign as any).meta_ad_account_name ?? process.env.META_AD_ACCOUNT_ID ?? "").replace("act_", "")}&selected_campaign_ids=${(campaign as any).meta_id}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  border: "1px solid #c7d2fe",
+                  background: "#eef2ff",
+                  borderRadius: 10,
+                  padding: "7px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#4338ca",
+                  textDecoration: "none",
+                }}
+              >
+                View in Meta
+              </a>
+            )}
+          </div>
+        </div>
+
+        {(campaign as any).audience && (
+          <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
+            <span style={{ color: "#a1a1aa" }}>Audience: </span>
+            {String((campaign as any).audience)}
+          </div>
+        )}
+
+        {!hasNoAds && (
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "#52525b" }}>
+            <span style={{ fontWeight: 700, color: "#18181b", fontSize: 13 }}>
+              {ads.length} ad{ads.length === 1 ? "" : "s"}
+            </span>
+            {totalSpend > 0 && <span>{formatCurrency(totalSpend)} spent</span>}
+            {avgCtr > 0 && <span style={{ color: avgCtr >= 2 ? "#166534" : "#52525b" }}>{avgCtr}% CTR</span>}
+            {ads.reduce((s, a) => s + a.conversions, 0) > 0 && (
+              <span style={{ color: "#166534", fontWeight: 600 }}>
+                {ads.reduce((s, a) => s + a.conversions, 0)} results
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Then the ads it contains — including the one just created. */}
+      {hasNoAds ? (
+        <EmptyState
+          title="No ads in this campaign yet"
+          description="Add the first one below. It starts paused so you can review it before it spends anything."
+        />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+            Ads in this campaign
+          </h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {ads.map((ad) => {
+              const raw = rawAdById.get(String(ad.id)) ?? {};
+              return (
+                <AdPreviewCard
+                  key={ad.id}
+                  adId={Number(ad.id)}
+                  adName={ad.name}
+                  imageUrl={raw.creative_image_url ?? null}
+                  headline={raw.creative_headline ?? null}
+                  body={raw.creative_body ?? null}
+                  cta={raw.creative_cta ?? null}
+                  destinationUrl={raw.creative_destination_url ?? null}
+                  metaId={raw.meta_id ?? null}
+                  adsetMetaId={(campaign as any).meta_adset_id ?? null}
+                  status={String(raw.status ?? "testing")}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {adsAllowed && (() => {
         async function inlineMetaAction(data: {
           name: string;
@@ -306,10 +466,23 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         }
 
         return (
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+          // Collapsed once the campaign has ads. Landing on a page whose first
+          // element is an empty ad form reads as "my campaign wasn't created",
+          // which is exactly how it felt.
+          <details open={hasNoAds}>
+            <summary
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 12,
+                flexWrap: "wrap",
+                cursor: "pointer",
+                listStyle: "none",
+              }}
+            >
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#18181b" }}>
-                {hasNoAds ? "Add your first ad" : "Add another ad"}
+                {hasNoAds ? "Add your first ad" : "+ Add another ad"}
               </h2>
               {adAccountId && (
                 <span
@@ -327,7 +500,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
                   {adAccountName ?? adAccountId}
                 </span>
               )}
-            </div>
+            </summary>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "#71717a" }}>
               Upload an image, write your copy, and create your ad. It starts paused so you can review first.
             </p>
@@ -340,46 +513,9 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
               onSubmit={inlineMetaAction}
               draftKey={`ad-draft:${clientId}:${campaignId}`}
             />
-          </div>
+          </details>
         );
       })()}
-
-      {!hasNoAds && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "10px 16px",
-            borderRadius: 12,
-            background: "#fafafa",
-            border: "1px solid #e4e4e7",
-            flexWrap: "wrap",
-            fontSize: 12,
-          }}
-        >
-          <span style={{ fontWeight: 700, color: "#18181b", fontSize: 13 }}>
-            {ads.length} ad{ads.length === 1 ? "" : "s"}
-          </span>
-          {totalSpend > 0 && <span style={{ color: "#52525b" }}>{formatCurrency(totalSpend)} spent</span>}
-          {avgCtr > 0 && <span style={{ color: avgCtr >= 2 ? "#166534" : "#52525b" }}>{avgCtr}% CTR</span>}
-          {ads.reduce((s, a) => s + a.conversions, 0) > 0 && (
-            <span style={{ color: "#166534", fontWeight: 600 }}>
-              {ads.reduce((s, a) => s + a.conversions, 0)} results
-            </span>
-          )}
-          {hasMetaId && (
-            <a
-              href={`https://www.facebook.com/adsmanager/manage/ads?act=${((client as any).meta_ad_account_id ?? (campaign as any).meta_ad_account_name ?? process.env.META_AD_ACCOUNT_ID ?? "").replace("act_", "")}&selected_campaign_ids=${(campaign as any).meta_id}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "#4338ca", textDecoration: "none", fontWeight: 600, marginLeft: "auto" }}
-            >
-              View in Meta
-            </a>
-          )}
-        </div>
-      )}
     </div>
   );
   } catch (err) {
