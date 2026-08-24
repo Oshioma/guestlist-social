@@ -11,7 +11,7 @@ type Props = {
   canRunAds: boolean;
 };
 
-export default function AppShell({ children, isAdmin, canRunAds }: Props) {
+export default function AppShell({ children, isAdmin, canRunAds, buildSha }: Props & { buildSha?: string }) {
   // Below 1100px the sidebar is an off-canvas drawer. Above it, this state is
   // inert — the sidebar is always visible and the trigger is hidden by CSS.
   const [navOpen, setNavOpen] = useState(false);
@@ -56,7 +56,23 @@ export default function AppShell({ children, isAdmin, canRunAds }: Props) {
       )}
       <div className="app-main">
         <Topbar onMenu={() => setNavOpen(true)} />
-        <main className="app-content">{children}</main>
+        <main className="app-content">
+          {children}
+          {buildSha && (
+            // Which build you are looking at. Screenshots of a bug are far
+            // more useful when they carry the commit that produced them.
+            <div
+              style={{
+                marginTop: 32,
+                fontSize: 10,
+                color: "#a1a1aa",
+                letterSpacing: "0.04em",
+              }}
+            >
+              build {buildSha}
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
