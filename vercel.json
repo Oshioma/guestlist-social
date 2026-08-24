@@ -4,5 +4,11 @@
     "deploymentEnabled": {
       "claude/**": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-admin-report",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }
