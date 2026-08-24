@@ -55,6 +55,10 @@ const SCHEMA = {
     "creative_body",
     "creative_headline",
     "creative_cta",
+    // Collected by both ad forms and read by push-ad-to-meta and the
+    // clone-a-winner list. It was missing in production and every symptom of
+    // that was silent (20260824_ads_creative_destination_url.sql).
+    "creative_destination_url",
     "creative_type",
     "hook_type",
     "format_style",
