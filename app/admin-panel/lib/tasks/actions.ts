@@ -13,6 +13,7 @@ const actions = createTaskActions(supabaseTasksAdapter, {
   onMutate: () => {
     revalidatePath("/admin-panel/tasks");
     revalidatePath("/admin-panel/tasks/completed");
+    revalidatePath("/admin-panel/tasks/overview");
   },
 });
 

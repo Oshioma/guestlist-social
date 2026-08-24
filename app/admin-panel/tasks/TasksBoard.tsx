@@ -1053,6 +1053,9 @@ export default function TasksBoard({
                 </button>
               ))}
             </div>
+            <Link href="/admin-panel/tasks/overview" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, padding:"7px 12px" }} title="All current tasks per employee">
+              {"👥"} Overview
+            </Link>
             <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, padding:"7px 12px" }} title="Completed tasks per employee, month by month">
               {"📅"} Employee report
             </Link>
