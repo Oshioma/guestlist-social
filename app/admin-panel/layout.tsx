@@ -2,6 +2,7 @@ import "./admin.css";
 import { redirect } from "next/navigation";
 import AppShell from "./components/AppShell";
 import MetaSdkLoader from "./components/MetaSdkLoader";
+import FailureRecorder from "./components/FailureRecorder";
 import { getMemberAccess } from "@/lib/auth/permissions";
 
 export default async function AdminPanelLayout({
@@ -18,6 +19,7 @@ export default async function AdminPanelLayout({
     <>
       <MetaSdkLoader />
       <AppShell isAdmin={access.role === "admin"} canRunAds={access.canRunAds}>
+        <FailureRecorder />
         {children}
       </AppShell>
     </>
