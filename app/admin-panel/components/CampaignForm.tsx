@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import AiInlineSuggestion from "./AiInlineSuggestion";
 import ImageUpload from "./ImageUpload";
 import CreativeLibraryPicker from "./CreativeLibraryPicker";
@@ -44,7 +45,10 @@ type Props = {
   winningAds?: WinningAd[];
   title?: string;
   submitLabel?: string;
-  action: (state: { error: string | null }, formData: FormData) => Promise<{ error: string | null }>;
+  action: (
+    state: { error: string | null },
+    formData: FormData
+  ) => Promise<{ error: string | null; campaignId?: string; adError?: string | null }>;
   initialValues?: CampaignFormValues;
   /**
    * When set, the form keeps a local draft under this key so a hard reload
@@ -131,6 +135,44 @@ export default function CampaignForm({
   draftKey,
 }: Props) {
   const [state, formAction, pending] = useActionState(action, { error: null });
+  const router = useRouter();
+
+  // The action returns the campaign it made; navigating is this side's job.
+  // "Creating…" now ends when the campaign exists, and the walk to the
+  // campaign page has its own label instead of hiding inside the same spinner.
+  const [navigating, setNavigating] = useState(false);
+  useEffect(() => {
+    const created = (state as { campaignId?: string }).campaignId;
+    if (!created) return;
+    const adError = (state as { adError?: string | null }).adError;
+    setNavigating(true);
+    markCreateUrl(`campaign-created-${stamp()}`);
+    const q = adError ? `&adError=${encodeURIComponent(adError)}` : "";
+    router.push(`/app/clients/${clientId}/campaigns/${created}?created=1${q}`);
+  }, [state, clientId, router]);
+
+  // A marker in the address bar survives a reload and shows up in a screenshot,
+  // which is the only diagnostic that has reliably worked on this form.
+  function stamp() {
+    return new Date().toTimeString().slice(0, 8).replace(/:/g, "");
+  }
+  function markCreateUrl(fragment: string) {
+    try {
+      const u = new URL(window.location.href);
+      u.hash = fragment;
+      window.history.replaceState(null, "", u.toString());
+    } catch {
+      /* ignore */
+    }
+  }
+  const [urlAttempt, setUrlAttempt] = useState<string | null>(null);
+  useEffect(() => {
+    const h = window.location.hash;
+    if (h.startsWith("#campaign-attempt-")) setUrlAttempt(h.replace("#campaign-attempt-", ""));
+  }, []);
+  useEffect(() => {
+    if (state.error) markCreateUrl(`campaign-refused-${stamp()}`);
+  }, [state]);
 
   // Every field below is CONTROLLED on purpose. React 19 auto-resets an
   // uncontrolled `<form action={fn}>` as soon as the action returns, so when
@@ -420,7 +462,33 @@ export default function CampaignForm({
         padding: 24,
       }}
     >
-      <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <form
+        action={formAction}
+        onSubmit={() => {
+          setUrlAttempt(null);
+          markCreateUrl(`campaign-attempt-${stamp()}`);
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 16 }}
+      >
+        {urlAttempt && !pending && (
+          <div
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            The create at{" "}
+            {`${urlAttempt.slice(0, 2)}:${urlAttempt.slice(2, 4)}:${urlAttempt.slice(4, 6)}`}{" "}
+            never came back — the page reloaded before the server answered.
+            Check this client&rsquo;s campaigns before retrying, in case it was
+            created anyway.
+          </div>
+        )}
         {aiError && (
           <div style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
             AI suggestions are unavailable right now — {aiError}. Everything on
@@ -811,7 +879,7 @@ export default function CampaignForm({
 
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || navigating}
           style={{
             border: "none",
             borderRadius: 10,
@@ -824,7 +892,9 @@ export default function CampaignForm({
             opacity: pending ? 0.7 : 1,
           }}
         >
-          {pending
+          {navigating
+            ? "Opening campaign…"
+            : pending
             ? "Creating..."
             : showAdFields && (adImageUrl || adHeadline || adBody)
             ? "Create campaign + ad"
