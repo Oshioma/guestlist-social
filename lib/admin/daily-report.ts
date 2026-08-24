@@ -10,15 +10,20 @@ import "server-only";
 //                            many were completed so far this week.
 //   2. Posts queued        — upcoming scheduled/queued publish-queue items,
 //                            grouped per client.
-//   3. Salaries coming up  — this month's Crew lines from the cashflow
+//   3. This month's money  — revenue vs costs from the cashflow forecast.
+//   4. Salaries coming up  — this month's Crew lines from the cashflow
 //                            forecast (why recipients are an explicit list,
 //                            not "all admins" — see app-settings).
-//   4. Client comments     — unresolved comments clients left on posts.
+//   5. Client comments     — unresolved comments clients left on posts.
 //
-// Runs from /api/cron/daily-admin-report (service role, no session), so every
-// read here is deliberately agency-wide — same posture as the admin dashboard.
-// Fail-soft everywhere: a broken section renders as empty rather than
-// blocking the whole email.
+// Scheduling is deliberately cron-free: maybeSendDailyReport() runs after
+// every admin-panel page load and sends at most once per calendar day (agency
+// timezone), claimed atomically through an app_settings marker so concurrent
+// page loads can't double-send. The /api/cron/daily-admin-report route stays
+// as an optional manual/external trigger. Everything runs on the service role
+// (no session), so reads are deliberately agency-wide — same posture as the
+// admin dashboard. Fail-soft everywhere: a broken section renders as empty
+// rather than blocking the whole email.
 // ---------------------------------------------------------------------------
 
 import { createClient } from "@supabase/supabase-js";
@@ -32,6 +37,10 @@ import {
   zonedDateKey,
   zonedTimeToUtcIso,
 } from "@/lib/timezone";
+import {
+  normalizeAmounts,
+  normalizeOverrides,
+} from "@/app/admin-panel/lib/cashflow-shared";
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -127,6 +136,8 @@ export type DailyReportData = {
   queuedTotal: number;
   salaryMonthLabel: string;
   salaries: SalaryLine[];
+  monthlyRevenue: number;
+  monthlyCosts: number;
   clientComments: ClientComment[];
   timeZone: string;
 };
@@ -175,9 +186,8 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
         .limit(200),
       supabase
         .from("cashflow_lines")
-        .select("label, amounts")
+        .select("section, label, kind, amounts")
         .eq("year", year)
-        .eq("section", "Crew")
         .order("sort_order", { ascending: true }),
       supabase
         .from("proofer_comments")
@@ -320,18 +330,65 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     scheduledFor: r.scheduled_for,
   }));
 
-  // 3. Salaries — this month's Crew amounts from the cashflow forecast.
+  // 3. This month's money + salaries, from the cashflow forecast. Same maths
+  // as the dashboard's "Finance this month" card: costs/revenue are the
+  // month's column across every line, salaries are the Crew section, and
+  // revenue additionally includes the auto client-retainers row (live sum of
+  // active clients' monthly price, unless that month is pinned by an
+  // override in cashflow_settings).
   const salaries: SalaryLine[] = [];
+  let monthlyRevenue = 0;
+  let monthlyCosts = 0;
   if (!crewRes.error) {
     for (const row of (crewRes.data ?? []) as {
+      section: string | null;
       label: string | null;
+      kind: string | null;
       amounts: unknown;
     }[]) {
-      const amounts = Array.isArray(row.amounts) ? row.amounts : [];
-      const amount = Number(amounts[monthIdx] ?? 0);
-      if (Number.isFinite(amount) && amount > 0) {
-        salaries.push({ name: row.label || "—", amount });
+      const amount = normalizeAmounts(row.amounts)[monthIdx] || 0;
+      if ((row.kind ?? "cost") === "revenue") {
+        monthlyRevenue += amount;
+      } else {
+        monthlyCosts += amount;
+        if (row.section === "Crew" && amount > 0) {
+          salaries.push({ name: row.label || "—", amount });
+        }
       }
+    }
+
+    try {
+      const [{ data: settingRow }, { data: activeClients }] = await Promise.all(
+        [
+          supabase
+            .from("cashflow_settings")
+            .select("retainer_overrides")
+            .eq("year", year)
+            .maybeSingle<{ retainer_overrides: unknown }>(),
+          supabase
+            .from("clients")
+            .select("id")
+            .in("status", ["active", "growing"])
+            .eq("archived", false),
+        ]
+      );
+      const overrides = normalizeOverrides(settingRow?.retainer_overrides);
+      let retainer = 0;
+      const clientIds = (activeClients ?? []).map((r) => (r as { id: number }).id);
+      if (clientIds.length > 0) {
+        const { data: billing } = await supabase
+          .from("client_billing")
+          .select("monthly_price")
+          .in("client_id", clientIds);
+        retainer = (billing ?? []).reduce((total, row) => {
+          const price = Number((row as { monthly_price: unknown }).monthly_price);
+          return total + (Number.isFinite(price) ? price : 0);
+        }, 0);
+      }
+      monthlyRevenue +=
+        overrides[monthIdx] != null ? (overrides[monthIdx] as number) : retainer;
+    } catch (e) {
+      console.warn("[daily-report] retainer revenue unavailable:", e);
     }
   }
 
@@ -375,6 +432,8 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     queuedTotal: queueRows.length,
     salaryMonthLabel,
     salaries,
+    monthlyRevenue,
+    monthlyCosts,
     clientComments,
     timeZone,
   };
@@ -512,7 +571,26 @@ export function renderDailyReport(data: DailyReportData): {
   }
   textLines.push("");
 
-  // 3. Staff salaries coming up
+  // 3. This month's money
+  const net = data.monthlyRevenue - data.monthlyCosts;
+  htmlParts.push(sectionTitle(`This month's money (${data.salaryMonthLabel})`));
+  htmlParts.push(
+    table(
+      row(`Monthly revenue`, `<strong style="color:#166534;">${gbp(data.monthlyRevenue)}</strong>`) +
+        row(`Monthly costs`, `<strong>${gbp(data.monthlyCosts)}</strong>`) +
+        row(
+          `<strong>Net</strong>`,
+          `<strong style="color:${net >= 0 ? "#166534" : "#b91c1c"};">${net < 0 ? "-" : ""}${gbp(Math.abs(net))}</strong>`
+        )
+    )
+  );
+  textLines.push(`THIS MONTH'S MONEY (${data.salaryMonthLabel})`);
+  textLines.push(`  Revenue: ${gbp(data.monthlyRevenue)}`);
+  textLines.push(`  Costs: ${gbp(data.monthlyCosts)}`);
+  textLines.push(`  Net: ${net < 0 ? "-" : ""}${gbp(Math.abs(net))}`);
+  textLines.push("");
+
+  // 4. Staff salaries coming up
   htmlParts.push(sectionTitle(`Staff salaries coming up (${data.salaryMonthLabel})`));
   textLines.push(`STAFF SALARIES COMING UP (${data.salaryMonthLabel})`);
   if (data.salaries.length === 0) {
@@ -533,7 +611,7 @@ export function renderDailyReport(data: DailyReportData): {
   }
   textLines.push("");
 
-  // 4. Client comments
+  // 5. Client comments
   htmlParts.push(
     sectionTitle(`Client comments on posts (${data.clientComments.length} unresolved)`)
   );
@@ -618,4 +696,93 @@ export async function sendDailyAdminReport(): Promise<SendDailyReportResult> {
   }
 
   return { recipients: recipients.length, sent, skipped, failed, details };
+}
+
+// ── Cron-free daily trigger ────────────────────────────────────────────────
+//
+// Called (fire-and-forget, via next/server `after`) on every admin-panel page
+// load. The first visit of each calendar day (agency timezone) sends the
+// report; every other visit is a cheap no-op. The day is claimed atomically
+// in app_settings BEFORE sending, so two simultaneous page loads can't both
+// send; if the send then fails outright, the claim is released so the next
+// visit retries.
+
+const DAILY_REPORT_LAST_SENT_KEY = "daily_report_last_sent";
+
+// Returns true if this call won the claim for `todayKey`. The marker value
+// is `{ day: "YYYY-MM-DD" }` so the guard can filter on the `value->>day`
+// text path (raw jsonb equality filters are unreliable through PostgREST).
+async function claimDay(
+  supabase: ReturnType<typeof admin>,
+  todayKey: string
+): Promise<boolean> {
+  // Fast path: fresh key, no row yet.
+  const { error: insertErr } = await supabase
+    .from("app_settings")
+    .insert({ key: DAILY_REPORT_LAST_SENT_KEY, value: { day: todayKey } });
+  if (!insertErr) return true;
+
+  // Row exists — flip it to today only if it isn't today already. The guard
+  // makes the update itself the mutex: exactly one concurrent caller sees a
+  // changed row. The is.null arm self-heals a malformed marker value.
+  const { data, error } = await supabase
+    .from("app_settings")
+    .update({
+      value: { day: todayKey },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("key", DAILY_REPORT_LAST_SENT_KEY)
+    .or(`value->>day.neq.${todayKey},value->>day.is.null`)
+    .select("key");
+  if (error) {
+    console.error("[daily-report] claim failed:", error.message);
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
+async function releaseDay(supabase: ReturnType<typeof admin>): Promise<void> {
+  await supabase
+    .from("app_settings")
+    .delete()
+    .eq("key", DAILY_REPORT_LAST_SENT_KEY);
+}
+
+export async function maybeSendDailyReport(): Promise<void> {
+  try {
+    const supabase = admin();
+
+    // No recipients → nothing to do, and deliberately no claim either, so
+    // adding recipients mid-day still gets a report on the next page load.
+    const recipients = await getDailyReportRecipients(supabase);
+    if (recipients.length === 0) return;
+
+    let timeZone = "Europe/London";
+    try {
+      timeZone = await getDisplayTimezone(supabase);
+    } catch {
+      // keep default
+    }
+    const todayKey = zonedDateKey(new Date(), timeZone);
+
+    // Cheap read before the claim: already sent today → done.
+    const { data: markerRow } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", DAILY_REPORT_LAST_SENT_KEY)
+      .maybeSingle<{ value: { day?: unknown } | null }>();
+    if (markerRow?.value?.day === todayKey) return;
+
+    if (!(await claimDay(supabase, todayKey))) return;
+
+    const result = await sendDailyAdminReport();
+    console.log(
+      `[daily-report] daily send for ${todayKey}: sent=${result.sent} skipped=${result.skipped} failed=${result.failed}`
+    );
+    // Nothing went out at all (provider down / not configured) — release the
+    // claim so a later visit today retries instead of silently losing a day.
+    if (result.sent === 0) await releaseDay(supabase);
+  } catch (e) {
+    console.error("[daily-report] maybeSendDailyReport failed:", e);
+  }
 }

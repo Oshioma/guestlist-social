@@ -7,11 +7,16 @@ export const maxDuration = 60;
 // ---------------------------------------------------------------------------
 // /api/cron/daily-admin-report
 //
-// Sends the daily admin email digest (this week's tasks, queued posts,
-// upcoming crew salaries, unresolved client comments) to the recipients
-// configured in Settings → Daily admin report. Scheduled via Vercel Cron
-// (see vercel.json). With no recipients configured it's a no-op, so running
-// it in an unconfigured environment is harmless.
+// Manual/external trigger for the daily admin email digest (this week's
+// tasks, queued posts, monthly revenue/costs, upcoming crew salaries,
+// unresolved client comments), sent to the recipients configured in
+// Settings → Daily admin report.
+//
+// The normal daily send does NOT come through here — it's cron-free:
+// maybeSendDailyReport() fires after admin-panel page loads and sends once
+// per day (see lib/admin/daily-report.ts). This route stays as an escape
+// hatch (force a send from a scheduler or curl) and always sends, ignoring
+// the once-a-day marker. With no recipients configured it's a no-op.
 //
 // Auth: same posture as the other cron routes — CRON_SECRET bearer token,
 // with Vercel Cron's x-vercel-cron header accepted as an alternate

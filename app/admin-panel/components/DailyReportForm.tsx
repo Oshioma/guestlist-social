@@ -73,9 +73,10 @@ export default function DailyReportForm({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <p style={{ margin: 0, fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
-        Every morning (7am UTC — 8am UK in summer), the listed admins get an email with this
-        week{"’"}s tasks, the publish queue, this month{"’"}s crew salaries and
-        unresolved client comments. It includes salary figures, so only add
+        Once a day — triggered by the first admin-panel visit of the day —
+        the listed admins get an email with this week{"’"}s tasks, the publish
+        queue, this month{"’"}s revenue, costs and crew salaries, and
+        unresolved client comments. It includes financial figures, so only add
         people who should see those. Leave empty to turn the report off.
       </p>
       <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
