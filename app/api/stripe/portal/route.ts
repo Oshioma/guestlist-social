@@ -61,10 +61,21 @@ export async function POST(req: Request) {
 
   const origin = await authRedirectOrigin();
   const stripe = getStripe();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${origin}/proofer/teams`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  // Surface the real Stripe failure (stale customer id after a test/live key
+  // switch, portal not configured in the dashboard, …) instead of letting the
+  // throw become a bare 500 the panel can only render as "Something went wrong".
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${origin}/proofer/teams`,
+    });
+    return NextResponse.json({ url: session.url });
+  } catch (e) {
+    console.error("stripe portal failed:", e);
+    const detail = e instanceof Error ? e.message : "unknown error";
+    return NextResponse.json(
+      { error: `Couldn't open the billing portal: ${detail}` },
+      { status: 502 }
+    );
+  }
 }

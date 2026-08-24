@@ -502,8 +502,9 @@ export async function inviteToTeam(
 
   // Paid gate: collaborators (member/admin) need a paid team (Pro or Agency) —
   // inviting people is a "Teams" feature. Clients are always allowed, since
-  // giving a client sight of their own content is core, not an upsell.
-  if (role === "admin" || role === "proofer" || role === "member") {
+  // giving a client sight of their own content is core, not an upsell. Agency
+  // staff bypass the gate on any team (they run the platform and never pay).
+  if (!gate.isStaff && (role === "admin" || role === "proofer" || role === "member")) {
     if ((team?.plan ?? "free") === "free") {
       return { error: "Upgrade this team to Pro or Agency to invite admins, proofers or creators." };
     }
@@ -586,8 +587,9 @@ export async function updateTeamMemberRole(
   }
 
   // Same paid gate as invites: promoting someone to a collaborator role needs
-  // a paid team (Pro or Agency).
+  // a paid team (Pro or Agency). Agency staff bypass it, same as for invites.
   if (
+    !gate.isStaff &&
     (parsed.data.role === "admin" ||
       parsed.data.role === "proofer" ||
       parsed.data.role === "member") &&

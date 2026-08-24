@@ -82,6 +82,14 @@ export function BillingPanel({ teamId, info }: { teamId: string; info: BillingIn
 
       {error && <div style={errorBoxStyle}>{error}</div>}
 
+      {info.isStaff && (
+        <div style={{ ...successBoxStyle, background: "#eef2ff", color: "#4451b8", borderColor: "#dbe2fb" }}>
+          You&rsquo;re agency staff — you don&rsquo;t pay for plans. Skip checkout and use
+          &ldquo;Staff: manual plan override&rdquo; at the bottom of this panel to set any
+          plan for free.
+        </div>
+      )}
+
       {!info.stripeConfigured && (
         <div style={{ ...successBoxStyle, background: "#fff7ed", color: "#9a3412", borderColor: "#fed7aa" }}>
           Billing isn&rsquo;t configured on this deployment yet.
