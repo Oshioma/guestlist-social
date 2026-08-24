@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { getProoferAccess } from "@/lib/auth/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authRedirectOrigin } from "@/lib/auth/request-origin";
@@ -74,41 +75,68 @@ export async function POST(req: Request) {
 
   const stripe = getStripe();
 
-  // Reuse the team's Stripe customer, or create one and remember it. Storing it
-  // now (not just via the webhook) keeps repeat checkouts on one customer.
-  let customerId = team.stripe_customer_id as string | null;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: access.email ?? undefined,
-      name: (team.name as string) ?? undefined,
-      metadata: { teamId },
-    });
-    customerId = customer.id;
-    await admin.from("teams").update({ stripe_customer_id: customerId }).eq("id", teamId);
-  }
+  // Any Stripe call below can throw (wrong-mode key, deleted price, network).
+  // An unhandled throw would surface as a bare 500 and the billing panel could
+  // only say "Something went wrong" — so catch and return the real reason.
+  try {
+    // Reuse the team's Stripe customer, or create one and remember it. Storing
+    // it now (not just via the webhook) keeps repeat checkouts on one customer.
+    // A stored id can be stale — deleted in the dashboard, or created under a
+    // different key mode (test vs live) — in which case checkout would throw
+    // "No such customer"; verify it and fall back to creating a fresh one.
+    let customerId = team.stripe_customer_id as string | null;
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if (existing.deleted) customerId = null;
+      } catch (e) {
+        if ((e as Stripe.errors.StripeError)?.code === "resource_missing") {
+          customerId = null;
+        } else {
+          throw e;
+        }
+      }
+    }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: access.email ?? undefined,
+        name: (team.name as string) ?? undefined,
+        metadata: { teamId },
+      });
+      customerId = customer.id;
+      await admin.from("teams").update({ stripe_customer_id: customerId }).eq("id", teamId);
+    }
 
-  const origin = await authRedirectOrigin();
-  // Billing lives on the Teams list page now (the per-team detail page is
-  // retired), so send the customer back there after checkout.
-  const returnTo = `${origin}/proofer/teams`;
+    const origin = await authRedirectOrigin();
+    // Billing lives on the Teams list page now (the per-team detail page is
+    // retired), so send the customer back there after checkout.
+    const returnTo = `${origin}/proofer/teams`;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: TRIAL_DAYS,
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: TRIAL_DAYS,
+        metadata: { teamId, plan },
+      },
+      client_reference_id: teamId,
       metadata: { teamId, plan },
-    },
-    client_reference_id: teamId,
-    metadata: { teamId, plan },
-    allow_promotion_codes: true,
-    success_url: `${returnTo}?billing=success`,
-    cancel_url: `${returnTo}?billing=cancelled`,
-  });
+      allow_promotion_codes: true,
+      success_url: `${returnTo}?billing=success`,
+      cancel_url: `${returnTo}?billing=cancelled`,
+    });
 
-  if (!session.url) {
-    return NextResponse.json({ error: "Could not start checkout." }, { status: 502 });
+    if (!session.url) {
+      return NextResponse.json({ error: "Could not start checkout." }, { status: 502 });
+    }
+    return NextResponse.json({ url: session.url });
+  } catch (e) {
+    console.error("stripe checkout failed:", e);
+    const detail = e instanceof Error ? e.message : "unknown error";
+    return NextResponse.json(
+      { error: `Couldn't start checkout: ${detail}` },
+      { status: 502 }
+    );
   }
-  return NextResponse.json({ url: session.url });
 }
