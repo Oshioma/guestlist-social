@@ -186,14 +186,29 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await onSubmit({
-        name: name.trim(),
-        imageUrl: imageUrl.trim(),
-        headline: headline.trim(),
-        body: body.trim(),
-        ctaType,
-        destinationUrl: destinationUrl.trim(),
-      });
+      // A server action that rejects — a timeout, a 500, an action id the
+      // current deployment no longer knows — throws out of this transition,
+      // and Next recovers by re-rendering the route from scratch. That is
+      // what "clicked create and came back to an empty form" was: the failure
+      // took the form with it and said nothing. Catch it here so the ad stays
+      // on screen and the reason is visible.
+      let result: { error?: string; warning?: string };
+      try {
+        result = await onSubmit({
+          name: name.trim(),
+          imageUrl: imageUrl.trim(),
+          headline: headline.trim(),
+          body: body.trim(),
+          ctaType,
+          destinationUrl: destinationUrl.trim(),
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setError(
+          `The ad could not be sent to the server — ${detail}. Your ad is still here and saved locally. If this keeps happening, reload the page and try once more.`
+        );
+        return;
+      }
       if (result.error) {
         setError(result.error);
       } else {
