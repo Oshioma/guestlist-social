@@ -15,6 +15,12 @@ import { createClient } from "@supabase/supabase-js";
 const API_VERSION = "v25.0";
 const BASE = `https://graph.facebook.com/${API_VERSION}`;
 
+// Every call below runs inside the request that creates an ad. Unbounded, a
+// slow Meta leaves "Creating ad in Meta…" spinning with no way out. The image
+// upload gets more room because Meta fetches the creative itself.
+const GRAPH_TIMEOUT_MS = 15_000;
+const GRAPH_IMAGE_TIMEOUT_MS = 30_000;
+
 function getCredentials() {
   const token = process.env.META_ACCESS_TOKEN;
   let accountId = process.env.META_AD_ACCOUNT_ID;
@@ -87,7 +93,8 @@ export async function createMetaAd(
     // Last resort: fetch pages from the ad account
     try {
       const pagesRes = await fetch(
-        `${BASE}/me/accounts?access_token=${token}&limit=1`
+        `${BASE}/me/accounts?access_token=${token}&limit=1`,
+        { signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS) }
       );
       if (pagesRes.ok) {
         const pagesData = await pagesRes.json();
@@ -114,6 +121,7 @@ export async function createMetaAd(
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: imgParams,
+      signal: AbortSignal.timeout(GRAPH_IMAGE_TIMEOUT_MS),
     });
     const imgData = await imgRes.json();
     // Response shape: { images: { <filename>: { hash: "abc123" } } }
@@ -158,6 +166,7 @@ export async function createMetaAd(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: creativeParams,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
   });
   let creativeData = (await creativeRes.json()) as {
     id?: string;
@@ -202,6 +211,7 @@ export async function createMetaAd(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: adParams,
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
   });
   const adData = (await adRes.json()) as {
     id?: string;

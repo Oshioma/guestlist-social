@@ -11,6 +11,9 @@ import { createMetaAd } from "@/lib/meta-ad-create";
 import { getCreativeSourcesForClient } from "@/lib/creative-sources";
 import { revalidatePath } from "next/cache";
 
+// Same as the campaign page: the Meta ad create runs in this route's action.
+export const maxDuration = 90;
+
 type Props = {
   params: Promise<{ clientId: string; campaignId: string }>;
 };
@@ -76,30 +79,37 @@ export default async function NewAdPage({ params }: Props) {
     body: string;
     ctaType: string;
     destinationUrl: string;
-  }): Promise<{ error?: string }> {
+  }): Promise<{ error?: string; warning?: string }> {
     "use server";
 
+    const startedAt = Date.now();
     const adsetMetaId = (campaign as any).meta_adset_id as string;
 
-    const result = await createMetaAd({
-      adsetMetaId,
-      name: data.name,
-      imageUrl: data.imageUrl,
-      headline: data.headline,
-      body: data.body,
-      ctaType: data.ctaType,
-      destinationUrl: data.destinationUrl,
-    });
-
-    if (!result.ok) {
-      return { error: `Meta ${result.step}: ${result.error}` };
+    // Meta gets a go at the ad, but never gets to decide whether the operator
+    // keeps it: a refusal or a timeout becomes a warning on a saved ad.
+    let metaAdId: string | null = null;
+    let metaWarning: string | null = null;
+    try {
+      const result = await createMetaAd({
+        adsetMetaId,
+        name: data.name,
+        imageUrl: data.imageUrl,
+        headline: data.headline,
+        body: data.body,
+        ctaType: data.ctaType,
+        destinationUrl: data.destinationUrl,
+      });
+      if (result.ok) metaAdId = result.adId;
+      else metaWarning = `Meta ${result.step}: ${result.error}`;
+    } catch (err) {
+      metaWarning = err instanceof Error ? err.message : "Meta did not respond in time.";
     }
 
     const supabaseServer = await createClient();
-    await supabaseServer.from("ads").insert({
+    const { error: adError } = await supabaseServer.from("ads").insert({
       client_id: clientId,
       campaign_id: campaignId,
-      meta_id: result.adId,
+      ...(metaAdId ? { meta_id: metaAdId } : {}),
       name: data.name,
       status: "testing",
       creative_image_url: data.imageUrl,
@@ -108,9 +118,27 @@ export default async function NewAdPage({ params }: Props) {
       creative_cta: data.ctaType,
     });
 
+    console.log(
+      `metaAction: campaign ${campaignId} — total ${Date.now() - startedAt}ms, metaAdId ${
+        metaAdId ?? "none"
+      }`
+    );
+
+    if (adError) {
+      console.error("metaAction ads insert error:", adError);
+      const detail = `${adError.message}${adError.code ? ` (${adError.code})` : ""}`;
+      return {
+        error: metaAdId
+          ? `The ad was created in Meta but could not be saved here — ${detail}`
+          : `Could not save the ad — ${detail}`,
+      };
+    }
+
     revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
     revalidatePath(`/admin-panel/clients/${clientId}/ads`);
-    return {};
+    return metaWarning
+      ? { warning: `Saved here, but not pushed to Meta — ${metaWarning}` }
+      : {};
   }
 
   return (
@@ -167,6 +195,7 @@ export default async function NewAdPage({ params }: Props) {
           objective={(campaign as any).objective ?? "engagement"}
           existingCreatives={creativeSources}
           onSubmit={metaAction}
+          draftKey={`ad-draft:${clientId}:${campaignId}`}
         />
       ) : (
         <AdForm
