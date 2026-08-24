@@ -70,6 +70,29 @@ export type ActivityEntry = {
   at: string;
 };
 
+// One "this task was finished" event. Recurring tasks roll forward to open
+// when completed, so the completion log is the only durable record of them;
+// one-off tasks keep a single row reflecting their latest completion.
+export type TaskCompletion = {
+  id: string;
+  taskId: string;
+  title: string;
+  category: TaskCategory;
+  assignee: string;
+  completedBy: string;
+  recurrence: TaskRecurrence;
+  completedAt: string;
+};
+
+export type TaskCompletionInput = {
+  taskId: string;
+  title: string;
+  category: TaskCategory;
+  assignee: string;
+  completedBy: string;
+  recurrence: TaskRecurrence;
+};
+
 // Inputs accepted by the adapter. Keeping these separate from Task lets the
 // factory normalize and validate before hitting the data layer.
 export type CreateTaskInput = {

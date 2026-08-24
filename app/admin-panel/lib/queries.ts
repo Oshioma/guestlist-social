@@ -1,6 +1,7 @@
 import { createClient } from "../../../lib/supabase/server";
 import { createAdminClient } from "../../../lib/supabase/admin";
 import { supabaseTasksAdapter } from "./tasks/supabase-adapter";
+import type { TaskCompletion } from "@/features/tasks";
 import {
   mapDbAdToUiAd,
   mapDbClientToUiClient,
@@ -243,6 +244,40 @@ export async function getTasksData(): Promise<{
     .sort((a, b) => a.localeCompare(b));
 
   return { tasks, currentUserEmail, knownUsers };
+}
+
+// Data for the weekly completed-tasks report (/admin-panel/tasks/completed).
+// Reads the task_completions log, which records every completion event —
+// including recurring tasks, which roll forward to open and would otherwise
+// vanish from any "completed" listing. If the log table isn't available yet
+// (migration not applied), fall back to tasks in status 'completed', dated by
+// their last update — approximate, but the page still works.
+export async function getCompletedTasksReportData(): Promise<{
+  completions: TaskCompletion[];
+  currentUserEmail: string;
+}> {
+  const currentUserEmail = await supabaseTasksAdapter.getCurrentUserEmail();
+  try {
+    const completions = (await supabaseTasksAdapter.listCompletions?.()) ?? [];
+    return { completions, currentUserEmail };
+  } catch (err) {
+    console.error("getCompletedTasksReportData: completion log unavailable, falling back to tasks:", err);
+    const tasks = await supabaseTasksAdapter.listTasks();
+    const completions = tasks
+      .filter((t) => t.status === "completed")
+      .map((t) => ({
+        id: `task-${t.id}`,
+        taskId: t.id,
+        title: t.title,
+        category: t.category,
+        assignee: t.assignee,
+        completedBy: t.assignee,
+        recurrence: t.recurrence,
+        completedAt: t.updatedAt || t.createdAt,
+      }))
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+    return { completions, currentUserEmail };
+  }
 }
 
 export async function getCarouselIdeasData(): Promise<{

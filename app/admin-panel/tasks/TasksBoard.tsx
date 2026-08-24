@@ -7,6 +7,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import Link from "next/link";
 import SectionCard from "../components/SectionCard";
 import type {
   Task,
@@ -886,9 +887,12 @@ export default function TasksBoard({
             <h2 style={{ margin:0, fontSize:20, fontWeight:700, color:"#18181b" }}>Completed tasks</h2>
             <p style={{ margin:"4px 0 0", fontSize:13, color:"#71717a" }}>{completedTasks.length} task{completedTasks.length!==1?"s":""} completed</p>
           </div>
-          <div style={{ display:"flex", gap:6 }}>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             <button type="button" onClick={() => setCompletedGrouping("by-person")} style={tabBtn(completedGrouping==="by-person")}>By person</button>
             <button type="button" onClick={() => setCompletedGrouping("by-date")} style={tabBtn(completedGrouping==="by-date")}>By date</button>
+            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center" }} title="Completed tasks per employee, week by week">
+              Weekly report {"→"}
+            </Link>
           </div>
         </div>
 
@@ -1049,6 +1053,9 @@ export default function TasksBoard({
                 </button>
               ))}
             </div>
+            <Link href="/admin-panel/tasks/completed" style={{ ...secondaryButton, textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, padding:"7px 12px" }} title="Completed tasks per employee, week by week">
+              {"📅"} Weekly report
+            </Link>
             {/* Notifications */}
             <div style={{ position:"relative" }}>
               <button type="button" onClick={() => { setShowNotifications((v)=>!v); if(!showNotifications) markAllRead(); }} style={{ ...secondaryButton, padding:"7px 11px", position:"relative" }} aria-label={"Notifications" + (unreadCount>0 ? " (" + String(unreadCount) + ")" : "")}>
