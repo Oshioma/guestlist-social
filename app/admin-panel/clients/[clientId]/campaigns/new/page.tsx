@@ -81,12 +81,12 @@ export default async function NewCampaignPage({ params }: Props) {
   async function action(
     _state: { error: string | null },
     formData: FormData
-  ): Promise<{ error: string | null }> {
+  ): Promise<{ error: string | null; campaignId?: string; adError?: string | null }> {
     "use server";
 
     try {
-      await createCampaignAction(clientId, formData);
-      return { error: null };
+      const { campaignId, adError } = await createCampaignAction(clientId, formData);
+      return { error: null, campaignId, adError };
     } catch (error) {
       if (isRedirectError(error)) throw error;
 

@@ -7,7 +7,24 @@ import { createClient } from "../../../lib/supabase/server";
 import { createAdminClient } from "../../../lib/supabase/admin";
 import { createMetaCampaign } from "../../../lib/meta-campaign-create";
 
-export async function createCampaignAction(clientId: string, formData: FormData) {
+export type CreateCampaignResult = {
+  campaignId: string;
+  /** Set when the campaign saved but its first ad did not. */
+  adError: string | null;
+};
+
+/**
+ * Creates the campaign (and its first ad, in the one-click flow) and returns
+ * what it made. It deliberately does NOT redirect: while the server action
+ * held the redirect, `pending` on the submit button covered the navigation AND
+ * the render of the page being navigated to, so a slow next page was
+ * indistinguishable from a create that never finished. The caller navigates,
+ * so the button can stop saying "Creating…" the moment the campaign exists.
+ */
+export async function createCampaignAction(
+  clientId: string,
+  formData: FormData
+): Promise<CreateCampaignResult> {
   // Step timings end up in the server logs. A create that feels stuck is
   // otherwise indistinguishable from one that never started.
   const startedAt = Date.now();
@@ -188,8 +205,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
     }ms, ad ${adFailure ? `FAILED: ${adFailure}` : "ok"}`
   );
 
-  const adErrorParam = adFailure ? `&adError=${encodeURIComponent(adFailure)}` : "";
-  redirect(`/app/clients/${clientId}/campaigns/${insertedId}?created=1${adErrorParam}`);
+  return { campaignId: insertedId, adError: adFailure };
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {

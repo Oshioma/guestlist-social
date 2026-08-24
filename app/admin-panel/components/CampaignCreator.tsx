@@ -15,7 +15,7 @@ type Props = {
   action: (
     state: { error: string | null },
     formData: FormData
-  ) => Promise<{ error: string | null }>;
+  ) => Promise<{ error: string | null; campaignId?: string; adError?: string | null }>;
   suggestions: CampaignSuggestionBundle;
 };
 
