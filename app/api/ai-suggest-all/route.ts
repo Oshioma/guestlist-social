@@ -14,6 +14,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAiSourceSettings } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
+// Model calls do not fit in the platform default.
+export const maxDuration = 60;
 
 const GRAPH_VERSION = "v19.0";
 
@@ -170,7 +172,12 @@ export async function POST(req: Request) {
         const term = client?.industry || client?.name || "";
         if (token && term) {
           const url = `https://graph.facebook.com/${GRAPH_VERSION}/ads_archive?search_terms=${encodeURIComponent(term)}&ad_reached_countries=GB&ad_active_status=ACTIVE&fields=ad_creative_link_titles,ad_creative_bodies,page_name&limit=8&access_token=${token}`;
-          const res = await fetch(url, { cache: "no-store" });
+          // Enrichment, not the point of the endpoint: never let it hold up
+          // the suggestions the operator is waiting for.
+          const res = await fetch(url, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(6000),
+          });
           if (res.ok) {
             const data = await res.json();
             const ads = data.data ?? [];
