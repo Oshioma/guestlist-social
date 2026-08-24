@@ -18,6 +18,11 @@ import {
   facebookPageMatches,
 } from "../../../admin-panel/lib/account-match";
 
+// Reaches an external service (OAuth token exchange); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // GET /api/meta/callback
 //
 // Step 2 of the Meta OAuth flow. Verifies the state cookie, exchanges the

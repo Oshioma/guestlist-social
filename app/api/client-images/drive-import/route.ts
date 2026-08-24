@@ -12,6 +12,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Drive listing plus per-file downloads); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 120;
+
 
 const PAGE_SIZE = 1000;
 const MAX_IMAGES = 500;
@@ -94,7 +98,8 @@ export async function POST(req: Request) {
     });
 
     const driveRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files?${params.toString()}`
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+      { signal: AbortSignal.timeout(15_000) }
     );
 
     if (!driveRes.ok) {

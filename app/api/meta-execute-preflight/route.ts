@@ -34,6 +34,10 @@ import { NextResponse } from "next/server";
 import { createHmac } from "crypto";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Meta Graph reads); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
 
 const API_VERSION = "v25.0";
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;

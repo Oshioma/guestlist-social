@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     // browser-like Referer. Passing https://www.instagram.com/ consistently
     // gets past that check without needing any tokens.
     const res = await fetch(decoded, {
+      signal: AbortSignal.timeout(10_000),
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

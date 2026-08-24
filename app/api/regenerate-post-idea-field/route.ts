@@ -18,6 +18,10 @@ import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (model call); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 type Field = "caption_idea" | "image_idea" | "cta" | "first_line" | "hashtags";
 type Modifier =

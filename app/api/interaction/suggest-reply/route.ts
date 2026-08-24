@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (model call); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 // POST /api/interaction/suggest-reply
 //

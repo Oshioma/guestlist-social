@@ -223,7 +223,10 @@ async function fetchFromMetaGraph(
     // CAROUSEL_ALBUM parents return null media_url; their image lives on
     // the first child. Request children inline so a single call covers
     // all three types (IMAGE, VIDEO, CAROUSEL_ALBUM).
-    const mediaRes = await fetch(`${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,caption,media_url,thumbnail_url,media_type,children{media_url,thumbnail_url,media_type}&limit=10&access_token=${acct.access_token}`);
+    const mediaRes = await fetch(
+      `${GRAPH}/${acct.account_id}/media?fields=id,timestamp,permalink,caption,media_url,thumbnail_url,media_type,children{media_url,thumbnail_url,media_type}&limit=10&access_token=${acct.access_token}`,
+      { signal: AbortSignal.timeout(15_000) }
+    );
     if (!mediaRes.ok) {
       const errBody = await mediaRes.text().catch(() => "");
       const tokenExpired = isTokenError(mediaRes.status, errBody);
@@ -268,7 +271,8 @@ async function fetchFromMetaGraph(
         "from{id,name,username}," +
         "user{id,username}";
       const res = await fetch(
-        `${GRAPH}/${m.id}/comments?fields=${encodeURIComponent(commentFields)}&limit=25&access_token=${acct.access_token}`
+        `${GRAPH}/${m.id}/comments?fields=${encodeURIComponent(commentFields)}&limit=25&access_token=${acct.access_token}`,
+        { signal: AbortSignal.timeout(15_000) }
       );
       if (!res.ok) {
         const errBody = await res.text().catch(() => "");

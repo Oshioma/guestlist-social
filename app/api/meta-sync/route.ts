@@ -18,6 +18,11 @@ import {
   targetingToAudience,
 } from "@/lib/meta";
 
+// Reaches an external service (syncs every campaign and ad); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 300;
+
+
 /**
  * GET /api/meta-sync
  *

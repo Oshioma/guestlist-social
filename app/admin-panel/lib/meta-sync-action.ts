@@ -195,7 +195,7 @@ export async function syncMetaData(clientId: string) {
 
     const campRes = await fetch(
       `https://graph.facebook.com/v25.0/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&limit=50&access_token=${token}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal: AbortSignal.timeout(20_000) }
     );
     if (!campRes.ok) throw new Error(`Meta campaigns: ${campRes.status}`);
     const campData = await campRes.json();
@@ -297,7 +297,7 @@ export async function syncMetaData(clientId: string) {
     // 2. Ads — fetch 10 active/paused ads, single page, no pagination.
     const adsRes = await fetch(
       `https://graph.facebook.com/v25.0/${accountId}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,creative{id,image_url,thumbnail_url,object_story_spec}&limit=50&access_token=${token}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal: AbortSignal.timeout(20_000) }
     );
     const metaAds: Array<{ id: string; name: string; status: string; effective_status?: string; adset_id?: string; campaign_id: string; creative?: { id?: string; image_url?: string; thumbnail_url?: string } }> =
       adsRes.ok ? ((await adsRes.json()).data ?? []) : [];

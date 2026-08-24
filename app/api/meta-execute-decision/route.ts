@@ -39,6 +39,10 @@ import {
 import { captureBaseline } from "@/lib/decision-outcomes";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Meta Graph writes); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 type DecisionType =
   | "pause_ad"

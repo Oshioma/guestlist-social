@@ -87,7 +87,9 @@ export async function createMetaAd(
           pageId = account.account_id;
         }
       }
-    } catch { /* fall through */ }
+    } catch (err) {
+      console.error("createMetaAd: page lookup from connected accounts failed:", err);
+    }
   }
   if (!pageId) {
     // Last resort: fetch pages from the ad account
@@ -100,7 +102,9 @@ export async function createMetaAd(
         const pagesData = await pagesRes.json();
         pageId = pagesData.data?.[0]?.id ?? null;
       }
-    } catch { /* fall through */ }
+    } catch (err) {
+      console.error("createMetaAd: page lookup from ad account failed:", err);
+    }
   }
   if (!pageId) {
     return {
@@ -130,8 +134,18 @@ export async function createMetaAd(
       const firstKey = Object.keys(images)[0];
       if (firstKey) imageHash = images[firstKey].hash;
     }
-  } catch {
-    // Fall through — try with image_url as fallback
+    if (!imageHash) {
+      console.error(
+        "createMetaAd: Meta accepted no image hash",
+        imgRes.status,
+        JSON.stringify(imgData).slice(0, 300)
+      );
+    }
+  } catch (err) {
+    // Fall through — the creative is built with the plain image_url instead.
+    // Worth a line either way: a creative silently missing its uploaded image
+    // is the difference between an ad Meta accepts and one it refuses.
+    console.error("createMetaAd: image upload to Meta failed:", err);
   }
 
   // ── 2. Create Ad Creative ─────────────────────────────────────────

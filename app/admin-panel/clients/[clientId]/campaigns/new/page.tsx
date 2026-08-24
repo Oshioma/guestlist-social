@@ -46,7 +46,9 @@ export default async function NewCampaignPage({ params }: Props) {
   let creativeSources: Awaited<ReturnType<typeof getCreativeSourcesForClient>> = [];
   try {
     creativeSources = await getCreativeSourcesForClient(clientId);
-  } catch { /* degrade gracefully */ }
+  } catch (err) {
+    console.error("new campaign page: creative sources unavailable:", err);
+  }
 
   // Fetch winning ads for "Clone winner" buttons
   const { data: winnerRows } = await supabase

@@ -10,6 +10,10 @@
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Pexels API); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
 
 export async function GET(req: Request) {
   const apiKey = process.env.PEXELS_API_KEY;
@@ -25,7 +29,7 @@ export async function GET(req: Request) {
 
   const res = await fetch(
     `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=${perPage}&orientation=landscape`,
-    { headers: { Authorization: apiKey } }
+    { headers: { Authorization: apiKey }, signal: AbortSignal.timeout(10_000) }
   );
 
   if (!res.ok) {

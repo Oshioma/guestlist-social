@@ -14,6 +14,10 @@ import { createClient } from "@supabase/supabase-js";
 import { logMetaWrite } from "@/lib/meta-write-log";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Meta Graph writes); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 const GRAPH_VERSION = "v19.0";
 
@@ -94,7 +98,7 @@ export async function POST(req: Request) {
     const start = Date.now();
     const res = await fetch(
       `https://graph.facebook.com/${GRAPH_VERSION}${endpoint}`,
-      { method: "POST", body: params, cache: "no-store" }
+      { method: "POST", body: params, cache: "no-store", signal: AbortSignal.timeout(15_000) }
     );
     const data = await res.json();
 

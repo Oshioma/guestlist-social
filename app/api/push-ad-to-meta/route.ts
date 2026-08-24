@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createMetaAd } from "@/lib/meta-ad-create";
 
+// Reaches an external service (Meta ad writes); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
+
 export async function POST(req: Request) {
   try {
     const { adId } = await req.json();

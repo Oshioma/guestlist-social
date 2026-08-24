@@ -505,7 +505,7 @@ async function publishFacebookPost(args: {
     const start = Date.now();
     const res = await fetch(
       `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
-      { method: "POST", body: params, cache: "no-store" }
+      { method: "POST", body: params, cache: "no-store", signal: AbortSignal.timeout(30_000) }
     );
     const data = (await res.json()) as { id?: string; post_id?: string; error?: { message?: string } };
     logMetaWrite({
@@ -535,7 +535,7 @@ async function publishFacebookPost(args: {
   const start = Date.now();
   const res = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
-    { method: "POST", body: params, cache: "no-store" }
+    { method: "POST", body: params, cache: "no-store", signal: AbortSignal.timeout(30_000) }
   );
   const data = (await res.json()) as { id?: string; error?: { message?: string } };
   logMetaWrite({
@@ -707,7 +707,7 @@ async function publishFacebookVideo(args: {
   const start = Date.now();
   const res = await fetch(
     `https://graph.facebook.com/${META_GRAPH_VERSION}${endpoint}`,
-    { method: "POST", body: params, cache: "no-store" }
+    { method: "POST", body: params, cache: "no-store", signal: AbortSignal.timeout(60_000) }
   );
   const data = (await res.json()) as {
     id?: string;

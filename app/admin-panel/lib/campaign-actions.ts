@@ -273,12 +273,14 @@ async function deleteCampaignCore(campaignId: string, clientId: string) {
       const token = process.env.META_ACCESS_TOKEN;
       if (token) {
         await fetch(`https://graph.facebook.com/v25.0/${campaign.meta_id}`, {
+          signal: AbortSignal.timeout(15_000),
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ access_token: token, status: "DELETED" }),
         });
       }
-    } catch { /* Meta deletion is best-effort */ }
+    } catch (metaDeleteErr) {
+      console.error("deleteCampaign: Meta delete failed:", metaDeleteErr); /* Meta deletion is best-effort */ }
   }
 
   // Delete ads in this campaign first

@@ -131,6 +131,7 @@ DALLE_PROMPT: [A detailed DALL-E prompt that would generate this image — inclu
     if (sources.imageGeneration && openaiKey && dallePrompt) {
       try {
         const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
+          signal: AbortSignal.timeout(90_000),
           method: "POST",
           headers: {
             "Content-Type": "application/json",
