@@ -246,6 +246,20 @@ export async function getTasksData(): Promise<{
   return { tasks, currentUserEmail, knownUsers };
 }
 
+// Data for the tasks overview page (/admin-panel/tasks/overview): every
+// current task plus who's viewing. Deliberately skips getTasksData's
+// knownUsers work (auth admin listing) — the overview only displays tasks.
+export async function getTasksOverviewData(): Promise<{
+  tasks: Task[];
+  currentUserEmail: string;
+}> {
+  const [tasks, currentUserEmail] = await Promise.all([
+    supabaseTasksAdapter.listTasks(),
+    supabaseTasksAdapter.getCurrentUserEmail(),
+  ]);
+  return { tasks, currentUserEmail };
+}
+
 // Data for the weekly completed-tasks report (/admin-panel/tasks/completed).
 // Reads the task_completions log, which records every completion event —
 // including recurring tasks, which roll forward to open and would otherwise

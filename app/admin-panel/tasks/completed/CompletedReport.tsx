@@ -167,16 +167,21 @@ export default function CompletedReport({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Header */}
-      <div>
-        <Link href="/admin-panel/tasks" style={{ fontSize: 12, fontWeight: 600, color: "#71717a", textDecoration: "none" }}>
-          {"←"} Back to tasks
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <Link href="/admin-panel/tasks" style={{ fontSize: 12, fontWeight: 600, color: "#71717a", textDecoration: "none" }}>
+            {"←"} Back to tasks
+          </Link>
+          <h1 style={{ margin: "8px 0 0", fontSize: 30, lineHeight: 1.05, fontWeight: 700, color: "#18181b", letterSpacing: "-0.03em" }}>
+            Completed tasks
+          </h1>
+          <p style={{ margin: "6px 0 0", fontSize: 14, color: "#71717a", maxWidth: 620 }}>
+            Pick an employee to see what they{"’"}ve finished, month by month. Recurring tasks are counted every time they{"’"}re completed.
+          </p>
+        </div>
+        <Link href="/admin-panel/tasks/overview" style={{ padding: "6px 10px", borderRadius: 8, background: "#fff", color: "#18181b", border: "1px solid #e4e4e7", fontSize: 12, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }} title="All current tasks per employee">
+          {"👥"} Overview
         </Link>
-        <h1 style={{ margin: "8px 0 0", fontSize: 30, lineHeight: 1.05, fontWeight: 700, color: "#18181b", letterSpacing: "-0.03em" }}>
-          Completed tasks
-        </h1>
-        <p style={{ margin: "6px 0 0", fontSize: 14, color: "#71717a", maxWidth: 620 }}>
-          Pick an employee to see what they{"’"}ve finished, month by month. Recurring tasks are counted every time they{"’"}re completed.
-        </p>
       </div>
 
       {/* Employee tabs */}
