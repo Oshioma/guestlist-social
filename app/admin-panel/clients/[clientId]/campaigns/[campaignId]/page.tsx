@@ -27,7 +27,7 @@ import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
   params: Promise<{ clientId: string; campaignId: string }>;
-  searchParams?: Promise<{ created?: string }>;
+  searchParams?: Promise<{ created?: string; adError?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,12 @@ export const maxDuration = 90;
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
   try {
   const { clientId, campaignId } = await params;
-  const justCreated = (await searchParams)?.created === "1";
+  const query = await searchParams;
+  const justCreated = query?.created === "1";
+  // Set when the campaign saved but its first ad did not — see
+  // createCampaignAction. The operator has to be told, or the copy they wrote
+  // on the campaign form disappears without a word.
+  const adFailure = query?.adError ?? null;
   const supabase = await createClient();
   const adsAllowed = await canRunAds();
 
@@ -158,7 +163,31 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {justCreated && <ClearCampaignDraft clientId={clientId} />}
+      {/* Keep the draft when the ad half failed — it still holds that ad copy. */}
+      {justCreated && !adFailure && <ClearCampaignDraft clientId={clientId} />}
+
+      {adFailure && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "#991b1b",
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 10,
+            padding: "12px 14px",
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ fontWeight: 700 }}>
+            The campaign was created, but its first ad was not saved.
+          </strong>
+          <span style={{ display: "block", marginTop: 4 }}>{adFailure}</span>
+          <span style={{ display: "block", marginTop: 6, color: "#7f1d1d" }}>
+            Your ad copy is still saved on this device — reopen the new-campaign
+            form to get it back, or add the ad below.
+          </span>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Link
           href={`/app/clients/${clientId}`}

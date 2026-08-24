@@ -120,6 +120,12 @@ export async function createCampaignAction(clientId: string, formData: FormData)
   const adCtaType = String(formData.get("adCtaType") ?? "").trim();
   const adDestinationUrl = String(formData.get("adDestinationUrl") ?? "").trim();
 
+  // The one-click flow creates the campaign AND its first ad. If the ad half
+  // fails, the redirect used to carry on as if everything had worked: the
+  // operator lands on a campaign that says "Add your first ad" with no idea
+  // their copy went nowhere. Carry the reason to the page instead.
+  let adFailure: string | null = null;
+
   if (adImageUrl || adHeadline || adBody) {
     try {
       // Save the ad with the image URL exactly as given. Copying the creative
@@ -147,6 +153,7 @@ export async function createCampaignAction(clientId: string, formData: FormData)
 
       if (adError) {
         console.error("Ad creation in one-click flow failed:", adError);
+        adFailure = `${adError.message}${adError.code ? ` (${adError.code})` : ""}`;
       } else if (insertedAd && adImageUrl) {
         const adId = String(insertedAd.id);
         after(async () => {
@@ -171,16 +178,18 @@ export async function createCampaignAction(clientId: string, formData: FormData)
       }
     } catch (adErr) {
       console.error("Ad creation in one-click flow failed:", adErr);
+      adFailure = adErr instanceof Error ? adErr.message : "Could not save the ad.";
     }
   }
 
   console.log(
     `createCampaignAction: campaign ${insertedId} — insert ${afterInsertMs}ms, total ${
       Date.now() - startedAt
-    }ms`
+    }ms, ad ${adFailure ? `FAILED: ${adFailure}` : "ok"}`
   );
 
-  redirect(`/app/clients/${clientId}/campaigns/${insertedId}?created=1`);
+  const adErrorParam = adFailure ? `&adError=${encodeURIComponent(adFailure)}` : "";
+  redirect(`/app/clients/${clientId}/campaigns/${insertedId}?created=1${adErrorParam}`);
 }
 
 export async function assignCampaignToClient(campaignId: string, clientId: string) {
