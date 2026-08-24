@@ -4,6 +4,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { authRedirectOrigin } from "@/lib/auth/request-origin";
 import { getStripe, stripeConfigured } from "@/lib/stripe";
 
+// Reaches an external service (Stripe API); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // POST /api/stripe/portal  { teamId }
 //
 // Opens the Stripe Billing Portal for a team so the owner can change plan,

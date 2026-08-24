@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (several sequential Graph pages); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 const GRAPH = "https://graph.facebook.com/v19.0";
 
@@ -52,7 +56,8 @@ type RawComment = {
 
 async function fetchFacebookComments(pageId: string, token: string, postsLimit = 8): Promise<RawComment[]> {
   const postsRes = await fetch(
-    `${GRAPH}/${pageId}/posts?fields=id,message,created_time&limit=${postsLimit}&access_token=${token}`
+    `${GRAPH}/${pageId}/posts?fields=id,message,created_time&limit=${postsLimit}&access_token=${token}`,
+    { signal: AbortSignal.timeout(15_000) }
   );
   if (!postsRes.ok) {
     const err = await postsRes.json().catch(() => ({}));
@@ -65,7 +70,8 @@ async function fetchFacebookComments(pageId: string, token: string, postsLimit =
   await Promise.all(
     posts.slice(0, 6).map(async (post) => {
       const res = await fetch(
-        `${GRAPH}/${post.id}/comments?fields=id,message,from,created_time,like_count&limit=25&access_token=${token}`
+        `${GRAPH}/${post.id}/comments?fields=id,message,from,created_time,like_count&limit=25&access_token=${token}`,
+        { signal: AbortSignal.timeout(15_000) }
       );
       if (!res.ok) return;
       const d = await res.json() as { data?: { id: string; message?: string; from?: { name?: string }; created_time?: string; like_count?: number }[] };
@@ -88,7 +94,8 @@ async function fetchFacebookComments(pageId: string, token: string, postsLimit =
 
 async function fetchInstagramComments(igUserId: string, token: string, mediaLimit = 8): Promise<RawComment[]> {
   const mediaRes = await fetch(
-    `${GRAPH}/${igUserId}/media?fields=id,caption,timestamp,permalink&limit=${mediaLimit}&access_token=${token}`
+    `${GRAPH}/${igUserId}/media?fields=id,caption,timestamp,permalink&limit=${mediaLimit}&access_token=${token}`,
+    { signal: AbortSignal.timeout(15_000) }
   );
   if (!mediaRes.ok) {
     const err = await mediaRes.json().catch(() => ({}));
@@ -101,7 +108,8 @@ async function fetchInstagramComments(igUserId: string, token: string, mediaLimi
   await Promise.all(
     media.slice(0, 6).map(async (m) => {
       const res = await fetch(
-        `${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${token}`
+        `${GRAPH}/${m.id}/comments?fields=id,text,username,timestamp,like_count&limit=25&access_token=${token}`,
+        { signal: AbortSignal.timeout(15_000) }
       );
       if (!res.ok) return;
       const d = await res.json() as { data?: { id: string; text?: string; username?: string; timestamp?: string; like_count?: number }[] };

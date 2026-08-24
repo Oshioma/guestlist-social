@@ -14,6 +14,10 @@ import { planForPriceId, type Plan } from "@/lib/billing/plans";
 // works — never parse the request before constructEvent.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Reaches an external service (Stripe API); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
 
 // Statuses that keep a paid entitlement live. past_due is included so a failed
 // renewal doesn't instantly lock the team out while Stripe retries the card.

@@ -4,6 +4,11 @@ import {
   parseSignedRequest,
 } from "../../../admin-panel/lib/meta-auth";
 
+// Reaches an external service (Meta callback); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // POST /api/instagram/deauthorize
 //
 // Meta calls this (the app's "Deauthorize callback URL") when a user removes

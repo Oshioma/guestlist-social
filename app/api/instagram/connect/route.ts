@@ -3,6 +3,11 @@ import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { instagramAuthorizeUrl } from "../../../admin-panel/lib/meta-auth";
 
+// Reaches an external service (OAuth token exchange); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // GET /api/instagram/connect?clientId=<id>&returnTo=<portal|/path>
 //
 // Step 1 of the Instagram *Business Login* flow — the no-Facebook path for

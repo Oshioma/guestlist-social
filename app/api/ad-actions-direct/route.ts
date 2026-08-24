@@ -5,6 +5,10 @@ import { createMetaAd } from "@/lib/meta-ad-create";
 import { logMetaWrite } from "@/lib/meta-write-log";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Meta ad writes); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

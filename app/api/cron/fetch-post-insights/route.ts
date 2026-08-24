@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchDueInsights } from "@/lib/post-insights";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (walks every connected account); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 300;
+
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

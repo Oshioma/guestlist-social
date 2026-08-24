@@ -313,6 +313,7 @@ export async function exchangeInstagramCodeForToken(
     method: "POST",
     body,
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   const raw = (await res.json()) as {
     access_token?: string;

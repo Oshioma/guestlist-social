@@ -7,6 +7,11 @@ import {
   metaServiceClient,
 } from "../../../admin-panel/lib/meta-auth";
 
+// Reaches an external service (OAuth token exchange); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // GET /api/instagram/callback
 //
 // Step 2 of the Instagram Business Login flow. Verifies the state cookie,

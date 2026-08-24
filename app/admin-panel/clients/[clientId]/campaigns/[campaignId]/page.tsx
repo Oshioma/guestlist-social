@@ -93,7 +93,9 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   let creativeSources: Awaited<ReturnType<typeof getCreativeSourcesForClient>> = [];
   try {
     creativeSources = await getCreativeSourcesForClient(clientId);
-  } catch { /* degrade gracefully */ }
+  } catch (err) {
+    console.error("campaign page: creative sources unavailable:", err);
+  }
 
   const winners = ads.filter((ad) => ad.status === "active" && ad.ctr >= 2.5);
   const paused = ads.filter((ad) => ad.status === "paused");
@@ -131,8 +133,9 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   let learningSuggestions: Awaited<ReturnType<typeof generateSuggestionsFromLearnings>> = [];
   try {
     learningSuggestions = await generateSuggestionsFromLearnings(clientId, campaignId);
-  } catch {
-    // learnings table may not exist — degrade gracefully
+  } catch (err) {
+    // learnings table may not exist — degrade gracefully, but leave a trace
+    console.error("campaign page: learning suggestions unavailable:", err);
   }
 
   const hasMetaId = !!(campaign as any).meta_id;
@@ -158,7 +161,9 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           adAccountName = data.name ?? null;
         }
       }
-    } catch { /* fall through */ }
+    } catch (err) {
+      console.error("campaign page: Meta ad-account name lookup failed:", err);
+    }
   }
 
   return (

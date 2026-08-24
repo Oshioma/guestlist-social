@@ -12,6 +12,11 @@ import {
   type Plan,
 } from "@/lib/billing/plans";
 
+// Reaches an external service (Stripe API); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 // POST /api/stripe/checkout  { teamId, plan }
 //
 // Starts a Stripe Checkout session for a team's subscription and returns the

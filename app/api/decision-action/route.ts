@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { updateAdStatus, updateCampaignBudget } from "@/lib/meta";
 
 export const dynamic = "force-dynamic";
+// Reaches an external service (Meta Graph); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 60;
+
 
 export async function POST(req: Request) {
   try {

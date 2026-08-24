@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { socialAccountConnectGate } from "@/lib/billing/team-billing";
 
+// Reaches an external service (OAuth token exchange); the platform default is not a
+// safe assumption for it.
+export const maxDuration = 30;
+
+
 type Actor = { userId: string; isStaff: boolean };
 
 // May the signed-in user connect credentials for this account? Connecting is a

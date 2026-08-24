@@ -134,6 +134,7 @@ async function metaPost<T>(
 
   const start = Date.now();
   const res = await fetch(`${BASE_URL}${path}`, {
+    signal: AbortSignal.timeout(15_000),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,
