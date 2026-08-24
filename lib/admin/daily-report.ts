@@ -748,14 +748,22 @@ async function releaseDay(supabase: ReturnType<typeof admin>): Promise<void> {
     .eq("key", DAILY_REPORT_LAST_SENT_KEY);
 }
 
-export async function maybeSendDailyReport(): Promise<void> {
+export type MaybeSendResult = {
+  triggered: boolean;
+  reason: string;
+  result?: SendDailyReportResult;
+};
+
+export async function maybeSendDailyReport(): Promise<MaybeSendResult> {
   try {
     const supabase = admin();
 
     // No recipients → nothing to do, and deliberately no claim either, so
-    // adding recipients mid-day still gets a report on the next page load.
+    // adding recipients mid-day still gets a report on the next trigger.
     const recipients = await getDailyReportRecipients(supabase);
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) {
+      return { triggered: false, reason: "no recipients configured" };
+    }
 
     let timeZone = "Europe/London";
     try {
@@ -771,18 +779,24 @@ export async function maybeSendDailyReport(): Promise<void> {
       .select("value")
       .eq("key", DAILY_REPORT_LAST_SENT_KEY)
       .maybeSingle<{ value: { day?: unknown } | null }>();
-    if (markerRow?.value?.day === todayKey) return;
+    if (markerRow?.value?.day === todayKey) {
+      return { triggered: false, reason: "already sent today" };
+    }
 
-    if (!(await claimDay(supabase, todayKey))) return;
+    if (!(await claimDay(supabase, todayKey))) {
+      return { triggered: false, reason: "another trigger claimed today" };
+    }
 
     const result = await sendDailyAdminReport();
     console.log(
       `[daily-report] daily send for ${todayKey}: sent=${result.sent} skipped=${result.skipped} failed=${result.failed}`
     );
     // Nothing went out at all (provider down / not configured) — release the
-    // claim so a later visit today retries instead of silently losing a day.
+    // claim so a later trigger today retries instead of silently losing a day.
     if (result.sent === 0) await releaseDay(supabase);
+    return { triggered: true, reason: "sent", result };
   } catch (e) {
     console.error("[daily-report] maybeSendDailyReport failed:", e);
+    return { triggered: false, reason: "error" };
   }
 }

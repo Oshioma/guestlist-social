@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { sendDailyAdminReport } from "@/lib/admin/daily-report";
+import {
+  maybeSendDailyReport,
+  sendDailyAdminReport,
+} from "@/lib/admin/daily-report";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,11 +15,13 @@ export const maxDuration = 60;
 // unresolved client comments), sent to the recipients configured in
 // Settings → Daily admin report.
 //
-// The normal daily send does NOT come through here — it's cron-free:
-// maybeSendDailyReport() fires after admin-panel page loads and sends once
-// per day (see lib/admin/daily-report.ts). This route stays as an escape
-// hatch (force a send from a scheduler or curl) and always sends, ignoring
-// the once-a-day marker. With no recipients configured it's a no-op.
+// Two triggers share this send, and the once-a-day marker in app_settings
+// keeps them from double-sending: the Supabase pg_cron schedule (see
+// 20260824_supabase_cron_schedules.sql) calls this route each morning, and
+// maybeSendDailyReport() also fires after admin-panel page loads as a
+// backup. By default this route respects the marker (already sent today →
+// no-op); pass ?force=1 to send regardless. With no recipients configured
+// it's always a no-op.
 //
 // Auth: same posture as the other cron routes — CRON_SECRET bearer token,
 // with Vercel Cron's x-vercel-cron header accepted as an alternate
@@ -50,8 +55,13 @@ async function handle(req: Request) {
   }
 
   try {
-    const result = await sendDailyAdminReport();
-    return NextResponse.json({ ok: true, ...result });
+    const force = new URL(req.url).searchParams.get("force") === "1";
+    if (force) {
+      const result = await sendDailyAdminReport();
+      return NextResponse.json({ ok: true, forced: true, ...result });
+    }
+    const outcome = await maybeSendDailyReport();
+    return NextResponse.json({ ok: true, ...outcome });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[daily-admin-report] failed:", message);
