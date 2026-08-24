@@ -68,6 +68,41 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   const attemptKey = draftKey ? `${draftKey}:last-attempt` : "ad-form:last-attempt";
   const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
 
+  // Everything that remembers a failure across the reload has been going to
+  // localStorage — drafts, the attempt trace, the failure recorder — and none
+  // of it has ever shown up on the affected machine. If site storage is
+  // blocked there, all of it silently no-ops, so say that plainly instead of
+  // looking like the features are missing.
+  const [storageBlocked, setStorageBlocked] = useState(false);
+  useEffect(() => {
+    try {
+      const probe = "gs:storage-probe";
+      window.localStorage.setItem(probe, "1");
+      window.localStorage.removeItem(probe);
+    } catch {
+      setStorageBlocked(true);
+    }
+  }, []);
+
+  // A marker in the URL survives what storage can't: it rides through a hard
+  // reload, needs no permissions, and — unlike anything else here — it shows
+  // up in a screenshot of the address bar.
+  const [urlAttempt, setUrlAttempt] = useState<string | null>(null);
+  useEffect(() => {
+    const h = window.location.hash;
+    if (h.startsWith("#ad-attempt-")) setUrlAttempt(h.replace("#ad-attempt-", ""));
+  }, []);
+
+  function markUrl(fragment: string) {
+    try {
+      const u = new URL(window.location.href);
+      u.hash = fragment;
+      window.history.replaceState(null, "", u.toString());
+    } catch {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(attemptKey);
@@ -226,7 +261,13 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       // took the form with it and said nothing. Catch it here so the ad stays
       // on screen and the reason is visible.
       const attempt: Attempt = { startedAt: Date.now() };
+      const stamp = new Date(attempt.startedAt)
+        .toTimeString()
+        .slice(0, 8)
+        .replace(/:/g, "");
       writeAttempt(attempt);
+      markUrl(`ad-attempt-${stamp}`);
+      setUrlAttempt(null);
 
       let result: { error?: string; warning?: string };
       try {
@@ -241,6 +282,7 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         writeAttempt({ ...attempt, finishedAt: Date.now(), outcome: "threw", detail });
+        markUrl(`ad-threw-${stamp}`);
         setError(
           `The ad could not be sent to the server — ${detail}. Your ad is still here and saved locally. If this keeps happening, reload the page and try once more.`
         );
@@ -253,6 +295,7 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
           outcome: "refused",
           detail: result.error,
         });
+        markUrl(`ad-refused-${stamp}`);
         setError(result.error);
       } else {
         writeAttempt({
@@ -261,6 +304,7 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
           outcome: result.warning ? "saved-with-warning" : "created",
           detail: result.warning,
         });
+        markUrl(`ad-${result.warning ? "saved" : "created"}-${stamp}`);
         // The ad exists — even when Meta refused it, which comes back as a
         // warning rather than an error so the operator isn't invited to
         // submit it a second time.
@@ -365,6 +409,44 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {urlAttempt && (
+          <div
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            The create at{" "}
+            {`${urlAttempt.slice(0, 2)}:${urlAttempt.slice(2, 4)}:${urlAttempt.slice(4, 6)}`}{" "}
+            never came back — the page reloaded before the server answered. The
+            ad was not created. Nothing is wrong with what you typed.
+          </div>
+        )}
+
+        {storageBlocked && (
+          <div
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            This browser is blocking site storage for guestlistsocial.com, so
+            drafts of this ad can&rsquo;t be saved and a failure can&rsquo;t be
+            reported back to you after a reload. Allow site data for this site
+            to get both.
+          </div>
+        )}
+
         {draftRestored && !error && (
           <div
             style={{
