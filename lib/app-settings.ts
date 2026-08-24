@@ -120,6 +120,66 @@ export async function setAiSourceSettings(
   if (error) throw new Error(`save AI source settings: ${error.message}`);
 }
 
+// ── Daily admin report recipients ────────────────────────────────────────
+//
+// Who receives the daily email digest (tasks, queued posts, upcoming crew
+// salaries, client comments). Deliberately an explicit list rather than
+// "every admin user": the report contains salary figures, so it goes only
+// to addresses the operator has typed in. Empty list = report disabled.
+
+const DAILY_REPORT_RECIPIENTS_KEY = "daily_report_recipients";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeRecipientList(raw: unknown): string[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+    ? raw.split(/[,;\s]+/)
+    : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of list) {
+    if (typeof item !== "string") continue;
+    const email = item.trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+export async function getDailyReportRecipients(
+  supabase: SupabaseClient
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", DAILY_REPORT_RECIPIENTS_KEY)
+    .maybeSingle<{ value: unknown }>();
+
+  // Fail closed: any read problem means "no recipients", never a crash in
+  // the cron and never an accidental send to a guessed audience.
+  if (error || data?.value == null) return [];
+  return normalizeRecipientList(data.value);
+}
+
+export async function setDailyReportRecipients(
+  supabase: SupabaseClient,
+  emails: string[]
+): Promise<void> {
+  const value = normalizeRecipientList(emails);
+  const { error } = await supabase.from("app_settings").upsert(
+    {
+      key: DAILY_REPORT_RECIPIENTS_KEY,
+      value,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "key" }
+  );
+  if (error) throw new Error(`save daily report recipients: ${error.message}`);
+}
+
 export type ReaperSettings = {
   // Minimum (positive + negative) verdicts a pattern needs before the
   // reaper is allowed to retire it. Below this, the sample is too small

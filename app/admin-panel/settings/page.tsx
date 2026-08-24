@@ -9,6 +9,8 @@ import ReaperThresholdsForm from "../components/ReaperThresholdsForm";
 import EngineThresholdsForm from "../components/EngineThresholdsForm";
 import AutoApproveForm from "../components/AutoApproveForm";
 import TimezoneForm from "../components/TimezoneForm";
+import DailyReportForm from "../components/DailyReportForm";
+import { sendDailyAdminReport } from "@/lib/admin/daily-report";
 import EngineNav from "../components/EngineNav";
 import { syncMetaData, importFromMeta, syncAllClients } from "../lib/meta-sync-action";
 import {
@@ -25,6 +27,9 @@ import {
   type AutoApproveSettings,
   getDisplayTimezone,
   setDisplayTimezone,
+  getDailyReportRecipients,
+  setDailyReportRecipients,
+  normalizeRecipientList,
 } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
@@ -49,12 +54,14 @@ export default async function SettingsPage() {
     engineSettings,
     autoApproveSettings,
     displayTimezone,
+    dailyReportRecipients,
     { data: metaAccounts },
   ] = await Promise.all([
     getReaperSettings(adminClient),
     getEngineThresholds(adminClient),
     getAutoApproveSettings(adminClient),
     getDisplayTimezone(adminClient),
+    getDailyReportRecipients(adminClient),
     adminClient
       .from("connected_meta_accounts")
       .select("id, client_id, platform, account_name, token_expires_at, updated_at")
@@ -238,6 +245,24 @@ export default async function SettingsPage() {
             "use server";
             const admin = createAdminClient();
             await setDisplayTimezone(admin, timeZone);
+          }}
+        />
+      </SectionCard>
+
+      <SectionCard title="Daily admin report">
+        <DailyReportForm
+          initialRecipients={dailyReportRecipients}
+          onSave={async (raw) => {
+            "use server";
+            const emails = normalizeRecipientList(raw);
+            await setDailyReportRecipients(createAdminClient(), emails);
+            return emails;
+          }}
+          onSendNow={async () => {
+            "use server";
+            const { recipients, sent, skipped, failed, reason } =
+              await sendDailyAdminReport();
+            return { recipients, sent, skipped, failed, reason };
           }}
         />
       </SectionCard>
