@@ -13,6 +13,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAiSourceSettings } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
+// Model calls do not fit in the platform default.
+export const maxDuration = 60;
 
 const GRAPH_VERSION = "v19.0";
 

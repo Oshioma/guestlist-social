@@ -200,6 +200,9 @@ export default function CampaignForm({
     headline: 0,
   });
   const [aiLoading, setAiLoading] = useState(false);
+  // The suggestions call used to fail into `.catch(() => {})`, so a broken
+  // endpoint looked identical to a form that simply has no AI on it.
+  const [aiError, setAiError] = useState<string | null>(null);
   const [nextLoadingField, setNextLoadingField] = useState<string | null>(null);
 
   const ai = {
@@ -215,7 +218,13 @@ export default function CampaignForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, objective }),
     })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          throw new Error(`${r.status} ${r.statusText}${text ? ` — ${text.slice(0, 200)}` : ""}`);
+        }
+        return r.json();
+      })
       .then((data) => {
         if (data.ok && data.suggestions) {
           const norm = (v: unknown): SugList => {
@@ -229,9 +238,14 @@ export default function CampaignForm({
             headline: norm(data.suggestions.headline),
           });
           setAiIndex({ audience: 0, budget: 0, headline: 0 });
+          setAiError(null);
+        } else {
+          setAiError(String(data.error ?? "No suggestions came back."));
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        setAiError(err instanceof Error ? err.message : String(err));
+      });
   }
 
   useEffect(() => {
@@ -407,6 +421,13 @@ export default function CampaignForm({
       }}
     >
       <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {aiError && (
+          <div style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
+            AI suggestions are unavailable right now — {aiError}. Everything on
+            this form still works without them.
+          </div>
+        )}
+
         {draftRestored && !state.error && (
           <div
             style={{
