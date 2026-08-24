@@ -18,7 +18,11 @@ export default async function AdminPanelLayout({
   return (
     <>
       <MetaSdkLoader />
-      <AppShell isAdmin={access.role === "admin"} canRunAds={access.canRunAds}>
+      <AppShell
+        isAdmin={access.role === "admin"}
+        canRunAds={access.canRunAds}
+        buildSha={(process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7)}
+      >
         <FailureRecorder />
         {children}
       </AppShell>

@@ -52,6 +52,39 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+
+  // ── Attempt trace ──────────────────────────────────────────────────────
+  // A create that dies takes the page with it: the form, the error and the
+  // console all go. Write down what a click did BEFORE it can disappear, and
+  // show it back on the next render. An attempt with a start and no finish is
+  // the signature of a request that never came back — which is otherwise
+  // indistinguishable from a click that never happened.
+  type Attempt = {
+    startedAt: number;
+    finishedAt?: number;
+    outcome?: "created" | "saved-with-warning" | "refused" | "threw";
+    detail?: string;
+  };
+  const attemptKey = draftKey ? `${draftKey}:last-attempt` : "ad-form:last-attempt";
+  const [lastAttempt, setLastAttempt] = useState<Attempt | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(attemptKey);
+      if (raw) setLastAttempt(JSON.parse(raw) as Attempt);
+    } catch {
+      /* ignore */
+    }
+  }, [attemptKey]);
+
+  function writeAttempt(a: Attempt) {
+    setLastAttempt(a);
+    try {
+      window.localStorage.setItem(attemptKey, JSON.stringify(a));
+    } catch {
+      /* ignore */
+    }
+  }
   const [draftRestored, setDraftRestored] = useState(false);
 
   // ── Draft recovery ─────────────────────────────────────────────────────
@@ -192,6 +225,9 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
       // what "clicked create and came back to an empty form" was: the failure
       // took the form with it and said nothing. Catch it here so the ad stays
       // on screen and the reason is visible.
+      const attempt: Attempt = { startedAt: Date.now() };
+      writeAttempt(attempt);
+
       let result: { error?: string; warning?: string };
       try {
         result = await onSubmit({
@@ -204,14 +240,27 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
         });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
+        writeAttempt({ ...attempt, finishedAt: Date.now(), outcome: "threw", detail });
         setError(
           `The ad could not be sent to the server — ${detail}. Your ad is still here and saved locally. If this keeps happening, reload the page and try once more.`
         );
         return;
       }
       if (result.error) {
+        writeAttempt({
+          ...attempt,
+          finishedAt: Date.now(),
+          outcome: "refused",
+          detail: result.error,
+        });
         setError(result.error);
       } else {
+        writeAttempt({
+          ...attempt,
+          finishedAt: Date.now(),
+          outcome: result.warning ? "saved-with-warning" : "created",
+          detail: result.warning,
+        });
         // The ad exists — even when Meta refused it, which comes back as a
         // warning rather than an error so the operator isn't invited to
         // submit it a second time.
@@ -658,6 +707,35 @@ export default function MetaAdForm({ campaignName, clientId, clientWebsite, obje
         >
           {isPending ? "Creating ad in Meta..." : "Create ad"}
         </button>
+
+        {lastAttempt && !isPending && (
+          <div
+            style={{
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: lastAttempt.finishedAt ? "#71717a" : "#92400e",
+              background: lastAttempt.finishedAt ? "transparent" : "#fffbeb",
+              border: lastAttempt.finishedAt ? "none" : "1px solid #fde68a",
+              borderRadius: 8,
+              padding: lastAttempt.finishedAt ? 0 : "8px 10px",
+            }}
+          >
+            {lastAttempt.finishedAt ? (
+              <>
+                Last attempt {new Date(lastAttempt.startedAt).toLocaleTimeString()} ·{" "}
+                {((lastAttempt.finishedAt - lastAttempt.startedAt) / 1000).toFixed(1)}s ·{" "}
+                {lastAttempt.outcome}
+                {lastAttempt.detail ? ` — ${lastAttempt.detail}` : ""}
+              </>
+            ) : (
+              <>
+                The attempt at {new Date(lastAttempt.startedAt).toLocaleTimeString()} never
+                came back — the page reloaded before the server answered. Nothing you typed
+                was lost; it is restored above.
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
 
