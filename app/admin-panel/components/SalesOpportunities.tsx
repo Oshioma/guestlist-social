@@ -28,6 +28,8 @@ type Props = {
   // First of the current month (agency timezone) — the default bucket for
   // newly added opportunities.
   currentMonthStart: string;
+  // Today in the agency timezone — drives the "call back this week" banner.
+  todayKey: string;
 };
 
 const STATUS_STYLES: Record<OppStatus, { color: string; bg: string }> = {
@@ -49,6 +51,30 @@ function monthLabel(iso: string): string {
   });
 }
 
+function shortDayLabel(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+// Monday of the week containing dayKey, and days added to a key.
+function mondayOf(dayKey: string): string {
+  const d = new Date(dayKey + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dayKey: string, days: number): string {
+  const d = new Date(dayKey + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function sumWhere(
   opps: SalesOpportunity[],
   status: OppStatus | null
@@ -66,6 +92,7 @@ function sumWhere(
 export default function SalesOpportunities({
   initialOpps,
   currentMonthStart,
+  todayKey,
 }: Props) {
   const [opps, setOpps] = useState<SalesOpportunity[]>(initialOpps);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +136,25 @@ export default function SalesOpportunities({
   const pending = sumWhere(opps, "pending");
   const decided = booked.count + lost.count;
 
+  // Call backs this week: still-pending opportunities whose follow-up date
+  // falls in the current Mon–Sun week. Derived from live state, so editing a
+  // follow-up or booking a deal updates the banner immediately.
+  const weekStart = mondayOf(todayKey);
+  const weekEnd = addDays(weekStart, 6);
+  const callBacks = useMemo(
+    () =>
+      opps
+        .filter(
+          (o) =>
+            o.status === "pending" &&
+            o.followUp != null &&
+            o.followUp >= weekStart &&
+            o.followUp <= weekEnd
+        )
+        .sort((a, b) => (a.followUp ?? "").localeCompare(b.followUp ?? "")),
+    [opps, weekStart, weekEnd]
+  );
+
   // ── Mutations (optimistic) + persistence ──────────────────────────────────
   function patchRow(id: number, patch: SalesOpportunityPatch) {
     setOpps((prev) =>
@@ -146,6 +192,96 @@ export default function SalesOpportunities({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Call backs this week */}
+      {callBacks.length > 0 && (
+        <div
+          style={{
+            border: "1px solid #fcd34d",
+            borderRadius: 12,
+            background: "#fffbeb",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 16px",
+              borderBottom: "1px solid #fde68a",
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#92400e",
+            }}
+          >
+            📞 Call back this week ({callBacks.length})
+          </div>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              fontSize: 13,
+            }}
+          >
+            <tbody>
+              {callBacks.map((o) => {
+                const overdue = (o.followUp ?? "") < todayKey;
+                const isToday = o.followUp === todayKey;
+                return (
+                  <tr key={o.id}>
+                    <td
+                      style={{
+                        padding: "7px 16px",
+                        borderBottom: "1px solid #fef3c7",
+                        whiteSpace: "nowrap",
+                        width: 120,
+                        fontWeight: 700,
+                        color: overdue
+                          ? "#b91c1c"
+                          : isToday
+                            ? "#92400e"
+                            : "#78716c",
+                      }}
+                    >
+                      {isToday
+                        ? "Today"
+                        : shortDayLabel(o.followUp ?? "")}
+                      {overdue ? " · missed" : ""}
+                    </td>
+                    <td
+                      style={{
+                        padding: "7px 16px",
+                        borderBottom: "1px solid #fef3c7",
+                        fontWeight: 600,
+                        color: "#18181b",
+                      }}
+                    >
+                      {o.company || "(unnamed)"}
+                      {o.notes && (
+                        <span style={{ color: "#a16207", fontWeight: 400 }}>
+                          {" "}
+                          — {o.notes}
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "7px 16px",
+                        borderBottom: "1px solid #fef3c7",
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                        fontWeight: 600,
+                        color: "#78716c",
+                      }}
+                    >
+                      {o.amount == null ? "—" : money(o.amount)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div
         style={{

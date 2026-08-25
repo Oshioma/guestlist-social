@@ -25,6 +25,7 @@ export default async function SalesOpportunitiesPage() {
     <SalesOpportunities
       initialOpps={opportunities}
       currentMonthStart={currentMonthStart}
+      todayKey={todayKey}
     />
   );
 }
