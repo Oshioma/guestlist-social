@@ -13,7 +13,8 @@
 // calendar show their counts and select them into the side panel.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { completeCapsuleTaskAction } from "../lib/capsule-actions";
 
 export type TaskItem = {
   key: string;
@@ -24,6 +25,9 @@ export type TaskItem = {
   what: string; // task description
   extra: string; // category, opportunity, amount…
   href: string | null;
+  // Capsule task id — enables the tick-off checkbox. Null for pipeline rows.
+  capsuleId: number | null;
+  phone: string | null;
 };
 
 type Props = {
@@ -88,9 +92,33 @@ function cellLabel(item: TaskItem): string {
 }
 
 export default function SalesTaskCalendar({ items, todayKey }: Props) {
+  // Local copy so completing a task removes it optimistically.
+  const [localItems, setLocalItems] = useState(items);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
   const [month, setMonth] = useState(monthOf(todayKey));
   // A day key, or the two off-grid buckets.
   const [selected, setSelected] = useState<string>(todayKey);
+
+  // Tick a Capsule task off: drop it from the calendar immediately, restore
+  // it if Capsule rejects the write.
+  function completeTask(item: TaskItem) {
+    if (item.capsuleId == null) return;
+    const taskId = item.capsuleId;
+    setLocalItems((prev) => prev.filter((i) => i.key !== item.key));
+    startTransition(async () => {
+      try {
+        const { error } = await completeCapsuleTaskAction(taskId);
+        if (error) throw new Error(error);
+        setCompleteError(null);
+      } catch (e) {
+        setLocalItems((prev) => [...prev, item]);
+        setCompleteError(
+          e instanceof Error ? e.message : "Couldn't complete the task."
+        );
+      }
+    });
+  }
   // The account carries a huge backlog of ancient open tasks; only overdue
   // from the last month counts by default, the rest sits behind a toggle.
   const [showOldOverdue, setShowOldOverdue] = useState(false);
@@ -106,7 +134,7 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
     const overdue: TaskItem[] = [];
     const oldOverdue: TaskItem[] = [];
     const undated: TaskItem[] = [];
-    for (const item of items) {
+    for (const item of localItems) {
       if (!item.dueOn) {
         undated.push(item);
         continue;
@@ -119,7 +147,7 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
       }
     }
     return { byDay, overdue, oldOverdue, undated };
-  }, [items, todayKey, overdueCutoff]);
+  }, [localItems, todayKey, overdueCutoff]);
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
 
@@ -385,6 +413,20 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
                 : `${oldOverdue.length} older than a month hidden — show`}
             </button>
           )}
+          {completeError && (
+            <div
+              style={{
+                padding: "8px 16px",
+                borderBottom: "1px solid #fecaca",
+                background: "#fef2f2",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#991b1b",
+              }}
+            >
+              {completeError}
+            </div>
+          )}
           {panelItems.length === 0 ? (
             <div style={{ padding: "14px 16px", fontSize: 13, color: "#a1a1aa" }}>
               {selected === "overdue" && oldOverdue.length > 0
@@ -396,8 +438,39 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
               {panelItems.map((t) => (
                 <div
                   key={t.key}
-                  style={{ padding: "10px 16px", borderBottom: "1px solid #f4f4f5" }}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    padding: "10px 16px",
+                    borderBottom: "1px solid #f4f4f5",
+                  }}
                 >
+                  {t.capsuleId != null && (
+                    <button
+                      type="button"
+                      title="Mark done in Capsule"
+                      aria-label="Mark done in Capsule"
+                      onClick={() => completeTask(t)}
+                      style={{
+                        flexShrink: 0,
+                        width: 18,
+                        height: 18,
+                        marginTop: 1,
+                        borderRadius: 999,
+                        border: "2px solid #a5b4fc",
+                        background: "#fff",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#818cf8";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#fff";
+                      }}
+                    />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>
                     {t.what}
                     {t.dueTime && (
@@ -417,6 +490,22 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
                       </a>
                     ) : (
                       <span style={{ fontWeight: 600 }}>{t.who}</span>
+                    )}
+                    {t.phone && (
+                      <>
+                        <span style={{ color: "#a1a1aa" }}> · </span>
+                        <a
+                          href={`tel:${t.phone.replace(/[^+\d]/g, "")}`}
+                          style={{
+                            color: "#0369a1",
+                            fontWeight: 600,
+                            textDecoration: "none",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {t.phone}
+                        </a>
+                      </>
                     )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
@@ -442,6 +531,7 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
                     >
                       {t.source === "capsule" ? "CAPSULE" : "PIPELINE"}
                     </span>
+                  </div>
                   </div>
                 </div>
               ))}

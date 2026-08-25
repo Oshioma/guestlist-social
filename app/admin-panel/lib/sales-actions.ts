@@ -183,11 +183,15 @@ function mapOpp(r: Record<string, unknown>): SalesOpportunity {
     followUp: (r.follow_up as string | null) ?? null,
     notes: (r.notes as string) ?? "",
     sortOrder: Number(r.sort_order) || 0,
+    capsulePartyId:
+      r.capsule_party_id == null ? null : Number(r.capsule_party_id),
+    capsuleOpportunityId:
+      r.capsule_opportunity_id == null ? null : Number(r.capsule_opportunity_id),
   };
 }
 
 const OPP_COLUMNS =
-  "id, month_start, opp_date, company, amount, status, follow_up, notes, sort_order";
+  "id, month_start, opp_date, company, amount, status, follow_up, notes, sort_order, capsule_party_id, capsule_opportunity_id";
 
 export async function getSalesOpportunities(): Promise<SalesOpportunity[]> {
   const supabase = await createClient();

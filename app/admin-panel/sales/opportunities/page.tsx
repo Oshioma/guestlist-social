@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDisplayTimezone } from "@/lib/app-settings";
+import { isCapsuleConfigured } from "@/lib/capsule";
 import { getSalesOpportunities } from "@/app/admin-panel/lib/sales-actions";
 import SalesOpportunities from "@/app/admin-panel/components/SalesOpportunities";
 
@@ -26,6 +27,8 @@ export default async function SalesOpportunitiesPage() {
       initialOpps={opportunities}
       currentMonthStart={currentMonthStart}
       todayKey={todayKey}
+      capsuleConfigured={isCapsuleConfigured()}
+      capsuleSite={process.env.CAPSULE_SITE ?? null}
     />
   );
 }

@@ -44,6 +44,9 @@ export type SalesOpportunity = {
   followUp: string | null; // call-back / decision date
   notes: string;
   sortOrder: number;
+  // Set once the row has been pushed to Capsule (see capsule-actions).
+  capsulePartyId: number | null;
+  capsuleOpportunityId: number | null;
 };
 
 // Coerce whatever came back from jsonb into a clean 5-number array.
