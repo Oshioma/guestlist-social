@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { label: "Weekly activity", href: "/app/sales" },
   { label: "Opportunities", href: "/app/sales/opportunities" },
+  { label: "Call list", href: "/app/sales/calls" },
 ];
 
 export default function SalesTabs() {
