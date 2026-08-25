@@ -515,6 +515,10 @@ export type CapsuleOpportunitySummary = {
   name: string;
   partyId: number | null;
   partyName: string;
+  milestoneId: number | null;
+  milestoneName: string;
+  // A lostReason on the opportunity — Capsule's marker for a lost deal.
+  lost: boolean;
 };
 
 export type CapsuleOpportunitiesResult =
@@ -527,12 +531,54 @@ function mapOpportunity(raw: unknown): CapsuleOpportunitySummary | null {
   const id = Number(o.id);
   if (!Number.isFinite(id)) return null;
   const party = o.party as { id?: unknown } | undefined;
+  const milestone = o.milestone as { id?: unknown; name?: unknown } | undefined;
   return {
     id,
     name: typeof o.name === "string" ? o.name : "",
     partyId: party && Number.isFinite(Number(party.id)) ? Number(party.id) : null,
     partyName: partyDisplayName(o.party),
+    milestoneId:
+      milestone && Number.isFinite(Number(milestone.id))
+        ? Number(milestone.id)
+        : null,
+    milestoneName:
+      milestone && typeof milestone.name === "string" ? milestone.name : "",
+    lost: o.lostReason != null,
   };
+}
+
+export type CapsuleMilestone = { name: string; probability: number | null };
+
+// Milestones by id — the pipeline stages, with their win probability
+// (Capsule's Won stage carries 100). Fail-soft to an empty map.
+export async function getCapsuleMilestones(): Promise<
+  Map<number, CapsuleMilestone>
+> {
+  const token = process.env.CAPSULE_API_TOKEN;
+  const map = new Map<number, CapsuleMilestone>();
+  if (!token) return map;
+  try {
+    const res = await fetch(`${CAPSULE_API_BASE}/milestones?perPage=100`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return map;
+    const body = (await res.json()) as {
+      milestones?: { id?: unknown; name?: unknown; probability?: unknown }[];
+    };
+    for (const m of body.milestones ?? []) {
+      const id = Number(m.id);
+      if (!Number.isFinite(id)) continue;
+      const probability = Number(m.probability);
+      map.set(id, {
+        name: typeof m.name === "string" ? m.name : "",
+        probability: Number.isFinite(probability) ? probability : null,
+      });
+    }
+  } catch {
+    // empty map
+  }
+  return map;
 }
 
 // Every opportunity in the account (open and closed), with its contact —

@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDisplayTimezone } from "@/lib/app-settings";
 import { isCapsuleConfigured } from "@/lib/capsule";
 import { getSalesOpportunities } from "@/app/admin-panel/lib/sales-actions";
-import { autoLinkCapsuleOpportunities } from "@/app/admin-panel/lib/capsule-actions";
+import { syncCapsuleOpportunities } from "@/app/admin-panel/lib/capsule-actions";
 import SalesOpportunities from "@/app/admin-panel/components/SalesOpportunities";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function SalesOpportunitiesPage() {
   // Membership is enforced by the sales layout (and RLS underneath).
 
-  // Before loading the rows, link any unlinked ones to Capsule records that
-  // already exist (read-and-match only — nothing is created). Fail-soft.
+  // Before loading the rows, sync with Capsule: link unlinked rows to
+  // existing Capsule opportunities, and flip pending linked rows to
+  // booked / not booked when Capsule says won / lost. Read-only on Capsule
+  // (nothing is created there) and fail-soft.
   try {
-    await autoLinkCapsuleOpportunities();
+    await syncCapsuleOpportunities();
   } catch (e) {
-    console.warn("[sales] capsule auto-link skipped:", e);
+    console.warn("[sales] capsule sync skipped:", e);
   }
 
   const opportunities = await getSalesOpportunities();

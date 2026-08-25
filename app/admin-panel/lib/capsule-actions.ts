@@ -15,8 +15,11 @@ import { getMemberAccess } from "@/lib/auth/permissions";
 import {
   completeCapsuleTask,
   createCapsuleOpportunity,
+  getCapsuleMilestones,
   getCapsuleOpportunities,
   isCapsuleConfigured,
+  type CapsuleMilestone,
+  type CapsuleOpportunitySummary,
 } from "@/lib/capsule";
 
 async function requireStaff(): Promise<void> {
@@ -38,58 +41,110 @@ export async function completeCapsuleTaskAction(
   return { error: null };
 }
 
-// Link unlinked pipeline rows to Capsule records that already exist, by
-// matching the company name against each Capsule opportunity's contact
-// (case-insensitive; the newest opportunity wins when a contact has several).
-// Purely a read-and-link pass — it never creates anything in Capsule, so it's
-// safe to run on page load. Returns how many rows were linked; any failure
-// (Capsule down, token bad) just returns 0 and the page renders as before.
-export async function autoLinkCapsuleOpportunities(): Promise<number> {
+// Where a Capsule opportunity has landed: won, lost, or still in play.
+// Won = Capsule's Won stage (probability 100, or a "won" milestone name);
+// lost = a lostReason on the opportunity, or a "lost" milestone name.
+// Anything ambiguous counts as still-in-play, so a pending row is never
+// flipped on a guess.
+function capsuleOutcome(
+  opp: CapsuleOpportunitySummary,
+  milestones: Map<number, CapsuleMilestone>
+): "won" | "lost" | "open" {
+  const stage =
+    opp.milestoneId != null ? milestones.get(opp.milestoneId) : undefined;
+  const stageName = (opp.milestoneName || stage?.name || "").trim().toLowerCase();
+  if (opp.lost || stageName === "lost") return "lost";
+  if (stage?.probability === 100 || stageName === "won") return "won";
+  return "open";
+}
+
+// Keep the pipeline in step with Capsule, in one read-only-on-Capsule pass:
+//
+//   1. LINK — match unlinked rows to existing Capsule opportunities by
+//      contact name (case-insensitive; the newest opportunity wins when a
+//      contact has several) and save the ids.
+//   2. STATUS — for linked rows still marked pending, follow Capsule's
+//      outcome: won → booked, lost → not booked. Rows someone already set
+//      by hand (booked / not booked) are never touched, and Capsule is
+//      never written to — creation stays behind the per-row button.
+//
+// Safe to run on page load: any failure (no token, Capsule down) leaves the
+// pipeline exactly as it was.
+export async function syncCapsuleOpportunities(): Promise<{
+  linked: number;
+  updated: number;
+}> {
+  const none = { linked: 0, updated: 0 };
   const access = await getMemberAccess();
-  if (!access || !isCapsuleConfigured()) return 0;
+  if (!access || !isCapsuleConfigured()) return none;
 
   const supabase = await createClient();
-  const { data: unlinkedRows } = await supabase
+  const { data: rowData } = await supabase
     .from("sales_opportunities")
-    .select("id, company")
-    .is("capsule_opportunity_id", null)
-    .neq("company", "");
-  const unlinked = (unlinkedRows ?? []) as { id: number; company: string }[];
-  if (unlinked.length === 0) return 0;
+    .select("id, company, status, capsule_opportunity_id")
+    .or("capsule_opportunity_id.is.null,status.eq.pending");
+  const rows = (rowData ?? []) as {
+    id: number;
+    company: string | null;
+    status: string;
+    capsule_opportunity_id: number | null;
+  }[];
+  if (rows.length === 0) return none;
 
   const capsule = await getCapsuleOpportunities();
-  if (!capsule.ok) return 0;
+  if (!capsule.ok) return none;
+  const milestones = await getCapsuleMilestones();
 
-  // Newest opportunity per contact name.
-  const byPartyName = new Map<
-    string,
-    { id: number; partyId: number | null }
-  >();
+  const byId = new Map(capsule.opportunities.map((o) => [o.id, o]));
+  // Newest opportunity per contact name, for the linking pass.
+  const byPartyName = new Map<string, CapsuleOpportunitySummary>();
   for (const opp of capsule.opportunities) {
     const key = opp.partyName.trim().toLowerCase();
     if (!key) continue;
     const existing = byPartyName.get(key);
-    if (!existing || opp.id > existing.id) {
-      byPartyName.set(key, { id: opp.id, partyId: opp.partyId });
-    }
+    if (!existing || opp.id > existing.id) byPartyName.set(key, opp);
   }
 
   let linked = 0;
-  for (const row of unlinked) {
-    const match = byPartyName.get(row.company.trim().toLowerCase());
-    if (!match) continue;
+  let updated = 0;
+  for (const row of rows) {
+    // 1. Link.
+    let capsuleOpp =
+      row.capsule_opportunity_id != null
+        ? byId.get(row.capsule_opportunity_id)
+        : undefined;
+    if (row.capsule_opportunity_id == null) {
+      const match = byPartyName.get((row.company ?? "").trim().toLowerCase());
+      if (!match) continue;
+      const { error } = await supabase
+        .from("sales_opportunities")
+        .update({
+          capsule_opportunity_id: match.id,
+          capsule_party_id: match.partyId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .is("capsule_opportunity_id", null);
+      if (error) continue;
+      linked += 1;
+      capsuleOpp = match;
+    }
+
+    // 2. Status — pending rows follow Capsule's outcome.
+    if (row.status !== "pending" || !capsuleOpp) continue;
+    const outcome = capsuleOutcome(capsuleOpp, milestones);
+    if (outcome === "open") continue;
     const { error } = await supabase
       .from("sales_opportunities")
       .update({
-        capsule_opportunity_id: match.id,
-        capsule_party_id: match.partyId,
+        status: outcome === "won" ? "booked" : "not_booked",
         updated_at: new Date().toISOString(),
       })
       .eq("id", row.id)
-      .is("capsule_opportunity_id", null);
-    if (!error) linked += 1;
+      .eq("status", "pending");
+    if (!error) updated += 1;
   }
-  return linked;
+  return { linked, updated };
 }
 
 export type SendToCapsuleResult = {
