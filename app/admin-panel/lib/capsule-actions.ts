@@ -58,35 +58,48 @@ function capsuleOutcome(
   return "open";
 }
 
-// Keep the pipeline in step with Capsule, in one read-only-on-Capsule pass:
+// How many missing Capsule opportunities one page-load sync will create.
+// Keeps the load fast; a deeper backlog drains over loads or via the
+// explicit "Send pending to Capsule" button.
+const SYNC_CREATE_CAP = 12;
+
+// Keep the pipeline in step with Capsule, in one pass:
 //
 //   1. LINK — match unlinked rows to existing Capsule opportunities by
 //      contact name (case-insensitive; the newest opportunity wins when a
 //      contact has several) and save the ids.
 //   2. STATUS — for linked rows still marked pending, follow Capsule's
 //      outcome: won → booked, lost → not booked. Rows someone already set
-//      by hand (booked / not booked) are never touched, and Capsule is
-//      never written to — creation stays behind the per-row button.
+//      by hand (booked / not booked) are never touched.
+//   3. CREATE — pending rows with a company name that Capsule doesn't know
+//      at all get their Capsule contact + opportunity created (capped per
+//      load), so newly typed pitches flow into the CRM on their own.
 //
 // Safe to run on page load: any failure (no token, Capsule down) leaves the
 // pipeline exactly as it was.
 export async function syncCapsuleOpportunities(): Promise<{
   linked: number;
   updated: number;
+  created: number;
 }> {
-  const none = { linked: 0, updated: 0 };
+  const none = { linked: 0, updated: 0, created: 0 };
   const access = await getMemberAccess();
   if (!access || !isCapsuleConfigured()) return none;
 
   const supabase = await createClient();
   const { data: rowData } = await supabase
     .from("sales_opportunities")
-    .select("id, company, status, capsule_opportunity_id")
+    .select(
+      "id, company, status, amount, notes, follow_up, capsule_opportunity_id"
+    )
     .or("capsule_opportunity_id.is.null,status.eq.pending");
   const rows = (rowData ?? []) as {
     id: number;
     company: string | null;
     status: string;
+    amount: unknown;
+    notes: string | null;
+    follow_up: string | null;
     capsule_opportunity_id: number | null;
   }[];
   if (rows.length === 0) return none;
@@ -107,6 +120,7 @@ export async function syncCapsuleOpportunities(): Promise<{
 
   let linked = 0;
   let updated = 0;
+  const toCreate: typeof rows = [];
   for (const row of rows) {
     // 1. Link.
     let capsuleOpp =
@@ -115,7 +129,13 @@ export async function syncCapsuleOpportunities(): Promise<{
         : undefined;
     if (row.capsule_opportunity_id == null) {
       const match = byPartyName.get((row.company ?? "").trim().toLowerCase());
-      if (!match) continue;
+      if (!match) {
+        // Capsule has no opportunity for this company — create-phase candidate.
+        if (row.status === "pending" && (row.company ?? "").trim()) {
+          toCreate.push(row);
+        }
+        continue;
+      }
       const { error } = await supabase
         .from("sales_opportunities")
         .update({
@@ -144,7 +164,148 @@ export async function syncCapsuleOpportunities(): Promise<{
       .eq("status", "pending");
     if (!error) updated += 1;
   }
-  return { linked, updated };
+
+  // 3. Create the missing ones (capped so page loads stay quick).
+  let created = 0;
+  for (const row of toCreate.slice(0, SYNC_CREATE_CAP)) {
+    const ok = await createAndLinkRow(supabase, {
+      id: row.id,
+      company: row.company ?? "",
+      amount: row.amount,
+      notes: row.notes,
+      followUp: row.follow_up,
+    });
+    if (ok) created += 1;
+  }
+
+  return { linked, updated, created };
+}
+
+// Create the Capsule contact + opportunity for one pipeline row and store
+// the ids, guarded so a concurrent link can't be overwritten. Returns
+// whether the row ended up linked.
+async function createAndLinkRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  row: {
+    id: number;
+    company: string;
+    amount: unknown;
+    notes: string | null;
+    followUp: string | null;
+  }
+): Promise<boolean> {
+  const amount = row.amount == null ? null : Number(row.amount);
+  const result = await createCapsuleOpportunity({
+    company: row.company,
+    amount: amount != null && Number.isFinite(amount) ? amount : null,
+    notes: row.notes ?? "",
+    expectedCloseOn: row.followUp,
+  });
+  if (!result.ok) return false;
+
+  const { error } = await supabase
+    .from("sales_opportunities")
+    .update({
+      capsule_party_id: result.partyId,
+      capsule_opportunity_id: result.opportunityId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", row.id)
+    .is("capsule_opportunity_id", null);
+  if (error) {
+    console.warn("[capsule] created in Capsule but link save failed:", error.message);
+  }
+  return true;
+}
+
+// How many rows one "Send pending to Capsule" call pushes. The client loops
+// until nothing remains, so the cap only bounds each round trip (a serverless
+// invocation shouldn't run for minutes).
+const BULK_SEND_CAP = 25;
+
+export type BulkSendResult = {
+  results: {
+    id: number;
+    capsulePartyId: number | null;
+    capsuleOpportunityId: number | null;
+  }[];
+  failed: number;
+  remaining: number;
+  error: string | null;
+};
+
+// Push every still-pending, unlinked opportunity into Capsule (contact
+// matched or created, opportunity on the first pipeline stage), up to the
+// per-call cap — the client calls again while `remaining` is positive.
+export async function sendPendingToCapsule(): Promise<BulkSendResult> {
+  const access = await getMemberAccess();
+  if (!access || !isCapsuleConfigured()) {
+    return { results: [], failed: 0, remaining: 0, error: "Capsule isn't connected." };
+  }
+
+  const supabase = await createClient();
+  const { data: rowData } = await supabase
+    .from("sales_opportunities")
+    .select("id, company, amount, notes, follow_up")
+    .eq("status", "pending")
+    .is("capsule_opportunity_id", null)
+    .neq("company", "")
+    .order("id", { ascending: true });
+  const rows = (rowData ?? []) as {
+    id: number;
+    company: string;
+    amount: unknown;
+    notes: string | null;
+    follow_up: string | null;
+  }[];
+  if (rows.length === 0) {
+    return { results: [], failed: 0, remaining: 0, error: null };
+  }
+
+  const batch = rows.slice(0, BULK_SEND_CAP);
+  const results: BulkSendResult["results"] = [];
+  let failed = 0;
+  // Small parallel chunks: quick without hammering Capsule's rate limits.
+  const CHUNK = 3;
+  for (let i = 0; i < batch.length; i += CHUNK) {
+    await Promise.all(
+      batch.slice(i, i + CHUNK).map(async (row) => {
+        const amount = row.amount == null ? null : Number(row.amount);
+        const created = await createCapsuleOpportunity({
+          company: row.company,
+          amount: amount != null && Number.isFinite(amount) ? amount : null,
+          notes: row.notes ?? "",
+          expectedCloseOn: row.follow_up,
+        });
+        if (!created.ok) {
+          failed += 1;
+          return;
+        }
+        await supabase
+          .from("sales_opportunities")
+          .update({
+            capsule_party_id: created.partyId,
+            capsule_opportunity_id: created.opportunityId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .is("capsule_opportunity_id", null);
+        results.push({
+          id: row.id,
+          capsulePartyId: created.partyId,
+          capsuleOpportunityId: created.opportunityId,
+        });
+      })
+    );
+  }
+
+  revalidatePath("/app/sales/opportunities");
+  return {
+    results,
+    failed,
+    remaining: Math.max(0, rows.length - batch.length),
+    error: null,
+  };
 }
 
 export type SendToCapsuleResult = {
