@@ -23,6 +23,7 @@ import EmptyState from "@/app/admin-panel/components/EmptyState";
 import AdPreviewCard from "@/app/admin-panel/components/AdPreviewCard";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import ClearCampaignDraft from "@/app/admin-panel/components/ClearCampaignDraft";
+import CampaignDeliveryControl from "@/app/admin-panel/components/CampaignDeliveryControl";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
@@ -218,8 +219,8 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         >
           <strong style={{ fontWeight: 700 }}>Campaign created.</strong>{" "}
           {hasNoAds
-            ? "Add its first ad below whenever you're ready."
-            : "Its first ad is below — it starts paused until you switch it on."}
+            ? "Add its first ad below whenever you're ready. Nothing spends until you switch delivery on."
+            : "Its first ad is below. Nothing is spending yet — use the switch below when you want it to start."}
         </div>
       )}
 
@@ -300,6 +301,15 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
             )}
           </div>
         </div>
+
+        <CampaignDeliveryControl
+          clientId={clientId}
+          campaignId={campaignId}
+          dailyBudget={Number((campaign as any).budget ?? 0)}
+          live={campaignStatus === "live"}
+          inMeta={hasMetaId}
+          adCount={ads.length}
+        />
 
         {(campaign as any).audience && (
           <div style={{ fontSize: 13, color: "#52525b", lineHeight: 1.5 }}>
