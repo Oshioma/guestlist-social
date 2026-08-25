@@ -97,40 +97,87 @@ function mapTask(raw: unknown): CapsuleTask | null {
   };
 }
 
+const TASKS_PER_PAGE = 100;
+const TASKS_MAX_PAGES = 25; // up to 2,500 open tasks
+
+async function fetchTaskPage(
+  token: string,
+  page: number
+): Promise<{ ok: true; tasks: CapsuleTask[] } | { ok: false; status: number }> {
+  const url =
+    `${CAPSULE_API_BASE}/tasks?status=open&embed=party,opportunity` +
+    `&perPage=${TASKS_PER_PAGE}&page=${page}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return { ok: false, status: res.status };
+  const body = (await res.json()) as { tasks?: unknown[] };
+  return {
+    ok: true,
+    tasks: (body.tasks ?? [])
+      .map(mapTask)
+      .filter((t): t is CapsuleTask => t != null),
+  };
+}
+
 // Open (not yet completed) tasks — Capsule's calendar. Sorted by due date,
-// undated tasks last. Fetches up to five pages of 100 (the account carries a
-// long tail of open tasks), stopping early on a short page.
+// undated tasks last.
+//
+// Capsule returns open tasks oldest-due first, and this account carries a
+// backlog of hundreds of overdue ones — so a shallow fetch never reaches the
+// current month and the calendar looks empty. Page 1 runs alone (it also
+// validates the token); the remaining pages are fetched in parallel so depth
+// doesn't cost wall-clock time. A failed later page degrades to partial data
+// rather than an error.
 export async function getCapsuleOpenTasks(): Promise<CapsuleTasksResult> {
   const token = process.env.CAPSULE_API_TOKEN;
   if (!token) return { ok: false, configured: false };
 
   const tasks: CapsuleTask[] = [];
   try {
-    for (let page = 1; page <= 5; page++) {
-      const url =
-        `${CAPSULE_API_BASE}/tasks?status=open&embed=party,opportunity` +
-        `&perPage=100&page=${page}`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        const hint =
-          res.status === 401
-            ? "Capsule rejected the API token (check CAPSULE_API_TOKEN)."
-            : `Capsule API returned ${res.status}.`;
-        console.warn("[capsule] task fetch failed:", hint);
-        return { ok: false, configured: true, error: hint };
+    const first = await fetchTaskPage(token, 1);
+    if (!first.ok) {
+      const hint =
+        first.status === 401
+          ? "Capsule rejected the API token (check CAPSULE_API_TOKEN)."
+          : `Capsule API returned ${first.status}.`;
+      console.warn("[capsule] task fetch failed:", hint);
+      return { ok: false, configured: true, error: hint };
+    }
+    tasks.push(...first.tasks);
+
+    if (first.tasks.length === TASKS_PER_PAGE) {
+      const rest = await Promise.all(
+        Array.from({ length: TASKS_MAX_PAGES - 1 }, (_, i) =>
+          fetchTaskPage(token, i + 2).catch(
+            () => ({ ok: false, status: 0 }) as const
+          )
+        )
+      );
+      let exhausted = false;
+      for (const pageResult of rest) {
+        if (!pageResult.ok) {
+          console.warn(
+            "[capsule] a task page failed — continuing with partial data"
+          );
+          exhausted = true;
+          break;
+        }
+        tasks.push(...pageResult.tasks);
+        if (pageResult.tasks.length < TASKS_PER_PAGE) {
+          exhausted = true;
+          break;
+        }
       }
-      const body = (await res.json()) as { tasks?: unknown[] };
-      const pageTasks = (body.tasks ?? [])
-        .map(mapTask)
-        .filter((t): t is CapsuleTask => t != null);
-      tasks.push(...pageTasks);
-      if (pageTasks.length < 100) break;
+      if (!exhausted) {
+        console.warn(
+          `[capsule] more than ${TASKS_MAX_PAGES * TASKS_PER_PAGE} open tasks — furthest-out tasks not loaded`
+        );
+      }
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
