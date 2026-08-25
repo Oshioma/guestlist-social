@@ -44,6 +44,9 @@ function buildNavGroups(canRunAds: boolean, isAdmin: boolean): NavGroup[] {
 
   groups.push({ heading: "Tasks", items: [], headingHref: "/app/tasks" });
 
+  // Crew-wide sales log — weekly call activity + the opportunity pipeline.
+  groups.push({ heading: "Sales", items: [], headingHref: "/app/sales" });
+
   // Owner-level financials — gated to admins (the page enforces this too).
   if (isAdmin) {
     groups.push({ heading: "Cashflow", items: [], headingHref: "/app/cashflow" });
