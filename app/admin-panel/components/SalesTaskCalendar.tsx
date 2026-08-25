@@ -33,6 +33,9 @@ type Props = {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_CELL_TASKS = 3;
+// Overdue older than this many days is hidden behind a toggle — the chip and
+// panel stay about tasks that are realistically still getting chased.
+const OVERDUE_WINDOW_DAYS = 31;
 
 function monthOf(dayKey: string): string {
   return dayKey.slice(0, 7);
@@ -88,10 +91,20 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
   const [month, setMonth] = useState(monthOf(todayKey));
   // A day key, or the two off-grid buckets.
   const [selected, setSelected] = useState<string>(todayKey);
+  // The account carries a huge backlog of ancient open tasks; only overdue
+  // from the last month counts by default, the rest sits behind a toggle.
+  const [showOldOverdue, setShowOldOverdue] = useState(false);
 
-  const { byDay, overdue, undated } = useMemo(() => {
+  const overdueCutoff = useMemo(() => {
+    const d = new Date(todayKey + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - OVERDUE_WINDOW_DAYS);
+    return d.toISOString().slice(0, 10);
+  }, [todayKey]);
+
+  const { byDay, overdue, oldOverdue, undated } = useMemo(() => {
     const byDay = new Map<string, TaskItem[]>();
     const overdue: TaskItem[] = [];
+    const oldOverdue: TaskItem[] = [];
     const undated: TaskItem[] = [];
     for (const item of items) {
       if (!item.dueOn) {
@@ -101,22 +114,26 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
       const list = byDay.get(item.dueOn) ?? [];
       list.push(item);
       byDay.set(item.dueOn, list);
-      if (item.dueOn < todayKey) overdue.push(item);
+      if (item.dueOn < todayKey) {
+        (item.dueOn >= overdueCutoff ? overdue : oldOverdue).push(item);
+      }
     }
-    return { byDay, overdue, undated };
-  }, [items, todayKey]);
+    return { byDay, overdue, oldOverdue, undated };
+  }, [items, todayKey, overdueCutoff]);
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
 
   const panelItems =
     selected === "overdue"
-      ? overdue
+      ? showOldOverdue
+        ? [...oldOverdue, ...overdue]
+        : overdue
       : selected === "undated"
         ? undated
         : (byDay.get(selected) ?? []);
   const panelTitle =
     selected === "overdue"
-      ? `Overdue (${overdue.length})`
+      ? `Overdue (${showOldOverdue ? overdue.length + oldOverdue.length : overdue.length})`
       : selected === "undated"
         ? `No due date (${undated.length})`
         : dayHeading(selected);
@@ -161,7 +178,7 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
           Today
         </button>
         <div style={{ flex: 1 }} />
-        {overdue.length > 0 && (
+        {(overdue.length > 0 || oldOverdue.length > 0) && (
           <button
             type="button"
             onClick={() => setSelected("overdue")}
@@ -176,7 +193,7 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
               background: selected === "overdue" ? "#991b1b" : "#fef2f2",
             }}
           >
-            {overdue.length} overdue
+            {overdue.length > 0 ? `${overdue.length} overdue` : "overdue history"}
           </button>
         )}
         {undated.length > 0 && (
@@ -345,9 +362,34 @@ export default function SalesTaskCalendar({ items, todayKey }: Props) {
           >
             {panelTitle}
           </div>
+          {selected === "overdue" && oldOverdue.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOldOverdue((v) => !v)}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                borderBottom: "1px solid #f4f4f5",
+                background: "#fff",
+                padding: "8px 16px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#71717a",
+                cursor: "pointer",
+              }}
+            >
+              {showOldOverdue
+                ? `Hide the ${oldOverdue.length} older than a month`
+                : `${oldOverdue.length} older than a month hidden — show`}
+            </button>
+          )}
           {panelItems.length === 0 ? (
             <div style={{ padding: "14px 16px", fontSize: 13, color: "#a1a1aa" }}>
-              No tasks.
+              {selected === "overdue" && oldOverdue.length > 0
+                ? "Nothing overdue from the last month."
+                : "No tasks."}
             </div>
           ) : (
             <div style={{ maxHeight: 560, overflowY: "auto" }}>

@@ -98,12 +98,28 @@ function mapTask(raw: unknown): CapsuleTask | null {
 }
 
 const TASKS_PER_PAGE = 100;
-const TASKS_MAX_PAGES = 25; // up to 2,500 open tasks
+// Pages collected once the recent window is found — up to 3,000 tasks due
+// after the cutoff, which is plenty of runway of actual upcoming work.
+const MAX_FORWARD_PAGES = 30;
+// How far back "recent" reaches. Wider than the UI's one-month overdue
+// window so the pages handed to it always cover what it wants to show.
+const RECENT_WINDOW_DAYS = 45;
 
-async function fetchTaskPage(
-  token: string,
-  page: number
-): Promise<{ ok: true; tasks: CapsuleTask[] } | { ok: false; status: number }> {
+class CapsuleHttpError extends Error {
+  constructor(public status: number) {
+    super(`Capsule API returned ${status}.`);
+  }
+}
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+type TaskPage = { tasks: CapsuleTask[]; short: boolean };
+
+async function getPage(token: string, page: number): Promise<TaskPage> {
   const url =
     `${CAPSULE_API_BASE}/tasks?status=open&embed=party,opportunity` +
     `&perPage=${TASKS_PER_PAGE}&page=${page}`;
@@ -114,75 +130,147 @@ async function fetchTaskPage(
     },
     cache: "no-store",
   });
-  if (!res.ok) return { ok: false, status: res.status };
+  if (!res.ok) throw new CapsuleHttpError(res.status);
   const body = (await res.json()) as { tasks?: unknown[] };
-  return {
-    ok: true,
-    tasks: (body.tasks ?? [])
-      .map(mapTask)
-      .filter((t): t is CapsuleTask => t != null),
-  };
+  const tasks = (body.tasks ?? [])
+    .map(mapTask)
+    .filter((t): t is CapsuleTask => t != null);
+  return { tasks, short: tasks.length < TASKS_PER_PAGE };
 }
 
-// Open (not yet completed) tasks — Capsule's calendar. Sorted by due date,
-// undated tasks last.
-//
-// Capsule returns open tasks oldest-due first, and this account carries a
-// backlog of hundreds of overdue ones — so a shallow fetch never reaches the
-// current month and the calendar looks empty. Page 1 runs alone (it also
-// validates the token); the remaining pages are fetched in parallel so depth
-// doesn't cost wall-clock time. A failed later page degrades to partial data
-// rather than an error.
+// Preferred path: ask Capsule's structured-filter endpoint for tasks due
+// after the cutoff, so the ancient backlog never travels over the wire.
+// Returns null when the endpoint isn't available for tasks (older accounts /
+// API surface differences) so the caller can fall back to page-skipping.
+async function tasksViaFilter(
+  token: string,
+  cutoffKey: string
+): Promise<CapsuleTask[] | null> {
+  const out: CapsuleTask[] = [];
+  for (let page = 1; page <= MAX_FORWARD_PAGES; page++) {
+    const url =
+      `${CAPSULE_API_BASE}/tasks/filters?embed=party,opportunity` +
+      `&perPage=${TASKS_PER_PAGE}&page=${page}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: {
+          conditions: [
+            { field: "dueOn", operator: "is after", value: cutoffKey },
+          ],
+        },
+      }),
+      cache: "no-store",
+    });
+    if (res.status === 401) throw new CapsuleHttpError(401);
+    if (!res.ok) return null; // not supported here — fall back
+    const body = (await res.json()) as { tasks?: unknown[] };
+    const tasks = (body.tasks ?? [])
+      .map(mapTask)
+      .filter((t): t is CapsuleTask => t != null);
+    out.push(...tasks);
+    if (tasks.length < TASKS_PER_PAGE) break;
+  }
+  return out;
+}
+
+// Fallback path: Capsule lists open tasks oldest-due first and this account
+// carries thousands of ancient ones, so walking pages from the start never
+// reaches the current month. Instead, binary-search the page range for the
+// first page that touches the recent window (exponential probe for the upper
+// bound, then bisect — pages are cached so nothing is fetched twice), and
+// collect forward from there. The boundary page brings some pre-cutoff tasks
+// along, which is fine — they're the near-term overdue the UI still shows.
+async function tasksViaPageSkip(
+  token: string,
+  cutoffKey: string
+): Promise<CapsuleTask[]> {
+  const cache = new Map<number, TaskPage>();
+  const page = async (p: number): Promise<TaskPage> => {
+    const hit = cache.get(p);
+    if (hit) return hit;
+    const loaded = await getPage(token, p);
+    cache.set(p, loaded);
+    return loaded;
+  };
+  const reachesWindow = (pg: TaskPage): boolean => {
+    if (pg.short) return true; // last page (or empty) — nothing beyond it
+    let max: string | null = null;
+    for (const t of pg.tasks) {
+      if (t.dueOn && (max == null || t.dueOn > max)) max = t.dueOn;
+    }
+    return max != null && max >= cutoffKey;
+  };
+
+  const first = await page(1);
+  let lo = 1; // greatest page known NOT to reach the window
+  let hi: number | null = null; // least page known to reach it
+  if (reachesWindow(first)) {
+    hi = 1;
+  } else {
+    for (let p = 2; p <= 512; p *= 2) {
+      const pg = await page(p);
+      if (pg.tasks.length === 0 || reachesWindow(pg)) {
+        hi = p;
+        break;
+      }
+      lo = p;
+    }
+    if (hi == null) {
+      // >51k open tasks before the window — give up gracefully.
+      console.warn("[capsule] open-task backlog too deep to skip");
+      return first.tasks;
+    }
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      const pg = await page(mid);
+      if (pg.tasks.length === 0 || reachesWindow(pg)) hi = mid;
+      else lo = mid;
+    }
+  }
+
+  const out: CapsuleTask[] = [];
+  const seen = new Set<number>();
+  let p = hi;
+  for (let i = 0; i < MAX_FORWARD_PAGES; i++, p++) {
+    const pg = await page(p);
+    for (const t of pg.tasks) {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        out.push(t);
+      }
+    }
+    if (pg.short) break;
+  }
+  return out;
+}
+
+// Open (not yet completed) tasks in and after the recent window — Capsule's
+// calendar without the ancient backlog. Sorted by due date, undated last.
 export async function getCapsuleOpenTasks(): Promise<CapsuleTasksResult> {
   const token = process.env.CAPSULE_API_TOKEN;
   if (!token) return { ok: false, configured: false };
 
-  const tasks: CapsuleTask[] = [];
+  const cutoffKey = isoDaysAgo(RECENT_WINDOW_DAYS);
+  let tasks: CapsuleTask[];
   try {
-    const first = await fetchTaskPage(token, 1);
-    if (!first.ok) {
-      const hint =
-        first.status === 401
-          ? "Capsule rejected the API token (check CAPSULE_API_TOKEN)."
-          : `Capsule API returned ${first.status}.`;
-      console.warn("[capsule] task fetch failed:", hint);
-      return { ok: false, configured: true, error: hint };
-    }
-    tasks.push(...first.tasks);
-
-    if (first.tasks.length === TASKS_PER_PAGE) {
-      const rest = await Promise.all(
-        Array.from({ length: TASKS_MAX_PAGES - 1 }, (_, i) =>
-          fetchTaskPage(token, i + 2).catch(
-            () => ({ ok: false, status: 0 }) as const
-          )
-        )
-      );
-      let exhausted = false;
-      for (const pageResult of rest) {
-        if (!pageResult.ok) {
-          console.warn(
-            "[capsule] a task page failed — continuing with partial data"
-          );
-          exhausted = true;
-          break;
-        }
-        tasks.push(...pageResult.tasks);
-        if (pageResult.tasks.length < TASKS_PER_PAGE) {
-          exhausted = true;
-          break;
-        }
-      }
-      if (!exhausted) {
-        console.warn(
-          `[capsule] more than ${TASKS_MAX_PAGES * TASKS_PER_PAGE} open tasks — furthest-out tasks not loaded`
-        );
-      }
-    }
+    tasks =
+      (await tasksViaFilter(token, cutoffKey)) ??
+      (await tasksViaPageSkip(token, cutoffKey));
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    console.warn("[capsule] task fetch failed:", message);
-    return { ok: false, configured: true, error: "Could not reach Capsule." };
+    const hint =
+      e instanceof CapsuleHttpError
+        ? e.status === 401
+          ? "Capsule rejected the API token (check CAPSULE_API_TOKEN)."
+          : e.message
+        : "Could not reach Capsule.";
+    console.warn("[capsule] task fetch failed:", hint);
+    return { ok: false, configured: true, error: hint };
   }
 
   tasks.sort((a, b) => {
