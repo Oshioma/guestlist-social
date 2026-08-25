@@ -3,6 +3,7 @@ import { getDisplayTimezone } from "@/lib/app-settings";
 import {
   capsulePartyUrl,
   getCapsuleOpenTasks,
+  getCapsulePartyPhones,
   type CapsuleTask,
 } from "@/lib/capsule";
 import SalesTaskCalendar, {
@@ -29,7 +30,16 @@ function gbp(n: number): string {
   return "£" + n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
 }
 
-function capsuleItem(t: CapsuleTask): TaskItem {
+function addDays(dayKey: string, days: number): string {
+  const d = new Date(dayKey + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function capsuleItem(
+  t: CapsuleTask,
+  phones: Record<number, string>
+): TaskItem {
   const extras = [t.categoryName, t.opportunityName, t.ownerName].filter(Boolean);
   return {
     key: `capsule-${t.id}`,
@@ -40,6 +50,8 @@ function capsuleItem(t: CapsuleTask): TaskItem {
     what: t.description || t.detail || "Task",
     extra: extras.join(" · "),
     href: capsulePartyUrl(t.partyId),
+    capsuleId: t.id,
+    phone: t.partyId != null ? (phones[t.partyId] ?? null) : null,
   };
 }
 
@@ -67,8 +79,29 @@ export default async function SalesCallsPage() {
       .limit(200),
   ]);
 
+  // Phone numbers for the contacts on tasks near today (a month either way)
+  // — the actionable window; further-out tasks just show the name.
+  let phones: Record<number, string> = {};
+  if (capsuleRes.ok) {
+    const windowLo = addDays(todayKey, -31);
+    const windowHi = addDays(todayKey, 31);
+    phones = await getCapsulePartyPhones(
+      capsuleRes.tasks
+        .filter(
+          (t) =>
+            t.partyId != null &&
+            t.dueOn != null &&
+            t.dueOn >= windowLo &&
+            t.dueOn <= windowHi
+        )
+        .map((t) => t.partyId as number)
+    );
+  }
+
   const items: TaskItem[] = [];
-  if (capsuleRes.ok) items.push(...capsuleRes.tasks.map(capsuleItem));
+  if (capsuleRes.ok) {
+    items.push(...capsuleRes.tasks.map((t) => capsuleItem(t, phones)));
+  }
   for (const r of (followUpRows ?? []) as {
     id: number;
     company: string | null;
@@ -91,6 +124,8 @@ export default async function SalesCallsPage() {
         .filter(Boolean)
         .join(" · "),
       href: "/app/sales/opportunities",
+      capsuleId: null,
+      phone: null,
     });
   }
 

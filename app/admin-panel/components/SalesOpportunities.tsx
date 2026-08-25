@@ -22,6 +22,7 @@ import {
   updateSalesOpportunity,
   type SalesOpportunityPatch,
 } from "../lib/sales-actions";
+import { sendOpportunityToCapsule } from "../lib/capsule-actions";
 
 type Props = {
   initialOpps: SalesOpportunity[];
@@ -30,6 +31,10 @@ type Props = {
   currentMonthStart: string;
   // Today in the agency timezone — drives the "call back this week" banner.
   todayKey: string;
+  // Whether CAPSULE_API_TOKEN is set — gates the "Send to Capsule" buttons.
+  capsuleConfigured: boolean;
+  // Capsule subdomain for deep links, when configured.
+  capsuleSite: string | null;
 };
 
 const STATUS_STYLES: Record<OppStatus, { color: string; bg: string }> = {
@@ -93,6 +98,8 @@ export default function SalesOpportunities({
   initialOpps,
   currentMonthStart,
   todayKey,
+  capsuleConfigured,
+  capsuleSite,
 }: Props) {
   const [opps, setOpps] = useState<SalesOpportunity[]>(initialOpps);
   const [error, setError] = useState<string | null>(null);
@@ -188,6 +195,26 @@ export default function SalesOpportunities({
   function removeRow(id: number) {
     setOpps((prev) => prev.filter((o) => o.id !== id));
     persist(() => deleteSalesOpportunity(id));
+  }
+
+  // Push a row into Capsule (matching/creating the contact, creating the
+  // opportunity) and store the returned ids so the row renders as linked.
+  function sendToCapsule(id: number) {
+    persist(async () => {
+      const res = await sendOpportunityToCapsule(id);
+      if (res.error) throw new Error(res.error);
+      setOpps((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                capsulePartyId: res.capsulePartyId,
+                capsuleOpportunityId: res.capsuleOpportunityId,
+              }
+            : o
+        )
+      );
+    });
   }
 
   return (
@@ -383,6 +410,9 @@ export default function SalesOpportunities({
           onPatch={patchRow}
           onAdd={() => addRow(monthStart)}
           onRemove={removeRow}
+          onSendToCapsule={sendToCapsule}
+          capsuleConfigured={capsuleConfigured}
+          capsuleSite={capsuleSite}
         />
       ))}
     </div>
@@ -423,12 +453,18 @@ function MonthBlock({
   onPatch,
   onAdd,
   onRemove,
+  onSendToCapsule,
+  capsuleConfigured,
+  capsuleSite,
 }: {
   monthStart: string;
   rows: SalesOpportunity[];
   onPatch: (id: number, patch: SalesOpportunityPatch) => void;
   onAdd: () => void;
   onRemove: (id: number) => void;
+  onSendToCapsule: (id: number) => void;
+  capsuleConfigured: boolean;
+  capsuleSite: string | null;
 }) {
   const booked = sumWhere(rows, "booked");
   const lost = sumWhere(rows, "not_booked");
@@ -502,12 +538,21 @@ function MonthBlock({
               <Th width={120}>Status</Th>
               <Th width={110}>Follow-up</Th>
               <Th>Notes</Th>
+              {capsuleConfigured && <Th width={80}>Capsule</Th>}
               <Th width={30}>{""}</Th>
             </tr>
           </thead>
           <tbody>
             {rows.map((o) => (
-              <OppRow key={o.id} opp={o} onPatch={onPatch} onRemove={onRemove} />
+              <OppRow
+                key={o.id}
+                opp={o}
+                onPatch={onPatch}
+                onRemove={onRemove}
+                onSendToCapsule={onSendToCapsule}
+                capsuleConfigured={capsuleConfigured}
+                capsuleSite={capsuleSite}
+              />
             ))}
           </tbody>
         </table>
@@ -575,10 +620,16 @@ function OppRow({
   opp,
   onPatch,
   onRemove,
+  onSendToCapsule,
+  capsuleConfigured,
+  capsuleSite,
 }: {
   opp: SalesOpportunity;
   onPatch: (id: number, patch: SalesOpportunityPatch) => void;
   onRemove: (id: number) => void;
+  onSendToCapsule: (id: number) => void;
+  capsuleConfigured: boolean;
+  capsuleSite: string | null;
 }) {
   const [hover, setHover] = useState(false);
   const statusStyle = STATUS_STYLES[opp.status];
@@ -697,6 +748,53 @@ function OppRow({
           style={{ ...inputStyle, minWidth: 140, color: "#52525b" }}
         />
       </td>
+      {capsuleConfigured && (
+        <td style={{ ...cellStyle, textAlign: "center", whiteSpace: "nowrap" }}>
+          {opp.capsuleOpportunityId != null ? (
+            capsuleSite ? (
+              <a
+                href={`https://${capsuleSite}.capsulecrm.com/opportunity/${opp.capsuleOpportunityId}`}
+                target="_blank"
+                rel="noopener"
+                title="Open in Capsule"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#3730a3",
+                  textDecoration: "none",
+                }}
+              >
+                Linked ↗
+              </a>
+            ) : (
+              <span
+                title="Linked to Capsule"
+                style={{ fontSize: 12, fontWeight: 700, color: "#3730a3" }}
+              >
+                Linked ✓
+              </span>
+            )
+          ) : (
+            <button
+              type="button"
+              title="Create this opportunity (and its contact) in Capsule"
+              onClick={() => onSendToCapsule(opp.id)}
+              style={{
+                border: "1px solid #c7d2fe",
+                borderRadius: 8,
+                background: "#eef2ff",
+                padding: "3px 8px",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#3730a3",
+                cursor: "pointer",
+              }}
+            >
+              → Capsule
+            </button>
+          )}
+        </td>
+      )}
       <td style={{ ...cellStyle, textAlign: "center" }}>
         <button
           type="button"

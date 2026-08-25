@@ -52,7 +52,7 @@ import {
   normalizeStatus,
   type OppStatus,
 } from "@/app/admin-panel/lib/sales-shared";
-import { getCapsuleOpenTasks } from "@/lib/capsule";
+import { getCapsuleOpenTasks, getCapsulePartyPhones } from "@/lib/capsule";
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -158,6 +158,7 @@ export type SalesSummary = {
   callsToday: {
     who: string;
     what: string;
+    phone: string | null;
     dueOn: string | null;
     overdue: boolean;
     source: "capsule" | "pipeline";
@@ -562,15 +563,20 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
   // tasks that would otherwise flood the list (mirrors the calendar tab).
   // Capsule not being configured or reachable just leaves its half out.
   const overdueCutoffKey = addDays(todayKey, -31);
+  const callsRaw: (SalesSummary["callsToday"][number] & {
+    partyId: number | null;
+  })[] = [];
   if (capsuleRes.ok) {
     for (const t of capsuleRes.tasks) {
       if (!t.dueOn || t.dueOn > todayKey || t.dueOn < overdueCutoffKey) continue;
-      sales.callsToday.push({
+      callsRaw.push({
         who: t.partyName || t.opportunityName || "(no contact)",
         what: t.description || t.detail || "Task",
+        phone: null,
         dueOn: t.dueOn,
         overdue: t.dueOn < todayKey,
         source: "capsule",
+        partyId: t.partyId,
       });
     }
   }
@@ -581,21 +587,36 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
       follow_up: string | null;
     }[]) {
       const amount = r.amount == null ? null : Number(r.amount);
-      sales.callsToday.push({
+      callsRaw.push({
         who: r.company || "(unnamed)",
         what:
           "Follow up on the pitch" +
           (amount != null && Number.isFinite(amount) ? ` (${gbp(amount)})` : ""),
+        phone: null,
         dueOn: r.follow_up,
         overdue: (r.follow_up ?? todayKey) < todayKey,
         source: "pipeline",
+        partyId: null,
       });
     }
   }
-  sales.callsToday.sort((a, b) =>
-    (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999")
-  );
-  sales.callsToday = sales.callsToday.slice(0, 15);
+  callsRaw.sort((a, b) => (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999"));
+  const callsCut = callsRaw.slice(0, 15);
+  // Phone numbers for the Capsule contacts on today's list, so the email is
+  // dialable on its own. Fail-soft: lookup errors just leave numbers off.
+  try {
+    const phones = await getCapsulePartyPhones(
+      callsCut
+        .map((c) => c.partyId)
+        .filter((id): id is number => id != null)
+    );
+    for (const c of callsCut) {
+      if (c.partyId != null) c.phone = phones[c.partyId] ?? null;
+    }
+  } catch (e) {
+    console.warn("[daily-report] phone lookup failed:", e);
+  }
+  sales.callsToday = callsCut.map(({ partyId: _partyId, ...c }) => c);
 
   const dateLabel = new Date(todayKey + "T00:00:00Z").toLocaleDateString(
     "en-GB",
@@ -810,7 +831,7 @@ export function renderDailyReport(data: DailyReportData): {
         sales.callsToday
           .map((c) =>
             row(
-              `<strong>${escapeHtml(truncate(c.who, 50))}</strong> <span style="color:#71717a;">— ${escapeHtml(truncate(c.what, 70))}</span>`,
+              `<strong>${escapeHtml(truncate(c.who, 50))}</strong>${c.phone ? ` <span style="color:#0369a1;font-weight:600;white-space:nowrap;">${escapeHtml(c.phone)}</span>` : ""} <span style="color:#71717a;">— ${escapeHtml(truncate(c.what, 70))}</span>`,
               c.overdue
                 ? `<span style="color:#b91c1c;font-weight:700;">overdue${c.dueOn ? ` (${dayLabel(c.dueOn)})` : ""}</span>`
                 : "today"
@@ -821,7 +842,7 @@ export function renderDailyReport(data: DailyReportData): {
     );
     sales.callsToday.forEach((c) =>
       textLines.push(
-        `    - ${c.who} — ${c.what}${c.overdue ? ` (overdue${c.dueOn ? `, ${dayLabel(c.dueOn)}` : ""})` : ""}`
+        `    - ${c.who}${c.phone ? ` (${c.phone})` : ""} — ${c.what}${c.overdue ? ` (overdue${c.dueOn ? `, ${dayLabel(c.dueOn)}` : ""})` : ""}`
       )
     );
   }
