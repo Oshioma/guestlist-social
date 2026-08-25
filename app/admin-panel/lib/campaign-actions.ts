@@ -381,6 +381,19 @@ export async function setCampaignDeliveryAction(
   );
 
   if (!result.ok) {
+    // "Invalid appsecret_proof" is Meta telling us the signing secret belongs
+    // to a different app than the token. Relaying that phrase verbatim leaves
+    // an operator with nothing to act on, so ask Meta which app the token is
+    // from and say that instead.
+    if ((result.error ?? "").toLowerCase().includes("appsecret_proof")) {
+      const { diagnoseMetaCredentials } = await import("@/lib/meta-execute");
+      const diagnosis = await diagnoseMetaCredentials();
+      return {
+        ok: false,
+        error: `Meta refused the change. ${diagnosis.detail}`,
+        dryRun: result.dryRun,
+      };
+    }
     return { ok: false, error: result.error, dryRun: result.dryRun };
   }
 

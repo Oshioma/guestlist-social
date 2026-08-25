@@ -61,8 +61,11 @@ export const DUPLICATE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 // ---------------------------------------------------------------------------
 
 function getCredentials() {
-  const token = process.env.META_ACCESS_TOKEN;
-  const appSecret = process.env.META_APP_SECRET;
+  // Trimmed on purpose: a secret pasted into a hosting dashboard often arrives
+  // with a trailing newline or space, which changes the HMAC and produces
+  // "Invalid appsecret_proof" with nothing to point at.
+  const token = process.env.META_ACCESS_TOKEN?.trim();
+  const appSecret = process.env.META_APP_SECRET?.trim();
 
   if (!token) {
     throw new Error("Missing META_ACCESS_TOKEN.");
@@ -777,6 +780,85 @@ export async function setDelivery(
       dryRun: false,
       changed,
       error: err instanceof Error ? err.message : "Meta refused the change.",
+    };
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Credential diagnosis.
+//
+// "Invalid appsecret_proof provided in the API argument" means the HMAC did
+// not match — in practice, META_APP_SECRET belongs to a different app than the
+// one that issued META_ACCESS_TOKEN. The proof itself is computed to spec, so
+// no amount of retrying helps; what is needed is which app the token is from,
+// which Meta will say if asked.
+// ---------------------------------------------------------------------------
+
+export type CredentialDiagnosis = {
+  ok: boolean;
+  /** Operator-facing, safe to display: ids and lengths only, never secrets. */
+  detail: string;
+};
+
+export async function diagnoseMetaCredentials(): Promise<CredentialDiagnosis> {
+  const token = process.env.META_ACCESS_TOKEN?.trim();
+  const appSecret = process.env.META_APP_SECRET?.trim();
+
+  if (!token) return { ok: false, detail: "META_ACCESS_TOKEN is not set." };
+  if (!appSecret) {
+    return {
+      ok: false,
+      detail:
+        "META_APP_SECRET is not set, and signed writes require it. Copy it from developers.facebook.com → your app → Settings → Basic → App Secret.",
+    };
+  }
+
+  let appId: string | null = null;
+  try {
+    const res = await fetch(
+      `${BASE_URL}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(10_000) }
+    );
+    const data = await res.json();
+    appId = data?.data?.app_id ? String(data.data.app_id) : null;
+  } catch {
+    /* the /me probe below is the one that matters */
+  }
+
+  try {
+    const proof = appsecretProof(token, appSecret);
+    const res = await fetch(
+      `${BASE_URL}/me?access_token=${encodeURIComponent(token)}&appsecret_proof=${proof}`,
+      { cache: "no-store", signal: AbortSignal.timeout(10_000) }
+    );
+    const data = await res.json();
+    if (data?.error) {
+      const message = String(data.error.message ?? "");
+      if (message.toLowerCase().includes("appsecret_proof")) {
+        return {
+          ok: false,
+          detail:
+            `META_APP_SECRET does not match the app that issued META_ACCESS_TOKEN. ` +
+            (appId
+              ? `The token belongs to app ${appId}, so take the secret from that app: developers.facebook.com → app ${appId} → Settings → Basic → App Secret. `
+              : "Take the secret from the same app the token was generated in. ") +
+            `Then update META_APP_SECRET in your hosting environment and redeploy. ` +
+            `(Secret currently loaded: ${appSecret.length} characters.)`,
+        };
+      }
+      return { ok: false, detail: `Meta rejected the credentials: ${message}` };
+    }
+    return {
+      ok: true,
+      detail: appId
+        ? `Signed writes verified against app ${appId}.`
+        : "Signed writes verified.",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: `Could not reach Meta to check the credentials — ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
