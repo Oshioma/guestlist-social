@@ -319,3 +319,102 @@ async function deleteCampaignCore(campaignId: string, clientId: string) {
 
   revalidatePath(`/admin-panel/clients/${clientId}`);
 }
+
+/**
+ * Switch a campaign's delivery on or off — the money decision.
+ *
+ * Everything the app creates in Meta starts PAUSED, and until now there was no
+ * way to change that from here: an operator was told "it starts paused" with
+ * no control to unpause it, and nothing anywhere said what going live would
+ * cost. This is that control.
+ *
+ * It flips the campaign, its ad set and its ads together, because Meta only
+ * delivers when all three are ACTIVE — a partial flip either spends when it
+ * looks paused or does nothing when it looks live.
+ */
+export async function setCampaignDeliveryAction(
+  clientId: string,
+  campaignId: string,
+  live: boolean
+): Promise<{ ok: boolean; error?: string; dryRun?: boolean }> {
+  const supabase = await createClient();
+
+  const { data: campaign, error: campaignError } = await supabase
+    .from("campaigns")
+    .select("id, meta_id, meta_adset_id, budget")
+    .eq("id", campaignId)
+    .eq("client_id", clientId)
+    .single();
+
+  if (campaignError || !campaign) {
+    return { ok: false, error: campaignError?.message ?? "Campaign not found." };
+  }
+
+  if (!(campaign as any).meta_id) {
+    return {
+      ok: false,
+      error:
+        "This campaign only exists here, not in Meta, so it cannot spend. Push it to Meta first.",
+    };
+  }
+
+  const { data: adRows } = await supabase
+    .from("ads")
+    .select("id, meta_id")
+    .eq("campaign_id", campaignId)
+    .eq("client_id", clientId);
+
+  const adMetaIds = (adRows ?? [])
+    .map((a) => (a as any).meta_id)
+    .filter((id: unknown): id is string => Boolean(id));
+
+  const { setDelivery } = await import("@/lib/meta-execute");
+  const result = await setDelivery(
+    {
+      campaignMetaId: String((campaign as any).meta_id),
+      adsetMetaId: (campaign as any).meta_adset_id
+        ? String((campaign as any).meta_adset_id)
+        : null,
+      adMetaIds,
+    },
+    live
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error, dryRun: result.dryRun };
+  }
+
+  // Only record the local state once Meta has accepted it, so the page never
+  // claims to be spending when Meta says otherwise.
+  const { error: updateError } = await supabase
+    .from("campaigns")
+    .update({
+      status: live ? "live" : "paused",
+      meta_status: live ? "ACTIVE" : "PAUSED",
+    })
+    .eq("id", campaignId)
+    .eq("client_id", clientId);
+
+  if (updateError) {
+    console.error("setCampaignDeliveryAction: local status update failed:", updateError);
+    return {
+      ok: false,
+      error: `Meta accepted the change but it could not be recorded here — ${updateError.message}`,
+      dryRun: result.dryRun,
+    };
+  }
+
+  if (adMetaIds.length > 0) {
+    await supabase
+      .from("ads")
+      .update({ meta_status: live ? "ACTIVE" : "PAUSED" })
+      .eq("campaign_id", campaignId)
+      .eq("client_id", clientId)
+      .not("meta_id", "is", null);
+  }
+
+  revalidatePath(`/admin-panel/clients/${clientId}/campaigns/${campaignId}`);
+  revalidatePath(`/admin-panel/clients/${clientId}`);
+
+  return { ok: true, dryRun: result.dryRun };
+}

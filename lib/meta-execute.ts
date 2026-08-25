@@ -706,3 +706,77 @@ export async function executeDuplicateAd(
     newAdId,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Delivery switch — the only thing in this codebase that can start spend.
+//
+// Everything else here is deliberately one-way-safe: pause, decrease, or copy
+// to PAUSED. Turning delivery ON is the opposite, so it is written to be
+// explicit about what it touches and to obey the same dry-run default as the
+// rest of the execution layer. A campaign only delivers when all three levels
+// are ACTIVE, so a half-flip would be worse than useless: it would look live
+// and spend nothing, or look paused and spend.
+// ---------------------------------------------------------------------------
+
+export type DeliveryTarget = {
+  campaignMetaId: string | null;
+  adsetMetaId: string | null;
+  adMetaIds: string[];
+};
+
+export type SetDeliveryResult = {
+  ok: boolean;
+  dryRun: boolean;
+  /** Meta ids actually flipped, in the order they were flipped. */
+  changed: string[];
+  error?: string;
+};
+
+export async function setDelivery(
+  target: DeliveryTarget,
+  live: boolean,
+  logContext?: { clientId?: number }
+): Promise<SetDeliveryResult> {
+  const status = live ? "ACTIVE" : "PAUSED";
+  const ids = [
+    target.campaignMetaId,
+    target.adsetMetaId,
+    ...target.adMetaIds,
+  ].filter((id): id is string => Boolean(id));
+
+  if (ids.length === 0) {
+    return {
+      ok: false,
+      dryRun: isDryRun(),
+      changed: [],
+      error: "Nothing to switch — this campaign has not been created in Meta.",
+    };
+  }
+
+  if (isDryRun()) {
+    return { ok: true, dryRun: true, changed: [] };
+  }
+
+  const changed: string[] = [];
+  try {
+    // Order matters going live: campaign, then ad set, then ads, so delivery
+    // never opens at a level whose parent is still paused. Pausing walks the
+    // same order — the campaign stops everything beneath it immediately.
+    for (const id of ids) {
+      await metaPost<{ success?: boolean }>(
+        `/${id}`,
+        { status },
+        { operation: `delivery:${live ? "activate" : "pause"}`, clientId: logContext?.clientId }
+      );
+      changed.push(id);
+    }
+    return { ok: true, dryRun: false, changed };
+  } catch (err) {
+    return {
+      ok: false,
+      dryRun: false,
+      changed,
+      error: err instanceof Error ? err.message : "Meta refused the change.",
+    };
+  }
+}
