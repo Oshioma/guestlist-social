@@ -16,8 +16,10 @@ import "server-only";
 //                            not "all admins" — see app-settings).
 //   5. Client comments     — unresolved comments clients left on posts.
 //   6. Sales               — this week's calls / opps / deals so far (and
-//                            yesterday's), new opportunities logged since
-//                            yesterday, and deals booked this month.
+//                            yesterday's), who to call today (Capsule's
+//                            calendar + due pipeline follow-ups), new
+//                            opportunities logged since yesterday, and deals
+//                            booked this month.
 //
 // Scheduling is deliberately cron-free: maybeSendDailyReport() runs after
 // every admin-panel page load and sends at most once per calendar day (agency
@@ -50,6 +52,7 @@ import {
   normalizeStatus,
   type OppStatus,
 } from "@/app/admin-panel/lib/sales-shared";
+import { getCapsuleOpenTasks } from "@/lib/capsule";
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -150,6 +153,15 @@ export type SalesSummary = {
   newOpps: { company: string; amount: number | null; status: OppStatus }[];
   // Opportunities marked booked in the current month's bucket.
   bookedThisMonth: { company: string; amount: number | null }[];
+  // Today's call agenda: Capsule open tasks due today or overdue, plus
+  // pending pipeline follow-ups that have come due.
+  callsToday: {
+    who: string;
+    what: string;
+    dueOn: string | null;
+    overdue: boolean;
+    source: "capsule" | "pipeline";
+  }[];
 };
 
 export type DailyReportData = {
@@ -212,6 +224,8 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     salesWeeksRes,
     newOppsRes,
     bookedOppsRes,
+    dueFollowUpsRes,
+    capsuleRes,
   ] = await Promise.all([
       supabase.from("tasks").select("title, assignee, due_date, status, priority"),
       supabase
@@ -253,6 +267,15 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
         .eq("status", "booked")
         .order("sort_order", { ascending: true })
         .limit(30),
+      supabase
+        .from("sales_opportunities")
+        .select("company, amount, follow_up")
+        .eq("status", "pending")
+        .not("follow_up", "is", null)
+        .lte("follow_up", todayKey)
+        .order("follow_up", { ascending: true })
+        .limit(15),
+      getCapsuleOpenTasks(),
     ]);
 
   // 1. Tasks — overdue and due this week, current (non-completed) only.
@@ -483,6 +506,7 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     hasYesterday: false,
     newOpps: [],
     bookedThisMonth: [],
+    callsToday: [],
   };
   // Mon=0 … Sun=6; only Mon–Fri exist in the grid.
   const yDayIdx =
@@ -531,6 +555,43 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
       amount: r.amount == null ? null : Number(r.amount),
     }));
   }
+  // Who to call today: Capsule's calendar (open tasks due today or overdue)
+  // merged with pipeline follow-ups that have come due. Capsule not being
+  // configured or reachable just leaves its half out.
+  if (capsuleRes.ok) {
+    for (const t of capsuleRes.tasks) {
+      if (!t.dueOn || t.dueOn > todayKey) continue;
+      sales.callsToday.push({
+        who: t.partyName || t.opportunityName || "(no contact)",
+        what: t.description || t.detail || "Task",
+        dueOn: t.dueOn,
+        overdue: t.dueOn < todayKey,
+        source: "capsule",
+      });
+    }
+  }
+  if (!dueFollowUpsRes.error) {
+    for (const r of (dueFollowUpsRes.data ?? []) as {
+      company: string | null;
+      amount: unknown;
+      follow_up: string | null;
+    }[]) {
+      const amount = r.amount == null ? null : Number(r.amount);
+      sales.callsToday.push({
+        who: r.company || "(unnamed)",
+        what:
+          "Follow up on the pitch" +
+          (amount != null && Number.isFinite(amount) ? ` (${gbp(amount)})` : ""),
+        dueOn: r.follow_up,
+        overdue: (r.follow_up ?? todayKey) < todayKey,
+        source: "pipeline",
+      });
+    }
+  }
+  sales.callsToday.sort((a, b) =>
+    (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999")
+  );
+  sales.callsToday = sales.callsToday.slice(0, 15);
 
   const dateLabel = new Date(todayKey + "T00:00:00Z").toLocaleDateString(
     "en-GB",
@@ -730,6 +791,35 @@ export function renderDailyReport(data: DailyReportData): {
   if (!sales.hasWeekRows && !sales.hasYesterday) {
     htmlParts.push(muted("No call activity logged for this week yet."));
     textLines.push("  No call activity logged for this week yet.");
+  }
+
+  htmlParts.push(
+    `<p style="margin:12px 0 6px;font-size:13px;font-weight:700;color:#18181b;">Who to call today (${sales.callsToday.length})</p>`
+  );
+  textLines.push(`  Who to call today (${sales.callsToday.length}):`);
+  if (sales.callsToday.length === 0) {
+    htmlParts.push(muted("No calls due today."));
+    textLines.push("    (no calls due today)");
+  } else {
+    htmlParts.push(
+      table(
+        sales.callsToday
+          .map((c) =>
+            row(
+              `<strong>${escapeHtml(truncate(c.who, 50))}</strong> <span style="color:#71717a;">— ${escapeHtml(truncate(c.what, 70))}</span>`,
+              c.overdue
+                ? `<span style="color:#b91c1c;font-weight:700;">overdue${c.dueOn ? ` (${dayLabel(c.dueOn)})` : ""}</span>`
+                : "today"
+            )
+          )
+          .join("")
+      )
+    );
+    sales.callsToday.forEach((c) =>
+      textLines.push(
+        `    - ${c.who} — ${c.what}${c.overdue ? ` (overdue${c.dueOn ? `, ${dayLabel(c.dueOn)}` : ""})` : ""}`
+      )
+    );
   }
 
   htmlParts.push(
