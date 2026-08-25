@@ -507,3 +507,75 @@ export async function createCapsuleOpportunity(
     return { ok: false, error: "Could not reach Capsule." };
   }
 }
+
+// ── Opportunity listing (for auto-linking the pipeline) ────────────────────
+
+export type CapsuleOpportunitySummary = {
+  id: number;
+  name: string;
+  partyId: number | null;
+  partyName: string;
+};
+
+export type CapsuleOpportunitiesResult =
+  | { ok: true; opportunities: CapsuleOpportunitySummary[] }
+  | { ok: false };
+
+function mapOpportunity(raw: unknown): CapsuleOpportunitySummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const id = Number(o.id);
+  if (!Number.isFinite(id)) return null;
+  const party = o.party as { id?: unknown } | undefined;
+  return {
+    id,
+    name: typeof o.name === "string" ? o.name : "",
+    partyId: party && Number.isFinite(Number(party.id)) ? Number(party.id) : null,
+    partyName: partyDisplayName(o.party),
+  };
+}
+
+// Every opportunity in the account (open and closed), with its contact —
+// used to match pipeline rows to Capsule records by company name. Page 1
+// first, the rest in parallel; fail-soft to "not ok" on any error so the
+// caller just skips auto-linking this time round.
+export async function getCapsuleOpportunities(): Promise<CapsuleOpportunitiesResult> {
+  const token = process.env.CAPSULE_API_TOKEN;
+  if (!token) return { ok: false };
+
+  const MAX_OPP_PAGES = 10;
+  const pageUrl = (page: number) =>
+    `${CAPSULE_API_BASE}/opportunities?embed=party&perPage=100&page=${page}`;
+  const fetchPage = async (page: number): Promise<CapsuleOpportunitySummary[] | null> => {
+    const res = await fetch(pageUrl(page), {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { opportunities?: unknown[] };
+    return (body.opportunities ?? [])
+      .map(mapOpportunity)
+      .filter((o): o is CapsuleOpportunitySummary => o != null);
+  };
+
+  try {
+    const first = await fetchPage(1);
+    if (first == null) return { ok: false };
+    const opportunities = [...first];
+    if (first.length === 100) {
+      const rest = await Promise.all(
+        Array.from({ length: MAX_OPP_PAGES - 1 }, (_, i) =>
+          fetchPage(i + 2).catch(() => null)
+        )
+      );
+      for (const page of rest) {
+        if (page == null) break;
+        opportunities.push(...page);
+        if (page.length < 100) break;
+      }
+    }
+    return { ok: true, opportunities };
+  } catch {
+    return { ok: false };
+  }
+}

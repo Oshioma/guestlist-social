@@ -15,6 +15,8 @@ import { getMemberAccess } from "@/lib/auth/permissions";
 import {
   completeCapsuleTask,
   createCapsuleOpportunity,
+  getCapsuleOpportunities,
+  isCapsuleConfigured,
 } from "@/lib/capsule";
 
 async function requireStaff(): Promise<void> {
@@ -34,6 +36,60 @@ export async function completeCapsuleTaskAction(
 
   revalidatePath("/app/sales/calls");
   return { error: null };
+}
+
+// Link unlinked pipeline rows to Capsule records that already exist, by
+// matching the company name against each Capsule opportunity's contact
+// (case-insensitive; the newest opportunity wins when a contact has several).
+// Purely a read-and-link pass — it never creates anything in Capsule, so it's
+// safe to run on page load. Returns how many rows were linked; any failure
+// (Capsule down, token bad) just returns 0 and the page renders as before.
+export async function autoLinkCapsuleOpportunities(): Promise<number> {
+  const access = await getMemberAccess();
+  if (!access || !isCapsuleConfigured()) return 0;
+
+  const supabase = await createClient();
+  const { data: unlinkedRows } = await supabase
+    .from("sales_opportunities")
+    .select("id, company")
+    .is("capsule_opportunity_id", null)
+    .neq("company", "");
+  const unlinked = (unlinkedRows ?? []) as { id: number; company: string }[];
+  if (unlinked.length === 0) return 0;
+
+  const capsule = await getCapsuleOpportunities();
+  if (!capsule.ok) return 0;
+
+  // Newest opportunity per contact name.
+  const byPartyName = new Map<
+    string,
+    { id: number; partyId: number | null }
+  >();
+  for (const opp of capsule.opportunities) {
+    const key = opp.partyName.trim().toLowerCase();
+    if (!key) continue;
+    const existing = byPartyName.get(key);
+    if (!existing || opp.id > existing.id) {
+      byPartyName.set(key, { id: opp.id, partyId: opp.partyId });
+    }
+  }
+
+  let linked = 0;
+  for (const row of unlinked) {
+    const match = byPartyName.get(row.company.trim().toLowerCase());
+    if (!match) continue;
+    const { error } = await supabase
+      .from("sales_opportunities")
+      .update({
+        capsule_opportunity_id: match.id,
+        capsule_party_id: match.partyId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .is("capsule_opportunity_id", null);
+    if (!error) linked += 1;
+  }
+  return linked;
 }
 
 export type SendToCapsuleResult = {
