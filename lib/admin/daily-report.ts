@@ -15,6 +15,9 @@ import "server-only";
 //                            forecast (why recipients are an explicit list,
 //                            not "all admins" — see app-settings).
 //   5. Client comments     — unresolved comments clients left on posts.
+//   6. Sales               — this week's calls / opps / deals so far (and
+//                            yesterday's), new opportunities logged since
+//                            yesterday, and deals booked this month.
 //
 // Scheduling is deliberately cron-free: maybeSendDailyReport() runs after
 // every admin-panel page load and sends at most once per calendar day (agency
@@ -41,6 +44,12 @@ import {
   normalizeAmounts,
   normalizeOverrides,
 } from "@/app/admin-panel/lib/cashflow-shared";
+import {
+  OPP_STATUS_LABELS,
+  normalizeDays,
+  normalizeStatus,
+  type OppStatus,
+} from "@/app/admin-panel/lib/sales-shared";
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -126,6 +135,23 @@ type ClientComment = {
   postCaption: string;
 };
 
+export type SalesSummary = {
+  // Current week's day cells summed across every rep, Monday → today.
+  weekCalls: number;
+  weekOpps: number;
+  weekDeals: number;
+  hasWeekRows: boolean;
+  // Yesterday's counts — only meaningful when yesterday was a logged Mon–Fri.
+  yesterdayCalls: number;
+  yesterdayOpps: number;
+  yesterdayDeals: number;
+  hasYesterday: boolean;
+  // Opportunities logged since the start of yesterday (agency timezone).
+  newOpps: { company: string; amount: number | null; status: OppStatus }[];
+  // Opportunities marked booked in the current month's bucket.
+  bookedThisMonth: { company: string; amount: number | null }[];
+};
+
 export type DailyReportData = {
   dateLabel: string;
   weekLabel: string;
@@ -139,6 +165,7 @@ export type DailyReportData = {
   monthlyRevenue: number;
   monthlyCosts: number;
   clientComments: ClientComment[];
+  sales: SalesSummary;
   timeZone: string;
 };
 
@@ -171,8 +198,21 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     timeZone: "UTC",
   });
 
-  const [tasksRes, completionsRes, queueRes, crewRes, commentsRes] =
-    await Promise.all([
+  const yesterdayKey = addDays(todayKey, -1);
+  const yesterdayMondayKey = mondayOf(yesterdayKey);
+  const monthStartKey = todayKey.slice(0, 7) + "-01";
+  const yesterdayStartUtc = zonedTimeToUtcIso(yesterdayKey, "00:00", timeZone);
+
+  const [
+    tasksRes,
+    completionsRes,
+    queueRes,
+    crewRes,
+    commentsRes,
+    salesWeeksRes,
+    newOppsRes,
+    bookedOppsRes,
+  ] = await Promise.all([
       supabase.from("tasks").select("title, assignee, due_date, status, priority"),
       supabase
         .from("task_completions")
@@ -196,6 +236,23 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
         .eq("resolved", false)
         .order("created_at", { ascending: false })
         .limit(20),
+      supabase
+        .from("sales_weeks")
+        .select("week_start, rep, calls, opps, deals")
+        .in("week_start", [mondayKey, yesterdayMondayKey]),
+      supabase
+        .from("sales_opportunities")
+        .select("company, amount, status, created_at")
+        .gte("created_at", yesterdayStartUtc || now.toISOString())
+        .order("created_at", { ascending: true })
+        .limit(30),
+      supabase
+        .from("sales_opportunities")
+        .select("company, amount")
+        .eq("month_start", monthStartKey)
+        .eq("status", "booked")
+        .order("sort_order", { ascending: true })
+        .limit(30),
     ]);
 
   // 1. Tasks — overdue and due this week, current (non-completed) only.
@@ -411,6 +468,70 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     ),
   }));
 
+  // 6. Sales — this week's activity (summed across reps), yesterday's
+  // counts, new opportunities and this month's bookings. The tables may not
+  // exist yet in an environment — fail soft to an empty section.
+  const sumDays = (a: number[]) => a.reduce((t, n) => t + (n || 0), 0);
+  const sales: SalesSummary = {
+    weekCalls: 0,
+    weekOpps: 0,
+    weekDeals: 0,
+    hasWeekRows: false,
+    yesterdayCalls: 0,
+    yesterdayOpps: 0,
+    yesterdayDeals: 0,
+    hasYesterday: false,
+    newOpps: [],
+    bookedThisMonth: [],
+  };
+  // Mon=0 … Sun=6; only Mon–Fri exist in the grid.
+  const yDayIdx =
+    (new Date(yesterdayKey + "T00:00:00Z").getUTCDay() + 6) % 7;
+  if (!salesWeeksRes.error) {
+    for (const row of (salesWeeksRes.data ?? []) as {
+      week_start: string | null;
+      calls: unknown;
+      opps: unknown;
+      deals: unknown;
+    }[]) {
+      const calls = normalizeDays(row.calls);
+      const opps = normalizeDays(row.opps);
+      const deals = normalizeDays(row.deals);
+      if (row.week_start === mondayKey) {
+        sales.hasWeekRows = true;
+        sales.weekCalls += sumDays(calls);
+        sales.weekOpps += sumDays(opps);
+        sales.weekDeals += sumDays(deals);
+      }
+      if (yDayIdx < 5 && row.week_start === yesterdayMondayKey) {
+        sales.hasYesterday = true;
+        sales.yesterdayCalls += calls[yDayIdx];
+        sales.yesterdayOpps += opps[yDayIdx];
+        sales.yesterdayDeals += deals[yDayIdx];
+      }
+    }
+  }
+  if (!newOppsRes.error) {
+    sales.newOpps = ((newOppsRes.data ?? []) as {
+      company: string | null;
+      amount: unknown;
+      status: unknown;
+    }[]).map((r) => ({
+      company: r.company || "(unnamed)",
+      amount: r.amount == null ? null : Number(r.amount),
+      status: normalizeStatus(r.status),
+    }));
+  }
+  if (!bookedOppsRes.error) {
+    sales.bookedThisMonth = ((bookedOppsRes.data ?? []) as {
+      company: string | null;
+      amount: unknown;
+    }[]).map((r) => ({
+      company: r.company || "(unnamed)",
+      amount: r.amount == null ? null : Number(r.amount),
+    }));
+  }
+
   const dateLabel = new Date(todayKey + "T00:00:00Z").toLocaleDateString(
     "en-GB",
     {
@@ -435,6 +556,7 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     monthlyRevenue,
     monthlyCosts,
     clientComments,
+    sales,
     timeZone,
   };
 }
@@ -571,7 +693,100 @@ export function renderDailyReport(data: DailyReportData): {
   }
   textLines.push("");
 
-  // 3. This month's money
+  // 3. Sales
+  const sales = data.sales;
+  const statusColor: Record<OppStatus, string> = {
+    pending: "#71717a",
+    booked: "#166534",
+    not_booked: "#b91c1c",
+  };
+  const oppAmount = (n: number | null) => (n == null ? "—" : gbp(n));
+  htmlParts.push(sectionTitle("Sales"));
+  textLines.push("SALES");
+  const salesRows: string[] = [];
+  if (sales.hasWeekRows) {
+    salesRows.push(
+      row(
+        "This week so far",
+        `<strong>${sales.weekCalls}</strong> calls · <strong>${sales.weekOpps}</strong> opps · <strong>${sales.weekDeals}</strong> deals`
+      )
+    );
+    textLines.push(
+      `  This week so far: ${sales.weekCalls} calls, ${sales.weekOpps} opps, ${sales.weekDeals} deals`
+    );
+  }
+  if (sales.hasYesterday) {
+    salesRows.push(
+      row(
+        "Yesterday",
+        `${sales.yesterdayCalls} calls · ${sales.yesterdayOpps} opps · ${sales.yesterdayDeals} deals`
+      )
+    );
+    textLines.push(
+      `  Yesterday: ${sales.yesterdayCalls} calls, ${sales.yesterdayOpps} opps, ${sales.yesterdayDeals} deals`
+    );
+  }
+  if (salesRows.length > 0) htmlParts.push(table(salesRows.join("")));
+  if (!sales.hasWeekRows && !sales.hasYesterday) {
+    htmlParts.push(muted("No call activity logged for this week yet."));
+    textLines.push("  No call activity logged for this week yet.");
+  }
+
+  htmlParts.push(
+    `<p style="margin:12px 0 6px;font-size:13px;font-weight:700;color:#18181b;">New opportunities since yesterday (${sales.newOpps.length})</p>`
+  );
+  textLines.push(`  New opportunities since yesterday (${sales.newOpps.length}):`);
+  if (sales.newOpps.length === 0) {
+    htmlParts.push(muted("None logged."));
+    textLines.push("    (none logged)");
+  } else {
+    htmlParts.push(
+      table(
+        sales.newOpps
+          .map((o) =>
+            row(
+              `${escapeHtml(truncate(o.company, 60))} <span style="color:${statusColor[o.status]};font-weight:600;">· ${OPP_STATUS_LABELS[o.status]}</span>`,
+              oppAmount(o.amount)
+            )
+          )
+          .join("")
+      )
+    );
+    sales.newOpps.forEach((o) =>
+      textLines.push(
+        `    - ${o.company} — ${oppAmount(o.amount)} (${OPP_STATUS_LABELS[o.status]})`
+      )
+    );
+  }
+
+  const bookedTotal = sales.bookedThisMonth.reduce(
+    (t, o) => t + (o.amount ?? 0),
+    0
+  );
+  htmlParts.push(
+    `<p style="margin:12px 0 6px;font-size:13px;font-weight:700;color:#166534;">Deals booked this month (${sales.bookedThisMonth.length}${sales.bookedThisMonth.length > 0 ? ` · ${gbp(bookedTotal)}` : ""})</p>`
+  );
+  textLines.push(
+    `  Deals booked this month (${sales.bookedThisMonth.length}${sales.bookedThisMonth.length > 0 ? ` · ${gbp(bookedTotal)}` : ""}):`
+  );
+  if (sales.bookedThisMonth.length === 0) {
+    htmlParts.push(muted("Nothing booked yet this month."));
+    textLines.push("    (nothing booked yet this month)");
+  } else {
+    htmlParts.push(
+      table(
+        sales.bookedThisMonth
+          .map((o) => row(escapeHtml(truncate(o.company, 60)), oppAmount(o.amount)))
+          .join("")
+      )
+    );
+    sales.bookedThisMonth.forEach((o) =>
+      textLines.push(`    - ${o.company} — ${oppAmount(o.amount)}`)
+    );
+  }
+  textLines.push("");
+
+  // 4. This month's money
   const net = data.monthlyRevenue - data.monthlyCosts;
   htmlParts.push(sectionTitle(`This month's money (${data.salaryMonthLabel})`));
   htmlParts.push(
@@ -590,7 +805,7 @@ export function renderDailyReport(data: DailyReportData): {
   textLines.push(`  Net: ${net < 0 ? "-" : ""}${gbp(Math.abs(net))}`);
   textLines.push("");
 
-  // 4. Staff salaries coming up
+  // 5. Staff salaries coming up
   htmlParts.push(sectionTitle(`Staff salaries coming up (${data.salaryMonthLabel})`));
   textLines.push(`STAFF SALARIES COMING UP (${data.salaryMonthLabel})`);
   if (data.salaries.length === 0) {
@@ -611,7 +826,7 @@ export function renderDailyReport(data: DailyReportData): {
   }
   textLines.push("");
 
-  // 5. Client comments
+  // 6. Client comments
   htmlParts.push(
     sectionTitle(`Client comments on posts (${data.clientComments.length} unresolved)`)
   );
