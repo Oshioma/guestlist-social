@@ -13,6 +13,12 @@ type Props = {
   /** False when the campaign was never created in Meta — it cannot spend. */
   inMeta: boolean;
   adCount: number;
+  /**
+   * True when META_EXECUTE_DRY_RUN is not "false". The switch then writes
+   * nothing to Meta, which has to be said up front — a button that silently
+   * does nothing is the worst of both worlds.
+   */
+  dryRun: boolean;
 };
 
 const money = (n: number) =>
@@ -31,6 +37,7 @@ export default function CampaignDeliveryControl({
   live,
   inMeta,
   adCount,
+  dryRun,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -50,7 +57,7 @@ export default function CampaignDeliveryControl({
         }
         if (res.dryRun) {
           setNote(
-            "Dry-run mode is on (META_EXECUTE_DRY_RUN), so nothing was sent to Meta and no money is committed."
+            "Nothing was sent to Meta and no money was committed — dry-run mode is on. Set META_EXECUTE_DRY_RUN=false in your Vercel environment variables and redeploy to make this switch real."
           );
           return;
         }
@@ -106,6 +113,26 @@ export default function CampaignDeliveryControl({
         <div style={{ fontSize: 12, color: "#71717a" }}>
           That is about {money(weekly)} a week, {money(monthly)} a month, and it
           keeps going until you pause it or the end date you set in Meta.
+        </div>
+      )}
+
+      {dryRun && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "#92400e",
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            padding: "8px 10px",
+            lineHeight: 1.55,
+          }}
+        >
+          <strong style={{ fontWeight: 700 }}>Dry-run mode is on</strong>, so this
+          switch will not send anything to Meta and cannot start spend. To make
+          it live: set <code>META_EXECUTE_DRY_RUN=false</code> in Vercel →
+          Project → Settings → Environment Variables (Production), then
+          redeploy. Until then every Meta write from this panel is simulated.
         </div>
       )}
 

@@ -191,6 +191,17 @@ export default function CampaignForm({
   const [endDate, setEndDate] = useState(initialValues?.endDate ?? "");
   const budgetNumber = Number(budget) || 0;
 
+  // Picking "Live" creates the campaign ACTIVE in Meta, so Create is itself a
+  // spend decision — it just never looked like one.
+  const commitsMoney = status === "live" && budgetNumber > 0;
+  const [liveConfirmed, setLiveConfirmed] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const money = (n: number) =>
+    `£${n.toLocaleString("en-GB", {
+      minimumFractionDigits: n % 1 ? 2 : 0,
+      maximumFractionDigits: 2,
+    })}`;
+
   // React 19 resets the form when a form action settles. Controlled text
   // inputs are restored from their value prop afterwards, but a controlled
   // <select> is not: the DOM snaps back to its first option while React still
@@ -463,6 +474,7 @@ export default function CampaignForm({
       }}
     >
       <form
+        ref={formRef}
         action={formAction}
         onSubmit={() => {
           setUrlAttempt(null);
@@ -714,6 +726,27 @@ export default function CampaignForm({
             <option value="live">Live — active and spending</option>
             <option value="paused">Paused</option>
           </select>
+          {commitsMoney && (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                lineHeight: 1.55,
+                color: "#92400e",
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 10px",
+              }}
+            >
+              <strong style={{ fontWeight: 700 }}>This will spend money.</strong>{" "}
+              Live campaigns are created active in Meta and start delivering as
+              soon as Meta approves them — up to {money(budgetNumber)} a day
+              (about {money(budgetNumber * 7)} a week). Choose{" "}
+              <em>Draft — paused until ready</em> if you want to review it
+              first and switch it on yourself.
+            </div>
+          )}
         </div>
 
         {showAdFields && (
@@ -877,6 +910,68 @@ export default function CampaignForm({
           <div style={{ fontSize: 13, color: "#b91c1c" }}>{state.error}</div>
         )}
 
+        {commitsMoney && !liveConfirmed ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              border: "1px solid #fde68a",
+              background: "#fffbeb",
+              borderRadius: 12,
+              padding: "14px 16px",
+            }}
+          >
+            <div style={{ fontSize: 13, color: "#18181b", lineHeight: 1.55 }}>
+              <strong style={{ fontWeight: 700 }}>
+                Creating this campaign starts real spend.
+              </strong>{" "}
+              It goes to Meta as active, at up to {money(budgetNumber)} a day —
+              roughly {money(budgetNumber * 7)} a week and{" "}
+              {money(budgetNumber * 30)} a month — until you pause it or it
+              reaches the end date above.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLiveConfirmed(true);
+                  // Submit through the form so the action, the draft and the
+                  // URL marker all behave exactly as a normal submit.
+                  requestAnimationFrame(() => formRef.current?.requestSubmit());
+                }}
+                style={{
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "10px 16px",
+                  background: "#16a34a",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Create it live — spend up to {money(budgetNumber)}/day
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus("testing")}
+                style={{
+                  border: "1px solid #e4e4e7",
+                  borderRadius: 10,
+                  padding: "10px 16px",
+                  background: "#fff",
+                  color: "#52525b",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Create as draft instead
+              </button>
+            </div>
+          </div>
+        ) : (
         <button
           type="submit"
           disabled={pending || navigating}
@@ -900,6 +995,7 @@ export default function CampaignForm({
             ? "Create campaign + ad"
             : submitLabel}
         </button>
+        )}
 
         {pending && slow && (
           <div style={{ fontSize: 12, color: "#71717a", lineHeight: 1.5 }}>

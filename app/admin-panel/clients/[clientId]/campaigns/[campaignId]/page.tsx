@@ -24,6 +24,7 @@ import AdPreviewCard from "@/app/admin-panel/components/AdPreviewCard";
 import CreateActionFromSuggestionButton from "@/app/admin-panel/components/CreateActionFromSuggestionButton";
 import ClearCampaignDraft from "@/app/admin-panel/components/ClearCampaignDraft";
 import CampaignDeliveryControl from "@/app/admin-panel/components/CampaignDeliveryControl";
+import { isDryRun } from "@/lib/meta-execute";
 import { formatCurrency } from "@/app/admin-panel/lib/utils";
 
 type Props = {
@@ -309,6 +310,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           live={campaignStatus === "live"}
           inMeta={hasMetaId}
           adCount={ads.length}
+          dryRun={isDryRun()}
         />
 
         {(campaign as any).audience && (
