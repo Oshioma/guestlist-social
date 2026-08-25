@@ -98,15 +98,15 @@ function mapTask(raw: unknown): CapsuleTask | null {
 }
 
 // Open (not yet completed) tasks — Capsule's calendar. Sorted by due date,
-// undated tasks last. Fetches up to two pages of 100; a sales team's open
-// call list realistically fits well inside that.
+// undated tasks last. Fetches up to five pages of 100 (the account carries a
+// long tail of open tasks), stopping early on a short page.
 export async function getCapsuleOpenTasks(): Promise<CapsuleTasksResult> {
   const token = process.env.CAPSULE_API_TOKEN;
   if (!token) return { ok: false, configured: false };
 
   const tasks: CapsuleTask[] = [];
   try {
-    for (let page = 1; page <= 2; page++) {
+    for (let page = 1; page <= 5; page++) {
       const url =
         `${CAPSULE_API_BASE}/tasks?status=open&embed=party,opportunity` +
         `&perPage=100&page=${page}`;
