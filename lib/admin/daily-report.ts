@@ -273,6 +273,7 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
         .eq("status", "pending")
         .not("follow_up", "is", null)
         .lte("follow_up", todayKey)
+        .gte("follow_up", addDays(todayKey, -31))
         .order("follow_up", { ascending: true })
         .limit(15),
       getCapsuleOpenTasks(),
@@ -556,11 +557,14 @@ export async function buildDailyReportData(): Promise<DailyReportData> {
     }));
   }
   // Who to call today: Capsule's calendar (open tasks due today or overdue)
-  // merged with pipeline follow-ups that have come due. Capsule not being
-  // configured or reachable just leaves its half out.
+  // merged with pipeline follow-ups that have come due. Overdue counts only
+  // within the last month — the account carries a backlog of ancient open
+  // tasks that would otherwise flood the list (mirrors the calendar tab).
+  // Capsule not being configured or reachable just leaves its half out.
+  const overdueCutoffKey = addDays(todayKey, -31);
   if (capsuleRes.ok) {
     for (const t of capsuleRes.tasks) {
-      if (!t.dueOn || t.dueOn > todayKey) continue;
+      if (!t.dueOn || t.dueOn > todayKey || t.dueOn < overdueCutoffKey) continue;
       sales.callsToday.push({
         who: t.partyName || t.opportunityName || "(no contact)",
         what: t.description || t.detail || "Task",
