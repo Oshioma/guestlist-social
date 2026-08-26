@@ -173,6 +173,20 @@ function explainGraphError(
   return base;
 }
 
+// IG usernames: letters, digits, dots, underscores, max 30 chars. Anything
+// else (especially spaces) means the operator typed a topic/phrase into the
+// handle box — catch it early with a pointer at Keyword search instead of
+// letting Meta/Apify return a cryptic pattern error.
+const IG_HANDLE_RE = /^[A-Za-z0-9._]{1,30}$/;
+
+function invalidHandleError(value: string): string {
+  return (
+    `"${value}" isn't a valid Instagram handle — handles are letters, numbers, ` +
+    `dots and underscores with no spaces (e.g. @bbcgoodfood). To find posts ` +
+    `about a topic or phrase, use the "Keyword" source instead.`
+  );
+}
+
 async function fetchHandle(
   viewerId: string,
   token: string,
@@ -180,6 +194,9 @@ async function fetchHandle(
 ): Promise<{ ok: true; posts: DiscoveryPost[] } | { ok: false; error: string }> {
   const clean = handle.replace(/^@+/, "").trim();
   if (!clean) return { ok: false, error: "handle required" };
+  if (!IG_HANDLE_RE.test(clean)) {
+    return { ok: false, error: invalidHandleError(handle) };
+  }
 
   const fields =
     "business_discovery.username(" +
@@ -281,7 +298,9 @@ async function fetchHashtag(
   token: string,
   hashtag: string
 ): Promise<{ ok: true; posts: DiscoveryPost[] } | { ok: false; error: string }> {
-  const clean = hashtag.replace(/^#+/, "").trim();
+  // Collapse phrases into a valid tag ("home baking" → "homebaking") —
+  // hashtags can't contain spaces or punctuation.
+  const clean = hashtag.replace(/#+/g, "").toLowerCase().replace(/[^a-z0-9_]+/g, "");
   if (!clean) return { ok: false, error: "hashtag required" };
 
   // Step 1: resolve hashtag to an id
@@ -427,36 +446,90 @@ type ApifyInput = {
   addParentData?: boolean;
 };
 
-function buildApifyInput(kind: ApifyKind, value: string): ApifyInput | null {
+// Words that don't help identify a hashtag when a phrase is collapsed into
+// tag candidates. Deliberately short — topical words like "ideas" stay in.
+const KEYWORD_STOPWORDS = new Set([
+  "a", "an", "and", "the", "of", "for", "to", "in", "on", "at", "with",
+  "my", "your", "our", "some",
+]);
+
+// Instagram has no free-text post search, so a keyword phrase has to become
+// hashtags. "delicious dinner ideas" → ["deliciousdinnerideas",
+// "deliciousdinner", "dinnerideas"]: the fully collapsed phrase plus each
+// adjacent word pair. Single words pass through as-is ("baking" → ["baking"]).
+// All candidates go into ONE actor run via multiple directUrls, so this
+// costs the same as a single hashtag lookup.
+function keywordToHashtagCandidates(phrase: string): string[] {
+  const words = phrase
+    .toLowerCase()
+    .replace(/[#@]/g, " ")
+    .split(/[^a-z0-9_]+/)
+    .filter(Boolean)
+    .filter((w) => !KEYWORD_STOPWORDS.has(w));
+  if (words.length === 0) return [];
+  if (words.length === 1) return [words[0]];
+  const tags: string[] = [];
+  const push = (t: string) => {
+    if (t && !tags.includes(t)) tags.push(t);
+  };
+  push(words.join(""));
+  for (let i = 0; i + 1 < words.length; i++) push(words[i] + words[i + 1]);
+  return tags.slice(0, 4);
+}
+
+function buildApifyInput(
+  kind: ApifyKind,
+  value: string
+): { ok: true; input: ApifyInput } | { ok: false; error: string } {
   const clean = value.trim();
-  if (!clean) return null;
+  if (!clean) return { ok: false, error: "value required" };
 
   if (kind === "handle") {
     const handle = clean.replace(/^@+/, "");
+    if (!IG_HANDLE_RE.test(handle)) {
+      return { ok: false, error: invalidHandleError(clean) };
+    }
     return {
-      directUrls: [`https://www.instagram.com/${handle}/`],
-      resultsType: "posts",
-      resultsLimit: 12,
+      ok: true,
+      input: {
+        directUrls: [`https://www.instagram.com/${handle}/`],
+        resultsType: "posts",
+        resultsLimit: 12,
+      },
     };
   }
   if (kind === "hashtag") {
-    const tag = clean.replace(/^#+/, "");
+    // Collapse whatever the operator typed into a single valid tag:
+    // "#home baking" → "homebaking". Hashtags can't contain spaces.
+    const tag = clean.replace(/#+/g, "").toLowerCase().replace(/[^a-z0-9_]+/g, "");
+    if (!tag) {
+      return { ok: false, error: "Hashtag needs at least one letter or number." };
+    }
     return {
-      directUrls: [`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`],
-      resultsType: "posts",
-      resultsLimit: 30,
+      ok: true,
+      input: {
+        directUrls: [`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`],
+        resultsType: "posts",
+        resultsLimit: 30,
+      },
     };
   }
   if (kind === "keyword") {
-    // Keyword search: try the hashtag-style search since that's what gives
-    // posts back. The actor maps "search" + searchType=hashtag to the
-    // canonical hashtag page so we get post results, not just a list of tags.
+    // Multi-word phrases can't hit a hashtag page directly, so fan the
+    // phrase out into a few tag candidates and fetch them all in one run.
+    const tags = keywordToHashtagCandidates(clean);
+    if (tags.length === 0) {
+      return { ok: false, error: "Keyword needs at least one letter or number." };
+    }
     return {
-      search: clean,
-      searchType: "hashtag",
-      searchLimit: 1,
-      resultsType: "posts",
-      resultsLimit: 30,
+      ok: true,
+      input: {
+        directUrls: tags.map(
+          (t) => `https://www.instagram.com/explore/tags/${encodeURIComponent(t)}/`
+        ),
+        resultsType: "posts",
+        resultsLimit: tags.length > 1 ? 15 : 30,
+      },
     };
   }
   if (kind === "location") {
@@ -469,20 +542,26 @@ function buildApifyInput(kind: ApifyKind, value: string): ApifyInput | null {
     const id = numeric ?? (urlMatch ? urlMatch[1] : null);
     if (id) {
       return {
-        directUrls: [`https://www.instagram.com/explore/locations/${id}/`],
-        resultsType: "posts",
-        resultsLimit: 30,
+        ok: true,
+        input: {
+          directUrls: [`https://www.instagram.com/explore/locations/${id}/`],
+          resultsType: "posts",
+          resultsLimit: 30,
+        },
       };
     }
     return {
-      search: clean,
-      searchType: "place",
-      searchLimit: 1,
-      resultsType: "posts",
-      resultsLimit: 30,
+      ok: true,
+      input: {
+        search: clean,
+        searchType: "place",
+        searchLimit: 1,
+        resultsType: "posts",
+        resultsLimit: 30,
+      },
     };
   }
-  return null;
+  return { ok: false, error: `Unsupported kind: ${kind}` };
 }
 
 function shapeApifyRow(
@@ -587,8 +666,9 @@ async function fetchViaApify(
         "or set APIFY_TOKEN as a Vercel env var.",
     };
   }
-  const input = buildApifyInput(kind, value);
-  if (!input) return { ok: false, error: "value required" };
+  const built = buildApifyInput(kind, value);
+  if (!built.ok) return built;
+  const input = built.input;
 
   // Actor IDs are stored either with a slash (apify/instagram-scraper) or
   // with a tilde for the URL form (apify~instagram-scraper). Normalise.
@@ -629,9 +709,17 @@ async function fetchViaApify(
     return { ok: false, error: "Apify returned non-JSON response." };
   }
   const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+  // Keyword searches fetch several hashtag pages in one run, so the same
+  // post can come back more than once — keep the first copy of each id.
+  const seenIds = new Set<string>();
   const posts = rows
     .map((row) => shapeApifyRow(row, kind))
     .filter((p): p is DiscoveryPost => p !== null)
+    .filter((p) => {
+      if (seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    })
     .sort((a, b) => (b.postedAtMs ?? 0) - (a.postedAtMs ?? 0))
     .slice(0, 30);
   return { ok: true, posts };

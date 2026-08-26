@@ -1302,6 +1302,18 @@ export default function InteractionEngineUI({
       setDiscoveryFetchState("error");
       return;
     }
+    // Catch topic phrases typed into the handle box before they're saved —
+    // IG handles are letters/numbers/dots/underscores, never spaces.
+    if (
+      newSearchKind === "handle" &&
+      !/^[A-Za-z0-9._]{1,30}$/.test(value.replace(/^@+/, ""))
+    ) {
+      setDiscoveryError(
+        `"${value}" isn't an Instagram handle — handles have no spaces. To find posts about a topic (e.g. "delicious dinner ideas"), pick "Keyword" in the dropdown instead.`
+      );
+      setDiscoveryFetchState("error");
+      return;
+    }
     setDiscoveryFetchState("loading");
     setDiscoveryError(null);
     try {
