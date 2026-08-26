@@ -12,6 +12,11 @@ export type IgAccount = {
   tokenExpiresAt: string | null;
   lastError: string | null;
   lastErrorAt: string | null;
+  // False for customers with no connected Instagram account. They can
+  // still run Apify-backed discovery and keep saved searches (keyed by
+  // the synthetic "client:<id>" account id); the live comment feed and
+  // Meta-Graph lookups need a connection and are disabled in the UI.
+  connected: boolean;
 };
 
 export type SetupIssue =
@@ -62,10 +67,45 @@ async function getInstagramAccounts(): Promise<{
       tokenExpiresAt: (row.token_expires_at as string | null) ?? null,
       lastError: (row.last_error as string | null) ?? null,
       lastErrorAt: (row.last_error_at as string | null) ?? null,
+      connected: true,
     });
   }
 
+  // "No accounts" means no Instagram connections — decide it before the
+  // clients merge below pads the list with unconnected customers.
   const setupIssue: SetupIssue = accounts.length === 0 ? { kind: "no-accounts" } : null;
+
+  // Also list customers with no connected Instagram account, so the
+  // operator can pick any customer and run (and save) discovery searches
+  // for them. Their entries use a synthetic "client:<id>" account id.
+  const { data: clientRows, error: clientsError } = await db
+    .from("clients")
+    .select("id, name, archived")
+    .order("name", { ascending: true });
+  if (clientsError) {
+    console.error("[interaction/getInstagramAccounts] clients error:", clientsError);
+  } else {
+    const connectedClientIds = new Set(
+      accounts.map((a) => a.clientId).filter((id): id is number => id != null)
+    );
+    for (const row of clientRows ?? []) {
+      if (row.archived) continue;
+      const cid = Number(row.id);
+      if (!Number.isFinite(cid) || connectedClientIds.has(cid)) continue;
+      accounts.push({
+        id: `client:${cid}`,
+        clientId: cid,
+        name: String(row.name ?? `Client ${cid}`).trim() || `Client ${cid}`,
+        handle: "",
+        tokenExpiresAt: null,
+        lastError: null,
+        lastErrorAt: null,
+        connected: false,
+      });
+    }
+    accounts.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   return { accounts, setupIssue };
 }
 

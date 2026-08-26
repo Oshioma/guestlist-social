@@ -1390,6 +1390,46 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // RapidAPI-backed kinds don't touch Meta Graph, so they work for any
+  // customer — including ones with no connected Instagram account (their
+  // synthetic "client:<id>" accountId only scopes saved-search persistence).
+  try {
+    if (kind === "keyword") {
+      // Posts first — real people talking about the topic, filtered down
+      // from big brand / verified accounts. This is what operators want
+      // to interact with.
+      const result = await fetchKeywordPosts(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
+    }
+    if (kind === "keyword_pages") {
+      // Opt-in pages search for operators who explicitly want to seed
+      // competitor handle watchlists from a topic.
+      const result = await fetchKeywordPages(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, pages: result.pages });
+    }
+    if (kind === "location") {
+      const result = await fetchLocationPosts(value);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
+    }
+  } catch (err) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+
   let account: { account_id: string; access_token: string } | null = null;
   try {
     account = await getAccount(accountId);
@@ -1439,32 +1479,6 @@ export async function GET(req: NextRequest) {
           { ok: false, error: result.error, notSupported: true },
           { status: 400 }
         );
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-    if (kind === "keyword") {
-      // Posts first — real people talking about the topic, filtered down
-      // from big brand / verified accounts. This is what operators want
-      // to interact with.
-      const result = await fetchKeywordPosts(value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-    if (kind === "keyword_pages") {
-      // Opt-in pages search for operators who explicitly want to seed
-      // competitor handle watchlists from a topic.
-      const result = await fetchKeywordPages(value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, pages: result.pages });
-    }
-    if (kind === "location") {
-      const result = await fetchLocationPosts(value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
       }
       return NextResponse.json({ ok: true, kind, value, posts: result.posts });
     }
