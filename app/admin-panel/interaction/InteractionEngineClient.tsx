@@ -71,6 +71,10 @@ type ClientOption = {
   tokenExpiresAt?: string | null;
   lastError?: string | null;
   lastErrorAt?: string | null;
+  // False = customer without a connected Instagram account (synthetic
+  // "client:<id>" entry). Discovery + saved searches work; the live feed
+  // and Meta-Graph lookups don't. Undefined (legacy) counts as connected.
+  connected?: boolean;
 };
 
 function reconnectUrl(clientOption: ClientOption | null | undefined): string | null {
@@ -813,6 +817,10 @@ export default function InteractionEngineUI({
     }
     return initialClients[0]?.id ?? "";
   });
+  const activeClient = clients.find((c) => c.id === activeClientId) ?? clients[0] ?? null;
+  // Customers without a connected IG account can still run discovery and
+  // keep saved searches, but the comment feed / mentions need Meta.
+  const activeConnected = activeClient?.connected !== false;
   // Land on Discovery — finding posts to interact with is the page's main
   // job; the Feed tab is one click away and gets focused automatically
   // when a discovered post is added to the queue.
@@ -863,6 +871,13 @@ export default function InteractionEngineUI({
       : ["handle", "mentions"];
     if (!supported.includes(newSearchKind)) setNewSearchKind("handle");
   }, [experimentalDiscovery, newSearchKind]);
+  // Mentions needs a connected IG account — snap back to keyword when the
+  // operator switches to a customer without one.
+  useEffect(() => {
+    if (!activeConnected && newSearchKind === "mentions") {
+      setNewSearchKind("keyword");
+    }
+  }, [activeConnected, newSearchKind]);
   const [newSearchValue, setNewSearchValue] = useState("");
   // UK-only filter for discovery results. Persisted like english-only.
   const [ukOnly, setUkOnly] = useState(false);
@@ -988,7 +1003,6 @@ export default function InteractionEngineUI({
     "Learnings",
   ];
 
-  const activeClient = clients.find((c) => c.id === activeClientId) ?? clients[0] ?? null;
   const clientPosts = useMemo(
     () => (activeClient ? posts.filter((p) => p.clientId === activeClient.id) : []),
     [posts, activeClient?.id]
@@ -1135,13 +1149,20 @@ export default function InteractionEngineUI({
     }
 
     if (!activeClientId) return;
+    // No Instagram connection for this customer — polling the comments
+    // API would just error every 30s. Discovery still works without it.
+    if (!activeConnected) {
+      setIngestionState("idle");
+      setIngestionError(null);
+      return;
+    }
     ingestInstagramComments();
     const interval = setInterval(ingestInstagramComments, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeClientId, keywordFilter]);
+  }, [activeClientId, activeConnected, keywordFilter]);
 
   // Load saved discovery searches when the active account changes.
   useEffect(() => {
@@ -2061,7 +2082,11 @@ export default function InteractionEngineUI({
                 ? "Competitor / creator handle (Apify)"
                 : "Competitor / creator handle"}
             </option>
-            <option value="mentions">Posts that tag me</option>
+            <option value="mentions" disabled={!activeConnected}>
+              {activeConnected
+                ? "Posts that tag me"
+                : "Posts that tag me (needs IG connection)"}
+            </option>
             {experimentalDiscovery && (
               <>
                 <option value="location">
@@ -2693,6 +2718,7 @@ export default function InteractionEngineUI({
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>
                       {client.name}
+                      {client.connected === false ? " — no IG connected" : ""}
                     </option>
                   ))}
                 </select>
@@ -2710,10 +2736,11 @@ export default function InteractionEngineUI({
                 }`}
                 title={ingestionError ?? "Instagram source ingestion status"}
               >
-                {ingestionState === "success" && "● Instagram source connected"}
-                {ingestionState === "loading" && "● Connecting Instagram source..."}
-                {ingestionState === "error" && "● Instagram source error"}
-                {ingestionState === "idle" && "● Instagram source idle"}
+                {!activeConnected && "● No Instagram connected — discovery only"}
+                {activeConnected && ingestionState === "success" && "● Instagram source connected"}
+                {activeConnected && ingestionState === "loading" && "● Connecting Instagram source..."}
+                {activeConnected && ingestionState === "error" && "● Instagram source error"}
+                {activeConnected && ingestionState === "idle" && "● Instagram source idle"}
               </div>
               <div className={`text-xs ${isLive ? "text-green-600" : "text-gray-400"}`}>
                 {isLive ? "● Live feed" : "Paused"}
