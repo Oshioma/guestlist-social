@@ -833,9 +833,13 @@ export default function InteractionEngineUI({
   // operator stays where they were.
   const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("v2");
   const experimentalDiscovery = discoveryMode === "v2";
+  // The storage key was renamed when V2 became the default so that
+  // "stable" preferences saved under the old key stop pinning operators
+  // to the old surface — everyone lands on V2 once, and any mode they
+  // pick after that persists under the new key.
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem("interaction-discovery-mode");
+      const stored = window.localStorage.getItem("interaction-discovery-mode-v2default");
       if (stored === "stable" || stored === "v2") setDiscoveryMode(stored);
     } catch {
       // ignore
@@ -843,7 +847,7 @@ export default function InteractionEngineUI({
   }, []);
   useEffect(() => {
     try {
-      window.localStorage.setItem("interaction-discovery-mode", discoveryMode);
+      window.localStorage.setItem("interaction-discovery-mode-v2default", discoveryMode);
     } catch {
       // ignore
     }
