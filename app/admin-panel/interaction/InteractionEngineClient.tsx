@@ -813,7 +813,10 @@ export default function InteractionEngineUI({
     }
     return initialClients[0]?.id ?? "";
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Feed");
+  // Land on Discovery — finding posts to interact with is the page's main
+  // job; the Feed tab is one click away and gets focused automatically
+  // when a discovered post is added to the queue.
+  const [activeTab, setActiveTab] = useState<Tab>("Discovery");
   const [selectedId, setSelectedId] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [isLive, setIsLive] = useState(true);
