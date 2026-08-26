@@ -39,6 +39,7 @@ type DiscoveredPost = {
   commentCount: number | null;
   comments: DiscoveredComment[];
   source: "business_discovery" | "mentions" | "hashtag";
+  locationName?: string | null;
 };
 
 type DiscoveredPage = {
@@ -279,6 +280,50 @@ function looksEnglish(text: string | null | undefined): boolean {
       ? Math.max(2, Math.floor(tokens.length / 6))
       : Math.max(1, Math.floor(tokens.length / 5));
   return hits >= threshold;
+}
+
+// UK place names and signals, matched against a post's tagged location and
+// its caption (hashtags included, e.g. "#london" or "#ukfood"). Heuristic:
+// IG posts don't carry reliable country data, so this catches posts that
+// declare a UK connection rather than proving the author is UK-based.
+// Deliberately excludes UK places that are also everyday English words or
+// world-famous elsewhere ("reading", "bath", "hull", "stoke", "york" —
+// which would match "New York") to keep false positives down.
+const UK_SIGNALS = [
+  "uk", "united kingdom", "great britain", "britain", "british",
+  "england", "scotland", "wales", "cymru", "northern ireland",
+  "london", "manchester", "birmingham", "liverpool", "leeds", "sheffield",
+  "bristol", "newcastle", "sunderland", "nottingham", "leicester",
+  "southampton", "portsmouth", "brighton", "plymouth", "coventry",
+  "bradford", "wolverhampton", "milton keynes",
+  "norwich", "luton", "bournemouth", "middlesbrough", "peterborough",
+  "cambridge", "oxford", "exeter", "chester", "durham",
+  "canterbury", "ipswich", "watford", "preston",
+  "blackpool", "glasgow", "edinburgh", "aberdeen", "dundee", "inverness",
+  "stirling", "cardiff", "swansea", "belfast", "derry",
+  "yorkshire", "lancashire", "cornwall", "devon", "somerset", "dorset",
+  "essex", "kent", "surrey", "sussex", "hampshire", "norfolk", "suffolk",
+  "cotswolds", "lake district", "peak district", "snowdonia",
+  "midlands", "merseyside", "tyneside", "northumberland", "cumbria",
+  "shropshire", "wiltshire", "gloucestershire", "cheshire", "derbyshire",
+  "nottinghamshire", "lincolnshire", "staffordshire", "warwickshire",
+  "oxfordshire", "cambridgeshire", "hertfordshire", "buckinghamshire",
+  "berkshire", "bedfordshire", "northamptonshire", "leicestershire",
+  "worcestershire", "herefordshire",
+];
+const UK_SIGNAL_RE = new RegExp(
+  `(?:^|[^a-z0-9])(?:${UK_SIGNALS.map((s) => s.replace(/ /g, "\\s+")).join("|")})(?![a-z0-9])`,
+  "i"
+);
+
+function looksUK(post: { text: string; locationName?: string | null }): boolean {
+  const location = (post.locationName ?? "").trim();
+  if (location && UK_SIGNAL_RE.test(location)) return true;
+  const text = (post.text ?? "").trim();
+  if (!text) return false;
+  // "£" in a caption is a strong UK marker on its own.
+  if (text.includes("£")) return true;
+  return UK_SIGNAL_RE.test(text);
 }
 
 function proxiedMediaUrl(url: string | null | undefined): string {
@@ -779,11 +824,14 @@ export default function InteractionEngineUI({
   // Discovery tab state — saved searches persist per account; running one
   // fires /api/interaction/discover and renders the posts + their comments.
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
-  const [newSearchKind, setNewSearchKind] = useState<SearchKind>("handle");
+  // Keyword is the default source: topic searches ("delicious dinner
+  // ideas") are the main way operators find posts to interact with.
+  const [newSearchKind, setNewSearchKind] = useState<SearchKind>("keyword");
   // Discovery has two flavours: the stable Meta-Graph-only surface and
-  // the experimental scraper-backed one. Toggle lives in state and
-  // persists across sessions so the operator stays where they were.
-  const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("stable");
+  // the experimental scraper-backed one. V2 is the default since keyword
+  // search only exists there; the toggle persists across sessions so the
+  // operator stays where they were.
+  const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("v2");
   const experimentalDiscovery = discoveryMode === "v2";
   useEffect(() => {
     try {
@@ -809,6 +857,23 @@ export default function InteractionEngineUI({
     if (!supported.includes(newSearchKind)) setNewSearchKind("handle");
   }, [experimentalDiscovery, newSearchKind]);
   const [newSearchValue, setNewSearchValue] = useState("");
+  // UK-only filter for discovery results. Persisted like english-only.
+  const [ukOnly, setUkOnly] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("interaction-uk-only");
+      if (stored === "true" || stored === "false") setUkOnly(stored === "true");
+    } catch {
+      // ignore
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("interaction-uk-only", String(ukOnly));
+    } catch {
+      // ignore
+    }
+  }, [ukOnly]);
   const [activeSearchId, setActiveSearchId] = useState<number | null>(null);
   const [discoveryPosts, setDiscoveryPosts] = useState<DiscoveredPost[]>([]);
   const [discoveryPages, setDiscoveryPages] = useState<DiscoveredPage[]>([]);
@@ -1298,7 +1363,7 @@ export default function InteractionEngineUI({
       return;
     }
     if (newSearchKind !== "mentions" && !value) {
-      setDiscoveryError("Enter a handle or hashtag to save.");
+      setDiscoveryError("Enter a keyword, handle or hashtag to save.");
       setDiscoveryFetchState("error");
       return;
     }
@@ -2223,13 +2288,49 @@ export default function InteractionEngineUI({
       )}
 
       {(() => {
-        // Apply the same English filter the operator set on the Feed tab
-        // so discovery doesn't contradict their language preference.
-        const visibleDiscovery = englishOnly
-          ? discoveryPosts.filter((p) => looksEnglish(p.text))
-          : discoveryPosts;
-        if (visibleDiscovery.length === 0) return null;
+        if (discoveryPosts.length === 0) return null;
+        // Language filter shares state with the Feed tab so discovery
+        // doesn't contradict the operator's preference; UK-only is a
+        // discovery-specific heuristic over tagged location + caption.
+        const visibleDiscovery = discoveryPosts
+          .filter((p) => (englishOnly ? looksEnglish(p.text) : true))
+          .filter((p) => (ukOnly ? looksUK(p) : true));
         return (
+        <>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setEnglishOnly((v) => !v)}
+            title="Hide posts whose caption looks like another language"
+            className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+              englishOnly
+                ? "border-black bg-black text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {englishOnly ? "English only ✓" : "English only"}
+          </button>
+          <button
+            onClick={() => setUkOnly((v) => !v)}
+            title="Only show posts with a UK signal — a UK tagged location, a UK place name in the caption, or £ prices. Posts with no location data and no UK mention are hidden."
+            className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+              ukOnly
+                ? "border-black bg-black text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {ukOnly ? "UK only ✓" : "UK only"}
+          </button>
+          <span className="text-xs text-gray-400">
+            Showing {visibleDiscovery.length} of {discoveryPosts.length} posts
+          </span>
+        </div>
+        {visibleDiscovery.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
+            All {discoveryPosts.length} posts are hidden by the filters above.
+            {ukOnly &&
+              " UK-only needs a UK tagged location or place name in the caption — try adding a place to the keyword (e.g. “home baking london”) or switch the filter off."}
+          </div>
+        ) : (
         <div className="space-y-4">
           {visibleDiscovery.map((post) => (
             <div
@@ -2268,6 +2369,9 @@ export default function InteractionEngineUI({
                       </span>
                     )}
                     <span className="text-xs text-gray-400">{post.time}</span>
+                    {post.locationName && (
+                      <span className="text-xs text-gray-500">📍 {post.locationName}</span>
+                    )}
                     <span className="ml-auto text-xs text-gray-400">
                       {post.likeCount ?? 0} likes · {post.commentCount ?? post.comments.length} comments
                     </span>
@@ -2375,6 +2479,8 @@ export default function InteractionEngineUI({
             </div>
           ))}
         </div>
+        )}
+        </>
         );
       })()}
     </div>

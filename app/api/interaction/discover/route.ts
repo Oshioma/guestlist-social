@@ -35,6 +35,9 @@ type DiscoveryPost = {
   commentCount: number | null;
   comments: DiscoveryComment[];
   source: "business_discovery" | "mentions" | "hashtag";
+  // Tagged place on the post, when the provider exposes it. Used by the
+  // UK-only filter in the UI. Meta Graph endpoints don't return it.
+  locationName: string | null;
 };
 
 type DiscoveryComment = {
@@ -128,6 +131,7 @@ function shapePost(
     commentCount: typeof media.comments_count === "number" ? media.comments_count : null,
     comments,
     source,
+    locationName: null,
   };
 }
 
@@ -637,6 +641,16 @@ function shapeApifyRow(
     parseNumericField(row.ownerFollowersCount) ??
     null;
 
+  // Tagged place — Apify exposes it as locationName (string) or a nested
+  // location object depending on actor version.
+  const location = row.location as Record<string, unknown> | undefined;
+  const locationName =
+    String(
+      row.locationName ??
+        (location && typeof location === "object" ? location.name : "") ??
+        ""
+    ).trim() || null;
+
   return {
     id,
     author: display,
@@ -650,6 +664,7 @@ function shapeApifyRow(
     commentCount: parseNumericField(row.commentsCount ?? row.comments_count),
     comments,
     source: kind === "handle" ? "business_discovery" : "hashtag",
+    locationName,
   };
 }
 
@@ -829,6 +844,7 @@ async function fetchKeywordPosts(
         commentCount: parseNumericField(row.comment_count ?? row.comments),
         comments: [],
         source: "hashtag",
+        locationName: null,
       } as DiscoveryPost;
     })
     .filter((p): p is DiscoveryPost => p !== null)
@@ -1228,6 +1244,12 @@ async function fetchLocationPosts(
         commentCount: parseNumericField(node.comment_count ?? node.comments),
         comments: [],
         source: "hashtag",
+        locationName:
+          String(
+            (node.location as Record<string, unknown> | undefined)?.name ??
+              node.location_name ??
+              ""
+          ).trim() || null,
       } as DiscoveryPost;
     })
     .filter((p): p is DiscoveryPost => p !== null)
