@@ -813,7 +813,10 @@ export default function InteractionEngineUI({
     }
     return initialClients[0]?.id ?? "";
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Feed");
+  // Land on Discovery — finding posts to interact with is the page's main
+  // job; the Feed tab is one click away and gets focused automatically
+  // when a discovered post is added to the queue.
+  const [activeTab, setActiveTab] = useState<Tab>("Discovery");
   const [selectedId, setSelectedId] = useState("");
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
   const [isLive, setIsLive] = useState(true);
@@ -833,9 +836,13 @@ export default function InteractionEngineUI({
   // operator stays where they were.
   const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("v2");
   const experimentalDiscovery = discoveryMode === "v2";
+  // The storage key was renamed when V2 became the default so that
+  // "stable" preferences saved under the old key stop pinning operators
+  // to the old surface — everyone lands on V2 once, and any mode they
+  // pick after that persists under the new key.
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem("interaction-discovery-mode");
+      const stored = window.localStorage.getItem("interaction-discovery-mode-v2default");
       if (stored === "stable" || stored === "v2") setDiscoveryMode(stored);
     } catch {
       // ignore
@@ -843,7 +850,7 @@ export default function InteractionEngineUI({
   }, []);
   useEffect(() => {
     try {
-      window.localStorage.setItem("interaction-discovery-mode", discoveryMode);
+      window.localStorage.setItem("interaction-discovery-mode-v2default", discoveryMode);
     } catch {
       // ignore
     }
