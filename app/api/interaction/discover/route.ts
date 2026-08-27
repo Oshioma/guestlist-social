@@ -373,12 +373,22 @@ type DiscoveredPage = {
   description: string | null;
 };
 
+// Scraper calls are bounded so a hung provider fails fast (and falls
+// through to the last-known-good cache) instead of eating the route's
+// 45s budget. Meta Graph calls are deliberately left unbounded — they're
+// the stable path and consistently fast.
+const APIFY_TIMEOUT_MS = 25000;
+const RAPIDAPI_TIMEOUT_MS = 15000;
+
 // undici's "fetch failed" error is generic; the meaningful detail lives
 // on err.cause (e.g. "getaddrinfo ENOTFOUND host" or "socket hang up").
 // Pull whichever string looks most actionable.
 function describeFetchError(err: unknown): string {
   if (!err) return "unknown error";
-  const e = err as { message?: string; cause?: { code?: string; message?: string } };
+  const e = err as { name?: string; message?: string; cause?: { code?: string; message?: string } };
+  if (e.name === "TimeoutError" || e.name === "AbortError") {
+    return "the request timed out (provider too slow or down)";
+  }
   const causeBit = e.cause?.code
     ? `${e.cause.code}${e.cause.message ? ` — ${e.cause.message}` : ""}`
     : e.cause?.message ?? "";
@@ -677,7 +687,7 @@ async function fetchViaApify(
     return {
       ok: false,
       error:
-        "Apify token not set. Open Discovery V2 → Apify integration and paste your apify.com token, " +
+        "Apify token not set. Open the Discovery tab → Apify integration and paste your apify.com token, " +
         "or set APIFY_TOKEN as a Vercel env var.",
     };
   }
@@ -699,6 +709,7 @@ async function fetchViaApify(
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(APIFY_TIMEOUT_MS),
     });
   } catch (err) {
     return {
@@ -749,14 +760,20 @@ async function fetchKeywordPosts(
   if (!cfg.ok) return cfg;
 
   const endpoint = `https://${cfg.host}/search/posts?query=${encodeURIComponent(clean)}`;
-  const res = await fetch(endpoint, {
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      "x-rapidapi-host": cfg.host,
-      "x-rapidapi-key": cfg.key,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "x-rapidapi-host": cfg.host,
+        "x-rapidapi-key": cfg.key,
+      },
+      signal: AbortSignal.timeout(RAPIDAPI_TIMEOUT_MS),
+    });
+  } catch (err) {
+    return { ok: false, error: `Keyword search failed: ${describeFetchError(err)}` };
+  }
   const body = await res.text();
   let json: unknown = null;
   try {
@@ -899,6 +916,7 @@ async function resolveLocationIdViaInstagram(
   try {
     const res = await fetch(url, {
       cache: "no-store",
+      signal: AbortSignal.timeout(10000),
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1040,7 +1058,11 @@ async function fetchLocationPosts(
     )}`;
     let searchJson: unknown = null;
     try {
-      const res = await fetch(searchUrl, { cache: "no-store", headers });
+      const res = await fetch(searchUrl, {
+        cache: "no-store",
+        headers,
+        signal: AbortSignal.timeout(RAPIDAPI_TIMEOUT_MS),
+      });
       const body = await res.text();
       try {
         searchJson = body ? JSON.parse(body) : null;
@@ -1125,7 +1147,11 @@ async function fetchLocationPosts(
   )}`;
   let postsJson: unknown = null;
   try {
-    const res = await fetch(postsUrl, { cache: "no-store", headers });
+    const res = await fetch(postsUrl, {
+      cache: "no-store",
+      headers,
+      signal: AbortSignal.timeout(RAPIDAPI_TIMEOUT_MS),
+    });
     const body = await res.text();
     try {
       postsJson = body ? JSON.parse(body) : null;
@@ -1271,14 +1297,20 @@ async function fetchKeywordPages(
   const key = cfg.key;
 
   const endpoint = `https://${host}/search/pages?query=${encodeURIComponent(clean)}`;
-  const res = await fetch(endpoint, {
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      "x-rapidapi-host": host,
-      "x-rapidapi-key": key,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "x-rapidapi-host": host,
+        "x-rapidapi-key": key,
+      },
+      signal: AbortSignal.timeout(RAPIDAPI_TIMEOUT_MS),
+    });
+  } catch (err) {
+    return { ok: false, error: `Pages search failed: ${describeFetchError(err)}` };
+  }
   const body = await res.text();
   let json: unknown = null;
   try {
@@ -1349,150 +1381,227 @@ async function fetchKeywordPages(
   return { ok: true, pages };
 }
 
+// ============================================================================
+// Last-known-good cache. Every successful search overwrites its row in
+// interaction_search_results; when a live fetch fails we serve the cached
+// posts with a fetched_at stamp so an outage degrades to "stale" instead
+// of "empty". Cache errors are swallowed — the cache must never take a
+// working search down with it.
+// ============================================================================
+
+async function readResultCache(
+  accountId: string,
+  kind: string,
+  value: string
+): Promise<{ posts: DiscoveryPost[]; fetchedAt: string } | null> {
+  try {
+    const db = getServiceSupabase();
+    const { data } = await db
+      .from("interaction_search_results")
+      .select("posts, fetched_at")
+      .eq("account_id", accountId)
+      .eq("kind", kind)
+      .eq("value", value)
+      .limit(1)
+      .maybeSingle();
+    if (!data || !Array.isArray(data.posts) || data.posts.length === 0) return null;
+    return {
+      posts: data.posts as DiscoveryPost[],
+      fetchedAt: String(data.fetched_at),
+    };
+  } catch (err) {
+    console.warn("[discover] cache read failed:", err);
+    return null;
+  }
+}
+
+async function writeResultCache(
+  accountId: string,
+  kind: string,
+  value: string,
+  posts: DiscoveryPost[]
+): Promise<void> {
+  if (posts.length === 0) return; // don't overwrite good results with nothing
+  try {
+    const db = getServiceSupabase();
+    await db.from("interaction_search_results").upsert(
+      {
+        account_id: accountId,
+        kind,
+        value,
+        posts,
+        fetched_at: new Date().toISOString(),
+      },
+      { onConflict: "account_id,kind,value" }
+    );
+  } catch (err) {
+    console.warn("[discover] cache write failed:", err);
+  }
+}
+
+// ============================================================================
+// Engine routing. The operator no longer picks a backend — the server
+// chooses per kind, always preferring the free/official Meta path where it
+// exists and falling back to scrapers:
+//   mentions → Meta only (needs connected account)
+//   handle   → Meta Business Discovery when connected, Apify otherwise or
+//              on Meta failure
+//   keyword  → Apify when a token is saved, else RapidAPI Facebook search
+//   hashtag  → Apify when a token is saved, else Meta (gated by app review)
+//   location → Apify when a token is saved, else RapidAPI IG scraper
+// Scraper calls carry their own timeouts, so an outage fails fast and
+// falls through to the cache above instead of hanging the request.
+// ============================================================================
+
+type Engine = "meta" | "apify" | "rapidapi";
+
+async function runDiscovery(
+  kind: string,
+  value: string,
+  accountId: string
+): Promise<
+  | { ok: true; posts: DiscoveryPost[]; engine: Engine }
+  | { ok: false; error: string }
+> {
+  const apify = await getApifyCredentialsInternal();
+  const hasApify = Boolean(apify.token);
+  const account = await getAccount(accountId).catch(() => null);
+
+  if (kind === "mentions") {
+    if (!account) {
+      return {
+        ok: false,
+        error: `Mentions need a connected Instagram account (none found for ${accountId}).`,
+      };
+    }
+    const result = await fetchMentions(account.account_id, account.access_token);
+    return result.ok ? { ...result, engine: "meta" } : result;
+  }
+
+  if (kind === "handle") {
+    if (account) {
+      const meta = await fetchHandle(account.account_id, account.access_token, value);
+      if (meta.ok) return { ...meta, engine: "meta" };
+      if (hasApify) {
+        const scraped = await fetchViaApify("handle", value);
+        if (scraped.ok) return { ...scraped, engine: "apify" };
+        return {
+          ok: false,
+          error: `Meta lookup failed (${meta.error}) and the Apify fallback also failed (${scraped.error}).`,
+        };
+      }
+      return meta;
+    }
+    if (hasApify) {
+      const scraped = await fetchViaApify("handle", value);
+      return scraped.ok ? { ...scraped, engine: "apify" } : scraped;
+    }
+    return {
+      ok: false,
+      error:
+        "Handle lookups need either a connected Instagram account (Meta Business Discovery) or a saved Apify token.",
+    };
+  }
+
+  if (kind === "keyword") {
+    if (hasApify) {
+      const scraped = await fetchViaApify("keyword", value);
+      return scraped.ok ? { ...scraped, engine: "apify" } : scraped;
+    }
+    const result = await fetchKeywordPosts(value);
+    return result.ok ? { ...result, engine: "rapidapi" } : result;
+  }
+
+  if (kind === "hashtag") {
+    if (hasApify) {
+      const scraped = await fetchViaApify("hashtag", value);
+      return scraped.ok ? { ...scraped, engine: "apify" } : scraped;
+    }
+    if (account) {
+      const result = await fetchHashtag(account.account_id, account.access_token, value);
+      return result.ok ? { ...result, engine: "meta" } : result;
+    }
+    return {
+      ok: false,
+      error:
+        "Hashtag lookups need a saved Apify token (Meta's hashtag endpoint is gated behind app review).",
+    };
+  }
+
+  if (kind === "location") {
+    if (hasApify) {
+      const scraped = await fetchViaApify("location", value);
+      return scraped.ok ? { ...scraped, engine: "apify" } : scraped;
+    }
+    const result = await fetchLocationPosts(value);
+    return result.ok ? { ...result, engine: "rapidapi" } : result;
+  }
+
+  return { ok: false, error: `Unknown kind: ${kind}` };
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const accountId = (url.searchParams.get("accountId") ?? "").trim();
   const kind = (url.searchParams.get("kind") ?? "handle").trim();
   const value = (url.searchParams.get("value") ?? "").trim();
-  // Discovery V2 sets via=apify when the operator has a token saved. V1
-  // never sets it, so the existing Meta + RapidAPI paths below are
-  // untouched.
-  const via = (url.searchParams.get("via") ?? "").trim().toLowerCase();
 
   if (!accountId) {
     return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
   }
 
-  // Apify path bypasses the Meta token check entirely — the actor doesn't
-  // need a connected IG account, just the Apify token. We still require an
-  // accountId so saved-search persistence keeps working.
-  if (via === "apify") {
-    if (!["handle", "keyword", "hashtag", "location"].includes(kind)) {
-      return NextResponse.json(
-        { ok: false, error: `Apify path doesn't support kind=${kind}` },
-        { status: 400 }
-      );
-    }
+  // Pages search has no post cache (different result shape) and only one
+  // backend — handle it directly.
+  if (kind === "keyword_pages") {
     try {
-      const result = await fetchViaApify(kind as ApifyKind, value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    } catch (err) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: err instanceof Error ? err.message : "Apify error",
-        },
-        { status: 500 }
-      );
-    }
-  }
-
-  // RapidAPI-backed kinds don't touch Meta Graph, so they work for any
-  // customer — including ones with no connected Instagram account (their
-  // synthetic "client:<id>" accountId only scopes saved-search persistence).
-  try {
-    if (kind === "keyword") {
-      // Posts first — real people talking about the topic, filtered down
-      // from big brand / verified accounts. This is what operators want
-      // to interact with.
-      const result = await fetchKeywordPosts(value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-    if (kind === "keyword_pages") {
-      // Opt-in pages search for operators who explicitly want to seed
-      // competitor handle watchlists from a topic.
       const result = await fetchKeywordPages(value);
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
       }
       return NextResponse.json({ ok: true, kind, value, pages: result.pages });
+    } catch (err) {
+      return NextResponse.json(
+        { ok: false, error: err instanceof Error ? err.message : "Unknown error" },
+        { status: 500 }
+      );
     }
-    if (kind === "location") {
-      const result = await fetchLocationPosts(value);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-  } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-      },
-      { status: 500 }
-    );
   }
 
-  let account: { account_id: string; access_token: string } | null = null;
+  let result: Awaited<ReturnType<typeof runDiscovery>>;
   try {
-    account = await getAccount(accountId);
+    result = await runDiscovery(kind, value, accountId);
   } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: err instanceof Error ? err.message : "Supabase unavailable",
-      },
-      { status: 500 }
-    );
-  }
-  if (!account) {
-    return NextResponse.json(
-      { ok: false, error: `No connected Instagram account for ${accountId}` },
-      { status: 404 }
-    );
+    result = {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
   }
 
-  try {
-    if (kind === "handle") {
-      const result = await fetchHandle(
-        account.account_id,
-        account.access_token,
-        value
-      );
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-    if (kind === "mentions") {
-      const result = await fetchMentions(account.account_id, account.access_token);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, kind, value: "", posts: result.posts });
-    }
-    if (kind === "hashtag") {
-      const result = await fetchHashtag(
-        account.account_id,
-        account.access_token,
-        value
-      );
-      if (!result.ok) {
-        return NextResponse.json(
-          { ok: false, error: result.error, notSupported: true },
-          { status: 400 }
-        );
-      }
-      return NextResponse.json({ ok: true, kind, value, posts: result.posts });
-    }
-    return NextResponse.json(
-      { ok: false, error: `Unknown kind: ${kind}` },
-      { status: 400 }
-    );
-  } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+  if (result.ok) {
+    await writeResultCache(accountId, kind, value, result.posts);
+    return NextResponse.json({
+      ok: true,
+      kind,
+      value,
+      posts: result.posts,
+      engine: result.engine,
+    });
   }
+
+  // Live fetch failed — fall back to the last successful results, if any.
+  const cached = await readResultCache(accountId, kind, value);
+  if (cached) {
+    return NextResponse.json({
+      ok: true,
+      kind,
+      value,
+      posts: cached.posts,
+      engine: "cache",
+      cached: true,
+      fetchedAt: cached.fetchedAt,
+      staleError: result.error,
+    });
+  }
+
+  return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 }
