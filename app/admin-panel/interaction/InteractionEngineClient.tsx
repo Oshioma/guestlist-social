@@ -330,6 +330,17 @@ function looksUK(post: { text: string; locationName?: string | null }): boolean 
   return UK_SIGNAL_RE.test(text);
 }
 
+function formatRelativeTimestamp(iso: string): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "earlier";
+  const mins = Math.floor((Date.now() - ms) / 60000);
+  if (mins < 1) return "moments ago";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 function proxiedMediaUrl(url: string | null | undefined): string {
   const raw = String(url ?? "").trim();
   if (!raw) return "";
@@ -838,39 +849,6 @@ export default function InteractionEngineUI({
   // Keyword is the default source: topic searches ("delicious dinner
   // ideas") are the main way operators find posts to interact with.
   const [newSearchKind, setNewSearchKind] = useState<SearchKind>("keyword");
-  // Discovery has two flavours: the stable Meta-Graph-only surface and
-  // the experimental scraper-backed one. V2 is the default since keyword
-  // search only exists there; the toggle persists across sessions so the
-  // operator stays where they were.
-  const [discoveryMode, setDiscoveryMode] = useState<"stable" | "v2">("v2");
-  const experimentalDiscovery = discoveryMode === "v2";
-  // The storage key was renamed when V2 became the default so that
-  // "stable" preferences saved under the old key stop pinning operators
-  // to the old surface — everyone lands on V2 once, and any mode they
-  // pick after that persists under the new key.
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("interaction-discovery-mode-v2default");
-      if (stored === "stable" || stored === "v2") setDiscoveryMode(stored);
-    } catch {
-      // ignore
-    }
-  }, []);
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("interaction-discovery-mode-v2default", discoveryMode);
-    } catch {
-      // ignore
-    }
-  }, [discoveryMode]);
-  // When the operator flips modes, snap kind back to a supported value
-  // so the dropdown doesn't show a blank selection for a hidden option.
-  useEffect(() => {
-    const supported: SearchKind[] = experimentalDiscovery
-      ? ["handle", "mentions", "location", "keyword", "hashtag"]
-      : ["handle", "mentions"];
-    if (!supported.includes(newSearchKind)) setNewSearchKind("handle");
-  }, [experimentalDiscovery, newSearchKind]);
   // Mentions needs a connected IG account — snap back to keyword when the
   // operator switches to a customer without one.
   useEffect(() => {
@@ -899,6 +877,14 @@ export default function InteractionEngineUI({
   const [activeSearchId, setActiveSearchId] = useState<number | null>(null);
   const [discoveryPosts, setDiscoveryPosts] = useState<DiscoveredPost[]>([]);
   const [discoveryPages, setDiscoveryPages] = useState<DiscoveredPage[]>([]);
+  // Which engine served the last results, and whether they came from the
+  // last-known-good cache after a live fetch failed.
+  const [discoveryMeta, setDiscoveryMeta] = useState<{
+    engine?: string;
+    cached?: boolean;
+    fetchedAt?: string | null;
+    staleError?: string | null;
+  }>({});
   const [discoveryFetchState, setDiscoveryFetchState] = useState<FetchState>("idle");
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
@@ -926,7 +912,7 @@ export default function InteractionEngineUI({
   const [scraperSaveState, setScraperSaveState] = useState<FetchState>("idle");
   const [scraperSaveError, setScraperSaveError] = useState<string | null>(null);
 
-  // Apify integration (Discovery V2). One token unlocks the
+  // Apify integration. One token unlocks the
   // apify/instagram-scraper actor for handle/keyword/hashtag/location.
   const [apifySettings, setApifySettings] = useState<ApifySettings>({
     hasToken: false,
@@ -1197,16 +1183,9 @@ export default function InteractionEngineUI({
         kind: search.kind,
       });
       if (search.value) params.set("value", search.value);
-      // V2 + Apify token + a kind Apify covers → route through Apify.
-      // V1 path is unchanged.
-      const apifyKinds: SearchKind[] = ["handle", "keyword", "hashtag", "location"];
-      if (
-        experimentalDiscovery &&
-        apifySettings.hasToken &&
-        apifyKinds.includes(search.kind)
-      ) {
-        params.set("via", "apify");
-      }
+      // The server picks the engine per kind (Meta where connected and
+      // free, Apify/RapidAPI scrapers otherwise) and falls back to the
+      // last successful results when a live fetch fails.
       const res = await fetch(`/api/interaction/discover?${params.toString()}`, {
         cache: "no-store",
       });
@@ -1216,16 +1195,27 @@ export default function InteractionEngineUI({
         pages?: DiscoveredPage[];
         error?: string;
         notSupported?: boolean;
+        engine?: string;
+        cached?: boolean;
+        fetchedAt?: string | null;
+        staleError?: string | null;
       };
       if (!res.ok || !json.ok) {
         setDiscoveryFetchState("error");
         setDiscoveryError(json.error ?? "Discovery lookup failed");
         setDiscoveryPosts([]);
         setDiscoveryPages([]);
+        setDiscoveryMeta({});
         return false;
       }
       setDiscoveryPosts(json.posts ?? []);
       setDiscoveryPages(json.pages ?? []);
+      setDiscoveryMeta({
+        engine: json.engine,
+        cached: json.cached,
+        fetchedAt: json.fetchedAt ?? null,
+        staleError: json.staleError ?? null,
+      });
       setDiscoveryFetchState("success");
       return true;
     } catch (err) {
@@ -1235,6 +1225,7 @@ export default function InteractionEngineUI({
       );
       setDiscoveryPosts([]);
       setDiscoveryPages([]);
+      setDiscoveryMeta({});
       return false;
     }
   }
@@ -1845,38 +1836,6 @@ export default function InteractionEngineUI({
 
   const renderDiscovery = () => (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDiscoveryMode("stable")}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                !experimentalDiscovery
-                  ? "border-black bg-black text-white"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Discovery
-            </button>
-            <button
-              onClick={() => setDiscoveryMode("v2")}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                experimentalDiscovery
-                  ? "border-amber-600 bg-amber-50 text-amber-900"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Discovery V2 (experimental)
-            </button>
-          </div>
-          <div className="text-xs text-gray-500">
-            {experimentalDiscovery
-              ? "Scraper-backed sources. Flaky by design — switch back any time."
-              : "Meta Graph only. Free, reliable. Handles + tagged mentions."}
-          </div>
-        </div>
-      </div>
-      {experimentalDiscovery && (
       <details
         className="rounded-2xl border border-gray-200 bg-white"
         open={apifyPanelOpen}
@@ -1955,8 +1914,6 @@ export default function InteractionEngineUI({
           </div>
         </div>
       </details>
-      )}
-      {experimentalDiscovery && (
       <details
         className="rounded-2xl border border-gray-200 bg-white"
         open={scraperPanelOpen}
@@ -2060,16 +2017,15 @@ export default function InteractionEngineUI({
           </div>
         </div>
       </details>
-      )}
 
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="text-sm font-semibold text-gray-900">Add a discovery source</div>
         <div className="mt-1 text-xs text-gray-500">
-          {experimentalDiscovery
-            ? apifySettings.hasToken
-              ? "Experimental. Handle, keyword, hashtag and location all run through Apify (apify/instagram-scraper). Mentions still uses Meta Graph."
-              : "Experimental. Keyword + location go through RapidAPI (paid). Hashtag requires Meta app review. Competitor and mentions work out of the box via Meta Graph. Save an Apify token to unlock all four."
-            : "Meta Graph only. Competitor handle runs Business Discovery; mentions shows posts that tag this account. Both free."}
+          The best available source is picked automatically per search —
+          Meta&apos;s official API where it applies (competitor handles,
+          mentions), Apify or RapidAPI scrapers for keyword, hashtag and
+          location. If a live lookup fails, the last successful results are
+          shown instead.
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <select
@@ -2077,29 +2033,15 @@ export default function InteractionEngineUI({
             onChange={(e) => setNewSearchKind(e.target.value as SearchKind)}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
           >
-            <option value="handle">
-              {experimentalDiscovery && apifySettings.hasToken
-                ? "Competitor / creator handle (Apify)"
-                : "Competitor / creator handle"}
-            </option>
+            <option value="keyword">Keyword / topic</option>
+            <option value="hashtag">Hashtag</option>
+            <option value="location">IG location</option>
+            <option value="handle">Competitor / creator handle</option>
             <option value="mentions" disabled={!activeConnected}>
               {activeConnected
                 ? "Posts that tag me"
                 : "Posts that tag me (needs IG connection)"}
             </option>
-            {experimentalDiscovery && (
-              <>
-                <option value="location">
-                  {apifySettings.hasToken ? "IG location (Apify)" : "IG location (RapidAPI)"}
-                </option>
-                <option value="keyword">
-                  {apifySettings.hasToken ? "Keyword (Apify)" : "Keyword (RapidAPI)"}
-                </option>
-                <option value="hashtag">
-                  {apifySettings.hasToken ? "Hashtag (Apify)" : "Hashtag (gated by Meta)"}
-                </option>
-              </>
-            )}
           </select>
           {newSearchKind !== "mentions" && (
             <input
@@ -2160,20 +2102,12 @@ export default function InteractionEngineUI({
       </div>
 
       {(() => {
-        // Hide saved pills for kinds we no longer expose on this flavour
-        // of Discovery. They still live in the DB (and resurface on v2)
-        // so the operator's history isn't lost.
-        const visibleSearches = experimentalDiscovery
-          ? savedSearches
-          : savedSearches.filter(
-              (s) => s.kind === "handle" || s.kind === "mentions"
-            );
-        if (visibleSearches.length === 0) return null;
+        if (savedSearches.length === 0) return null;
         return (
         <div className="rounded-2xl border border-gray-200 bg-white p-5">
           <div className="text-sm font-semibold text-gray-900">Saved searches</div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {visibleSearches.map((s) => (
+            {savedSearches.map((s) => (
               <div
                 key={s.id}
                 className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition ${
@@ -2327,8 +2261,30 @@ export default function InteractionEngineUI({
         const visibleDiscovery = discoveryPosts
           .filter((p) => (englishOnly ? looksEnglish(p.text) : true))
           .filter((p) => (ukOnly ? looksUK(p) : true));
+        const engineLabel =
+          discoveryMeta.engine === "meta"
+            ? "via Instagram API"
+            : discoveryMeta.engine === "apify"
+              ? "via Apify"
+              : discoveryMeta.engine === "rapidapi"
+                ? "via RapidAPI"
+                : null;
         return (
         <>
+        {discoveryMeta.cached && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="font-semibold">
+              Live lookup failed — showing saved results
+              {discoveryMeta.fetchedAt
+                ? ` from ${formatRelativeTimestamp(discoveryMeta.fetchedAt)}`
+                : ""}
+              .
+            </div>
+            {discoveryMeta.staleError && (
+              <div className="mt-0.5 text-xs opacity-90">{discoveryMeta.staleError}</div>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setEnglishOnly((v) => !v)}
@@ -2354,6 +2310,7 @@ export default function InteractionEngineUI({
           </button>
           <span className="text-xs text-gray-400">
             Showing {visibleDiscovery.length} of {discoveryPosts.length} posts
+            {engineLabel ? ` · ${engineLabel}` : ""}
           </span>
         </div>
         {visibleDiscovery.length === 0 ? (
