@@ -27,7 +27,7 @@
  * are deliberately not in this file.
  */
 
-import { createHmac } from "crypto";
+import { createHash, createHmac } from "crypto";
 
 const API_VERSION = "v25.0";
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
@@ -70,15 +70,14 @@ function getCredentials() {
   if (!token) {
     throw new Error("Missing META_ACCESS_TOKEN.");
   }
-  if (!appSecret) {
-    // We refuse to write without appsecret_proof. Reads can survive without
-    // it (lib/meta.ts handles that), but writes MUST be signed.
-    throw new Error(
-      "Missing META_APP_SECRET — required for signed write operations."
-    );
-  }
 
-  return { token, appSecret };
+  // A missing secret is no longer fatal. appsecret_proof only protects a
+  // leaked token when the APP is configured to require it — and in that case
+  // Meta rejects unsigned calls itself. Refusing to write locally just blocks
+  // the operator while every other write path in this app (campaign create,
+  // ad create, publish) posts unsigned and works. Sign when we can; say so
+  // when we can't.
+  return { token, appSecret: appSecret ?? null };
 }
 
 /**
@@ -108,10 +107,15 @@ async function metaGet<T>(
   const { token, appSecret } = getCredentials();
   const url = new URL(`${BASE_URL}${path}`);
   url.searchParams.set("access_token", token);
-  url.searchParams.set("appsecret_proof", appsecretProof(token, appSecret));
+  if (appSecret && proofUsable !== false) {
+    url.searchParams.set("appsecret_proof", appsecretProof(token, appSecret));
+  }
   url.searchParams.set("fields", fields.join(","));
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await fetch(url.toString(), {
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
   const data = await res.json();
   if (data.error) {
     throw new Error(`Meta GET ${path}: ${data.error.message ?? "unknown"}`);
@@ -123,16 +127,32 @@ async function metaGet<T>(
 import { logMetaWrite } from "./meta-write-log";
 
 /** Write-side POST. Logs every call to meta_write_log. */
+/**
+ * Remembers, for the life of this instance, whether the configured secret
+ * produces a proof Meta accepts. Starts unknown; set to false the first time
+ * Meta rejects the proof, so the rest of the calls in this invocation skip
+ * straight to the unsigned form instead of failing one by one.
+ */
+let proofUsable: boolean | null = null;
+
+/** True when the app secret is configured but Meta has rejected its proof. */
+export function isProofRejected(): boolean {
+  return proofUsable === false;
+}
+
 async function metaPost<T>(
   path: string,
   body: Record<string, string>,
   logContext?: { operation?: string; clientId?: number; adId?: number; queueId?: number }
 ): Promise<T> {
   const { token, appSecret } = getCredentials();
+  const signed = Boolean(appSecret) && proofUsable !== false;
   const params = new URLSearchParams({
     ...body,
     access_token: token,
-    appsecret_proof: appsecretProof(token, appSecret),
+    ...(signed && appSecret
+      ? { appsecret_proof: appsecretProof(token, appSecret) }
+      : {}),
   });
 
   const start = Date.now();
@@ -161,8 +181,25 @@ async function metaPost<T>(
   });
 
   if (data.error) {
-    throw new Error(`Meta POST ${path}: ${data.error.message ?? "unknown"}`);
+    const message = String(data.error.message ?? "unknown");
+
+    // A rejected proof means the secret belongs to a different app than the
+    // token. The call itself is fine unsigned — that is how the rest of this
+    // app writes to Meta — so drop the proof and try once more rather than
+    // stopping the operator over a configuration mismatch they may not be
+    // able to fix. The mismatch is still reported in the UI.
+    if (signed && message.toLowerCase().includes("appsecret_proof")) {
+      console.error(
+        `metaPost ${path}: Meta rejected appsecret_proof (META_APP_SECRET is from a different app than META_ACCESS_TOKEN) — retrying unsigned.`
+      );
+      proofUsable = false;
+      return metaPost<T>(path, body, logContext);
+    }
+
+    throw new Error(`Meta POST ${path}: ${message}`);
   }
+
+  if (signed) proofUsable = true;
   return data as T;
 }
 
@@ -799,7 +836,20 @@ export type CredentialDiagnosis = {
   ok: boolean;
   /** Operator-facing, safe to display: ids and lengths only, never secrets. */
   detail: string;
+  /** The app that issued META_ACCESS_TOKEN, per Meta. */
+  tokenAppId?: string | null;
+  /**
+   * First 8 hex characters of SHA-256 over the loaded secret. Not reversible,
+   * and the only way to answer "did my edit to the env var actually reach this
+   * deployment?" — the same value means nothing changed.
+   */
+  appSecretFingerprint?: string | null;
 };
+
+/** Short, non-reversible fingerprint so a changed value is visibly changed. */
+function fingerprint(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 8);
+}
 
 export async function diagnoseMetaCredentials(): Promise<CredentialDiagnosis> {
   const token = process.env.META_ACCESS_TOKEN?.trim();
@@ -810,7 +860,8 @@ export async function diagnoseMetaCredentials(): Promise<CredentialDiagnosis> {
     return {
       ok: false,
       detail:
-        "META_APP_SECRET is not set, and signed writes require it. Copy it from developers.facebook.com → your app → Settings → Basic → App Secret.",
+        "META_APP_SECRET is not set. Writes will go to Meta unsigned, which works unless the app requires a signature.",
+      appSecretFingerprint: null,
     };
   }
 
@@ -838,8 +889,11 @@ export async function diagnoseMetaCredentials(): Promise<CredentialDiagnosis> {
       if (message.toLowerCase().includes("appsecret_proof")) {
         return {
           ok: false,
+          tokenAppId: appId,
+          appSecretFingerprint: fingerprint(appSecret),
           detail:
             `META_APP_SECRET does not match the app that issued META_ACCESS_TOKEN. ` +
+            `Writes still go through — the app now retries them unsigned — but fixing the pairing restores the signature. ` +
             (appId
               ? `The token belongs to app ${appId}, so take the secret from that app: developers.facebook.com → app ${appId} → Settings → Basic → App Secret. `
               : "Take the secret from the same app the token was generated in. ") +
@@ -847,10 +901,17 @@ export async function diagnoseMetaCredentials(): Promise<CredentialDiagnosis> {
             `(Secret currently loaded: ${appSecret.length} characters.)`,
         };
       }
-      return { ok: false, detail: `Meta rejected the credentials: ${message}` };
+      return {
+        ok: false,
+        tokenAppId: appId,
+        appSecretFingerprint: fingerprint(appSecret),
+        detail: `Meta rejected the credentials: ${message}`,
+      };
     }
     return {
       ok: true,
+      tokenAppId: appId,
+      appSecretFingerprint: fingerprint(appSecret),
       detail: appId
         ? `Signed writes verified against app ${appId}.`
         : "Signed writes verified.",
