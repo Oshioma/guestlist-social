@@ -11,8 +11,6 @@ import OnboardingFunnel from "./OnboardingFunnel";
 import { loadOnboardingFunnel } from "@/lib/admin/onboarding-funnel";
 import LegalPagesEditor from "./LegalPagesEditor";
 import { loadLegalPagesForEditor } from "@/lib/legal/actions";
-import SystemStatus from "./SystemStatus";
-import { loadSystemStatus } from "@/lib/admin/system-status";
 import PublicSignupToggle from "./PublicSignupToggle";
 import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
@@ -46,7 +44,6 @@ export default async function SuperAdminPage({
   const users = tab === "users" ? await loadUsersOverview() : [];
   const funnel = tab === "users" ? await loadOnboardingFunnel() : null;
   const legalPages = tab === "legal" ? await loadLegalPagesForEditor() : [];
-  const systemGroups = tab === "system" ? await loadSystemStatus() : [];
   const signupOpen = tab === "system" ? await publicSignupEnabled() : false;
 
   const maxWidth =
@@ -148,13 +145,29 @@ export default async function SuperAdminPage({
           <section style={cardStyle}>
             <h3 style={sectionTitleStyle}>System status</h3>
             <p style={sectionSubStyle}>
-              Which keys and integrations are live. Secret values are never shown
-              — a secret reads only “Set” or “Not set”. Reload to re-check.
+              The sign-up switch lives here because it is an owner decision. The
+              full read-out of keys, integrations and schema moved to one place
+              so the two could not drift apart.
             </p>
             <div style={{ marginBottom: 16 }}>
               <PublicSignupToggle enabled={signupOpen} />
             </div>
-            <SystemStatus groups={systemGroups} />
+            <a
+              href="/app/systems"
+              style={{
+                display: "inline-block",
+                border: "1px solid #e4e4e7",
+                borderRadius: 10,
+                padding: "9px 16px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#18181b",
+                textDecoration: "none",
+                background: "#fff",
+              }}
+            >
+              Open Systems →
+            </a>
           </section>
         )}
       </div>
