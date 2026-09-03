@@ -55,10 +55,12 @@ function buildNavGroups(canRunAds: boolean, isAdmin: boolean): NavGroup[] {
   return groups;
 }
 
-function buildUtilityItems(_isAdmin: boolean): NavItem[] {
+function buildUtilityItems(isAdmin: boolean): NavItem[] {
   return [
     { label: "Settings", href: "/app/settings" },
     { label: "Consultation Template", href: "/app/settings/consultation" },
+    // Configuration health — admin only, and the page enforces it too.
+    ...(isAdmin ? [{ label: "Systems", href: "/app/systems" }] : []),
     { label: "Guide", href: "/app/guide" },
   ];
 }
