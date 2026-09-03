@@ -1,5 +1,6 @@
-import { requireAdmin } from "@/lib/auth/permissions";
-import { inspectEnv, type VarStatus } from "@/lib/system-checks";
+import { getMemberAccess, isSuperAdmin } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
+import { crossChecks, inspectEnv, type VarStatus } from "@/lib/system-checks";
 import { isDryRun } from "@/lib/meta-execute";
 import SystemProbes from "./SystemProbes";
 
@@ -13,9 +14,15 @@ const STATUS_STYLE: Record<VarStatus, { label: string; bg: string; fg: string; b
 };
 
 export default async function SystemsPage() {
-  await requireAdmin();
+  // Admins and super-admins both. This page replaced the super-admin
+  // diagnostics, so anyone who could read those must still be able to.
+  const [access, superAdmin] = await Promise.all([getMemberAccess(), isSuperAdmin()]);
+  if (!superAdmin && access?.role !== "admin") {
+    redirect("/post-login");
+  }
 
   const groups = inspectEnv();
+  const relationships = crossChecks();
   const all = groups.flatMap((g) => g.vars);
   const broken = all.filter((v) => v.status === "missing" || v.status === "malformed");
   const dryRun = isDryRun();
@@ -82,6 +89,41 @@ export default async function SystemsPage() {
         <SystemProbes />
       </div>
 
+      {relationships.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#18181b" }}>
+              Cross-checks
+            </h2>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#a1a1aa" }}>
+              Settings that are each valid on their own but wrong together.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {relationships.map((c) => (
+              <div
+                key={c.name}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  border: `1px solid ${c.ok ? "#e4e4e7" : "#fde68a"}`,
+                  background: c.ok ? "#fff" : "#fffbeb",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                }}
+              >
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{c.ok ? "✅" : "⚠️"}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: "#52525b", lineHeight: 1.5 }}>{c.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {groups.map((group) => (
         <div key={group.group} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
@@ -141,7 +183,27 @@ export default async function SystemsPage() {
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                    {v.fingerprint && (
+                    {v.value !== undefined && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#52525b",
+                          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                          background: "#fafafa",
+                          border: "1px solid #f4f4f5",
+                          borderRadius: 6,
+                          padding: "2px 6px",
+                          maxWidth: 320,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={v.value}
+                      >
+                        {v.value}
+                      </span>
+                    )}
+                    {v.value === undefined && v.fingerprint && (
                       <span
                         style={{
                           fontSize: 11,

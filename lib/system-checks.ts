@@ -27,6 +27,8 @@ export type VarReport = {
   length: number;
   fingerprint: string | null;
   required: boolean;
+  /** Present only for values explicitly marked non-secret. */
+  value?: string;
 };
 
 export type GroupReport = {
@@ -41,6 +43,13 @@ type Rule = {
   required?: boolean;
   /** Return a complaint, or null when the shape is fine. */
   shape?: (value: string) => string | null;
+  /**
+   * Not a secret — show the value in full. Ported from the super-admin
+   * diagnostics this page replaces, and it is the better call for URLs, app
+   * ids, flags and price ids: a typo you can read beats a fingerprint you
+   * can only compare. Anything omitted here is treated as a secret.
+   */
+  publicValue?: boolean;
 };
 
 const digits = (len: [number, number]) => (v: string) =>
@@ -64,18 +73,19 @@ const minLength = (n: number) => (v: string) =>
   v.length >= n ? null : `looks too short (${v.length} characters, expected ${n}+)`;
 
 /** Catches a placeholder that was pasted over rather than replaced. */
-const PLACEHOLDER = /your[_ -]?|changeme|xxxx|<.*>|example\.com|\s/i;
+const PLACEHOLDER = /your[_ -]?app|your[_ -]?key|your[_ -]?secret|your[_ -]?id|changeme|xxxx|<[^>]+>|example\.com/i;
 
 const GROUPS: { group: string; blurb: string; rules: Rule[] }[] = [
   {
     group: "Core",
     blurb: "Without these the app does not run.",
     rules: [
-      { name: "NEXT_PUBLIC_SUPABASE_URL", purpose: "The database and storage endpoint.", required: true, shape: httpsUrl },
+      { name: "NEXT_PUBLIC_SUPABASE_URL", purpose: "The database and storage endpoint.", required: true, shape: httpsUrl, publicValue: true },
       { name: "SUPABASE_SERVICE_ROLE_KEY", purpose: "Server-side database access that bypasses row-level security.", required: true, shape: minLength(40) },
       { name: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", purpose: "Browser-side database access, scoped by row-level security.", required: true, shape: minLength(20) },
-      { name: "NEXT_PUBLIC_APP_URL", purpose: "Absolute links in emails and OAuth redirects.", shape: httpsUrl },
-      { name: "SUPER_ADMIN_EMAILS", purpose: "Who may reach the super-admin surfaces." },
+      { name: "NEXT_PUBLIC_APP_URL", purpose: "Absolute links in emails and OAuth redirects.", shape: httpsUrl, publicValue: true },
+      { name: "SUPER_ADMIN_EMAILS", purpose: "Who may reach the super-admin surfaces.", publicValue: true },
+      { name: "NEXT_PUBLIC_SITE_URL", purpose: "Base URL for auth and email links.", required: true, shape: httpsUrl, publicValue: true },
     ],
   },
   {
@@ -84,23 +94,23 @@ const GROUPS: { group: string; blurb: string; rules: Rule[] }[] = [
     rules: [
       { name: "META_ACCESS_TOKEN", purpose: "Every Graph call the ads side makes.", required: true, shape: minLength(50) },
       { name: "META_APP_SECRET", purpose: "Signs write calls (appsecret_proof). Must belong to the same app as the token.", shape: (v) => (/^[a-f0-9]{32}$/i.test(v) ? null : "should be 32 hex characters") },
-      { name: "META_AD_ACCOUNT_ID", purpose: "The ad account campaigns are created in.", required: true, shape: prefixed("act_") },
-      { name: "META_APP_ID", purpose: "Not read by any code path — kept only for reference.", shape: digits([15, 17]) },
-      { name: "META_EXECUTE_DRY_RUN", purpose: '"false" lets the delivery switch spend real money. Anything else simulates.', shape: (v) => (["true", "false"].includes(v) ? null : 'should be "true" or "false"') },
+      { name: "META_AD_ACCOUNT_ID", purpose: "The ad account campaigns are created in.", required: true, shape: prefixed("act_"), publicValue: true },
+      { name: "META_APP_ID", purpose: "Not read by any code path — safe to delete.", shape: digits([15, 17]), publicValue: true },
+      { name: "META_EXECUTE_DRY_RUN", purpose: '"false" lets the delivery switch spend real money. Anything else simulates.', shape: (v) => (["true", "false"].includes(v) ? null : 'should be "true" or "false"'), publicValue: true },
     ],
   },
   {
     group: "Meta & Instagram publishing",
     blurb: "Connecting accounts and publishing organic posts.",
     rules: [
-      { name: "META_SOCIAL_APP_ID", purpose: "The publishing app, separate from the ads app.", shape: digits([15, 17]) },
+      { name: "META_SOCIAL_APP_ID", purpose: "The publishing app, separate from the ads app.", shape: digits([15, 17]), publicValue: true },
       { name: "META_SOCIAL_APP_SECRET", purpose: "Publishing app OAuth exchange.", shape: minLength(20) },
-      { name: "NEXT_PUBLIC_META_SOCIAL_APP_ID", purpose: "Browser-side Facebook login.", shape: digits([15, 17]) },
-      { name: "META_SOCIAL_OAUTH_REDIRECT_URI", purpose: "Where Facebook returns after connecting.", shape: httpsUrl },
-      { name: "META_SOCIAL_LOGIN_CONFIG_ID", purpose: "Facebook Login for Business configuration.", shape: digits([10, 20]) },
-      { name: "INSTAGRAM_APP_ID", purpose: "Instagram login app.", shape: digits([15, 17]) },
+      { name: "NEXT_PUBLIC_META_SOCIAL_APP_ID", purpose: "Browser-side Facebook login.", shape: digits([15, 17]), publicValue: true },
+      { name: "META_SOCIAL_OAUTH_REDIRECT_URI", purpose: "Where Facebook returns after connecting.", shape: httpsUrl, publicValue: true },
+      { name: "META_SOCIAL_LOGIN_CONFIG_ID", purpose: "Facebook Login for Business configuration.", shape: digits([10, 20]), publicValue: true },
+      { name: "INSTAGRAM_APP_ID", purpose: "Instagram login app.", shape: digits([15, 17]), publicValue: true },
       { name: "INSTAGRAM_APP_SECRET", purpose: "Instagram OAuth exchange.", shape: minLength(20) },
-      { name: "INSTAGRAM_OAUTH_REDIRECT_URI", purpose: "Where Instagram returns after connecting.", shape: httpsUrl },
+      { name: "INSTAGRAM_OAUTH_REDIRECT_URI", purpose: "Where Instagram returns after connecting.", shape: httpsUrl, publicValue: true },
     ],
   },
   {
@@ -117,6 +127,8 @@ const GROUPS: { group: string; blurb: string; rules: Rule[] }[] = [
     rules: [
       { name: "STRIPE_SECRET_KEY", purpose: "Checkout and billing portal.", shape: (v) => (v.startsWith("sk_") || v.startsWith("rk_") ? null : 'should start with "sk_" or "rk_"') },
       { name: "STRIPE_WEBHOOK_SECRET", purpose: "Verifies Stripe webhooks.", shape: prefixed("whsec_") },
+      { name: "STRIPE_PRICE_PRO", purpose: "Price id for the Pro plan.", publicValue: true },
+      { name: "STRIPE_PRICE_AGENCY", purpose: "Price id for the Agency plan.", publicValue: true },
     ],
   },
   {
@@ -124,7 +136,7 @@ const GROUPS: { group: string; blurb: string; rules: Rule[] }[] = [
     blurb: "Outbound email, stock imagery, image imports.",
     rules: [
       { name: "RESEND_API_KEY", purpose: "Transactional email.", shape: prefixed("re_") },
-      { name: "EMAIL_FROM", purpose: "Sender address on outbound email.", shape: (v) => (v.includes("@") ? null : "should be an email address") },
+      { name: "EMAIL_FROM", purpose: "Sender address on outbound email.", shape: (v) => (v.includes("@") ? null : "should be an email address"), publicValue: true },
       { name: "PEXELS_API_KEY", purpose: "Stock image suggestions.", shape: minLength(20) },
       { name: "GOOGLE_DRIVE_API_KEY", purpose: "Importing client images from Drive.", shape: minLength(20) },
     ],
@@ -134,10 +146,10 @@ const GROUPS: { group: string; blurb: string; rules: Rule[] }[] = [
     blurb: "Scheduled work, captcha, deployment identity.",
     rules: [
       { name: "CRON_SECRET", purpose: "Authenticates the scheduled jobs.", shape: minLength(16) },
-      { name: "CAPTCHA_PROVIDER", purpose: "Which captcha guards public sign-up." },
-      { name: "NEXT_PUBLIC_TURNSTILE_SITE_KEY", purpose: "Captcha widget on public forms." },
+      { name: "CAPTCHA_PROVIDER", purpose: 'Which captcha guards public sign-up. Blank defaults to "turnstile".', publicValue: true },
+      { name: "NEXT_PUBLIC_TURNSTILE_SITE_KEY", purpose: "Captcha widget on public forms. Only needed when public sign-up is open with the Turnstile provider.", publicValue: true },
       { name: "TURNSTILE_SECRET_KEY", purpose: "Server-side captcha verification.", shape: minLength(20) },
-      { name: "ENABLE_PUBLIC_SIGNUP", purpose: "Whether strangers can create accounts." },
+      { name: "ENABLE_PUBLIC_SIGNUP", purpose: "The initial default for self-registration. A database toggle overrides it — see the live checks.", publicValue: true },
     ],
   },
 ];
@@ -168,6 +180,11 @@ export function inspectEnv(): GroupReport[] {
       }
 
       const complaints: string[] = [];
+      // A space inside a credential is always wrong; inside a comma-separated
+      // list of emails it is not, so only flag whitespace for single values.
+      if (!rule.name.endsWith("EMAILS") && /\s/.test(value)) {
+        complaints.push("contains a space, which no key, id or URL should");
+      }
       if (PLACEHOLDER.test(value)) {
         complaints.push(
           "contains placeholder text or whitespace — it looks like a template value that was pasted over"
@@ -188,6 +205,7 @@ export function inspectEnv(): GroupReport[] {
         length: value.length,
         fingerprint: fingerprint(value),
         required,
+        ...(rule.publicValue ? { value } : {}),
       };
     }),
   }));
@@ -249,6 +267,84 @@ export async function runLiveProbes(): Promise<ProbeResult[]> {
         .select("id", { count: "exact", head: true });
       if (error) return { ok: false, detail: `${error.message} (${error.code ?? "no code"})` };
       return { ok: true, detail: `Connected. ${count ?? 0} client accounts.` };
+    })
+  );
+
+  // Schema drift. Ported from the super-admin diagnostics, extended with the
+  // column whose absence silently broke ad creation, the clone-a-winner list
+  // and Meta destinations all at once. 42P01 = no such table, 42703 = no such
+  // column.
+  probes.push(
+    timed("Database schema", async () => {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!url || !key) return { ok: false, detail: "Not configured." };
+      const { createClient } = await import("@supabase/supabase-js");
+      const admin = createClient(url, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const targets: [string, string][] = [
+        ["ads", "creative_destination_url"],
+        ["email_templates", "key"],
+        ["legal_pages", "key"],
+        ["connected_meta_accounts", "auth_type"],
+        ["campaigns", "meta_adset_id"],
+        ["team_accounts", "team_id"],
+      ];
+
+      const results = await Promise.all(
+        targets.map(async ([table, column]) => {
+          const { error } = await admin
+            .from(table)
+            .select(column, { count: "exact", head: true })
+            .limit(1);
+          if (!error) return null;
+          if (error.code === "42P01") return `${table} table missing`;
+          if (error.code === "42703") return `${table}.${column} missing`;
+          return `${table}: ${error.message}`;
+        })
+      );
+
+      const problems = results.filter((r): r is string => Boolean(r));
+      return problems.length
+        ? { ok: false, detail: `Run the pending migrations — ${problems.join("; ")}.` }
+        : { ok: true, detail: `${targets.length} tables and columns present.` };
+    })
+  );
+
+  // Sign-up and captcha, as a pair. The env var is only the initial default —
+  // a database toggle overrides it — and Turnstile keys only matter when
+  // sign-up is actually open with the Turnstile provider. Reporting the keys
+  // as "missing" without that context is how you get told off for a setting
+  // that is working as intended.
+  probes.push(
+    timed("Sign-up & captcha", async () => {
+      const { publicSignupEnabled } = await import("./auth/public-signup");
+      const open = await publicSignupEnabled();
+      const provider =
+        (process.env.CAPTCHA_PROVIDER ?? "").trim().toLowerCase() || "turnstile";
+      const keysSet =
+        Boolean(process.env.TURNSTILE_SECRET_KEY?.trim()) &&
+        Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+
+      if (!open) {
+        return {
+          ok: true,
+          detail: `Closed — invite only. Captcha provider "${provider}"; Turnstile keys ${keysSet ? "set" : "not needed"}.`,
+        };
+      }
+      if (provider === "turnstile" && !keysSet) {
+        return {
+          ok: false,
+          detail:
+            "Public sign-up is OPEN with the Turnstile provider, but the Turnstile keys are not set — sign-up will fail. Set both keys, change CAPTCHA_PROVIDER, or close sign-up.",
+        };
+      }
+      return {
+        ok: true,
+        detail: `OPEN — anyone can register. Captcha provider "${provider}"${provider === "turnstile" ? " with keys set" : ""}. Honeypot, timing and rate limits apply regardless.`,
+      };
     })
   );
 
@@ -343,6 +439,82 @@ export async function runLiveProbes(): Promise<ProbeResult[]> {
   );
 
   return Promise.all(probes);
+}
+
+export type CrossCheck = { name: string; ok: boolean; detail: string };
+
+/**
+ * Relationships between variables. Each one individually valid can still be
+ * collectively wrong — a secret from the wrong app is exactly that, and it
+ * cost a day.
+ */
+export function crossChecks(): CrossCheck[] {
+  const out: CrossCheck[] = [];
+  const get = (n: string) => process.env[n]?.trim() ?? "";
+
+  const adsSecret = get("META_APP_SECRET");
+  const socialSecret = get("META_SOCIAL_APP_SECRET");
+  const adsAppId = get("META_APP_ID");
+  const socialAppId = get("META_SOCIAL_APP_ID");
+
+  if (adsSecret && socialSecret) {
+    const same = adsSecret === socialSecret;
+    const sameApp = adsAppId && socialAppId && adsAppId === socialAppId;
+    out.push({
+      name: "Ads and publishing app secrets",
+      ok: !same || Boolean(sameApp),
+      detail: same
+        ? sameApp
+          ? "Identical, which is right — both point at the same Meta app."
+          : "META_APP_SECRET and META_SOCIAL_APP_SECRET hold the same value. That is correct if the ads app and the publishing app are one app, and wrong if they are two. This cannot be settled from the variables alone: run the live checks and compare the app named by \"Meta write credentials\" against META_SOCIAL_APP_ID" +
+            (socialAppId ? ` (${socialAppId}).` : ".")
+        : "Different values, as expected for two separate Meta apps.",
+    });
+  }
+
+  const publicSocial = get("NEXT_PUBLIC_META_SOCIAL_APP_ID");
+  if (socialAppId && publicSocial) {
+    out.push({
+      name: "Publishing app id, server and browser",
+      ok: socialAppId === publicSocial,
+      detail:
+        socialAppId === publicSocial
+          ? "META_SOCIAL_APP_ID matches NEXT_PUBLIC_META_SOCIAL_APP_ID."
+          : "META_SOCIAL_APP_ID and NEXT_PUBLIC_META_SOCIAL_APP_ID differ — the browser would start a login the server cannot finish.",
+    });
+  }
+
+  const appUrl = get("NEXT_PUBLIC_APP_URL");
+  const siteUrl = get("NEXT_PUBLIC_SITE_URL");
+  if (appUrl && siteUrl) {
+    out.push({
+      name: "App and site URLs",
+      ok: appUrl.replace(/\/$/, "") === siteUrl.replace(/\/$/, ""),
+      detail:
+        appUrl.replace(/\/$/, "") === siteUrl.replace(/\/$/, "")
+          ? "NEXT_PUBLIC_APP_URL and NEXT_PUBLIC_SITE_URL agree."
+          : `They differ (${appUrl} vs ${siteUrl}). Links built from one will not match redirects built from the other.`,
+    });
+  }
+
+  for (const [uri, label] of [
+    ["META_SOCIAL_OAUTH_REDIRECT_URI", "Facebook"],
+    ["INSTAGRAM_OAUTH_REDIRECT_URI", "Instagram"],
+  ] as const) {
+    const value = get(uri);
+    if (value && siteUrl) {
+      const matches = value.startsWith(siteUrl.replace(/\/$/, ""));
+      out.push({
+        name: `${label} redirect URI host`,
+        ok: matches,
+        detail: matches
+          ? `Points at this deployment (${value}).`
+          : `${value} is not under NEXT_PUBLIC_SITE_URL — the OAuth round trip will land somewhere else.`,
+      });
+    }
+  }
+
+  return out;
 }
 
 /** Not-configured is a state, not a failure — kept distinct in the wording. */
