@@ -521,3 +521,189 @@ export function crossChecks(): CrossCheck[] {
 function skipDetail(detail: string): { ok: boolean; detail: string } {
   return { ok: false, detail };
 }
+
+// ---------------------------------------------------------------------------
+// Which Meta app is which.
+//
+// This app talks to three potentially different Meta apps — one for running
+// ads, one for publishing to Facebook/Instagram pages, one for Instagram
+// login — and the environment names them only by opaque 16-digit ids. Nothing
+// in a dashboard tells you which id is which, and pairing an id with the wrong
+// secret fails in ways that look like a dozen other problems.
+//
+// Meta will answer this directly. An app access token is literally
+// "{app-id}|{app-secret}", so asking for /{app-id} with it does two jobs at
+// once: it proves the id and secret belong together, and it returns the app's
+// real name.
+// ---------------------------------------------------------------------------
+
+export type MetaAppIdentity = {
+  /** What this app is used for, in this codebase. */
+  role: string;
+  /** The variables that carry it. */
+  vars: string[];
+  appId: string | null;
+  /** The name Meta gives it, once verified. */
+  appName: string | null;
+  status: "ok" | "warn" | "error" | "missing";
+  detail: string;
+};
+
+const GRAPH = "https://graph.facebook.com/v25.0";
+
+/** Verifies an id/secret pair and returns the app's name from Meta. */
+async function lookupAppByPair(
+  appId: string,
+  appSecret: string
+): Promise<{ ok: boolean; name?: string; error?: string }> {
+  try {
+    const res = await fetch(
+      `${GRAPH}/${appId}?fields=id,name&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(10_000) }
+    );
+    const data = await res.json();
+    if (data?.error) return { ok: false, error: String(data.error.message ?? "rejected") };
+    return { ok: true, name: data?.name ? String(data.name) : undefined };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Asks Meta which app issued a token, and what that app is called. */
+async function lookupAppByToken(
+  token: string
+): Promise<{ ok: boolean; appId?: string; name?: string; error?: string }> {
+  try {
+    const res = await fetch(
+      `${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(10_000) }
+    );
+    const data = await res.json();
+    if (data?.error) return { ok: false, error: String(data.error.message ?? "rejected") };
+    return {
+      ok: true,
+      appId: data?.data?.app_id ? String(data.data.app_id) : undefined,
+      name: data?.data?.application ? String(data.data.application) : undefined,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function identifyMetaApps(): Promise<MetaAppIdentity[]> {
+  const env = (name: string) => process.env[name]?.trim() || null;
+  const out: MetaAppIdentity[] = [];
+
+  // 1. Ads. The app is whichever one issued the token — there is no separate
+  //    "ads app id" variable that any code path reads.
+  const adsToken = env("META_ACCESS_TOKEN");
+  if (!adsToken) {
+    out.push({
+      role: "Running ads",
+      vars: ["META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "META_APP_SECRET"],
+      appId: null,
+      appName: null,
+      status: "missing",
+      detail: "META_ACCESS_TOKEN is not set, so the ads side cannot talk to Meta at all.",
+    });
+  } else {
+    const found = await lookupAppByToken(adsToken);
+    const secret = env("META_APP_SECRET");
+    let detail = found.ok
+      ? `META_ACCESS_TOKEN was issued by this app. Campaigns and ads are created in ad account ${env("META_AD_ACCOUNT_ID") ?? "(not set)"}.`
+      : `Meta would not identify the token: ${found.error}`;
+
+    let status: MetaAppIdentity["status"] = found.ok ? "ok" : "error";
+
+    // Does META_APP_SECRET belong to this app? That pairing is what signs
+    // write calls, and getting it wrong is invisible until a write fails.
+    if (found.ok && found.appId && secret) {
+      const pair = await lookupAppByPair(found.appId, secret);
+      if (pair.ok) {
+        detail += " META_APP_SECRET belongs to this app, so writes are signed.";
+      } else {
+        status = "warn";
+        detail +=
+          ` META_APP_SECRET does NOT belong to this app (${pair.error}), so writes go unsigned.` +
+          " Copy the App Secret from this app's Settings → Basic to fix the pairing.";
+      }
+    }
+
+    out.push({
+      role: "Running ads",
+      vars: ["META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "META_APP_SECRET"],
+      appId: found.appId ?? null,
+      appName: found.name ?? null,
+      status,
+      detail,
+    });
+  }
+
+  // 2. Publishing to Facebook / Instagram pages.
+  const socialId = env("META_SOCIAL_APP_ID");
+  const socialSecret = env("META_SOCIAL_APP_SECRET");
+  if (!socialId || !socialSecret) {
+    out.push({
+      role: "Publishing posts (Facebook & Instagram pages)",
+      vars: ["META_SOCIAL_APP_ID", "META_SOCIAL_APP_SECRET", "NEXT_PUBLIC_META_SOCIAL_APP_ID"],
+      appId: socialId,
+      appName: null,
+      status: "missing",
+      detail: "Both the id and the secret are needed to complete a Facebook connection.",
+    });
+  } else {
+    const pair = await lookupAppByPair(socialId, socialSecret);
+    out.push({
+      role: "Publishing posts (Facebook & Instagram pages)",
+      vars: ["META_SOCIAL_APP_ID", "META_SOCIAL_APP_SECRET", "NEXT_PUBLIC_META_SOCIAL_APP_ID"],
+      appId: socialId,
+      appName: pair.name ?? null,
+      status: pair.ok ? "ok" : "error",
+      detail: pair.ok
+        ? "The id and secret belong together, so connecting a Facebook page can complete."
+        : `Meta rejected this id/secret pair (${pair.error}). One of them is from a different app, and connecting a page will fail at the token exchange.`,
+    });
+  }
+
+  // 3. Instagram login (a separate app in Meta's model).
+  const igId = env("INSTAGRAM_APP_ID");
+  const igSecret = env("INSTAGRAM_APP_SECRET");
+  if (!igId || !igSecret) {
+    out.push({
+      role: "Instagram login",
+      vars: ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"],
+      appId: igId,
+      appName: null,
+      status: "missing",
+      detail: "Instagram's own login flow needs both values.",
+    });
+  } else {
+    const pair = await lookupAppByPair(igId, igSecret);
+    out.push({
+      role: "Instagram login",
+      vars: ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"],
+      appId: igId,
+      appName: pair.name ?? null,
+      status: pair.ok ? "ok" : "error",
+      detail: pair.ok
+        ? "The id and secret belong together."
+        : `Meta rejected this id/secret pair (${pair.error}).`,
+    });
+  }
+
+  // 4. Anything left over. META_APP_ID is read by nothing.
+  const strayAppId = env("META_APP_ID");
+  if (strayAppId) {
+    out.push({
+      role: "Unused",
+      vars: ["META_APP_ID"],
+      appId: strayAppId,
+      appName: null,
+      status: "warn",
+      detail:
+        "No code path reads META_APP_ID. It is only a source of confusion when working out which app is which — delete it in Vercel.",
+    });
+  }
+
+  return out;
+}
