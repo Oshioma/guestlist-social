@@ -12,6 +12,7 @@ import { loadOnboardingFunnel } from "@/lib/admin/onboarding-funnel";
 import LegalPagesEditor from "./LegalPagesEditor";
 import { loadLegalPagesForEditor } from "@/lib/legal/actions";
 import PublicSignupToggle from "./PublicSignupToggle";
+import SystemsReport from "./SystemsReport";
 import { publicSignupEnabled } from "@/lib/auth/public-signup";
 
 export const dynamic = "force-dynamic";
@@ -145,29 +146,13 @@ export default async function SuperAdminPage({
           <section style={cardStyle}>
             <h3 style={sectionTitleStyle}>System status</h3>
             <p style={sectionSubStyle}>
-              The sign-up switch lives here because it is an owner decision. The
-              full read-out of keys, integrations and schema moved to one place
-              so the two could not drift apart.
+              Every environment variable, third-party service and Meta app this
+              deployment depends on. One place, so nothing can drift.
             </p>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 20 }}>
               <PublicSignupToggle enabled={signupOpen} />
             </div>
-            <a
-              href="/app/systems"
-              style={{
-                display: "inline-block",
-                border: "1px solid #e4e4e7",
-                borderRadius: 10,
-                padding: "9px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#18181b",
-                textDecoration: "none",
-                background: "#fff",
-              }}
-            >
-              Open Systems →
-            </a>
+            <SystemsReport />
           </section>
         )}
       </div>

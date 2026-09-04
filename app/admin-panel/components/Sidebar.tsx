@@ -60,7 +60,6 @@ function buildUtilityItems(isAdmin: boolean): NavItem[] {
     { label: "Settings", href: "/app/settings" },
     { label: "Consultation Template", href: "/app/settings/consultation" },
     // Configuration health — admin only, and the page enforces it too.
-    ...(isAdmin ? [{ label: "Systems", href: "/app/systems" }] : []),
     { label: "Guide", href: "/app/guide" },
   ];
 }
