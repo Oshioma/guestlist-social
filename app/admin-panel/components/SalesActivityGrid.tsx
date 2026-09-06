@@ -109,13 +109,26 @@ export default function SalesActivityGrid({
   }
 
   // ── Derived totals (recomputed every render from local state) ─────────────
+  // Top-level cards: this week vs last week, calls and opportunities, summed
+  // across every rep's row for that week.
   const totals = useMemo(() => {
-    const calls = sum(weeks.map((w) => sum(w.calls)));
-    const opps = sum(weeks.map((w) => sum(w.opps)));
-    const deals = sum(weeks.map((w) => sum(w.deals)));
-    const leads = sum(weeks.map((w) => w.leads));
-    return { calls, opps, deals, leads };
-  }, [weeks]);
+    const d = new Date(currentWeekStart + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 7);
+    const lastWeekStart = d.toISOString().slice(0, 10);
+
+    const weekSums = (weekStart: string) => {
+      const rows = weeks.filter((w) => w.weekStart === weekStart);
+      return {
+        calls: sum(rows.map((w) => sum(w.calls))),
+        opps: sum(rows.map((w) => sum(w.opps))),
+      };
+    };
+    return {
+      lastWeekStart,
+      thisWeek: weekSums(currentWeekStart),
+      lastWeek: weekSums(lastWeekStart),
+    };
+  }, [weeks, currentWeekStart]);
 
   // ── Local mutations (optimistic) + persistence ────────────────────────────
   function setDay(id: number, metric: SalesMetric, day: number, value: number) {
@@ -178,24 +191,23 @@ export default function SalesActivityGrid({
           gap: 12,
         }}
       >
-        <SummaryCard label="Calls logged" value={String(totals.calls)} />
         <SummaryCard
-          label="Opportunities"
-          value={String(totals.opps)}
+          label={`Calls this week (W/S ${weekLabel(currentWeekStart)})`}
+          value={String(totals.thisWeek.calls)}
+        />
+        <SummaryCard
+          label="Opportunities this week"
+          value={String(totals.thisWeek.opps)}
           color={METRIC_COLORS.opps}
         />
         <SummaryCard
-          label="Deals"
-          value={String(totals.deals)}
-          color={METRIC_COLORS.deals}
+          label={`Calls last week (W/S ${weekLabel(totals.lastWeekStart)})`}
+          value={String(totals.lastWeek.calls)}
         />
         <SummaryCard
-          label="Calls → opp rate"
-          value={
-            totals.calls > 0
-              ? `${((totals.opps / totals.calls) * 100).toFixed(1)}%`
-              : "—"
-          }
+          label="Opportunities last week"
+          value={String(totals.lastWeek.opps)}
+          color={METRIC_COLORS.opps}
         />
       </div>
 
