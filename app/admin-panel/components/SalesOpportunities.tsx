@@ -22,7 +22,10 @@ import {
   updateSalesOpportunity,
   type SalesOpportunityPatch,
 } from "../lib/sales-actions";
-import { sendOpportunityToCapsule } from "../lib/capsule-actions";
+import {
+  sendOpportunityToCapsule,
+  sendPendingToCapsule,
+} from "../lib/capsule-actions";
 
 type Props = {
   initialOpps: SalesOpportunity[];
@@ -195,6 +198,55 @@ export default function SalesOpportunities({
   function removeRow(id: number) {
     setOpps((prev) => prev.filter((o) => o.id !== id));
     persist(() => deleteSalesOpportunity(id));
+  }
+
+  const pendingUnlinked = useMemo(
+    () =>
+      opps.filter(
+        (o) =>
+          o.status === "pending" &&
+          o.capsuleOpportunityId == null &&
+          o.company.trim() !== ""
+      ).length,
+    [opps]
+  );
+
+  // Push every pending, unlinked row into Capsule. The server caps each call,
+  // so keep calling while it reports more remaining; rows light up as Linked
+  // batch by batch.
+  function sendAllToCapsule() {
+    persist(async () => {
+      for (let round = 0; round < 20; round++) {
+        const res = await sendPendingToCapsule();
+        if (res.error) throw new Error(res.error);
+        if (res.results.length > 0) {
+          setOpps((prev) =>
+            prev.map((o) => {
+              const hit = res.results.find((r) => r.id === o.id);
+              return hit
+                ? {
+                    ...o,
+                    capsulePartyId: hit.capsulePartyId,
+                    capsuleOpportunityId: hit.capsuleOpportunityId,
+                  }
+                : o;
+            })
+          );
+        }
+        if (res.remaining === 0) {
+          if (res.failed > 0) {
+            throw new Error(
+              `${res.failed} row(s) couldn't be sent — check their company names.`
+            );
+          }
+          return;
+        }
+        // No progress this round → stop rather than spin.
+        if (res.results.length === 0) {
+          throw new Error("Sending stalled — some rows couldn't be created in Capsule.");
+        }
+      }
+    });
   }
 
   // Push a row into Capsule (matching/creating the contact, creating the
@@ -375,6 +427,26 @@ export default function SalesOpportunities({
         >
           + Add opportunity
         </button>
+        {capsuleConfigured && pendingUnlinked > 0 && (
+          <button
+            type="button"
+            onClick={sendAllToCapsule}
+            disabled={savingCount > 0}
+            title="Create a Capsule contact + opportunity for every pending row that isn't linked yet"
+            style={{
+              border: "1px solid #c7d2fe",
+              borderRadius: 10,
+              padding: "9px 14px",
+              background: "#eef2ff",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#3730a3",
+              cursor: "pointer",
+            }}
+          >
+            → Send {pendingUnlinked} pending to Capsule
+          </button>
+        )}
         <span
           style={{ fontSize: 12, color: savingCount > 0 ? "#0369a1" : "#a1a1aa" }}
         >
