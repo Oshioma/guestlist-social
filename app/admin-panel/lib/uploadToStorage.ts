@@ -19,6 +19,13 @@ const RESUMABLE_THRESHOLD = UPLOAD_CHUNK_SIZE; // 6 MB (one chunk)
 
 const DEFAULT_BUCKET = "gsocial";
 
+// Uploads are INSERT-only (never upsert). Supabase implements upsert as
+// INSERT ... ON CONFLICT DO UPDATE, which additionally needs SELECT and UPDATE
+// RLS policies on storage.objects. The public buckets deliberately have no
+// SELECT policy (so they can't be listed), so an upsert fails with "new row
+// violates row-level security policy". Object names are timestamped, so
+// there's nothing to overwrite anyway.
+
 type UploadOptions = {
   bucket?: string;
   onProgress?: (percent: number) => void;
@@ -62,7 +69,7 @@ export async function uploadToStorage(
       .from(targetBucket)
       .upload(objectName, file, {
         cacheControl: "3600",
-        upsert: true,
+        upsert: false,
         contentType: file.type || undefined,
       });
     if (error) throw error;
@@ -79,7 +86,7 @@ export async function uploadToStorage(
       retryDelays: [0, 3000, 5000, 10000, 20000],
       headers: {
         authorization: `Bearer ${session.access_token}`,
-        "x-upsert": "true",
+        "x-upsert": "false",
       },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
