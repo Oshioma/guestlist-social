@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
+import { defaultPublishTimeUtc } from "../../../lib/timezone";
 
 const VALID_STATUSES = [
   "none",
@@ -63,7 +64,9 @@ function scheduledForFromPost(
 ): string {
   const date = String(postDate).slice(0, 10);
   const time =
-    publishTime && /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+    publishTime && /^\d{2}:\d{2}$/.test(publishTime)
+      ? publishTime
+      : defaultPublishTimeUtc(date);
   return `${date}T${time}:00.000Z`;
 }
 
@@ -484,7 +487,7 @@ export async function saveProoferPostAction(
   pillarId: string | null,
   linkedIdeaId: string | null = null,
   linkedIdeaKindRaw: string | null = null,
-  publishTime: string = "18:00",
+  publishTime: string = "",
   publishTargets: string[] = ["instagram"]
 ) {
   if (!clientId || !postDate) {
@@ -496,7 +499,9 @@ export async function saveProoferPostAction(
   const normalizedMedia = normalizeMediaUrls(mediaUrls);
   const primaryImageUrl = normalizedMedia[0] ?? "";
   const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
-  const normalizedPublishTime = /^\d{2}:\d{2}$/.test(publishTime) ? publishTime : "18:00";
+  const normalizedPublishTime = /^\d{2}:\d{2}$/.test(publishTime)
+    ? publishTime
+    : defaultPublishTimeUtc(String(postDate).slice(0, 10));
   const normalizedLinkedIdeaKind = normalizeIdeaKind(linkedIdeaKindRaw);
   const normalizedLinkedIdeaId =
     linkedIdeaId && linkedIdeaId.trim() && normalizedLinkedIdeaKind
@@ -824,7 +829,7 @@ export async function propagateProoferPlatformForwardAction(
       media_urls: [],
       status: "none",
       pillar_id: null,
-      publish_time: "18:00",
+      publish_time: defaultPublishTimeUtc(dateKey),
       created_by: authorEmail,
     }));
 
@@ -914,7 +919,7 @@ export async function propagateProoferPillarForwardAction(
         media_urls: [],
         status: "none",
         pillar_id: normalizedPillarId,
-        publish_time: "18:00",
+        publish_time: defaultPublishTimeUtc(dateKey),
         created_by: authorEmail,
       }));
 

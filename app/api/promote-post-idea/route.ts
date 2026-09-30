@@ -12,6 +12,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { defaultPublishTimeUtc } from "../../../lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
         media_urls: [],
         pillar_id: idea.content_pillar_id ?? null,
         status: "none",
-        publish_time: "18:00",
+        publish_time: defaultPublishTimeUtc(String(idea.post_slot_date).slice(0, 10)),
         created_by: "ai-promote",
       })
       .select("id")

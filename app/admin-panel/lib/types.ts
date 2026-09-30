@@ -329,7 +329,7 @@ export type ProoferPost = {
   caption: string;
   imageUrl: string;
   mediaUrls: string[];
-  publishTime: string; // "HH:MM" in UTC, default "18:00"
+  publishTime: string; // "HH:MM" in UTC; entered/shown in the display zone, default 6pm UK
   /** Destinations this post publishes to. Empty means nothing is selected. */
   publishTargets: PublishTarget[];
   status: ProoferStatus;

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferAccess } from "@/lib/auth/permissions";
 import { getOnboardingState } from "@/lib/onboarding";
+import { DEFAULT_TIMEZONE, DEFAULT_PUBLISH_CLOCK, zoneHHMMToUtcHHMM } from "@/lib/timezone";
 import { saveProoferPostAction } from "@/app/admin-panel/lib/proofer-actions";
 
 // ---------------------------------------------------------------------------
@@ -576,7 +577,8 @@ export async function saveFirstPostAction(input: {
   const clientId = String(input.clientId ?? "").trim();
   const caption = String(input.caption ?? "");
   const postDate = String(input.postDate ?? "").trim();
-  const publishTime = /^\d{2}:\d{2}$/.test(input.publishTime) ? input.publishTime : "18:00";
+  // The tour's time picker is a plain UK clock time; publish_time is stored as UTC.
+  const localTime = /^\d{2}:\d{2}$/.test(input.publishTime) ? input.publishTime : DEFAULT_PUBLISH_CLOCK;
   const mediaUrls = Array.isArray(input.mediaUrls)
     ? input.mediaUrls.filter((u) => typeof u === "string" && u.trim())
     : [];
@@ -626,7 +628,7 @@ export async function saveFirstPostAction(input: {
       null,
       null,
       null,
-      publishTime,
+      zoneHHMMToUtcHHMM(postDate, localTime, DEFAULT_TIMEZONE),
       ["instagram"]
     );
   } catch (e) {

@@ -1,12 +1,13 @@
 /**
  * Display timezone for publish times.
  *
- * The whole publishing pipeline stores and enters times as UTC/GMT:
+ * The whole publishing pipeline stores times as UTC/GMT:
  * `publish_time` is an "HH:MM" string in UTC, and `scheduled_for` /
  * `published_at` are UTC timestamps. That's the right storage model — it
  * never drifts. But operators think in their own local time ("this post
  * goes out at 9pm my time"), so the *display* layer converts UTC into a
- * region the agency picks in Settings.
+ * region the agency picks in Settings, and time inputs take a wall-clock time
+ * in that region and convert it back to UTC on the way in.
  *
  * This module is pure (no Supabase, no server-only APIs) so it's safe to
  * import from both server pages and client components. The get/set helpers
@@ -312,4 +313,64 @@ export function zonedTimeToUtcIso(
   );
   const offsetMin = zoneOffsetMinutes(new Date(guessMs), tz);
   return new Date(guessMs - offsetMin * 60000).toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// Publish-time entry in local time.
+//
+// `publish_time` stays stored as a UTC "HH:MM" anchored to the post's date,
+// but operators type it — and read it back in the time inputs — as a
+// wall-clock time in the display zone (UK by default). So "18:00" in the
+// Proofer means 6pm on a UK clock, BST or GMT alike, never "18:00 GMT which
+// is 7pm in summer". These two helpers are the conversion at that boundary.
+// ---------------------------------------------------------------------------
+
+// The default publish slot, as a wall-clock time in the display zone.
+export const DEFAULT_PUBLISH_CLOCK = "18:00";
+
+// Stored UTC "HH:MM" on `dateKey` → the "HH:MM" it reads as in `timeZone`.
+// Returns "" for malformed input.
+export function utcHHMMToZoneHHMM(
+  dateKey: string,
+  utcHHMM: string,
+  timeZone: string
+): string {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateKey ?? "");
+  const tm = /^(\d{1,2}):(\d{2})$/.exec(utcHHMM ?? "");
+  if (!dm || !tm) return "";
+  const instant = new Date(
+    Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), Number(tm[1]), Number(tm[2]))
+  );
+  return hhmmInZone(instant, timeZone);
+}
+
+// Wall-clock "HH:MM" in `timeZone` on `dateKey` → the UTC "HH:MM" we store.
+// publish_time has no date of its own — it's always read against the post's
+// date — so a local time whose UTC instant falls on a different calendar day
+// (e.g. 00:30 BST = 23:30Z the day before) can't be represented. Rather than
+// silently scheduling it a day late, clamp to the nearest time that stays on
+// the post's day ("00:00" / "23:59" UTC); the input then shows the clamped
+// time so the operator sees what will actually happen. Returns "" for
+// malformed input.
+export function zoneHHMMToUtcHHMM(
+  dateKey: string,
+  hhmm: string,
+  timeZone: string
+): string {
+  const iso = zonedTimeToUtcIso(dateKey, hhmm, timeZone);
+  if (!iso) return "";
+  const day = dateKey.slice(0, 10);
+  const utcDay = iso.slice(0, 10);
+  if (utcDay < day) return "00:00";
+  if (utcDay > day) return "23:59";
+  return iso.slice(11, 16);
+}
+
+// The UTC "HH:MM" to store for a new post on `dateKey` so it goes out at the
+// default slot (6pm) on the display-zone clock — 17:00Z in BST, 18:00Z in GMT.
+export function defaultPublishTimeUtc(
+  dateKey: string,
+  timeZone: string = DEFAULT_TIMEZONE
+): string {
+  return zoneHHMMToUtcHHMM(dateKey, DEFAULT_PUBLISH_CLOCK, timeZone) || DEFAULT_PUBLISH_CLOCK;
 }
