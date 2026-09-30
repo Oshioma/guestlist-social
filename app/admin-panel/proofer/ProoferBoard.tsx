@@ -4630,16 +4630,13 @@ export default function ProoferBoard({
                       <div
                         style={{
                           width: "100%",
-                          // Video shows in Instagram's tallest feed frame (4:5)
-                          // and is contained (not cropped) so the whole clip is
-                          // visible; images stay square. An empty square preview
-                          // eats most of a phone screen, so shrink the
-                          // placeholder until there's media to show.
-                          aspectRatio: activeIsVideo
-                            ? "4 / 5"
-                            : isNarrow && !activeUrl
-                            ? undefined
-                            : "1 / 1",
+                          // Instagram's tallest feed frame — 4:5, i.e. a
+                          // 1080×1350 portrait post — for images and video
+                          // alike. Video is contained (not cropped) so the
+                          // whole clip is visible; images fill the frame. An
+                          // empty preview eats most of a phone screen, so
+                          // shrink the placeholder until there's media to show.
+                          aspectRatio: isNarrow && !activeUrl ? undefined : "4 / 5",
                           height: isNarrow && !activeUrl ? 90 : undefined,
                           maxHeight: activeIsVideo ? "80vh" : undefined,
                           background: activeIsVideo ? "#000" : "#f4f4f5",
