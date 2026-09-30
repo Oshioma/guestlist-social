@@ -47,6 +47,9 @@ import {
   hhmmInZone,
   zonedTimeToUtcIso,
   zoneAbbrev,
+  defaultPublishTimeUtc,
+  utcHHMMToZoneHHMM,
+  zoneHHMMToUtcHHMM,
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import { rememberLastClient } from "../../proofer/last-client";
@@ -685,7 +688,7 @@ export default function ProoferBoard({
   initialPillars,
   initialIdeas,
   initialPostIdeas,
-  timeZone = "Etc/GMT",
+  timeZone = DEFAULT_TIMEZONE,
   // Where the board's own client/month navigation and Publish Queue button
   // point. Defaults to the admin-panel route so the existing /app/proofer page
   // is unchanged; the standalone /proofer page overrides basePath so switching
@@ -802,7 +805,7 @@ export default function ProoferBoard({
       if (!initial[slotKey]) {
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
-        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] };
+        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] };
       }
     }
     return initial;
@@ -905,7 +908,7 @@ export default function ProoferBoard({
         if (next[slotKey]) continue;
         const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
           .filter(Boolean).join("\n\n");
-        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] };
+        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] };
       }
       return next;
     });
@@ -1163,7 +1166,7 @@ export default function ProoferBoard({
       pillarId: existing?.pillarId ?? null,
       linkedIdeaId: existing?.linkedIdeaId ?? null,
       linkedIdeaKind: existing?.linkedIdeaKind ?? null,
-      publishTime: existing?.publishTime ?? "18:00",
+      publishTime: existing?.publishTime ?? defaultPublishTimeUtc(dateKey, timeZone),
       // A brand new slot defaults to every connected platform (both IG + FB
       // when both are connected), falling back to Instagram when we know of
       // none — which also matches what an unmigrated row implies.
@@ -1627,7 +1630,7 @@ export default function ProoferBoard({
                       .filter(Boolean).join("\n\n");
                     return {
                       ...prev,
-                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: "18:00", publishTargets: [...defaultTargets] },
+                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] },
                     };
                   });
                   // Fetch a suggested stock photo for this idea in the background
@@ -3242,13 +3245,13 @@ export default function ProoferBoard({
                     >
                       <input
                         type="time"
-                        value={draft.publishTime}
-                        onChange={(e) =>
-                          updateDraft(dateKey, activePlatform, {
-                            publishTime: e.target.value,
-                          })
-                        }
-                        aria-label="Publish time (GMT)"
+                        value={utcHHMMToZoneHHMM(dateKey, draft.publishTime, timeZone) || draft.publishTime}
+                        onChange={(e) => {
+                          // Typed in the display zone (UK time); stored as UTC.
+                          const utc = zoneHHMMToUtcHHMM(dateKey, e.target.value, timeZone);
+                          if (utc) updateDraft(dateKey, activePlatform, { publishTime: utc });
+                        }}
+                        aria-label={`Publish time (${zoneAbbrev(timeZone, new Date(`${dateKey}T12:00:00Z`))})`}
                         style={{
                           padding: "5px 9px",
                           borderRadius: 8,
@@ -3263,7 +3266,7 @@ export default function ProoferBoard({
                       <span
                         style={{ fontSize: 11, color: "#a1a1aa", fontWeight: 600 }}
                       >
-                        GMT
+                        {zoneAbbrev(timeZone, new Date(`${dateKey}T12:00:00Z`))}
                       </span>
                     </div>
                   )}
@@ -4462,8 +4465,12 @@ export default function ProoferBoard({
                       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <input
                           type="time"
-                          value={draft.publishTime}
-                          onChange={(e) => updateDraft(dateKey, activePlatform, { publishTime: e.target.value })}
+                          value={utcHHMMToZoneHHMM(dateKey, draft.publishTime, timeZone) || draft.publishTime}
+                          onChange={(e) => {
+                            // Typed in the display zone (UK time); stored as UTC.
+                            const utc = zoneHHMMToUtcHHMM(dateKey, e.target.value, timeZone);
+                            if (utc) updateDraft(dateKey, activePlatform, { publishTime: utc });
+                          }}
                           disabled={isLocked}
                           style={{
                             padding: isNarrow ? "9px 10px" : "4px 6px",
@@ -4477,28 +4484,7 @@ export default function ProoferBoard({
                           }}
                         />
                         <span style={{ fontSize: isNarrow ? 11 : 9, color: "#a1a1aa" }}>
-                          Publish (GMT)
-                          {(() => {
-                            // Show the local equivalent whenever the display
-                            // zone renders a different clock than plain GMT —
-                            // e.g. UK summer time (BST) or another region.
-                            const local = formatUtcClockInZone(
-                              dateKey,
-                              draft.publishTime,
-                              timeZone
-                            );
-                            const gmt = formatUtcClockInZone(
-                              dateKey,
-                              draft.publishTime,
-                              "Etc/GMT"
-                            );
-                            return local && local !== gmt ? (
-                              <span style={{ color: "#6366f1", fontWeight: 600 }}>
-                                {" · "}
-                                {local}
-                              </span>
-                            ) : null;
-                          })()}
+                          Publish ({zoneAbbrev(timeZone, new Date(`${dateKey}T12:00:00Z`))})
                         </span>
                       </div>
                       )}
