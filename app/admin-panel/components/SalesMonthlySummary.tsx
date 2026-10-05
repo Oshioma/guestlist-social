@@ -9,9 +9,13 @@
 // derived from the same rows the grids edit, so it can't drift. Day counts
 // are bucketed by their actual date, so a week that straddles a month end
 // splits correctly; weekly leads go to the month the week starts in.
+//
+// "Split by rep" adds one row per rep under each team total. Only the
+// activity columns split — opportunities aren't logged against a rep, so the
+// pipeline columns stay team-level.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SalesOpportunity, SalesWeek } from "../lib/sales-shared";
 
 type Props = {
@@ -21,19 +25,25 @@ type Props = {
   currentMonthStart: string;
 };
 
-type MonthRow = {
-  month: string; // "2026-10"
+type Activity = {
   calls: number;
   opps: number;
   deals: number;
   leads: number;
+};
+
+type MonthRow = Activity & {
+  month: string; // "2026-10"
   pitched: number;
   booked: number;
   bookedValue: number;
   pendingValue: number;
+  // Per-rep activity for this month, keyed by rep name.
+  reps: Map<string, Activity>;
 };
 
 const COLLAPSED_MONTHS = 6;
+const SPLIT_KEY = "sales-monthly-split-by-rep";
 
 const gbp = new Intl.NumberFormat("en-GB", {
   style: "currency",
@@ -41,17 +51,19 @@ const gbp = new Intl.NumberFormat("en-GB", {
   maximumFractionDigits: 0,
 });
 
+function emptyActivity(): Activity {
+  return { calls: 0, opps: 0, deals: 0, leads: 0 };
+}
+
 function emptyRow(month: string): MonthRow {
   return {
     month,
-    calls: 0,
-    opps: 0,
-    deals: 0,
-    leads: 0,
+    ...emptyActivity(),
     pitched: 0,
     booked: 0,
     bookedValue: 0,
     pendingValue: 0,
+    reps: new Map(),
   };
 }
 
@@ -85,12 +97,36 @@ export default function SalesMonthlySummary({
   currentMonthStart,
 }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [splitByRep, setSplitByRep] = useState(true);
   const currentMonth = currentMonthStart.slice(0, 7);
+
+  // Remember the split toggle per viewer. Purely a convenience — the page
+  // renders fine (split on) if storage is unavailable.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(SPLIT_KEY);
+      if (saved !== null) setSplitByRep(saved === "1");
+    } catch {
+      // storage blocked — keep the default
+    }
+  }, []);
+
+  function toggleSplit() {
+    setSplitByRep((v) => {
+      try {
+        window.localStorage.setItem(SPLIT_KEY, v ? "0" : "1");
+      } catch {
+        // storage blocked — the toggle still works for this visit
+      }
+      return !v;
+    });
+  }
 
   // Every month from the earliest logged one up to now, newest first — gaps
   // included, so a quiet month shows as zeros rather than vanishing.
-  const rows = useMemo(() => {
+  const { rows, repCount } = useMemo(() => {
     const byMonth = new Map<string, MonthRow>();
+    const allReps = new Set<string>();
     const row = (month: string) => {
       let r = byMonth.get(month);
       if (!r) {
@@ -99,15 +135,39 @@ export default function SalesMonthlySummary({
       }
       return r;
     };
+    const repRow = (month: string, rep: string) => {
+      const r = row(month);
+      let a = r.reps.get(rep);
+      if (!a) {
+        a = emptyActivity();
+        r.reps.set(rep, a);
+      }
+      return a;
+    };
 
     for (const w of weeks) {
+      allReps.add(w.rep);
       for (let i = 0; i < 5; i++) {
-        const r = row(addDays(w.weekStart, i).slice(0, 7));
-        r.calls += w.calls[i] || 0;
-        r.opps += w.opps[i] || 0;
-        r.deals += w.deals[i] || 0;
+        const month = addDays(w.weekStart, i).slice(0, 7);
+        const calls = w.calls[i] || 0;
+        const opps = w.opps[i] || 0;
+        const deals = w.deals[i] || 0;
+        const r = row(month);
+        r.calls += calls;
+        r.opps += opps;
+        r.deals += deals;
+        // Only open a rep row for a month the rep actually logged in, so a
+        // week's empty spill-over days don't add a row of zeros.
+        if (calls || opps || deals || i === 0) {
+          const a = repRow(month, w.rep);
+          a.calls += calls;
+          a.opps += opps;
+          a.deals += deals;
+        }
       }
-      row(w.weekStart.slice(0, 7)).leads += w.leads || 0;
+      const startMonth = w.weekStart.slice(0, 7);
+      row(startMonth).leads += w.leads || 0;
+      repRow(startMonth, w.rep).leads += w.leads || 0;
     }
 
     for (const o of opportunities) {
@@ -124,18 +184,21 @@ export default function SalesMonthlySummary({
     }
 
     const keys = [...byMonth.keys()].filter((m) => m <= currentMonth).sort();
-    if (keys.length === 0) return [];
     const out: MonthRow[] = [];
-    for (let m = currentMonth; m >= keys[0]; m = prevMonth(m)) {
-      out.push(byMonth.get(m) ?? emptyRow(m));
+    if (keys.length > 0) {
+      for (let m = currentMonth; m >= keys[0]; m = prevMonth(m)) {
+        out.push(byMonth.get(m) ?? emptyRow(m));
+      }
     }
-    return out;
+    return { rows: out, repCount: allReps.size };
   }, [weeks, opportunities, currentMonth]);
 
   if (rows.length === 0) return null;
 
   const visible = showAll ? rows : rows.slice(0, COLLAPSED_MONTHS);
   const maxCalls = Math.max(1, ...visible.map((r) => r.calls));
+  // Splitting a single rep just repeats the total, so only offer it for 2+.
+  const showRepRows = splitByRep && repCount > 1;
 
   return (
     <section
@@ -163,26 +226,35 @@ export default function SalesMonthlySummary({
           <p style={{ fontSize: 12, color: "#71717a", margin: "4px 0 0" }}>
             Activity from the weekly grid, pipeline from the opportunity log.
             Arrows compare with the month before.
+            {showRepRows && " Pipeline isn't logged per rep, so it's team-only."}
           </p>
         </div>
-        {rows.length > COLLAPSED_MONTHS && (
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            style={{
-              border: "1px solid #e4e4e7",
-              background: "#fff",
-              borderRadius: 8,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#52525b",
-              cursor: "pointer",
-            }}
-          >
-            {showAll ? "Show recent" : `Show all ${rows.length} months`}
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {repCount > 1 && (
+            <button
+              type="button"
+              onClick={toggleSplit}
+              aria-pressed={splitByRep}
+              style={{
+                ...buttonStyle,
+                background: splitByRep ? "#18181b" : "#fff",
+                color: splitByRep ? "#fff" : "#52525b",
+                borderColor: splitByRep ? "#18181b" : "#e4e4e7",
+              }}
+            >
+              Split by rep
+            </button>
+          )}
+          {rows.length > COLLAPSED_MONTHS && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              style={buttonStyle}
+            >
+              {showAll ? "Show recent" : `Show all ${rows.length} months`}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -217,94 +289,179 @@ export default function SalesMonthlySummary({
             {visible.map((r, i) => {
               const prev = rows[i + 1] ?? null;
               const isCurrent = r.month === currentMonth;
+              const bg = isCurrent ? "#fef3c7" : undefined;
+              const reps = showRepRows
+                ? [...r.reps.entries()].sort(([a], [b]) => a.localeCompare(b))
+                : [];
               return (
-                <tr
+                <MonthGroup
                   key={r.month}
-                  style={{ background: isCurrent ? "#fef3c7" : undefined }}
-                >
-                  <td style={{ ...tdStyle, textAlign: "left", fontWeight: 600 }}>
-                    {monthLabel(r.month)}
-                    {isCurrent && (
-                      <span
-                        style={{
-                          marginLeft: 6,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: "#92400e",
-                          textTransform: "uppercase",
-                          letterSpacing: 0.4,
-                        }}
-                      >
-                        so far
-                      </span>
-                    )}
-                  </td>
-                  <td style={tdStyle}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "flex-end",
-                        gap: 8,
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          display: "inline-block",
-                          width: 48,
-                          height: 6,
-                          borderRadius: 3,
-                          background: "#f4f4f5",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <span
-                          style={{
-                            display: "block",
-                            height: "100%",
-                            width: `${(r.calls / maxCalls) * 100}%`,
-                            background: "#18181b",
-                          }}
-                        />
-                      </span>
-                      <Num value={r.calls} prev={prev?.calls} />
-                    </div>
-                  </td>
-                  <td style={{ ...tdStyle, color: "#0369a1" }}>
-                    <Num value={r.opps} prev={prev?.opps} />
-                  </td>
-                  <td style={{ ...tdStyle, color: "#15803d" }}>
-                    <Num value={r.deals} prev={prev?.deals} />
-                  </td>
-                  <td style={tdStyle}>
-                    <Num value={r.leads} prev={prev?.leads} />
-                  </td>
-                  <td style={tdMuted}>{pct(r.opps, r.calls)}</td>
-                  <td style={tdMuted}>{pct(r.deals, r.opps)}</td>
-                  <td style={tdStyle}>
-                    <Num value={r.pitched} prev={prev?.pitched} />
-                  </td>
-                  <td style={tdStyle}>
-                    <Num value={r.booked} prev={prev?.booked} />
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>
-                    <Num
-                      value={r.bookedValue}
-                      prev={prev?.bookedValue}
-                      format={(n) => gbp.format(n)}
-                    />
-                  </td>
-                  <td style={tdMuted}>
-                    {r.pendingValue > 0 ? gbp.format(r.pendingValue) : "—"}
-                  </td>
-                </tr>
+                  row={r}
+                  prev={prev}
+                  isCurrent={isCurrent}
+                  background={bg}
+                  maxCalls={maxCalls}
+                  reps={reps}
+                  showTeamLabel={showRepRows}
+                />
               );
             })}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+// One month: the team-total row, then (when split) a row per rep.
+function MonthGroup({
+  row: r,
+  prev,
+  isCurrent,
+  background,
+  maxCalls,
+  reps,
+  showTeamLabel,
+}: {
+  row: MonthRow;
+  prev: MonthRow | null;
+  isCurrent: boolean;
+  background: string | undefined;
+  maxCalls: number;
+  reps: [string, Activity][];
+  showTeamLabel: boolean;
+}) {
+  return (
+    <>
+      <tr style={{ background }}>
+        <td style={{ ...tdStyle, textAlign: "left", fontWeight: 600 }}>
+          {monthLabel(r.month)}
+          {isCurrent && (
+            <span
+              style={{
+                marginLeft: 6,
+                fontSize: 10,
+                fontWeight: 600,
+                color: "#92400e",
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+              }}
+            >
+              so far
+            </span>
+          )}
+          {showTeamLabel && (
+            <span
+              style={{
+                marginLeft: 6,
+                fontSize: 11,
+                fontWeight: 500,
+                color: "#a1a1aa",
+              }}
+            >
+              Team
+            </span>
+          )}
+        </td>
+        <td style={tdStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 8,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                display: "inline-block",
+                width: 48,
+                height: 6,
+                borderRadius: 3,
+                background: "#f4f4f5",
+                overflow: "hidden",
+              }}
+            >
+              <span
+                style={{
+                  display: "block",
+                  height: "100%",
+                  width: `${(r.calls / maxCalls) * 100}%`,
+                  background: "#18181b",
+                }}
+              />
+            </span>
+            <Num value={r.calls} prev={prev?.calls} />
+          </div>
+        </td>
+        <td style={{ ...tdStyle, color: "#0369a1" }}>
+          <Num value={r.opps} prev={prev?.opps} />
+        </td>
+        <td style={{ ...tdStyle, color: "#15803d" }}>
+          <Num value={r.deals} prev={prev?.deals} />
+        </td>
+        <td style={tdStyle}>
+          <Num value={r.leads} prev={prev?.leads} />
+        </td>
+        <td style={tdMuted}>{pct(r.opps, r.calls)}</td>
+        <td style={tdMuted}>{pct(r.deals, r.opps)}</td>
+        <td style={tdStyle}>
+          <Num value={r.pitched} prev={prev?.pitched} />
+        </td>
+        <td style={tdStyle}>
+          <Num value={r.booked} prev={prev?.booked} />
+        </td>
+        <td style={{ ...tdStyle, fontWeight: 600 }}>
+          <Num
+            value={r.bookedValue}
+            prev={prev?.bookedValue}
+            format={(n) => gbp.format(n)}
+          />
+        </td>
+        <td style={tdMuted}>
+          {r.pendingValue > 0 ? gbp.format(r.pendingValue) : "—"}
+        </td>
+      </tr>
+
+      {reps.map(([rep, a]) => {
+        // Compare with this rep's own previous month (zero if they didn't log).
+        const p = prev ? (prev.reps.get(rep) ?? emptyActivity()) : undefined;
+        return (
+          <tr key={rep} style={{ background, fontSize: 12 }}>
+            <td
+              style={{
+                ...tdRep,
+                textAlign: "left",
+                paddingLeft: 28,
+                color: "#52525b",
+              }}
+            >
+              {rep}
+            </td>
+            <td style={tdRep}>
+              <Num value={a.calls} prev={p?.calls} />
+            </td>
+            <td style={{ ...tdRep, color: "#0369a1" }}>
+              <Num value={a.opps} prev={p?.opps} />
+            </td>
+            <td style={{ ...tdRep, color: "#15803d" }}>
+              <Num value={a.deals} prev={p?.deals} />
+            </td>
+            <td style={tdRep}>
+              <Num value={a.leads} prev={p?.leads} />
+            </td>
+            <td style={{ ...tdRep, color: "#71717a" }}>
+              {pct(a.opps, a.calls)}
+            </td>
+            <td style={{ ...tdRep, color: "#71717a" }}>
+              {pct(a.deals, a.opps)}
+            </td>
+            <td style={tdRep} colSpan={4} />
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
@@ -339,6 +496,17 @@ function Num({
   );
 }
 
+const buttonStyle: React.CSSProperties = {
+  border: "1px solid #e4e4e7",
+  background: "#fff",
+  borderRadius: 8,
+  padding: "6px 10px",
+  fontSize: 12,
+  fontWeight: 600,
+  color: "#52525b",
+  cursor: "pointer",
+};
+
 const thStyle: React.CSSProperties = {
   padding: "8px 12px",
   fontSize: 11,
@@ -359,3 +527,9 @@ const tdStyle: React.CSSProperties = {
 };
 
 const tdMuted: React.CSSProperties = { ...tdStyle, color: "#71717a" };
+
+const tdRep: React.CSSProperties = {
+  ...tdStyle,
+  padding: "5px 12px",
+  borderBottom: "1px dashed #f1f1f3",
+};
