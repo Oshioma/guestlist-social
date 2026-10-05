@@ -1,14 +1,22 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDisplayTimezone } from "@/lib/app-settings";
-import { getSalesWeeks } from "@/app/admin-panel/lib/sales-actions";
+import {
+  getSalesOpportunities,
+  getSalesWeeks,
+} from "@/app/admin-panel/lib/sales-actions";
 import SalesActivityGrid from "@/app/admin-panel/components/SalesActivityGrid";
+import SalesMonthlySummary from "@/app/admin-panel/components/SalesMonthlySummary";
 
 export const dynamic = "force-dynamic";
 
-// Weekly activity tab — the calls / opps / deals grid, one row per (week, rep).
+// Weekly activity tab — a monthly breakdown on top, then the calls / opps /
+// deals grid, one row per (week, rep).
 export default async function SalesPage() {
   // Membership is enforced by the sales layout (and RLS underneath).
-  const weeks = await getSalesWeeks();
+  const [weeks, opportunities] = await Promise.all([
+    getSalesWeeks(),
+    getSalesOpportunities(),
+  ]);
 
   // Today's Monday in the agency's display timezone, so "this week" doesn't
   // slip a day around midnight for a server running in UTC.
@@ -24,6 +32,16 @@ export default async function SalesPage() {
   const currentWeekStart = today.toISOString().slice(0, 10);
 
   return (
-    <SalesActivityGrid initialWeeks={weeks} currentWeekStart={currentWeekStart} />
+    <>
+      <SalesMonthlySummary
+        weeks={weeks}
+        opportunities={opportunities}
+        currentMonthStart={todayKey.slice(0, 7) + "-01"}
+      />
+      <SalesActivityGrid
+        initialWeeks={weeks}
+        currentWeekStart={currentWeekStart}
+      />
+    </>
   );
 }
