@@ -1191,9 +1191,13 @@ export default function ProoferBoard({
     platform: ProoferPlatform,
     url: string
   ) {
-    const current = getDraftFor(dateKey, platform);
-    updateDraft(dateKey, platform, {
-      mediaUrls: [...current.mediaUrls, url],
+    // Append against the latest state (not this render's `drafts`): multi-file
+    // uploads and multi-image pastes call this several times from one async
+    // loop, and a stale snapshot would keep only the last URL.
+    const key = postKey(dateKey, platform);
+    setDrafts((prev) => {
+      const base = prev[key] ?? getDraftFor(dateKey, platform);
+      return { ...prev, [key]: { ...base, mediaUrls: [...base.mediaUrls, url] } };
     });
   }
 
@@ -4157,6 +4161,7 @@ export default function ProoferBoard({
                           onUploaded={(url) => addMediaUrl(dateKey, activePlatform, url)}
                           label="🖼️ Image"
                           accept="image/*"
+                          multiple
                           buttonStyle={mediaChip}
                         />
                         <ImageUpload

@@ -542,7 +542,8 @@ function PostCard({
             folder={`proofer/${clientId}/${post.postDate.slice(0, 7)}`}
             bucket="postimages"
             accept="image/*"
-            label="Add image"
+            label="Add images"
+            multiple
             compact
             onUploaded={(url) => setMediaUrls((prev) => [...prev, url])}
           />
