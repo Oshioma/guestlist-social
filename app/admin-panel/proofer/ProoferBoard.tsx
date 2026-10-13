@@ -1022,18 +1022,37 @@ export default function ProoferBoard({
   // interval while it's visible. router.refresh() only re-seeds the server data
   // (posts + their status); it never clobbers an in-progress local draft, which
   // lives in client state and is preserved across the refresh.
+  //
+  // Each refresh streams the whole board, and a stream cut off mid-way (Wi-Fi
+  // blip, laptop waking from sleep) surfaces as "network error" in the error
+  // boundary. So: skip while offline, and throttle — "focus" and
+  // "visibilitychange" both fire on the same tab switch, and a refocus right
+  // after the interval tick shouldn't stack a second full-board fetch on top.
   useEffect(() => {
     if (!clientId) return;
+    let lastRefresh = Date.now();
     const reconcile = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState !== "visible") return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      if (Date.now() - lastRefresh < 10_000) return;
+      lastRefresh = Date.now();
+      router.refresh();
     };
-    document.addEventListener("visibilitychange", reconcile);
-    window.addEventListener("focus", reconcile);
+    // On wake/refocus the network often isn't back yet even though
+    // navigator.onLine says it is — give it a moment before fetching.
+    let wakeTimer: number | undefined;
+    const reconcileSoon = () => {
+      window.clearTimeout(wakeTimer);
+      wakeTimer = window.setTimeout(reconcile, 1500);
+    };
+    document.addEventListener("visibilitychange", reconcileSoon);
+    window.addEventListener("focus", reconcileSoon);
     const id = window.setInterval(reconcile, 30000);
     return () => {
-      document.removeEventListener("visibilitychange", reconcile);
-      window.removeEventListener("focus", reconcile);
+      document.removeEventListener("visibilitychange", reconcileSoon);
+      window.removeEventListener("focus", reconcileSoon);
       window.clearInterval(id);
+      window.clearTimeout(wakeTimer);
     };
   }, [clientId, router]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useErrorRecovery } from "@/lib/use-error-recovery";
 
 export default function ProoferError({
   error,
@@ -12,6 +13,7 @@ export default function ProoferError({
   useEffect(() => {
     console.error("Proofer render error:", error);
   }, [error]);
+  const { retry, isNetwork, autoRetrying } = useErrorRecovery(error, reset);
 
   return (
     <div
@@ -30,10 +32,14 @@ export default function ProoferError({
           margin: "0 0 8px",
         }}
       >
-        Something went wrong
+        {isNetwork ? (autoRetrying ? "Reconnecting…" : "Connection lost") : "Something went wrong"}
       </h2>
       <p style={{ fontSize: 14, color: "#71717a", margin: "0 0 16px" }}>
-        {error.message || "The page failed to load after saving."}
+        {isNetwork
+          ? autoRetrying
+            ? "The connection dropped while the page was loading. Trying again…"
+            : "We couldn’t reach the server. Check your internet connection, then try again."
+          : error.message || "The page failed to load after saving."}
       </p>
       {error.digest && (
         <p style={{ fontSize: 11, color: "#a1a1aa", margin: "0 0 16px" }}>
@@ -42,7 +48,7 @@ export default function ProoferError({
       )}
       <button
         type="button"
-        onClick={reset}
+        onClick={retry}
         style={{
           padding: "10px 20px",
           borderRadius: 8,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useErrorRecovery } from "@/lib/use-error-recovery";
 
 // Error boundary for the whole Proofer surface (the board, Teams, the Meta
 // page-picker, …). Next.js normally shows a generic "Application error: a
@@ -18,6 +19,30 @@ export default function ProoferError({
     // Also log it, for anyone who does have the console open / server logs.
     console.error("Proofer error boundary:", error);
   }, [error]);
+  const { retry, isNetwork, autoRetrying } = useErrorRecovery(error, reset);
+
+  if (isNetwork) {
+    return (
+      <main style={wrap}>
+        <div style={card}>
+          <h1 style={h1}>{autoRetrying ? "Reconnecting…" : "Connection lost"}</h1>
+          <p style={sub}>
+            {autoRetrying
+              ? "The connection dropped while the page was loading. Trying again…"
+              : "We couldn’t reach the server. Check your internet connection, then try again."}
+          </p>
+          <div style={row}>
+            <button type="button" onClick={retry} style={primary}>
+              Try again
+            </button>
+            <a href="/teams" style={ghost}>
+              Back to Teams
+            </a>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main style={wrap}>
@@ -34,7 +59,7 @@ export default function ProoferError({
           </p>
         )}
         <div style={row}>
-          <button type="button" onClick={() => reset()} style={primary}>
+          <button type="button" onClick={retry} style={primary}>
             Try again
           </button>
           <a href="/teams" style={ghost}>
