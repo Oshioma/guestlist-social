@@ -53,6 +53,7 @@ import {
 } from "../../../lib/timezone";
 import type { ProoferIdeaLite } from "../lib/queries";
 import { rememberLastClient } from "../../proofer/last-client";
+import { readDraft, writeDraft, clearDraft, clearAllDrafts } from "../../../lib/draft-storage";
 import {
   saveProoferPostAction,
   updateProoferStatusAction,
@@ -930,6 +931,101 @@ export default function ProoferBoard({
     draftsRef.current = drafts;
   }, [drafts]);
 
+  // ── Draft auto-save ─────────────────────────────────────────────────────────
+  // Unsaved edits live only in `drafts` state, so a refresh, a closed tab or a
+  // crash into the error boundary used to lose them. Mirror them to
+  // localStorage per user + client + month and restore on load. A draft is
+  // dropped from storage once it's saved (handleStatus deletes it from state),
+  // and all drafts are wiped on sign out.
+  //
+  // Each slot carries its own last-edited time so a restore never masks a post
+  // someone saved after the draft was typed.
+  type StoredDrafts = Record<string, { draft: Draft; editedAt: number }>;
+  const [draftUserId, setDraftUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    createClient()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (!cancelled) setDraftUserId(data.session?.user.id ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const draftStorageKey =
+    draftUserId && clientId ? `proofer:${draftUserId}:${clientId}:${month}` : null;
+  // Which key the current `drafts` belong to. Writes are held until that key
+  // has been restored, so switching client/month (which empties `drafts`)
+  // can't overwrite the new view's saved drafts with nothing.
+  const restoredKeyRef = useRef<string | null>(null);
+  const seededCaptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const idea of postIdeas) {
+      const key = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+      map.set(
+        key,
+        [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags].filter(Boolean).join("\n\n")
+      );
+    }
+    return map;
+  }, [postIdeas]);
+  const persistedRef = useRef<StoredDrafts>({});
+
+  useEffect(() => {
+    if (!draftStorageKey) return;
+    const stored = readDraft<StoredDrafts>(draftStorageKey) ?? {};
+    const keep: StoredDrafts = {};
+    for (const [key, entry] of Object.entries(stored)) {
+      if (!entry?.draft || typeof entry.draft.caption !== "string") continue;
+      const saved = postsByKey.get(key);
+      if (saved && new Date(saved.updatedAt).getTime() > entry.editedAt) continue;
+      keep[key] = entry;
+    }
+    persistedRef.current = keep;
+    restoredKeyRef.current = draftStorageKey;
+    const restored = Object.keys(keep);
+    if (restored.length === 0) return;
+    const changed = restored.filter(
+      (key) => JSON.stringify(draftsRef.current[key]) !== JSON.stringify(keep[key].draft)
+    ).length;
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const key of restored) next[key] = keep[key].draft;
+      return next;
+    });
+    if (changed > 0) {
+      notify(
+        `Restored ${changed} unsaved draft${changed === 1 ? "" : "s"} from this device.`,
+        "info"
+      );
+    }
+    // Only on a new user/client/month — not on every refresh of posts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageKey || restoredKeyRef.current !== draftStorageKey) return;
+    const timer = window.setTimeout(() => {
+      const prev = persistedRef.current;
+      const next: StoredDrafts = {};
+      const now = Date.now();
+      for (const [key, draft] of Object.entries(drafts)) {
+        // An untouched AI-idea pre-fill is re-seeded from the server anyway;
+        // only the user's own edits need saving.
+        if (draft.mediaUrls.length === 0 && seededCaptions.get(key) === draft.caption) continue;
+        const before = prev[key];
+        const unchanged = before && JSON.stringify(before.draft) === JSON.stringify(draft);
+        next[key] = { draft, editedAt: unchanged ? before.editedAt : now };
+      }
+      persistedRef.current = next;
+      if (Object.keys(next).length === 0) clearDraft(draftStorageKey);
+      else writeDraft(draftStorageKey, next);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [drafts, draftStorageKey, seededCaptions]);
+
   // ── Realtime: reflect saved changes without a refresh ───────────────────────
   useEffect(() => {
     if (!clientId) return;
@@ -1004,7 +1100,8 @@ export default function ProoferBoard({
       channel.subscribe();
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") clearAllDrafts();
       if (session?.access_token) supabase.realtime.setAuth(session.access_token);
     });
 

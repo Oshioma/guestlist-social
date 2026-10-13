@@ -4,6 +4,7 @@ import { SignInForm } from "./SignInForm";
 import { publicSignupEnabled } from "@/lib/auth/public-signup";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/auth/actions";
+import ClearDraftsOnSignOut from "./ClearDraftsOnSignOut";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -49,6 +50,9 @@ export default async function SignInPage({ searchParams }: PageProps) {
     <div className="auth-card">
       <h1 className="auth-title">Sign in</h1>
       <p className="auth-subtitle">Welcome back.</p>
+      {/* Sign-out lands here with no ?next. A session-expiry bounce carries
+          ?next, so keep drafts then — the same user is about to come back. */}
+      {!next && <ClearDraftsOnSignOut />}
       {error === "not-authorized" && (
         <p className="auth-alert auth-alert-error">
           This account isn&apos;t authorized. Access is invite-only — ask an
