@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
+import { createAdminClient } from "../../../lib/supabase/admin";
+import { ensureMetaSizedImage } from "./meta-image-size";
 import { defaultPublishTimeUtc } from "../../../lib/timezone";
 
 const VALID_STATUSES = [
@@ -496,7 +498,14 @@ export async function saveProoferPostAction(
 
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedTargets = normalizePublishTargets(publishTargets);
-  const normalizedMedia = normalizeMediaUrls(mediaUrls);
+  // Swap any photo over Meta's size limit (e.g. one added by link) for a
+  // resized copy now, so what's saved and previewed is what gets published.
+  // The service role is only used to write the copy to storage.
+  const rawMedia = normalizeMediaUrls(mediaUrls);
+  const storageAdmin = rawMedia.length > 0 ? createAdminClient() : null;
+  const normalizedMedia = storageAdmin
+    ? await Promise.all(rawMedia.map((u) => ensureMetaSizedImage(storageAdmin, u)))
+    : rawMedia;
   const primaryImageUrl = normalizedMedia[0] ?? "";
   const normalizedPillarId = pillarId && pillarId.trim() ? pillarId : null;
   const normalizedPublishTime = /^\d{2}:\d{2}$/.test(publishTime)
