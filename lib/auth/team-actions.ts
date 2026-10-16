@@ -771,18 +771,22 @@ export async function startAccountConnect(
     .eq("team_id", teamId);
   const teamClientIds = (taRows ?? []).map((r) => Number(r.client_id));
 
-  // Reuse an existing unconnected, non-archived account in this team if there is
-  // one — repeated (or abandoned) connects then reuse it instead of stacking up
-  // empty accounts.
+  // Reuse an existing unconnected, non-archived *placeholder* ("New account")
+  // in this team if there is one — repeated (or abandoned) connects then reuse
+  // it instead of stacking up empty accounts. Never reuse a real, named client
+  // that just has no connection yet: that silently attached a new business's
+  // Page to an unrelated (often paused) client, hiding it from the Posts picker.
   let clientId: number | null = null;
   if (teamClientIds.length > 0) {
     const [{ data: connRows }, { data: clientRows }] = await Promise.all([
       admin.from("connected_meta_accounts").select("client_id").in("client_id", teamClientIds),
-      admin.from("clients").select("id, archived").in("id", teamClientIds),
+      admin.from("clients").select("id, name, archived").in("id", teamClientIds),
     ]);
     const connected = new Set((connRows ?? []).map((r) => Number(r.client_id)));
     const alive = new Set(
-      (clientRows ?? []).filter((c) => !c.archived).map((c) => Number(c.id))
+      (clientRows ?? [])
+        .filter((c) => !c.archived && c.name === "New account")
+        .map((c) => Number(c.id))
     );
     clientId =
       teamClientIds
