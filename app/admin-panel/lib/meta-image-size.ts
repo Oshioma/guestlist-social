@@ -6,10 +6,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Meta rejects oversized photos outright: Facebook /photos caps at 10 MB
 // ("Can't read files", subcode 1366046) and Instagram image containers at
-// 8 MB. Operators upload straight-off-the-camera JPEGs of 12–15 MB, so before
-// handing an image URL to Meta we check its size and, if it's over the
-// stricter Instagram limit, publish a resized copy instead. The original in
-// the Proofer is never touched.
+// 8 MB. Uploads are shrunk in the browser (uploadToStorage), but images added
+// by link, from Pexels or the client library, HEIC files the browser couldn't
+// decode, and photos saved before that existed can still be oversized. So the
+// Proofer save swaps any such image for a resized copy, and publishing runs
+// the same check as a safety net.
 const META_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 // Plenty for feed/story display (IG renders at most 1440px wide) while keeping
 // a camera JPEG well under the limit.
@@ -17,18 +18,23 @@ const MAX_LONG_EDGE_PX = 2880;
 const RESIZED_BUCKET = "postimages";
 const RESIZED_FOLDER = "meta-resized";
 
-async function contentLength(url: string): Promise<number | null> {
+async function headInfo(
+  url: string
+): Promise<{ ok: boolean; size: number | null; type: string }> {
   try {
     const res = await fetch(url, {
       method: "HEAD",
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return null;
     const len = Number(res.headers.get("content-length"));
-    return Number.isFinite(len) && len > 0 ? len : null;
+    return {
+      ok: res.ok,
+      size: Number.isFinite(len) && len > 0 ? len : null,
+      type: (res.headers.get("content-type") ?? "").toLowerCase(),
+    };
   } catch {
-    return null;
+    return { ok: false, size: null, type: "" };
   }
 }
 
@@ -44,8 +50,20 @@ export async function ensureMetaSizedImage(
 ): Promise<string> {
   if (!url || /\.gif(\?|$)/i.test(url)) return url;
 
-  const size = await contentLength(url);
-  if (size === null || size <= META_IMAGE_MAX_BYTES) return url;
+  const head = await headInfo(url);
+  if (head.size === null || head.size <= META_IMAGE_MAX_BYTES) return url;
+  // Only still images: videos, GIFs and unknown types pass through.
+  if (head.type && (!head.type.startsWith("image/") || head.type === "image/gif")) {
+    return url;
+  }
+
+  // Keyed on the source URL, so a re-save or a retry re-uses the same copy
+  // instead of downloading and resizing again.
+  const key = createHash("sha1").update(url).digest("hex");
+  const objectName = `${RESIZED_FOLDER}/${key}.jpg`;
+  const resizedUrl = admin.storage.from(RESIZED_BUCKET).getPublicUrl(objectName)
+    .data.publicUrl;
+  if ((await headInfo(resizedUrl)).ok) return resizedUrl;
 
   try {
     const res = await fetch(url, {
@@ -75,9 +93,6 @@ export async function ensureMetaSizedImage(
     }
     if (!output) return url;
 
-    // Keyed on the source URL so a retry re-uses the same object.
-    const key = createHash("sha1").update(url).digest("hex");
-    const objectName = `${RESIZED_FOLDER}/${key}.jpg`;
     const { error } = await admin.storage
       .from(RESIZED_BUCKET)
       .upload(objectName, output, {
@@ -87,8 +102,7 @@ export async function ensureMetaSizedImage(
       });
     if (error) return url;
 
-    return admin.storage.from(RESIZED_BUCKET).getPublicUrl(objectName).data
-      .publicUrl;
+    return resizedUrl;
   } catch {
     return url;
   }
