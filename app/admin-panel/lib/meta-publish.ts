@@ -387,6 +387,16 @@ export async function publishMetaQueueItem(
     : [];
   const imageUrl: string =
     (post.image_url as string | null) || mediaUrls[0] || "";
+  // Every uploaded item, in the order the operator arranged them. A post with
+  // more than one goes out as an IG carousel / FB multi-photo post — sending
+  // only the first item silently dropped the rest.
+  const allMedia: string[] = Array.from(
+    new Set(
+      mediaUrls.filter((u): u is string => typeof u === "string" && u.trim() !== "")
+    )
+  );
+  if (allMedia.length === 0 && imageUrl) allMedia.push(imageUrl);
+  const isMulti = allMedia.length > 1;
 
   const postPlatform: string = (post as any).platform ?? "";
   const isStory =
@@ -410,7 +420,14 @@ export async function publishMetaQueueItem(
   try {
     let publishUrl: string | null = null;
 
-    if (platform === "facebook") {
+    if (platform === "facebook" && isMulti && !allMedia.some(isVideoUrl)) {
+      publishUrl = await publishFacebookMultiPhoto({
+        pageId: account.account_id,
+        pageToken: account.access_token,
+        caption,
+        imageUrls: allMedia,
+      });
+    } else if (platform === "facebook") {
       publishUrl = isVideo
         ? await publishFacebookVideo({
             pageId: account.account_id,
@@ -438,6 +455,14 @@ export async function publishMetaQueueItem(
             imageUrl,
             apiBase: igApiBase,
           });
+    } else if (isMulti) {
+      publishUrl = await publishInstagramCarousel({
+        igAccountId: account.account_id,
+        pageToken: account.access_token,
+        caption,
+        mediaUrls: allMedia,
+        apiBase: igApiBase,
+      });
     } else {
       publishUrl = isVideo
         ? await publishInstagramVideo({
@@ -552,6 +577,185 @@ async function publishFacebookPost(args: {
     throw new Error(`FB /feed failed: ${res.status} ${JSON.stringify(data)}`);
   }
   return data.id ? `https://www.facebook.com/${data.id}` : null;
+}
+
+// Facebook multi-photo post: upload each photo unpublished, then create one
+// feed post that attaches them all. Posting each to /photos with published
+// left on would create N separate posts instead of one album-style post.
+async function publishFacebookMultiPhoto(args: {
+  pageId: string;
+  pageToken: string;
+  caption: string;
+  imageUrls: string[];
+}): Promise<string | null> {
+  const { pageId, pageToken, caption, imageUrls } = args;
+  const base = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
+
+  const photoIds: string[] = [];
+  for (const url of imageUrls) {
+    const params = new URLSearchParams();
+    params.set("url", url);
+    params.set("published", "false");
+    params.set("access_token", pageToken);
+
+    const endpoint = `/${pageId}/photos`;
+    const start = Date.now();
+    const res = await fetch(`${base}${endpoint}`, {
+      method: "POST",
+      body: params,
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = (await res.json()) as { id?: string; error?: { message?: string } };
+    logMetaWrite({
+      operation: "publish:facebook",
+      metaEndpoint: endpoint,
+      requestBody: { url, published: false },
+      responseStatus: res.status,
+      responseBody: data,
+      success: res.ok && !!data.id,
+      errorMessage: data.error?.message ?? null,
+      durationMs: Date.now() - start,
+    });
+    if (!res.ok || !data.id) {
+      throw new Error(`FB /photos (unpublished) failed: ${res.status} ${JSON.stringify(data)}`);
+    }
+    photoIds.push(data.id);
+  }
+
+  const params = new URLSearchParams();
+  if (caption) params.set("message", caption);
+  photoIds.forEach((id, i) => {
+    params.set(`attached_media[${i}]`, JSON.stringify({ media_fbid: id }));
+  });
+  params.set("access_token", pageToken);
+
+  const endpoint = `/${pageId}/feed`;
+  const start = Date.now();
+  const res = await fetch(`${base}${endpoint}`, {
+    method: "POST",
+    body: params,
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const data = (await res.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation: "publish:facebook",
+    metaEndpoint: endpoint,
+    requestBody: { message: caption, attached_media: photoIds },
+    responseStatus: res.status,
+    responseBody: data,
+    success: res.ok && !!data.id,
+    errorMessage: data.error?.message ?? null,
+    durationMs: Date.now() - start,
+  });
+  if (!res.ok) {
+    throw new Error(`FB /feed (multi-photo) failed: ${res.status} ${JSON.stringify(data)}`);
+  }
+  return data.id ? `https://www.facebook.com/${data.id}` : null;
+}
+
+// Instagram allows at most 10 items in a carousel.
+const IG_CAROUSEL_MAX_ITEMS = 10;
+
+// Instagram carousel: one child container per item (is_carousel_item), each
+// polled until ready, then a CAROUSEL parent that lists the children and
+// carries the caption, then media_publish on the parent.
+async function publishInstagramCarousel(args: {
+  igAccountId: string;
+  pageToken: string;
+  caption: string;
+  mediaUrls: string[];
+  apiBase: string;
+}): Promise<string | null> {
+  const { igAccountId, pageToken, caption, apiBase } = args;
+  const mediaUrls = args.mediaUrls.slice(0, IG_CAROUSEL_MAX_ITEMS);
+  const operation = "publish:instagram_carousel";
+
+  const childIds: string[] = [];
+  for (const url of mediaUrls) {
+    const video = isVideoUrl(url);
+    const params = new URLSearchParams();
+    params.set("is_carousel_item", "true");
+    if (video) {
+      params.set("media_type", "VIDEO");
+      params.set("video_url", url);
+    } else {
+      params.set("image_url", url);
+    }
+    params.set("access_token", pageToken);
+
+    const start = Date.now();
+    const res = await fetch(`${apiBase}/${igAccountId}/media`, {
+      method: "POST",
+      body: params,
+      cache: "no-store",
+    });
+    const data = (await res.json()) as { id?: string; error?: { message?: string } };
+    logMetaWrite({
+      operation,
+      metaEndpoint: `/${igAccountId}/media`,
+      requestBody: video
+        ? { is_carousel_item: true, media_type: "VIDEO", video_url: url }
+        : { is_carousel_item: true, image_url: url },
+      responseStatus: res.status,
+      responseBody: data,
+      success: res.ok && !!data.id,
+      errorMessage: data.error?.message ?? null,
+      durationMs: Date.now() - start,
+    });
+    if (!res.ok || !data.id) {
+      throw new Error(
+        `IG carousel item /media failed: ${res.status} ${JSON.stringify(data)}`
+      );
+    }
+    childIds.push(data.id);
+  }
+
+  for (const id of childIds) {
+    await waitForContainerReady(id, pageToken, operation, apiBase);
+  }
+
+  const parentParams = new URLSearchParams();
+  parentParams.set("media_type", "CAROUSEL");
+  parentParams.set("children", childIds.join(","));
+  if (caption) parentParams.set("caption", caption);
+  parentParams.set("access_token", pageToken);
+
+  const start = Date.now();
+  const res = await fetch(`${apiBase}/${igAccountId}/media`, {
+    method: "POST",
+    body: parentParams,
+    cache: "no-store",
+  });
+  const parent = (await res.json()) as { id?: string; error?: { message?: string } };
+  logMetaWrite({
+    operation,
+    metaEndpoint: `/${igAccountId}/media`,
+    requestBody: { media_type: "CAROUSEL", children: childIds, caption },
+    responseStatus: res.status,
+    responseBody: parent,
+    success: res.ok && !!parent.id,
+    errorMessage: parent.error?.message ?? null,
+    durationMs: Date.now() - start,
+  });
+  if (!res.ok || !parent.id) {
+    throw new Error(`IG carousel /media failed: ${res.status} ${JSON.stringify(parent)}`);
+  }
+
+  await waitForContainerReady(parent.id, pageToken, operation, apiBase);
+
+  const publishedId = await publishIgContainer({
+    igAccountId,
+    creationId: parent.id,
+    pageToken,
+    apiBase,
+    operation,
+    label: "IG carousel",
+  });
+  if (!publishedId) return null;
+
+  return lookupInstagramPermalink(publishedId, pageToken, apiBase);
 }
 
 async function publishInstagramPost(args: {
