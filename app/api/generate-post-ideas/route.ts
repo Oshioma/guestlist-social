@@ -134,7 +134,7 @@ export async function POST(req: Request) {
 
         // Load client + pillars + existing posts + existing ideas + consultation in parallel
         const [clientRes, pillarsRes, postsRes, ideasRes, consultationRes] = await Promise.all([
-          supabase.from("clients").select("id, name, industry, notes, ai_instructions").eq("id", clientId).single(),
+          supabase.from("clients").select("id, name, industry, notes, ai_instructions, website_summary").eq("id", clientId).single(),
           supabase.from("content_pillars").select("id, name, description, color").eq("client_id", clientId).eq("archived", false).order("sort_order", { ascending: true }),
           supabase.from("proofer_posts").select("post_date, platform, caption, status").eq("client_id", clientId).gte("post_date", monthStart).lt("post_date", nextMonthStr).order("post_date", { ascending: true }),
           // A day is filled if it has ANY non-rejected idea, on any platform —
@@ -231,7 +231,10 @@ ${clientHeader || "(unnamed client)"}
 
 ${consultationBlock
   ? `CLIENT CONSULTATION (answers given by the client — use this as your primary brand knowledge):\n${consultationBlock}`
-  : "(no consultation data yet — use professional defaults based on the client name and industry)"}
+  : client.website_summary
+    ? "(no consultation data yet — use the website brand summary below as your brand knowledge)"
+    : "(no consultation data yet — use professional defaults based on the client name and industry)"}
+${client.website_summary ? `\nWEBSITE BRAND SUMMARY (written from the client's own website — use its products, prices, location and tone):\n${client.website_summary}` : ""}
 ${client.ai_instructions ? `\nADDITIONAL RULES FROM AGENCY:\n${client.ai_instructions}` : ""}
 
 CONTENT PILLARS:
@@ -246,7 +249,7 @@ EXISTING POSTS THIS MONTH (do not repeat):
 ${existingCaptions || "(none yet)"}
 
 RULES:
-- Ground every post idea in specific details from the consultation answers above
+- Ground every post idea in specific details from the consultation answers and website brand summary above (real product names, offers, location)
 - Vary content type — no consecutive same-type posts
 - Weekdays: educational/behind-scenes. Weekends: lifestyle/offers
 - Separate caption from image concept — never merge them

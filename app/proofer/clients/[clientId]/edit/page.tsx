@@ -6,6 +6,7 @@ import { getMemberAccess } from "@/lib/auth/permissions";
 import ClientForm from "../../../../admin-panel/components/ClientForm";
 import ClientBillingForm from "../../../../admin-panel/components/ClientBillingForm";
 import ClientAiInstructions from "../../../../admin-panel/components/ClientAiInstructions";
+import ClientWebsiteSummary from "../../../../admin-panel/components/ClientWebsiteSummary";
 import ClientConsultationAnswersManager from "../../../../admin-panel/components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../../admin-panel/components/ClientPhotoLibrary";
 import PortalVisibilityForm from "../../../../admin-panel/components/PortalVisibilityForm";
@@ -312,6 +313,19 @@ export default async function ProoferEditClientPage({
                 consultation: client.portal_show_consultation !== false,
               }}
             />
+
+            <ClientWebsiteSummary
+
+              clientId={clientId}
+
+              initialWebsiteUrl={client.website_url ?? ""}
+
+              initialSummary={client.website_summary ?? ""}
+
+              initialReadAt={client.website_summary_at ?? null}
+
+            />
+
 
             <ClientAiInstructions
               clientId={clientId}

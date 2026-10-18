@@ -5,6 +5,7 @@ import { createClient } from "../../../../../lib/supabase/server";
 import ClientForm from "../../../components/ClientForm";
 import ClientBillingForm from "../../../components/ClientBillingForm";
 import ClientAiInstructions from "../../../components/ClientAiInstructions";
+import ClientWebsiteSummary from "../../../components/ClientWebsiteSummary";
 import ClientConsultationAnswersManager from "../../../components/ClientConsultationAnswersManager";
 import ClientPhotoLibrary from "../../../components/ClientPhotoLibrary";
 import ClientEditSwitcher from "../../../components/ClientEditSwitcher";
@@ -301,6 +302,19 @@ export default async function EditClientPage({ params }: Props) {
           consultation: client.portal_show_consultation !== false,
         }}
       />
+
+      <ClientWebsiteSummary
+
+        clientId={clientId}
+
+        initialWebsiteUrl={client.website_url ?? ""}
+
+        initialSummary={client.website_summary ?? ""}
+
+        initialReadAt={client.website_summary_at ?? null}
+
+      />
+
 
       <ClientAiInstructions
         clientId={clientId}

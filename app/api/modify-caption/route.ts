@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     if (clientId) {
       const supabase = getSupabase();
       const [clientRes, consultationRes] = await Promise.all([
-        supabase.from("clients").select("name, ai_instructions").eq("id", clientId).single(),
+        supabase.from("clients").select("name, ai_instructions, website_summary").eq("id", clientId).single(),
         supabase.from("consultation_submissions")
           .select("consultation_answers(question_prompt, answer_text)")
           .eq("client_id", clientId)
@@ -69,6 +69,7 @@ export async function POST(req: Request) {
         brandBlock = [
           client.name ? `Business: ${client.name}` : null,
           consultationBlock || null,
+          client.website_summary ? `Website brand summary:\n${client.website_summary}` : null,
           client.ai_instructions ? `Rules: ${client.ai_instructions}` : null,
         ].filter(Boolean).join("\n\n");
       }
