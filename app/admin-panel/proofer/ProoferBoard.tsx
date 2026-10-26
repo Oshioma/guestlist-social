@@ -790,6 +790,22 @@ export default function ProoferBoard({
     publishTime: string;
     publishTargets: PublishTarget[];
   };
+  function composeIdeaCaption(idea: PostIdea): string {
+    return [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags].filter(Boolean).join("\n\n");
+  }
+  // Pre-fill a slot from an AI idea. A slot with no draft gets a fresh one; a
+  // draft with a BLANK caption (e.g. the card was opened and its time/pillar
+  // touched, which auto-saves an empty draft) gets the idea's caption merged in,
+  // keeping the user's own settings and media. Previously any existing draft
+  // blocked the caption, while the stock image still attached — leaving a card
+  // with an image and no copy. A draft with typed copy is never overwritten.
+  function seedDraftFromIdea(existing: Draft | undefined, idea: PostIdea): Draft | null {
+    if (existing && existing.caption.trim()) return null;
+    if (existing) {
+      return { ...existing, caption: composeIdeaCaption(idea), pillarId: existing.pillarId ?? idea.contentPillarId ?? null };
+    }
+    return { caption: composeIdeaCaption(idea), mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] };
+  }
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => {
     const initial: Record<string, Draft> = {};
     // Slots that already have a saved post must NOT be pre-filled from an AI
@@ -803,11 +819,8 @@ export default function ProoferBoard({
     for (const idea of initialPostIdeas) {
       const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
       if (savedSlots.has(slotKey)) continue;
-      if (!initial[slotKey]) {
-        const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
-          .filter(Boolean).join("\n\n");
-        initial[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] };
-      }
+      const seeded = seedDraftFromIdea(initial[slotKey], idea);
+      if (seeded) initial[slotKey] = seeded;
     }
     return initial;
   });
@@ -906,10 +919,8 @@ export default function ProoferBoard({
       for (const idea of initialPostIdeas) {
         const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
         if (savedSlots.has(slotKey)) continue;
-        if (next[slotKey]) continue;
-        const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
-          .filter(Boolean).join("\n\n");
-        next[slotKey] = { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] };
+        const seeded = seedDraftFromIdea(next[slotKey], idea);
+        if (seeded) next[slotKey] = seeded;
       }
       return next;
     });
@@ -993,6 +1004,14 @@ export default function ProoferBoard({
     setDrafts((prev) => {
       const next = { ...prev };
       for (const key of restored) next[key] = keep[key].draft;
+      // A restored draft with a blank caption must not hide the slot's AI idea
+      // (that's how a card got stuck showing an image with no copy).
+      for (const idea of postIdeas) {
+        const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
+        if (!keep[slotKey] || postsByKey.has(slotKey)) continue;
+        const seeded = seedDraftFromIdea(next[slotKey], idea);
+        if (seeded) next[slotKey] = seeded;
+      }
       return next;
     });
     if (changed > 0) {
@@ -1670,9 +1689,11 @@ export default function ProoferBoard({
       if (!url) return;
       setDrafts((prev) => {
         const d = prev[slotKey];
-        // Only fill the idea's own freshly-seeded draft, and never overwrite
-        // media the user (or a real post) already put there.
-        if (!d || (d.mediaUrls && d.mediaUrls.length > 0)) return prev;
+        // Only fill a draft that carries this idea's caption (i.e. the idea
+        // actually landed there), and never overwrite media the user (or a
+        // real post) already put there.
+        if (!d || d.caption !== composeIdeaCaption(idea)) return prev;
+        if (d.mediaUrls && d.mediaUrls.length > 0) return prev;
         return { ...prev, [slotKey]: { ...d, mediaUrls: [url] } };
       });
     } catch {
@@ -1743,15 +1764,12 @@ export default function ProoferBoard({
                   });
                   const slotKey = postKey(idea.postSlotDate.slice(0, 10), idea.platform as ProoferPlatform);
                   setDrafts((prev) => {
-                    // Never overlay a slot that already has a draft or a saved
-                    // post — an idea must not mask/overwrite real content.
-                    if (prev[slotKey] || postsByKey.has(slotKey)) return prev;
-                    const composed = [idea.firstLine, idea.captionIdea, idea.cta, idea.hashtags]
-                      .filter(Boolean).join("\n\n");
-                    return {
-                      ...prev,
-                      [slotKey]: { caption: composed, mediaUrls: [], pillarId: idea.contentPillarId ?? null, linkedIdeaId: null, linkedIdeaKind: null, publishTime: defaultPublishTimeUtc(idea.postSlotDate.slice(0, 10), timeZone), publishTargets: [...defaultTargets] },
-                    };
+                    // Never overlay a saved post or a draft with typed copy —
+                    // an idea must not mask/overwrite real content. A blank
+                    // draft still takes the idea's caption (seedDraftFromIdea).
+                    if (postsByKey.has(slotKey)) return prev;
+                    const seeded = seedDraftFromIdea(prev[slotKey], idea);
+                    return seeded ? { ...prev, [slotKey]: seeded } : prev;
                   });
                   // Fetch a suggested stock photo for this idea in the background
                   // and drop it into the card (best-effort — never blocks the stream).
