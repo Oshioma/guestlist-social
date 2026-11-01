@@ -458,17 +458,18 @@ export function crossChecks(): CrossCheck[] {
   const socialAppId = get("META_SOCIAL_APP_ID");
 
   if (adsSecret && socialSecret) {
+    // Whether one secret for both jobs is right depends on whether one Meta
+    // app does both jobs — which only Meta can confirm, so this states the
+    // situation and leaves the verdict to "Your Meta apps" in the live checks.
     const same = adsSecret === socialSecret;
-    const sameApp = adsAppId && socialAppId && adsAppId === socialAppId;
     out.push({
       name: "Ads and publishing app secrets",
-      ok: !same || Boolean(sameApp),
+      ok: true,
       detail: same
-        ? sameApp
-          ? "Identical, which is right — both point at the same Meta app."
-          : "META_APP_SECRET and META_SOCIAL_APP_SECRET hold the same value. That is correct if the ads app and the publishing app are one app, and wrong if they are two. This cannot be settled from the variables alone: run the live checks and compare the app named by \"Meta write credentials\" against META_SOCIAL_APP_ID" +
-            (socialAppId ? ` (${socialAppId}).` : ".")
-        : "Different values, as expected for two separate Meta apps.",
+        ? `The same secret is used for running ads and for publishing. That is right when one Meta app does both jobs${
+            socialAppId ? ` — publishing uses app ${socialAppId}` : ""
+          }. Run the live checks: they name the app behind each job and say whether this secret belongs to it.`
+        : "Different secrets, which is what two separate Meta apps need.",
     });
   }
 
@@ -593,6 +594,9 @@ async function lookupAppByToken(
 export async function identifyMetaApps(): Promise<MetaAppIdentity[]> {
   const env = (name: string) => process.env[name]?.trim() || null;
   const out: MetaAppIdentity[] = [];
+  // Filled in from the token, then compared with the publishing app so the
+  // page can state the relationship instead of describing both possibilities.
+  let adsAppId: string | null = null;
 
   // 1. Ads. The app is whichever one issued the token — there is no separate
   //    "ads app id" variable that any code path reads.
@@ -629,6 +633,7 @@ export async function identifyMetaApps(): Promise<MetaAppIdentity[]> {
       }
     }
 
+    adsAppId = found.appId ?? null;
     out.push({
       role: "Running ads",
       vars: ["META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID", "META_APP_SECRET"],
@@ -653,15 +658,33 @@ export async function identifyMetaApps(): Promise<MetaAppIdentity[]> {
     });
   } else {
     const pair = await lookupAppByPair(socialId, socialSecret);
+    const sharesAdsApp = adsAppId !== null && adsAppId === socialId;
+    const sameSecret =
+      env("META_APP_SECRET") !== null && env("META_APP_SECRET") === socialSecret;
+
+    let detail = pair.ok
+      ? "The id and secret belong together, so connecting a Facebook page can complete."
+      : `Meta rejected this id/secret pair (${pair.error}). One of them is from a different app, and connecting a page will fail at the token exchange.`;
+
+    // The thing that was previously left hanging: is this the ads app or not?
+    if (sharesAdsApp) {
+      detail +=
+        ` This is the same app that runs your ads (${adsAppId}) — one app does both jobs, so using one secret for META_APP_SECRET and META_SOCIAL_APP_SECRET is correct.`;
+    } else if (adsAppId) {
+      detail +=
+        ` This is a different app from the one that runs your ads (${adsAppId}), so META_APP_SECRET and META_SOCIAL_APP_SECRET must hold different values` +
+        (sameSecret
+          ? " — and right now they hold the same one, so at least one of them is wrong."
+          : ".");
+    }
+
     out.push({
       role: "Publishing posts (Facebook & Instagram pages)",
       vars: ["META_SOCIAL_APP_ID", "META_SOCIAL_APP_SECRET", "NEXT_PUBLIC_META_SOCIAL_APP_ID"],
       appId: socialId,
       appName: pair.name ?? null,
-      status: pair.ok ? "ok" : "error",
-      detail: pair.ok
-        ? "The id and secret belong together, so connecting a Facebook page can complete."
-        : `Meta rejected this id/secret pair (${pair.error}). One of them is from a different app, and connecting a page will fail at the token exchange.`,
+      status: pair.ok && (!sameSecret || sharesAdsApp) ? "ok" : pair.ok ? "warn" : "error",
+      detail,
     });
   }
 
