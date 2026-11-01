@@ -14,6 +14,7 @@ export function DisconnectButton({
   platform,
   label,
   iconOnly = false,
+  teamCount = 1,
 }: {
   teamId: string;
   clientId: number;
@@ -22,15 +23,23 @@ export function DisconnectButton({
   // Compact mode: a subtle ✕ (used inline next to a connected handle) instead
   // of the full red "Disconnect X" button.
   iconOnly?: boolean;
+  // How many teams this account is linked to. The stored connection belongs to
+  // the account, not the team, so disconnecting a shared account cuts it off in
+  // every team — warn before that happens.
+  teamCount?: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
   function handleClick() {
+    const sharedWarning =
+      teamCount > 1
+        ? `\n\nThis account is in ${teamCount} teams — disconnecting removes ${label} for ALL of them. To take it out of just this team, use "remove from this team" instead.`
+        : "";
     if (
       !window.confirm(
-        `Disconnect ${label} for this account? Nothing is posted or deleted on ${label} — this only removes the stored connection here. You can reconnect anytime.`
+        `Disconnect ${label} for this account? Nothing is posted or deleted on ${label} — this only removes the stored connection here. You can reconnect anytime.${sharedWarning}`
       )
     ) {
       return;

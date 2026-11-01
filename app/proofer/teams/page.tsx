@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProoferBase } from "../base";
 import { CreateTeamForm } from "@/app/admin-panel/settings/teams/CreateTeamForm";
 import { AddAccount } from "./AddAccount";
+import { AddExistingAccount } from "./AddExistingAccount";
+import { AccountRemoveButton } from "./AccountRemoveButton";
 import { DisconnectButton } from "./[teamId]/DisconnectButton";
 import { TeamHeaderActions } from "./TeamHeaderActions";
 import { TeamMembersInline } from "./TeamMembersInline";
@@ -39,7 +41,9 @@ function worstHealth(...hs: (Health | undefined)[]): Health {
 }
 
 type Conn = { handle: string; health: Health } | null;
-type AccountLite = { id: number; name: string; ig: Conn; fb: Conn };
+// teamCount = how many teams (anyone's) this account is linked to. Only used
+// as a number for warnings — never to reveal which other teams they are.
+type AccountLite = { id: number; name: string; ig: Conn; fb: Conn; teamCount: number };
 type Member = { userId: string; name: string; role: string; isOwner: boolean; pending: boolean };
 type TeamRow = {
   id: string;
@@ -262,6 +266,11 @@ export default async function ProoferTeamsPage({
     // connection status for.
     const clientIdsByTeam = new Map<string, number[]>();
     const allClientIds = new Set<number>();
+    const teamCountByClient = new Map<number, number>();
+    for (const r of accountRows ?? []) {
+      const c = Number(r.client_id);
+      teamCountByClient.set(c, (teamCountByClient.get(c) ?? 0) + 1);
+    }
     for (const r of accountRows ?? []) {
       const tid = r.team_id as string;
       if (!teamIdSet.has(tid)) continue;
@@ -309,6 +318,7 @@ export default async function ProoferTeamsPage({
           name: nameById.get(cid)!,
           ig: igByClient.get(cid) ?? null,
           fb: fbByClient.get(cid) ?? null,
+          teamCount: teamCountByClient.get(cid) ?? 1,
         }))
         // Only show accounts that are actually connected — unconnected
         // placeholders are noise; you add a new one via "Add account" (which
@@ -335,6 +345,26 @@ export default async function ProoferTeamsPage({
       a.isPersonal ? -1 : b.isPersonal ? 1 : a.name.localeCompare(b.name)
     );
   }
+
+  const canManageTeam = (teamId: string) =>
+    isStaff ||
+    myRoleByTeam.get(teamId) === "owner" ||
+    myRoleByTeam.get(teamId) === "admin";
+
+  // Accounts the viewer may link into another of their teams: those in teams
+  // they manage (setTeamAccount enforces the same rule server-side). Lets one
+  // account sit in several teams — e.g. your main team plus a client-only team.
+  const managedAccounts = new Map<number, string>();
+  for (const r of rows) {
+    if (!canManageTeam(r.id)) continue;
+    for (const a of r.accounts) managedAccounts.set(a.id, a.name);
+  }
+  const linkableFor = (team: TeamRow) => {
+    const inTeam = new Set(team.accounts.map((a) => a.id));
+    return Array.from(managedAccounts, ([id, name]) => ({ id, name }))
+      .filter((a) => !inTeam.has(a.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
 
   return (
     <main style={{ flex: 1, minWidth: 0, padding: 24, background: "#f3f3f5" }}>
@@ -367,10 +397,7 @@ export default async function ProoferTeamsPage({
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {rows.map((t) => {
-                const canManage =
-                  isStaff ||
-                  myRoleByTeam.get(t.id) === "owner" ||
-                  myRoleByTeam.get(t.id) === "admin";
+                const canManage = canManageTeam(t.id);
                 return (
                 <div key={t.id} style={teamCard}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -399,7 +426,7 @@ export default async function ProoferTeamsPage({
                         {t.accounts.length === 0 ? (
                           <p style={{ fontSize: 13, color: "#a1a1aa", margin: "10px 0 0" }}>
                             {canManage
-                              ? "No accounts yet — use + above to add one."
+                              ? "No accounts yet — use + above to connect one, or add one you already have below."
                               : "No accounts in this team yet."}
                           </p>
                         ) : (
@@ -422,6 +449,7 @@ export default async function ProoferTeamsPage({
                                     teamId={t.id}
                                     clientId={a.id}
                                     canManage={canManage}
+                                    teamCount={a.teamCount}
                                   />
                                   <ConnCell
                                     platform="instagram"
@@ -429,8 +457,20 @@ export default async function ProoferTeamsPage({
                                     teamId={t.id}
                                     clientId={a.id}
                                     canManage={canManage}
+                                    teamCount={a.teamCount}
                                   />
                                 </div>
+                                {canManage && a.teamCount > 1 && (
+                                  // A shared account: removing it here keeps it
+                                  // (and its connection) in its other teams.
+                                  <div style={sharedRow}>
+                                    <span>
+                                      Also in {a.teamCount - 1} other team
+                                      {a.teamCount - 1 === 1 ? "" : "s"} · remove from this team
+                                    </span>
+                                    <AccountRemoveButton teamId={t.id} clientId={a.id} name={a.name} />
+                                  </div>
+                                )}
                                 {canManage && health !== "ok" && (
                                   <div style={reconnectRow}>
                                     <span style={{ color: health === "expired" ? "#dc2626" : "#b45309" }}>
@@ -446,6 +486,9 @@ export default async function ProoferTeamsPage({
                               </div>
                             );
                           })
+                        )}
+                        {canManage && (
+                          <AddExistingAccount teamId={t.id} options={linkableFor(t)} />
                         )}
                       </div>
                     </div>
@@ -549,12 +592,14 @@ function ConnCell({
   teamId,
   clientId,
   canManage,
+  teamCount,
 }: {
   platform: "facebook" | "instagram";
   conn: Conn;
   teamId: string;
   clientId: number;
   canManage: boolean;
+  teamCount: number;
 }) {
   const isFb = platform === "facebook";
   const label = isFb ? "Facebook" : "Instagram";
@@ -591,6 +636,7 @@ function ConnCell({
               platform={platform}
               label={label}
               iconOnly
+              teamCount={teamCount}
             />
           </span>
         )}
@@ -768,6 +814,15 @@ const reconnectRow: React.CSSProperties = {
   marginTop: 4,
   fontSize: 12,
   fontWeight: 600,
+};
+
+const sharedRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 4,
+  fontSize: 11.5,
+  color: "#71717a",
 };
 
 const reconnectPill: React.CSSProperties = {
