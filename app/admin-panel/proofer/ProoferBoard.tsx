@@ -4277,6 +4277,41 @@ export default function ProoferBoard({
                         order: isNarrow ? 4 : undefined,
                       }}
                     >
+                      {(() => {
+                        // Facebook can't post several videos (or videos mixed
+                        // with photos) as one post — its multi-item posts are
+                        // photos only — so meta-publish sends only the FIRST
+                        // item there. Same item/video tests as the publisher,
+                        // so this shows exactly when that would happen.
+                        const items = Array.from(
+                          new Set(draft.mediaUrls.filter((u) => u.trim() !== ""))
+                        );
+                        const toFacebook =
+                          draft.publishTargets.includes("facebook") ||
+                          activePlatform === "facebook";
+                        if (!toFacebook || items.length < 2 || !items.some(isVideoUrl)) {
+                          return null;
+                        }
+                        return (
+                          <div
+                            role="status"
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              border: "1px solid #fde68a",
+                              background: "#fffbeb",
+                              color: "#92400e",
+                              fontSize: 12.5,
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            ⚠️ Facebook can&apos;t post multiple videos — only the first
+                            item will go out on Facebook.
+                            {draft.publishTargets.includes("instagram") &&
+                              " Instagram still gets the full carousel."}
+                          </div>
+                        );
+                      })()}
 
                       {/* Single row of media buttons */}
                       <div
