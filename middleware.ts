@@ -58,12 +58,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // This domain only exposes Proofer plus the shared auth pages. The other
-    // product surfaces don't belong here — send them to the Proofer home.
+    // This domain only exposes Proofer, the client portal and the shared auth
+    // pages. The agency surfaces don't belong here — send them to the Proofer
+    // home. /portal stays: a client invited from Post Proofer signs in here, so
+    // their read-only portal must be served on this domain too (the role gates
+    // below keep posters off it and clients on their own account).
     if (
       path.startsWith("/admin-panel") ||
-      path.startsWith("/app") ||
-      path.startsWith("/portal")
+      path.startsWith("/app")
     ) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
@@ -186,6 +188,14 @@ export async function middleware(request: NextRequest) {
   // the top-of-middleware block already fenced off the other product surfaces
   // and maps clean paths onto /proofer, so only the normal host needs a nudge
   // off the admin panel and portal.
+  // On a Proofer host the agency surfaces were already fenced off above, so
+  // the only one left to bounce is the client portal.
+  if (isPoster && isProoferHost && path.startsWith("/portal")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   if (isPoster && !isProoferHost) {
     if (
       path.startsWith("/app") ||
@@ -201,21 +211,14 @@ export async function middleware(request: NextRequest) {
 
   // Client users can only see /portal/{theirClientId}/*. Anywhere else gets
   // bounced. The bounce target is always their own portal — that's the
-  // "calmer mirror" the feature promises.
+  // "calmer mirror" the feature promises. This holds on a Proofer host too,
+  // where the portal is served at the same /portal/{id} URL.
   if (isClientUser) {
-    // The standalone Proofer domain has no portal to bounce to — Proofer is an
-    // admin-only surface, so a client account simply isn't authorised here.
-    if (isProoferHost) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/sign-in";
-      url.search = "";
-      url.searchParams.set("error", "not-authorized");
-      return NextResponse.redirect(url);
-    }
-
     const ownPortal = `/portal/${linkedClientId}`;
 
-    if (ADMIN_PREFIXES.some((p) => path.startsWith(p))) {
+    // internalPath, not path: on a Proofer host the board's clean URLs ("/",
+    // "/teams", …) map onto /proofer/*, which a client must not reach.
+    if (ADMIN_PREFIXES.some((p) => internalPath.startsWith(p))) {
       const url = request.nextUrl.clone();
       url.pathname = ownPortal;
       url.search = "";

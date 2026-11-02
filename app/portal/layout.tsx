@@ -11,8 +11,24 @@
 // ---------------------------------------------------------------------------
 
 import "./portal.css";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getViewer } from "../admin-panel/lib/viewer";
+
+// Keep in sync with middleware.ts / app/proofer/base.ts.
+const PROOFER_HOSTS = new Set(["postproofer.com", "www.postproofer.com"]);
+
+// Clients invited from Post Proofer use the portal on that domain, so there it
+// carries Post Proofer's tab title and "P" icon instead of the agency site's.
+export async function generateMetadata(): Promise<Metadata> {
+  const host = (await headers()).get("host")?.toLowerCase().split(":")[0] ?? "";
+  if (!PROOFER_HOSTS.has(host)) return {};
+  return {
+    title: "Client portal — Post Proofer",
+    icons: { icon: { url: "/proofer-icon.svg", type: "image/svg+xml" } },
+  };
+}
 
 export default async function PortalLayout({
   children,
