@@ -15,6 +15,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../admin-panel/lib/viewer";
 import { notFound, redirect } from "next/navigation";
+import { isProoferHostRequest } from "./visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,12 @@ export default async function PortalClientDashboard({
 
   const viewer = await getViewer();
   if (!canViewClient(viewer, clientId)) notFound();
+
+  // This dashboard is an ads/reviews summary, and Post Proofer's portal never
+  // shows those — so on that domain Content is the only landing page.
+  if (await isProoferHostRequest()) {
+    redirect(`/portal/${clientId}/content`);
+  }
 
   const supabase = await createClient();
 
