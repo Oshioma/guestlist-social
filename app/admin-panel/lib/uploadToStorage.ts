@@ -89,7 +89,14 @@ export async function uploadToStorage(
         "x-upsert": "false",
       },
       uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
+      // Never resume an upload from an earlier attempt. Every attempt has a
+      // fresh timestamped objectName, but a resumed TUS upload keeps writing
+      // to the PREVIOUS attempt's object — so when that earlier attempt had
+      // actually finished (only the browser missed the success), the resume
+      // "completed" instantly and we returned the NEW name's URL, which was
+      // never written: a broken image on the post. Retries within this one
+      // attempt (retryDelays) still resume as normal.
+      storeFingerprintForResuming: false,
       metadata: {
         bucketName: targetBucket,
         objectName,
@@ -110,12 +117,7 @@ export async function uploadToStorage(
       },
     });
 
-    upload.findPreviousUploads().then((previous) => {
-      if (previous.length > 0) {
-        upload.resumeFromPreviousUpload(previous[0]);
-      }
-      upload.start();
-    });
+    upload.start();
   });
 
   const { data } = supabase.storage.from(targetBucket).getPublicUrl(objectName);

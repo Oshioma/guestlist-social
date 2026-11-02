@@ -266,8 +266,8 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-// A single media item filling a 1:1 square, matching the operator's proofer
-// card sizing (width: 100%, objectFit: cover inside a fixed square).
+// A single media item filling the carousel frame (width: 100%, objectFit:
+// cover for images, contain for video).
 function SquareMedia({ url }: { url: string }) {
   const fill: React.CSSProperties = {
     display: "block",
@@ -290,8 +290,8 @@ function SquareMedia({ url }: { url: string }) {
   return <img src={url} alt="" style={fill} />;
 }
 
-// Square carousel: one item at a time with prev/next nav + index badge,
-// exactly like the operator's board. Also carries the remove control.
+// 4:5 carousel: one item at a time with prev/next nav + index badge, like the
+// operator's board. Also carries the remove control.
 function MediaCarousel({
   urls,
   onRemove,
@@ -310,10 +310,10 @@ function MediaCarousel({
     <div
       style={{
         width: "100%",
-        // Video shows in Instagram's tallest feed frame (4:5), contained so
-        // the whole clip is visible; images stay square.
-        aspectRatio: activeIsVideo ? "4 / 5" : "1 / 1",
-        maxHeight: activeIsVideo ? "80vh" : undefined,
+        // Instagram's portrait feed frame — 1080×1350 (4:5) — for every item,
+        // scaled to the card's width. Images are cropped to it the way the
+        // feed does; video is contained so the whole clip stays visible.
+        aspectRatio: "4 / 5",
         background: activeIsVideo ? "#000" : "#f4f4f5",
         borderRadius: 10,
         overflow: "hidden",
