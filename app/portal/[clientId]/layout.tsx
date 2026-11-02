@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../admin-panel/lib/viewer";
 import PortalSidebar from "./PortalSidebar";
+import { isProoferHostRequest } from "./visibility";
 
 export default async function PortalClientLayout({
   children,
@@ -56,10 +57,12 @@ export default async function PortalClientLayout({
     portal_show_reviews?: boolean | null;
     portal_show_consultation?: boolean | null;
   };
+  // Ads and Reviews never show on Post Proofer (see visibility.ts).
+  const onProofer = await isProoferHostRequest();
   const visibility = {
     content: row.portal_show_content !== false,
-    ads: row.portal_show_ads !== false,
-    reviews: row.portal_show_reviews !== false,
+    ads: !onProofer && row.portal_show_ads !== false,
+    reviews: !onProofer && row.portal_show_reviews !== false,
     consultation: row.portal_show_consultation !== false,
   };
 

@@ -18,6 +18,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewClient, getViewer } from "../../../../admin-panel/lib/viewer";
+import { isPortalSectionVisible } from "../../visibility";
 import { DEFAULT_TIMEZONE, zoneAbbrev } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
@@ -221,6 +222,7 @@ export default async function PortalAdAuditTrailPage({
 
   const viewer = await getViewer();
   if (!canViewClient(viewer, clientId)) notFound();
+  if (!(await isPortalSectionVisible(clientId, viewer, "portal_show_ads"))) notFound();
 
   const supabase = await createClient();
 
