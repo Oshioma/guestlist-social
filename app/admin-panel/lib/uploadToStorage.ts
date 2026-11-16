@@ -26,6 +26,72 @@ const DEFAULT_BUCKET = "gsocial";
 // violates row-level security policy". Object names are timestamped, so
 // there's nothing to overwrite anyway.
 
+// Meta rejects photos over its size limits (Facebook 10 MB, Instagram 8 MB),
+// and camera JPEGs are routinely 12–15 MB. So any photo over the stricter
+// Instagram limit is downscaled in the browser BEFORE it's saved — what lands
+// in storage (and what the Proofer previews) is exactly what gets published.
+const META_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+// Plenty for feed/story display (Instagram renders at most 1440px wide).
+const MAX_LONG_EDGE_PX = 2880;
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  quality: number
+): Promise<Blob | null> {
+  return new Promise((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/jpeg", quality)
+  );
+}
+
+/**
+ * Return a copy of an oversized photo resized to fit Meta's limits, as a JPEG.
+ * Small photos, GIFs (animation) and non-images are returned untouched, as is
+ * anything the browser can't decode (e.g. HEIC outside Safari) — best-effort,
+ * so an upload never fails because of this step.
+ */
+async function shrinkOversizedImage(file: File): Promise<File> {
+  if (
+    !file.type.startsWith("image/") ||
+    file.type === "image/gif" ||
+    file.size <= META_IMAGE_MAX_BYTES
+  ) {
+    return file;
+  }
+  try {
+    // from-image applies EXIF orientation so portrait shots stay upright.
+    const bitmap = await createImageBitmap(file, {
+      imageOrientation: "from-image",
+    });
+    const scale = Math.min(
+      1,
+      MAX_LONG_EDGE_PX / Math.max(bitmap.width, bitmap.height)
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#ffffff"; // JPEG has no alpha; flatten onto white
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    for (const quality of [0.85, 0.75, 0.65]) {
+      const blob = await canvasToBlob(canvas, quality);
+      if (blob && blob.size <= META_IMAGE_MAX_BYTES) {
+        const base = file.name.replace(/\.[^/.]+$/, "") || "image";
+        return new File([blob], `${base}.jpg`, {
+          type: "image/jpeg",
+          lastModified: file.lastModified,
+        });
+      }
+    }
+  } catch {
+    // Undecodable in this browser — upload the original as before.
+  }
+  return file;
+}
+
 type UploadOptions = {
   bucket?: string;
   onProgress?: (percent: number) => void;
@@ -40,6 +106,8 @@ export async function uploadToStorage(
   folder: string,
   { bucket, onProgress }: UploadOptions = {}
 ): Promise<string> {
+  file = await shrinkOversizedImage(file);
+
   const supabase = createClient();
   const {
     data: { session },

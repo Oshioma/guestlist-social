@@ -17,6 +17,7 @@ import {
 } from "./meta-auth";
 import { logMetaWrite } from "../../../lib/meta-write-log";
 import { resolveAccountMatch } from "./account-match";
+import { ensureMetaSizedImage } from "./meta-image-size";
 
 type PublishResult =
   | { ok: true; publishUrl: string | null }
@@ -385,18 +386,26 @@ export async function publishMetaQueueItem(
   const mediaUrls: string[] = Array.isArray(post.media_urls)
     ? (post.media_urls as string[])
     : [];
-  const imageUrl: string =
+  const rawImageUrl: string =
     (post.image_url as string | null) || mediaUrls[0] || "";
   // Every uploaded item, in the order the operator arranged them. A post with
   // more than one goes out as an IG carousel / FB multi-photo post — sending
   // only the first item silently dropped the rest.
-  const allMedia: string[] = Array.from(
+  const rawMedia: string[] = Array.from(
     new Set(
       mediaUrls.filter((u): u is string => typeof u === "string" && u.trim() !== "")
     )
   );
-  if (allMedia.length === 0 && imageUrl) allMedia.push(imageUrl);
-  const isMulti = allMedia.length > 1;
+  if (rawMedia.length === 0 && rawImageUrl) rawMedia.push(rawImageUrl);
+  const isMulti = rawMedia.length > 1;
+
+  // Meta rejects photos over its size limits (FB 10 MB, IG 8 MB), so swap any
+  // oversized image for a resized copy. Videos pass through untouched.
+  const sized = (u: string) =>
+    isVideoUrl(u) ? Promise.resolve(u) : ensureMetaSizedImage(admin, u);
+  const [imageUrl, ...allMedia] = await Promise.all(
+    [rawImageUrl, ...rawMedia].map(sized)
+  );
 
   const postPlatform: string = (post as any).platform ?? "";
   const isStory =
