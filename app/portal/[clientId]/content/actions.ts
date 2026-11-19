@@ -17,6 +17,7 @@ import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canViewClient, getViewer, type Viewer } from "@/app/admin-panel/lib/viewer";
+import { queueSignedOffPost } from "@/lib/proofer-queue";
 
 type ActionResult = { error: string | null };
 
@@ -123,7 +124,10 @@ export async function savePortalPostAction(
 }
 
 // ── Approve / unapprove ──────────────────────────────────────────────────
-// Approve → "approved". Unapprove → "proofed" (ready, awaiting sign-off).
+// Approve → "approved", and the post is queued to publish exactly as when it's
+// approved on the board (shared queueSignedOffPost). Unapprove → "proofed"
+// (ready, awaiting sign-off) and its not-yet-published queue rows are removed,
+// so a client withdrawing approval really stops the post going out.
 export async function setPortalPostApprovalAction(
   clientIdValue: string,
   postId: string,
@@ -152,6 +156,43 @@ export async function setPortalPostApprovalAction(
   if (error) {
     console.error("setPortalPostApprovalAction error:", error);
     return fail("Could not update approval.");
+  }
+
+  // Service role is fine here: loadOwnedPost already verified the post
+  // belongs to this viewer's client, and every query below is keyed on it.
+  if (approved) {
+    const { data: row } = await admin
+      .from("proofer_posts")
+      .select("id, platform, publish_targets, post_date, publish_time")
+      .eq("id", postId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (row) {
+      const { error: queueError } = await queueSignedOffPost(
+        admin,
+        {
+          id: row.id as string,
+          platform: row.platform as string | null,
+          publish_targets: row.publish_targets,
+          post_date: String(row.post_date),
+          publish_time: row.publish_time as string | null,
+        },
+        viewerLabel(viewer)
+      );
+      if (queueError) {
+        console.error("setPortalPostApprovalAction queue error:", queueError);
+        return fail("Approved, but it couldn't be scheduled. Please tell your account manager.");
+      }
+    }
+  } else {
+    const { error: dequeueError } = await admin
+      .from("proofer_publish_queue")
+      .delete()
+      .eq("post_id", postId)
+      .eq("status", "scheduled");
+    if (dequeueError) {
+      console.error("setPortalPostApprovalAction dequeue error:", dequeueError);
+    }
   }
 
   await notifyOperator(
