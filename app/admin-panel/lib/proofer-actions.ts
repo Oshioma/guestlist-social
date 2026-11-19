@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "../../../lib/supabase/server";
 import { defaultPublishTimeUtc } from "../../../lib/timezone";
+import {
+  normalizePublishTargets,
+  queueSignedOffPost,
+  scheduledForFromPost,
+} from "../../../lib/proofer-queue";
 
 const VALID_STATUSES = [
   "none",
@@ -28,46 +33,12 @@ function normalizePlatform(value: string | undefined | null): Platform {
     : "instagram_feed";
 }
 
-const VALID_PUBLISH_TARGETS = ["instagram", "facebook"] as const;
-type PublishTargetValue = (typeof VALID_PUBLISH_TARGETS)[number];
-
-/**
- * Destinations a post publishes to. Order and duplicates are normalised so the
- * stored array is stable. An explicitly empty selection is preserved — that's
- * "don't publish this anywhere yet", not a missing value.
- */
-function normalizePublishTargets(value: unknown): PublishTargetValue[] {
-  if (!Array.isArray(value)) return [];
-  const set = new Set(
-    value.filter((v): v is PublishTargetValue =>
-      (VALID_PUBLISH_TARGETS as readonly unknown[]).includes(v)
-    )
-  );
-  return VALID_PUBLISH_TARGETS.filter((t) => set.has(t));
-}
-
 function normalizeMediaUrls(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((v): v is string => typeof v === "string")
     .map((v) => v.trim())
     .filter((v) => v.length > 0);
-}
-
-// The moment a post goes out is derived entirely from the proofer: its date
-// plus its publish time (stored as a UTC "HH:MM"). This is the single source
-// of truth for scheduling — the publish queue never sets a time of its own, so
-// changing the time on the proofer is the only way to reschedule.
-function scheduledForFromPost(
-  postDate: string,
-  publishTime: string | null | undefined
-): string {
-  const date = String(postDate).slice(0, 10);
-  const time =
-    publishTime && /^\d{2}:\d{2}$/.test(publishTime)
-      ? publishTime
-      : defaultPublishTimeUtc(date);
-  return `${date}T${time}:00.000Z`;
 }
 
 function parseDateKey(value: string): { year: number; month: number; day: number } | null {
@@ -678,53 +649,24 @@ export async function updateProoferStatusAction(
     }
 
     // Approving a post drops it straight into the publish queue — no separate
-    // "add to queue" step, and no queue-stage scheduling: the send time is the
-    // post's own date + publish time, set on the proofer. A post can publish to
-    // more than one destination, so we queue a row per target. We only insert
-    // targets that aren't already in the queue, so re-approving a post whose
-    // Instagram slot is already scheduled or published never resets it.
+    // "add to queue" step; the send time is the post's own date + publish time.
+    // Shared with the client portal's approve (see lib/proofer-queue.ts).
     if (normalized === "proofed" || normalized === "approved") {
-      let targets = normalizePublishTargets(existing.publish_targets);
-      // Posts predating publish_targets fall back to what their platform
-      // implied, so an un-migrated post still queues correctly.
-      if (targets.length === 0) {
-        targets = existing.platform === "facebook" ? ["facebook"] : ["instagram"];
-      }
-
-      const { data: existingRows } = await supabase
-        .from("proofer_publish_queue")
-        .select("platform")
-        .eq("post_id", existing.id);
-      const alreadyQueued = new Set(
-        (existingRows ?? []).map((row) => row.platform)
+      const { error: queueError } = await queueSignedOffPost(
+        supabase,
+        {
+          id: existing.id,
+          platform: existing.platform as string | null,
+          publish_targets: existing.publish_targets,
+          post_date: String(existing.post_date ?? postDate),
+          publish_time: existing.publish_time as string | null,
+        },
+        authorEmail
       );
-
-      const scheduledFor = scheduledForFromPost(
-        String(existing.post_date ?? postDate),
-        existing.publish_time as string | null
-      );
-
-      const rowsToInsert = targets
-        .filter((target) => !alreadyQueued.has(target))
-        .map((platform) => ({
-          post_id: existing.id,
-          platform,
-          status: "scheduled",
-          scheduled_for: scheduledFor,
-          created_by: authorEmail,
-          updated_at: new Date().toISOString(),
-        }));
-
-      if (rowsToInsert.length > 0) {
-        const { error: queueError } = await supabase
-          .from("proofer_publish_queue")
-          .insert(rowsToInsert);
-
-        // Non-fatal: the status change already succeeded. Log and move on so
-        // the operator isn't blocked by a queue hiccup.
-        if (queueError) {
-          console.error("updateProoferStatusAction auto-queue error:", queueError);
-        }
+      // Non-fatal: the status change already succeeded. Log and move on so
+      // the operator isn't blocked by a queue hiccup.
+      if (queueError) {
+        console.error("updateProoferStatusAction auto-queue error:", queueError);
       }
     }
   } else {
