@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsBell from "../admin-panel/components/NotificationsBell";
 import { moveProoferPostAction } from "../admin-panel/lib/proofer-actions";
@@ -240,6 +240,9 @@ export default function ProoferNav({
         router.push(
           `${home}?client=${encodeURIComponent(clientId)}&month=${encodeURIComponent(pickMonth)}`
         );
+      } catch (err) {
+        // Say why instead of silently doing nothing (e.g. the day got taken).
+        window.alert(err instanceof Error ? err.message : "Could not move this post.");
       } finally {
         setSavingId(null);
       }
@@ -592,7 +595,8 @@ export default function ProoferNav({
                         ) : (
                           <div style={{ maxHeight: 460, overflowY: "auto" }}>
                             {pillarPosts.map((post) => (
-                              <div key={post.id} style={popupRow}>
+                              <Fragment key={post.id}>
+                              <div style={popupRow}>
                                 <div
                                   style={{
                                     width: 96,
@@ -663,19 +667,13 @@ export default function ProoferNav({
                                   📅
                                 </button>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {pickPost && (
-                        <>
-                          {/* Tap-away catcher closes the picker */}
-                          <div
-                            aria-hidden
-                            onClick={() => setPickFor(null)}
-                            style={{ position: "fixed", inset: 0, zIndex: 51 }}
-                          />
-                          <div style={calPopup} role="dialog" aria-label="Reschedule to another day">
+                              {/* The reschedule calendar opens inline, right under
+                                  the post it moves. (It used to float to the LEFT
+                                  of this popup, which itself hangs left from the
+                                  chip — so for chips not at the far right it
+                                  rendered off-screen and the 📅 seemed dead.) */}
+                              {pickFor === post.id && (
+                          <div style={calInline} role="dialog" aria-label="Reschedule to another day">
                             <div style={{ fontSize: 12, fontWeight: 800, color: "#18181b", marginBottom: 6 }}>
                               Reschedule this post
                             </div>
@@ -702,7 +700,7 @@ export default function ProoferNav({
                                 ) : (
                                   (() => {
                                     const ds = dateStr(d);
-                                    const isSelf = ds === pickPost.postDate.slice(0, 10);
+                                    const isSelf = ds === post.postDate.slice(0, 10);
                                     const taken = occupied.has(ds) && !isSelf;
                                     const past = ds < todayStr;
                                     const disabled = taken || past || isSelf || isPending;
@@ -711,7 +709,7 @@ export default function ProoferNav({
                                         key={d}
                                         type="button"
                                         disabled={disabled}
-                                        onClick={() => reschedule(pickPost, d)}
+                                        onClick={() => reschedule(post, d)}
                                         title={
                                           isSelf
                                             ? "Already on this day"
@@ -743,9 +741,13 @@ export default function ProoferNav({
                             <div style={{ fontSize: 11, color: "#a1a1aa", marginTop: 8 }}>
                               Green days are free & upcoming — moves this post there (not approved yet).
                             </div>
+</div>
+                              )}
+                              </Fragment>
+                            ))}
                           </div>
-                        </>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -850,19 +852,14 @@ const popupRow: React.CSSProperties = {
   borderTop: "1px solid #f7f7f8",
 };
 
-// The reschedule calendar sits just to the left of the pillar popup card, so it
-// escapes the card's clipped, scrollable post list.
-const calPopup: React.CSSProperties = {
-  position: "absolute",
-  top: 0,
-  right: "calc(100% + 8px)",
-  zIndex: 52,
-  width: 250,
-  background: "#fff",
-  border: "1px solid #e4e4e7",
-  borderRadius: 12,
-  boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+// The reschedule calendar opens inline under the post being moved, inside the
+// popup's scrollable list, so it can never land off-screen.
+const calInline: React.CSSProperties = {
+  margin: "0 14px 12px",
   padding: 12,
+  background: "#fff",
+  border: "1px solid #b8e3d8",
+  borderRadius: 12,
 };
 const calNavBtn: React.CSSProperties = {
   width: 26,
